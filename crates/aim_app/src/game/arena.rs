@@ -184,6 +184,7 @@ impl ArenaFinisher<'_, '_> {
             recording: None,
             notes,
             adaptive_next: None,
+            finder_test: false,
         });
         self.next.set(AppState::Results);
     }

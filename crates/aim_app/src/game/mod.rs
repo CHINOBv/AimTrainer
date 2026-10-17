@@ -14,6 +14,8 @@ use aim_core::movement::MoveInput;
 use aim_core::scenario::{
     FrameInput, Recording, RunResult, ScenarioDef, Session, SessionEvent, Shape, parse_run_key,
 };
+use aim_core::sensitivity::Sensitivity;
+use aim_core::sensitivity::finder::{SensFinder, Slot};
 use aim_core::training::routine::PlannedRun;
 use aim_core::valorant::HumanoidDims;
 use bevy::camera::{PerspectiveProjection, Projection};
@@ -62,6 +64,10 @@ pub struct Run {
     pub adaptive: bool,
     /// Hide the overlay when the run ends (buy-phase micro drills).
     pub auto_hide: bool,
+    /// Sensitivity used instead of the player's own (sensitivity finder tests).
+    pub sens_override: Option<Sensitivity>,
+    /// The sensitivity-finder test this run is, if any.
+    pub finder_slot: Option<Slot>,
     entities: HashMap<u64, Entity>,
 }
 
@@ -70,11 +76,18 @@ impl Run {
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_nanos() as u64);
+        Self::with_seed(def, seed)
+    }
+
+    /// A run with a fixed seed (daily challenge: everyone gets the same targets).
+    pub fn with_seed(def: ScenarioDef, seed: u64) -> Self {
         let recording = Recording::new(def.clone(), seed);
         Self {
             recording,
             adaptive: false,
             auto_hide: false,
+            sens_override: None,
+            finder_slot: None,
             session: Session::new(def, seed),
             view: ViewAngles::default(),
             countdown: COUNTDOWN_SECS,
@@ -103,6 +116,8 @@ pub struct LastResult {
     pub notes: Vec<String>,
     /// Next adaptive level, when the run was played in adaptive mode.
     pub adaptive_next: Option<f32>,
+    /// The run was a sensitivity-finder test.
+    pub finder_test: bool,
 }
 
 #[derive(Component)]
@@ -128,6 +143,7 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<AppState>()
             .init_resource::<ActiveRoutine>()
+            .init_resource::<FinderState>()
             .add_systems(Startup, setup_world)
             .add_systems(
                 Update,
@@ -252,12 +268,11 @@ fn pause_input(keys: Res<ButtonInput<KeyCode>>, mut run: ResMut<Run>, overlay: R
 /// Degrees per count for the current zoom state.
 fn deg_per_count(settings: &Settings, run: &Run) -> f64 {
     let zoom = run.session.def().weapon.kind.stats().zoom as f64;
+    let sens = run.sens_override.unwrap_or(settings.sensitivity);
     if run.zoomed && zoom > 1.0 {
-        settings
-            .sensitivity
-            .zoomed_deg_per_count(zoom, settings.ads_multiplier)
+        sens.zoomed_deg_per_count(zoom, settings.ads_multiplier)
     } else {
-        settings.sensitivity.deg_per_count()
+        sens.deg_per_count()
     }
 }
 
@@ -306,15 +321,32 @@ struct RunFinisher<'w, 's> {
     adaptive: ResMut<'w, AdaptiveLevels>,
     overlay: ResMut<'w, Overlay>,
     settings: Res<'w, Settings>,
+    finder: ResMut<'w, FinderState>,
     paths: Res<'w, Paths>,
 }
+
+/// The sensitivity finder in progress (session only; not persisted).
+#[derive(Resource, Default)]
+pub struct FinderState(pub Option<SensFinder>);
+
+/// Scenario and length of a sensitivity-finder test: wide switching mixes flicks and
+/// control, which is where a sensitivity that is too fast or too slow shows first.
+pub const FINDER_SCENARIO: &str = "switch-wide";
+pub const FINDER_SECS: f32 = 30.0;
 
 impl RunFinisher<'_, '_> {
     fn finish(&mut self, run: &Run) {
         let session = &run.session;
         let result = session.result();
         let previous_best = self.history.best(&result.scenario_id);
-        self.history.append(&self.paths, &result);
+        let mut notes = progress_notes(&self.history, self.settings.daily_goal_minutes);
+        if let (Some(slot), Some(finder)) = (run.finder_slot, self.finder.0.as_mut()) {
+            finder.record(slot, result.score);
+            notes.insert(0, finder_note(finder));
+        } else {
+            // Finder test runs do not enter the regular history.
+            self.history.append(&self.paths, &result);
+        }
         let adaptive_next = run.adaptive.then(|| {
             let (base, _) = parse_run_key(&session.def().id);
             let next = self.adaptive.record(base, session.success_rate());
@@ -326,13 +358,32 @@ impl RunFinisher<'_, '_> {
             result,
             previous_best,
             recording: Some(run.recording.clone()),
-            notes: progress_notes(&self.history, self.settings.daily_goal_minutes),
+            notes,
+            finder_test: run.finder_slot.is_some(),
             adaptive_next,
         });
         self.next.set(AppState::Results);
         if run.auto_hide {
             self.overlay.visible = false;
         }
+    }
+}
+
+/// Where the sensitivity finder stands, for the results screen.
+pub(crate) fn finder_note(f: &SensFinder) -> String {
+    if f.is_done() {
+        format!(
+            "Sensitivity finder done: about {:.1} cm/360 suits you best. Apply it in Settings.",
+            f.center_cm
+        )
+    } else {
+        format!(
+            "Sensitivity finder round {}/{}: comparing {:.1} vs {:.1} cm/360.",
+            f.round + 1,
+            aim_core::sensitivity::finder::MAX_ROUNDS,
+            f.cm_for(Slot::Fast),
+            f.cm_for(Slot::Slow)
+        )
     }
 }
 

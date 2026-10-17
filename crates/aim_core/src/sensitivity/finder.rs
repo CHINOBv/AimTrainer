@@ -62,7 +62,7 @@ impl SensFinder {
             return None;
         }
         // Even rounds start fast, odd rounds start slow.
-        let first = if self.round % 2 == 0 {
+        let first = if self.round.is_multiple_of(2) {
             Slot::Fast
         } else {
             Slot::Slow

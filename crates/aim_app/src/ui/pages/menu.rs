@@ -1,19 +1,28 @@
 //! Main menu: scenarios, routines, benchmark and settings tabs.
 
 use crate::game::AppState;
+use crate::game::FinderState;
 use crate::overlay::{Overlay, background};
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::history::History;
 use crate::persistence::library::Library;
 use crate::persistence::method_progress::{DayProgress, MethodProgress};
+use crate::persistence::replays;
 use crate::persistence::settings::{Paths, Settings};
+use crate::platform::frame_stats::FrameStats;
 use crate::ui::UiAction;
 use crate::ui::atoms::ERROR;
 use crate::ui::molecules::tab_bar;
 use crate::ui::navigation::Navigator;
+use crate::ui::organisms::profile_code::{self, ProfileImport};
 use crate::ui::organisms::progress_panel::{self, ProgressModel};
+use crate::ui::organisms::replay_viewer::{self, ReplayViewerState};
+use crate::ui::organisms::sens_finder;
 use crate::ui::organisms::settings_panels::{self, DpiMeter};
-use crate::ui::organisms::today_panel::{self, DayModel, RoutineModel, TodayAction, TodayModel};
+use crate::ui::organisms::system_check::{self, SystemModel};
+use crate::ui::organisms::today_panel::{
+    self, ChallengeModel, DayModel, RoutineModel, TodayAction, TodayModel,
+};
 use crate::ui::organisms::{arena_list, benchmark_panel, routine_list, scenario_browser};
 use aim_core::fov;
 use aim_core::training::method::{MethodDef, Weekday};
@@ -65,6 +74,8 @@ struct MenuState {
     selected: Option<String>,
     dpi_target: u32,
     meter: DpiMeter,
+    profile_import: ProfileImport,
+    replays: ReplayViewerState,
 }
 
 fn count_dpi_meter(motion: Res<AccumulatedMouseMotion>, mut state: ResMut<MenuState>) {
@@ -79,6 +90,8 @@ fn count_dpi_meter(motion: Res<AccumulatedMouseMotion>, mut state: ResMut<MenuSt
 struct TrainingState<'w> {
     progress: ResMut<'w, MethodProgress>,
     adaptive: Res<'w, AdaptiveLevels>,
+    finder: ResMut<'w, FinderState>,
+    frames: Res<'w, FrameStats>,
 }
 
 /// Settings plus what is needed to persist and preview them.
@@ -160,8 +173,17 @@ fn menu(
         }
         Tab::Progress => {
             egui::CentralPanel::default().show(&mut root, |ui| {
-                let model = progress_model(lib, &history, cfg.settings.daily_goal_minutes);
-                action = action.take().or(progress_panel::progress_panel(ui, &model));
+                egui::ScrollArea::vertical().id_salt("progress").show(ui, |ui| {
+                    let model = progress_model(lib, &history, cfg.settings.daily_goal_minutes);
+                    action = action.take().or(progress_panel::progress_panel(ui, &model));
+                    ui.separator();
+                    ui.heading("Replays");
+                    ui.small("Your crosshair path around each target: overshoot, corrections and misses at a glance.");
+                    let entries = replays::list(&cfg.paths);
+                    replay_viewer::replay_viewer(ui, &mut state.replays, &entries, |e| {
+                        replays::load(&e.path).ok().map(|r| aim_core::analytics::path::replay_path(&r))
+                    });
+                });
             });
         }
         Tab::Scenarios => {
@@ -234,6 +256,23 @@ fn menu(
                     );
                     ui.separator();
                     settings_panels::display_panel(ui, &mut cfg.settings);
+                    ui.separator();
+                    action = action.take().or(sens_finder::sens_finder(
+                        ui,
+                        &mut training.finder.0,
+                        &mut cfg.settings,
+                    ));
+                    ui.separator();
+                    profile_code::profile_code(ui, &mut cfg.settings, &mut state.profile_import);
+                    ui.separator();
+                    let system = SystemModel {
+                        frames: training.frames.summary(),
+                        vsync_off: true,
+                        fullscreen: cfg.settings.fullscreen,
+                        wayland: crate::platform::is_wayland(),
+                        windows: cfg!(windows),
+                    };
+                    system_check::system_check(ui, &system);
                     ui.add_space(8.0);
                     ui.small(format!(
                         "Settings file: {}",
@@ -347,6 +386,11 @@ fn method_context<'a>(
     Some((method, tier.level, energy, tier.id.clone()))
 }
 
+/// Today's daily challenge (UTC day, so it is the same for every player).
+pub fn todays_challenge(lib: &Library) -> Option<aim_core::training::challenge::DailyChallenge> {
+    aim_core::training::challenge::daily((now_secs() / 86_400) as i64, &lib.scenarios)
+}
+
 fn routine_model(
     lib: &Library,
     progress: &MethodProgress,
@@ -405,6 +449,12 @@ fn today_model(
         suggested_tier: method.suggested_tier(energy).id.clone(),
         benchmark_energy: energy,
         day,
+        challenge: todays_challenge(lib).map(|c| ChallengeModel {
+            scenario_name: lib
+                .scenario(&c.scenario_id)
+                .map_or(c.scenario_id.clone(), |d| d.name.clone()),
+            best_today: history.best(&c.run_key()),
+        }),
     })
 }
 
@@ -462,6 +512,11 @@ fn apply_today(
             })
         }
         TodayAction::WarmUp => Some(UiAction::StartRoutine("quick-warmup".to_owned())),
+        TodayAction::Challenge => todays_challenge(lib).map(|c| UiAction::StartChallenge {
+            key: c.run_key(),
+            scenario: c.scenario_id,
+            seed: c.seed,
+        }),
     }
 }
 
