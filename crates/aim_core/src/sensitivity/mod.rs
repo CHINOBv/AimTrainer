@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 mod games;
+pub mod finder;
 pub mod matching;
 
 pub use games::{FovAxis, FovModel, Game, GameProfile};
