@@ -7,6 +7,8 @@ pub const USAGE: &str = "\
 usage:
   aimtrainer                                   start the trainer
   aimtrainer toggle|show|hide                  control a running trainer (Linux)
+  aimtrainer warmup [minutes]                  show the trainer and start a queue warm-up
+  aimtrainer micro                             one 20 s buy-phase drill, then hide again
   aimtrainer analyze-match <match.json> --player <Name#TAG|puuid>
                                                post-match analysis of an official match file";
 
@@ -22,11 +24,12 @@ pub fn parse(args: &[String]) -> Result<Option<CliCommand>, String> {
     let Some(first) = args.first() else {
         return Ok(None);
     };
-    if let Some(cmd) = ipc::Command::parse(first) {
+    if let Some(cmd) = ipc::Command::parse(&args.join(" ")) {
         return Ok(Some(CliCommand::Overlay(cmd)));
     }
     match first.as_str() {
         "-h" | "--help" | "help" => Ok(Some(CliCommand::Help)),
+        "warmup" => Err("warmup takes an optional length in minutes, 1–30".to_owned()),
         "analyze-match" => {
             let file = args
                 .get(1)
@@ -123,6 +126,19 @@ mod tests {
             parse(&args(&["explode"]))
                 .unwrap_err()
                 .contains("unknown command")
+        );
+        assert_eq!(
+            parse(&args(&["warmup", "3"])),
+            Ok(Some(CliCommand::Overlay(ipc::Command::Warmup(3))))
+        );
+        assert_eq!(
+            parse(&args(&["micro"])),
+            Ok(Some(CliCommand::Overlay(ipc::Command::Micro)))
+        );
+        assert!(
+            parse(&args(&["warmup", "99"]))
+                .unwrap_err()
+                .contains("1–30")
         );
     }
 

@@ -57,6 +57,8 @@ pub struct Run {
     pub recording: Recording,
     /// Played in adaptive mode: the result moves the scenario's difficulty staircase.
     pub adaptive: bool,
+    /// Hide the overlay when the run ends (buy-phase micro drills).
+    pub auto_hide: bool,
     entities: HashMap<u64, Entity>,
 }
 
@@ -69,6 +71,7 @@ impl Run {
         Self {
             recording,
             adaptive: false,
+            auto_hide: false,
             session: Session::new(def, seed),
             view: ViewAngles::default(),
             countdown: COUNTDOWN_SECS,
@@ -278,6 +281,7 @@ struct RunFinisher<'w, 's> {
     next: ResMut<'w, NextState<AppState>>,
     history: ResMut<'w, History>,
     adaptive: ResMut<'w, AdaptiveLevels>,
+    overlay: ResMut<'w, Overlay>,
     paths: Res<'w, Paths>,
 }
 
@@ -301,6 +305,9 @@ impl RunFinisher<'_, '_> {
             adaptive_next,
         });
         self.next.set(AppState::Results);
+        if run.auto_hide {
+            self.overlay.visible = false;
+        }
     }
 }
 

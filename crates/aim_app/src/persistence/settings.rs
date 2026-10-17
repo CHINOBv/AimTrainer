@@ -63,6 +63,14 @@ pub struct Settings {
     /// Global hotkey on Windows/X11 (e.g. "ctrl+shift+F10"). On Wayland bind
     /// `aimtrainer toggle` in your compositor instead. Requires a restart.
     pub overlay_hotkey: String,
+    /// Global hotkey that starts a queue warm-up (Windows/X11; `aimtrainer warmup` on Wayland).
+    pub warmup_hotkey: String,
+    /// Global hotkey for a buy-phase micro drill (Windows/X11; `aimtrainer micro` on Wayland).
+    pub micro_hotkey: String,
+    /// Length of the queue warm-up, minutes.
+    pub warmup_minutes: u32,
+    /// Daily training goal, minutes (30–50 min captures most daily gains, Listman 2021).
+    pub daily_goal_minutes: f32,
     pub target_color: [f32; 3],
 }
 
@@ -76,6 +84,10 @@ impl Default for Settings {
             fullscreen: true,
             always_on_top: true,
             overlay_hotkey: "ctrl+shift+F10".to_owned(),
+            warmup_hotkey: "ctrl+shift+F9".to_owned(),
+            micro_hotkey: "ctrl+shift+F8".to_owned(),
+            warmup_minutes: 5,
+            daily_goal_minutes: 30.0,
             target_color: [1.0, 0.27, 0.33],
         }
     }
