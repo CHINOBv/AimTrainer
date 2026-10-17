@@ -1,0 +1,24 @@
+id = "burst-control"
+name = "Burst Control"
+category = "precision"
+description = """
+Burst control with the Vandal (recoil on: hold to fire full-auto). One head-sized target at 15–25 m takes
+two hits and leaves after 1.4 s. Fire short 2–3 bullet bursts, then pause about 0.4 s so the recoil fully
+resets. Each bullet of a burst climbs, so long sprays go over the head. Hits within the first 6 bullets of
+a burst earn a bonus."""
+
+[weapon]
+kind = "vandal"
+recoil = true
+
+[targets]
+shape = { kind = "sphere", radius = 0.125 }   # VALORANT head ≈ 0.25 m
+spawn = { kind = "floor", x = [-5.0, 5.0], z = [-25.0, -15.0], height = [1.8, 1.95] }
+max_alive = 1
+health = 2
+lifetime_secs = 1.4
+appear_delay_secs = [0.35, 0.6]
+
+[scoring]
+burst_bonus = 20
+miss_penalty = 5

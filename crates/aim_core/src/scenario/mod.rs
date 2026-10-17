@@ -5,6 +5,7 @@ pub mod def;
 pub mod difficulty;
 pub mod hit;
 mod motion;
+mod recoil;
 pub mod recording;
 mod scoring;
 pub mod session;

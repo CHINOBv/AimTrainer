@@ -9,6 +9,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/ammo-discipline.toml"),
     ),
     (
+        "burst-control.toml",
+        include_str!("../../../../content/scenarios/burst-control.toml"),
+    ),
+    (
         "counter-strafe.toml",
         include_str!("../../../../content/scenarios/counter-strafe.toml"),
     ),
@@ -37,6 +41,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/peek-reaction.toml"),
     ),
     (
+        "spray-transfer.toml",
+        include_str!("../../../../content/scenarios/spray-transfer.toml"),
+    ),
+    (
         "static-headline.toml",
         include_str!("../../../../content/scenarios/static-headline.toml"),
     ),
@@ -63,6 +71,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "switch-wide.toml",
         include_str!("../../../../content/scenarios/switch-wide.toml"),
+    ),
+    (
+        "tap-discipline.toml",
+        include_str!("../../../../content/scenarios/tap-discipline.toml"),
     ),
     (
         "track-close-strafe.toml",

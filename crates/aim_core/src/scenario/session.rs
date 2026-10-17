@@ -2,17 +2,18 @@
 //! movement keys every frame and renders whatever `targets()` returns.
 //!
 //! [`Session`] owns the run state and orchestrates each frame; spawning, target motion,
-//! weapons and scoring live in the sibling `spawn`, `motion`, `weapon` and `scoring`
-//! modules.
+//! weapons, recoil and scoring live in the sibling `spawn`, `motion`, `weapon`, `recoil`
+//! and `scoring` modules.
 
 use super::def::{FireMode, ScenarioDef, Shape};
 use super::hit::{HitZone, Ray};
 use super::motion::MotionState;
+use super::recoil::RecoilState;
 use super::{scoring, spawn, weapon};
 use crate::math::{Vec3, ViewAngles};
 use crate::movement::{self, LocalVelocity, MoveInput, MovementProfile};
 use crate::rng::Rng;
-use crate::valorant::{HumanoidDims, WeaponStats};
+use crate::valorant::{HumanoidDims, RecoilProfile, WeaponStats};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
@@ -90,6 +91,59 @@ pub struct Stats {
     pub head_on_target_secs: f32,
     /// Seconds from a target becoming visible to its death.
     pub kill_times: Vec<f32>,
+    /// Recoil scenarios only: bursts fired. A burst is a run of shots with no pause as
+    /// long as the weapon's recovery time, so it always starts with a fully recovered
+    /// first bullet.
+    #[serde(default)]
+    pub bursts: u32,
+    /// Recoil scenarios only: bullets in the longest burst.
+    #[serde(default)]
+    pub longest_burst: u32,
+    /// Recoil scenarios only: shots per bullet-index bucket (see [`Stats::BULLET_BUCKETS`]).
+    #[serde(default)]
+    pub shots_by_bullet: [u32; 4],
+    /// Recoil scenarios only: hits per bullet-index bucket (see [`Stats::BULLET_BUCKETS`]).
+    #[serde(default)]
+    pub hits_by_bullet: [u32; 4],
+}
+
+impl Stats {
+    /// Labels of the bullet-index buckets of `shots_by_bullet` and `hits_by_bullet`.
+    pub const BULLET_BUCKETS: [&'static str; 4] = ["1", "2-3", "4-6", "7+"];
+
+    /// Bucket of a 1-based bullet index: 1, 2–3, 4–6 or 7+.
+    pub fn bullet_bucket(bullet: u32) -> usize {
+        match bullet {
+            0 | 1 => 0,
+            2..=3 => 1,
+            4..=6 => 2,
+            _ => 3,
+        }
+    }
+
+    /// Shots fired in recoil bursts.
+    pub fn burst_shots(&self) -> u32 {
+        self.shots_by_bullet.iter().sum()
+    }
+
+    /// Average bullets per burst; 0 without bursts.
+    pub fn avg_burst_len(&self) -> f32 {
+        if self.bursts == 0 {
+            0.0
+        } else {
+            self.burst_shots() as f32 / self.bursts as f32
+        }
+    }
+
+    /// Share of burst shots that were fully recovered first bullets; 0 without bursts.
+    pub fn first_bullet_share(&self) -> f32 {
+        let shots = self.burst_shots();
+        if shots == 0 {
+            0.0
+        } else {
+            self.shots_by_bullet[0] as f32 / shots as f32
+        }
+    }
 }
 
 /// Final numbers of a run, ready to display and persist.
@@ -125,12 +179,20 @@ pub struct Session {
     last_shot_at: f32,
     ammo: f32,
     reload_until: f32,
+    /// Spray state when the scenario enables `weapon.recoil`.
+    recoil: Option<RecoilState>,
 }
 
 impl Session {
     pub fn new(def: ScenarioDef, seed: u64) -> Self {
         let weapon = def.weapon.kind.stats();
         let profile = def.weapon.kind.movement();
+        let recoil = def
+            .weapon
+            .recoil
+            .then(|| def.weapon.kind.recoil())
+            .flatten()
+            .map(|r| RecoilState::new(r, weapon.first_shot_spread_deg));
         let mut s = Self {
             def,
             rng: Rng::new(seed),
@@ -148,6 +210,7 @@ impl Session {
             last_shot_at: f32::NEG_INFINITY,
             ammo: 0.0,
             reload_until: f32::NEG_INFINITY,
+            recoil,
         };
         s.ammo = s.def.weapon.ammo.map_or(0.0, |a| a.clip);
         s.refill(&mut Vec::new());
@@ -207,6 +270,8 @@ impl Session {
         self.move_targets(dt);
         match self.def.weapon.fire {
             FireMode::Click if input.fire_pressed => self.shoot(&mut events),
+            // With recoil the weapon is full-auto: holding the button keeps firing.
+            FireMode::Click if input.fire_held && self.recoil.is_some() => self.shoot(&mut events),
             FireMode::Hold if input.fire_held => self.hold_fire(dt, &mut events),
             _ => {}
         }
@@ -291,9 +356,12 @@ impl Session {
         if let Some(a) = self.def.weapon.ammo {
             self.ammo -= a.cost;
         }
-        self.last_shot_at = self.time;
-        let (dir, moving) = self.shot_direction();
+        self.last_shot_at = self.shot_time();
+        let (dir, moving, bullet) = self.fire_bullet();
         scoring::record_shot(&mut self.stats, &self.def.scoring, moving);
+        if let Some(b) = bullet {
+            scoring::record_bullet(&mut self.stats, b);
+        }
 
         let Some((idx, zone)) = self.hit_along(dir) else {
             scoring::record_miss(&mut self.stats, &self.def.scoring);
@@ -302,6 +370,10 @@ impl Session {
             return;
         };
         scoring::record_hit(&mut self.stats, &self.def.scoring, zone);
+        if let (Some(b), Some(r)) = (bullet, &self.recoil) {
+            let protected = r.profile().protected_bullets;
+            scoring::record_bullet_hit(&mut self.stats, &self.def.scoring, b, protected);
+        }
         if let Some(a) = self.def.weapon.ammo {
             self.ammo = (self.ammo + a.refund).min(a.clip);
         }
@@ -315,6 +387,59 @@ impl Session {
         if self.targets[idx].health <= 0.0 {
             self.kill(idx, events);
         }
+    }
+
+    /// Time stamp of a shot fired this frame. A held full-auto trigger fires on the
+    /// weapon's fixed cadence even when frames do not line up with it; every other shot
+    /// is stamped with the current time.
+    fn shot_time(&self) -> f32 {
+        let interval = 1.0 / self.weapon.fire_rate;
+        if self.recoil.is_some() && self.time - self.last_shot_at < 2.0 * interval {
+            self.last_shot_at + interval
+        } else {
+            self.time
+        }
+    }
+
+    /// Direction and moving flag of the shot fired now, plus its bullet index within the
+    /// burst when recoil is on.
+    fn fire_bullet(&mut self) -> (Vec3, bool, Option<u32>) {
+        let speed = self.player_speed();
+        let Some(recoil) = self.recoil.as_mut() else {
+            let (dir, moving) = self.shot_direction();
+            return (dir, moving, None);
+        };
+        let kick = recoil.fire(self.time, &mut self.rng);
+        let (dir, moving) = weapon::recoil_direction(
+            self.view,
+            kick,
+            speed,
+            &self.profile,
+            &self.weapon,
+            self.def.weapon.simulate_spread,
+            &mut self.rng,
+        );
+        (dir, moving, Some(kick.bullet))
+    }
+
+    /// The recoil model in use, when the scenario enables `weapon.recoil`.
+    pub fn recoil_profile(&self) -> Option<&RecoilProfile> {
+        self.recoil.as_ref().map(RecoilState::profile)
+    }
+
+    /// Index of the last bullet fired in the burst in progress (1 = first bullet). It is 0
+    /// when the next shot is a fully recovered first bullet, and always 0 without recoil.
+    pub fn burst_index(&self) -> u32 {
+        self.recoil
+            .as_ref()
+            .map_or(0, |r| r.bullet_index(self.time))
+    }
+
+    /// Seconds until recoil fully resets (0 once recovered); `None` without recoil.
+    pub fn recoil_recovery_remaining(&self) -> Option<f32> {
+        self.recoil
+            .as_ref()
+            .map(|r| r.recovery_remaining(self.time))
     }
 
     /// Start a reload when the next shot cannot be paid for.
@@ -869,6 +994,157 @@ mod tests {
         }
         assert!(!s.is_reloading());
         assert_eq!(s.ammo().unwrap().0, 100.0);
+    }
+
+    /// One sphere of `radius` straight ahead at eye height, 10 m away, with recoil on.
+    fn recoil_def(radius: f32) -> ScenarioDef {
+        let mut def = sphere_def(FireMode::Click, 1000.0);
+        def.weapon.recoil = true;
+        def.targets.max_alive = 1;
+        def.targets.shape = Shape::Sphere { radius };
+        def.targets.spawn = SpawnArea::Floor {
+            x: Range::fixed(0.0),
+            z: Range::fixed(-10.0),
+            height: Range::fixed(1.82),
+        };
+        def
+    }
+
+    fn frame(s: &mut Session, view: ViewAngles, held: bool) -> Vec<SessionEvent> {
+        s.update(FrameInput {
+            dt: 0.01,
+            view,
+            fire_pressed: held,
+            fire_held: held,
+            ..Default::default()
+        })
+    }
+
+    /// Hold fire until `n` more shots are fired, then release for one frame. Returns
+    /// whether each shot hit.
+    fn spray(s: &mut Session, view: ViewAngles, n: u32) -> Vec<bool> {
+        let mut hits = Vec::new();
+        while hits.len() < n as usize {
+            for e in frame(s, view, true) {
+                if let SessionEvent::Shot { hit, .. } = e {
+                    hits.push(hit.is_some());
+                }
+            }
+        }
+        frame(s, view, false);
+        hits
+    }
+
+    fn wait(s: &mut Session, secs: f32) {
+        for _ in 0..(secs / 0.01).round() as usize {
+            frame(s, ViewAngles::default(), false);
+        }
+    }
+
+    #[test]
+    fn without_recoil_holding_fire_does_not_auto_fire_or_count_bursts() {
+        let mut s = Session::new(sphere_def(FireMode::Click, 100.0), 1);
+        for _ in 0..100 {
+            s.update(FrameInput {
+                dt: 0.01,
+                fire_held: true,
+                ..Default::default()
+            });
+        }
+        assert_eq!(s.stats().shots, 0);
+        assert_eq!(s.burst_index(), 0);
+        assert_eq!(s.recoil_recovery_remaining(), None);
+        assert!(s.recoil_profile().is_none());
+        assert_eq!((s.stats().bursts, s.stats().shots_by_bullet), (0, [0; 4]));
+    }
+
+    #[test]
+    fn holding_fire_with_recoil_fires_at_the_weapon_fire_rate() {
+        let mut s = Session::new(recoil_def(0.3), 1);
+        for _ in 0..200 {
+            frame(&mut s, ViewAngles::new(180.0, 0.0), true);
+        }
+        // Vandal: 9.75 rounds/s. Shots at 0.01 + k / 9.75 s up to 2.0 s give k = 0..=19.
+        assert_eq!(s.stats().shots, 20);
+        assert_eq!(s.stats().bursts, 1);
+        assert_eq!(s.stats().longest_burst, 20);
+    }
+
+    #[test]
+    fn protected_bullets_climb_into_a_target_aimed_below() {
+        // The sphere covers ≈2.87° around its center. Aiming 3.2° below it, the first
+        // bullet (0.25° spread) always misses, and from bullet 4 on the climb (0.35° per
+        // bullet, estimate) plus spread keeps every protected bullet inside it.
+        let mut s = Session::new(recoil_def(0.5), 1);
+        let hits = spray(&mut s, ViewAngles::new(0.0, -3.2), 6);
+        assert!(!hits[0], "{hits:?}");
+        assert!(hits[3..].iter().all(|h| *h), "{hits:?}");
+    }
+
+    #[test]
+    fn waiting_the_recovery_time_resets_to_the_first_bullet() {
+        let mut s = Session::new(recoil_def(0.3), 1);
+        let away = ViewAngles::new(180.0, 0.0);
+        spray(&mut s, away, 3);
+        assert_eq!(s.burst_index(), 3);
+        wait(&mut s, 0.2);
+        assert_eq!(
+            s.burst_index(),
+            3,
+            "0.2 s is shorter than the 0.375 s recovery"
+        );
+        assert!(s.recoil_recovery_remaining().unwrap() > 0.0);
+        spray(&mut s, away, 1);
+        assert_eq!(s.burst_index(), 4);
+        wait(&mut s, 0.4);
+        assert_eq!(s.burst_index(), 0);
+        assert_eq!(s.recoil_recovery_remaining(), Some(0.0));
+        spray(&mut s, away, 1);
+        assert_eq!(s.burst_index(), 1);
+        assert_eq!(s.stats().bursts, 2);
+    }
+
+    #[test]
+    fn recoil_sprays_are_deterministic_per_seed() {
+        let run = |seed| {
+            let mut s = Session::new(recoil_def(0.3), seed);
+            let hits = spray(&mut s, ViewAngles::new(0.0, -1.0), 25);
+            (hits, s.stats().clone())
+        };
+        assert_eq!(run(4), run(4));
+    }
+
+    #[test]
+    fn burst_metrics_count_bursts_and_bullet_buckets() {
+        let mut s = Session::new(recoil_def(0.3), 1);
+        let away = ViewAngles::new(180.0, 0.0);
+        spray(&mut s, away, 3);
+        wait(&mut s, 0.5);
+        spray(&mut s, away, 1);
+        wait(&mut s, 0.5);
+        spray(&mut s, away, 8);
+        let st = s.stats();
+        assert_eq!(st.shots, 12);
+        assert_eq!(st.bursts, 3);
+        assert_eq!(st.longest_burst, 8);
+        assert_eq!(st.shots_by_bullet, [3, 4, 3, 2]);
+        assert_eq!(st.hits_by_bullet, [0; 4]);
+        assert!((st.avg_burst_len() - 4.0).abs() < 1e-6);
+        assert!((st.first_bullet_share() - 0.25).abs() < 1e-6);
+    }
+
+    #[test]
+    fn burst_bonus_only_rewards_hits_within_the_protected_bullets() {
+        // A 2 m sphere at 10 m (≈11°) catches every bullet of a 10-round spray.
+        let mut def = recoil_def(2.0);
+        def.scoring.sphere = 0.0;
+        def.scoring.burst_bonus = 10.0;
+        let mut s = Session::new(def, 1);
+        let hits = spray(&mut s, ViewAngles::new(0.0, 0.0), 10);
+        assert!(hits.iter().all(|h| *h), "{hits:?}");
+        assert_eq!(s.stats().hits_by_bullet, [1, 2, 3, 4]);
+        // Vandal protects 6 bullets: 6 × 10 points.
+        assert!((s.stats().score - 60.0).abs() < 1e-3, "{}", s.stats().score);
     }
 
     #[test]

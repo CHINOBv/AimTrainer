@@ -1,8 +1,9 @@
-//! Weapon handling: the fire-rate gate, the shot direction with movement spread, and the
-//! ray cast that finds which target a shot hits.
+//! Weapon handling: the fire-rate gate, the shot direction with movement spread and
+//! recoil, and the ray cast that finds which target a shot hits.
 
 use super::def::Shape;
 use super::hit::{HitZone, Ray, ray_humanoid, ray_sphere};
+use super::recoil::Kick;
 use super::session::Target;
 use crate::math::{Vec3, ViewAngles};
 use crate::movement::MovementProfile;
@@ -27,23 +28,51 @@ pub fn shot_direction(
     simulate_spread: bool,
     rng: &mut Rng,
 ) -> (Vec3, bool) {
-    let limit = profile.accuracy_speed_limit();
-    let moving = speed > limit;
-    let mut dir = view.direction();
-    if simulate_spread {
-        let mut spread = weapon.first_shot_spread_deg;
-        if moving {
-            let run = profile.run_speed;
-            let t = ((speed - limit) / (run - limit).max(f32::EPSILON)).clamp(0.0, 1.0);
-            spread += weapon.run_spread_deg * t;
-        }
-        // Uniform sample inside the spread cone's disk.
-        let r = spread * rng.next_f32().sqrt();
-        let phi = rng.next_f32() * std::f32::consts::TAU;
-        let v = view.rotated(r * phi.cos(), r * phi.sin());
-        dir = v.direction();
+    let moving = speed > profile.accuracy_speed_limit();
+    if !simulate_spread {
+        return (view.direction(), moving);
     }
-    (dir, moving)
+    let spread = weapon.first_shot_spread_deg + run_spread(speed, profile, weapon);
+    (sample_cone(view, spread, rng), moving)
+}
+
+/// Shot direction of one bullet of a recoil spray: the crosshair moved by the bullet's
+/// recoil `kick`, sampled inside the bullet's spread cone (plus running inaccuracy when
+/// `simulate_spread` is on). Returns the direction and whether the shooter was moving.
+pub(super) fn recoil_direction(
+    view: ViewAngles,
+    kick: Kick,
+    speed: f32,
+    profile: &MovementProfile,
+    weapon: &WeaponStats,
+    simulate_spread: bool,
+    rng: &mut Rng,
+) -> (Vec3, bool) {
+    let moving = speed > profile.accuracy_speed_limit();
+    let mut spread = kick.spread_deg;
+    if simulate_spread {
+        spread += run_spread(speed, profile, weapon);
+    }
+    let aimed = view.rotated(kick.yaw_deg, kick.pitch_deg);
+    (sample_cone(aimed, spread, rng), moving)
+}
+
+/// Extra spread for moving above the accuracy limit, growing linearly up to run speed.
+fn run_spread(speed: f32, profile: &MovementProfile, weapon: &WeaponStats) -> f32 {
+    let limit = profile.accuracy_speed_limit();
+    if speed <= limit {
+        return 0.0;
+    }
+    let run = profile.run_speed;
+    let t = ((speed - limit) / (run - limit).max(f32::EPSILON)).clamp(0.0, 1.0);
+    weapon.run_spread_deg * t
+}
+
+/// A direction sampled uniformly inside the disk of a cone of radius `spread_deg` around `view`.
+fn sample_cone(view: ViewAngles, spread_deg: f32, rng: &mut Rng) -> Vec3 {
+    let r = spread_deg * rng.next_f32().sqrt();
+    let phi = rng.next_f32() * std::f32::consts::TAU;
+    view.rotated(r * phi.cos(), r * phi.sin()).direction()
 }
 
 /// The index and zone of the nearest target visible at `now` that `ray` hits.

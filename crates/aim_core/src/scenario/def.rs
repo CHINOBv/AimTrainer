@@ -89,6 +89,11 @@ pub struct WeaponDef {
     /// refunds some, and running dry forces a reload. Modelled on Voltaic S5 clicking.
     #[serde(default)]
     pub ammo: Option<AmmoDef>,
+    /// Full-auto recoil (click mode, Vandal or Phantom only): holding the button keeps
+    /// firing at the fire rate, and each bullet of a burst climbs, sways and spreads more
+    /// until the player stops firing for the weapon's recovery time.
+    #[serde(default)]
+    pub recoil: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -123,6 +128,7 @@ impl Default for WeaponDef {
             fire: FireMode::default(),
             simulate_spread: false,
             ammo: None,
+            recoil: false,
         }
     }
 }
@@ -309,6 +315,10 @@ pub struct ScoringDef {
     /// Points subtracted when a target expires.
     #[serde(default)]
     pub expire_penalty: f32,
+    /// Points added per hit fired within the weapon's protected bullets (needs
+    /// `weapon.recoil`). Rewards short, controlled bursts.
+    #[serde(default)]
+    pub burst_bonus: f32,
 }
 
 fn pts_head() -> f32 {
@@ -331,6 +341,7 @@ impl Default for ScoringDef {
             miss_penalty: 0.0,
             moving_shot_penalty: 0.0,
             expire_penalty: 0.0,
+            burst_bonus: 0.0,
         }
     }
 }
@@ -386,6 +397,19 @@ impl ScenarioDef {
                 "needs cost > 0, clip >= cost, refund >= 0, reload_secs >= 0",
             );
         }
+        check(
+            !self.weapon.recoil
+                || (self.weapon.kind.recoil().is_some() && self.weapon.fire == FireMode::Click),
+            "weapon.recoil",
+            "needs kind = \"vandal\" or \"phantom\" and fire = \"click\"",
+        );
+        check(
+            self.scoring.burst_bonus.is_finite()
+                && self.scoring.burst_bonus >= 0.0
+                && (self.scoring.burst_bonus == 0.0 || self.weapon.recoil),
+            "scoring.burst_bonus",
+            "must be >= 0 and needs weapon.recoil = true",
+        );
         check(
             self.difficulty.is_valid(),
             "difficulty",
@@ -590,5 +614,30 @@ mod tests {
         d.targets.health = f32::INFINITY;
         let fields: Vec<_> = d.validate().into_iter().map(|e| e.field).collect();
         assert_eq!(fields, ["id", "duration_secs", "targets.health"]);
+    }
+
+    #[test]
+    fn recoil_and_burst_bonus_default_off_and_are_validated() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert!(!d.weapon.recoil);
+        assert_eq!(d.scoring.burst_bonus, 0.0);
+
+        let mut bad = d.clone();
+        bad.weapon.kind = Weapon::Guardian;
+        bad.weapon.recoil = true;
+        bad.scoring.burst_bonus = 10.0;
+        let fields: Vec<_> = bad.validate().into_iter().map(|e| e.field).collect();
+        assert_eq!(fields, ["weapon.recoil"]);
+
+        let mut no_recoil = d.clone();
+        no_recoil.scoring.burst_bonus = 10.0;
+        let fields: Vec<_> = no_recoil.validate().into_iter().map(|e| e.field).collect();
+        assert_eq!(fields, ["scoring.burst_bonus"]);
+
+        let mut hold = d;
+        hold.weapon.recoil = true;
+        hold.weapon.fire = FireMode::Hold;
+        let fields: Vec<_> = hold.validate().into_iter().map(|e| e.field).collect();
+        assert_eq!(fields, ["weapon.recoil"]);
     }
 }

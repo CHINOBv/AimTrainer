@@ -113,6 +113,34 @@ impl Weapon {
         }
     }
 
+    /// Full-auto recoil and spread model, for the rifles whose recoil is documented
+    /// (Vandal and Phantom). `None` for every other weapon.
+    pub fn recoil(self) -> Option<RecoilProfile> {
+        match self {
+            Weapon::Vandal => Some(RecoilProfile {
+                protected_bullets: 6,
+                max_spread_deg: 1.0,
+                spread_ramp_bullets: 10,
+                recovery_secs: 0.375,
+                yaw_switch_chance: 0.1,
+                yaw_switch_secs: 0.6,
+                climb_deg_per_bullet: 0.35,
+                sway_deg_per_bullet: 0.3,
+            }),
+            Weapon::Phantom => Some(RecoilProfile {
+                protected_bullets: 8,
+                max_spread_deg: 0.9,
+                spread_ramp_bullets: 10,
+                recovery_secs: 0.35,
+                yaw_switch_chance: 0.1,
+                yaw_switch_secs: 0.6,
+                climb_deg_per_bullet: 0.3,
+                sway_deg_per_bullet: 0.25,
+            }),
+            _ => None,
+        }
+    }
+
     /// Movement profile while holding this weapon.
     pub fn movement(self) -> MovementProfile {
         let s = self.stats();
@@ -121,6 +149,29 @@ impl Weapon {
             ..MovementProfile::valorant_with_speed(s.run_speed)
         }
     }
+}
+
+/// Recoil and spread of a full-auto spray (see `docs/valorant-mechanics.md`, "Recoil").
+/// Riot publishes the bullet counts and timings; the per-bullet angles are estimates.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RecoilProfile {
+    /// Bullets that only climb vertically before the horizontal sway starts (patch 11.08).
+    pub protected_bullets: u32,
+    /// Spread a long spray reaches, standing, degrees.
+    pub max_spread_deg: f32,
+    /// Bullets over which spread grows linearly from first-shot spread to the maximum
+    /// (trainer model, estimate).
+    pub spread_ramp_bullets: u32,
+    /// Pause without firing after which recoil and spread fully reset (patch 0.50).
+    pub recovery_secs: f32,
+    /// Chance per bullet, after the protected ones, that the sway switches side.
+    pub yaw_switch_chance: f32,
+    /// Time the sway takes to swing to the other side after a switch.
+    pub yaw_switch_secs: f32,
+    /// Vertical climb added by each protected bullet, degrees (estimate).
+    pub climb_deg_per_bullet: f32,
+    /// Horizontal sway added by each bullet after the protected ones, degrees (estimate).
+    pub sway_deg_per_bullet: f32,
 }
 
 /// Agent hitbox dimensions in meters. All agents share one hitbox in VALORANT; exact
@@ -167,6 +218,16 @@ mod tests {
         assert_eq!(Weapon::Knife.movement().run_speed, 6.75);
         let op = Weapon::Operator.movement();
         assert!((op.accuracy_speed_limit() - 5.13 * 0.15).abs() < 1e-6);
+    }
+
+    #[test]
+    fn only_vandal_and_phantom_have_a_recoil_model_with_patch_values() {
+        let v = Weapon::Vandal.recoil().unwrap();
+        let p = Weapon::Phantom.recoil().unwrap();
+        assert_eq!((v.protected_bullets, p.protected_bullets), (6, 8));
+        assert_eq!((v.recovery_secs, p.recovery_secs), (0.375, 0.35));
+        assert!(Weapon::Guardian.recoil().is_none());
+        assert!(Weapon::Classic.recoil().is_none());
     }
 
     #[test]

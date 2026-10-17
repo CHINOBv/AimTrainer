@@ -207,7 +207,11 @@ impl SimAimer {
         let dy = wrap_degrees(goal.yaw_deg + plan.error.0 - plan.from.yaw_deg);
         let dp = goal.pitch_deg + plan.error.1 - plan.from.pitch_deg;
         self.view = plan.from.rotated(dy * s, dp * s);
-        let fire = tau >= 1.0;
+        // With recoil on, every profile except the recruit waits for the gun to recover so
+        // the shot is a fresh first bullet (the habit the burst drills teach).
+        let recovering = self.profile.name != "recruit"
+            && session.recoil_recovery_remaining().is_some_and(|r| r > 0.0);
+        let fire = tau >= 1.0 && !recovering;
         if fire {
             plan.shot = true;
         }
