@@ -1,9 +1,11 @@
-//! End-of-run results with personal-best comparison and routine navigation.
+//! End-of-run results with personal-best comparison, the run analysis and routine
+//! navigation.
 
 use crate::game::{LastResult, RoutineProgress};
 use crate::ui::UiAction;
 use crate::ui::atoms::{GOOD, big};
 use crate::ui::molecules::stat_row;
+use crate::ui::organisms::analysis_panel::{RunReport, analysis_panel};
 use bevy_egui::egui::{self, Align2};
 
 /// What the card needs beyond the result itself.
@@ -13,7 +15,11 @@ pub struct ResultsContext<'a> {
     pub next_run: Option<&'a str>,
     /// Space was pressed this frame (shortcut for the primary button).
     pub space: bool,
+    /// Analysis of this run, computed once per result.
+    pub report: Option<&'a RunReport>,
 }
+
+const ANALYSIS_MAX_HEIGHT_PX: f32 = 280.0;
 
 pub fn results_card(
     ctx: &egui::Context,
@@ -62,6 +68,16 @@ pub fn results_card(
                     stat_row(ui, "Targets missed (expired)", r.expired.to_string());
                 }
             });
+            if let Some(report) = rc.report {
+                ui.separator();
+                egui::ScrollArea::vertical()
+                    .max_height(ANALYSIS_MAX_HEIGHT_PX)
+                    .show(ui, |ui| {
+                        if let Some(a) = analysis_panel(ui, report) {
+                            action = Some(a);
+                        }
+                    });
+            }
             ui.separator();
             if let Some(p) = rc.routine {
                 ui.label(format!("{} · run {}/{}", p.name, p.index + 1, p.plan.len()));

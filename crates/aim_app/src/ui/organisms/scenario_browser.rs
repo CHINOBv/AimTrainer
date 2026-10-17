@@ -4,6 +4,7 @@ use crate::persistence::history::History;
 use crate::persistence::library::Library;
 use crate::ui::UiAction;
 use crate::ui::molecules::scenario_item;
+use crate::ui::organisms::history_chart::history_chart;
 use aim_core::scenario::{Category, FireMode, ScenarioDef};
 use bevy_egui::egui;
 
@@ -32,6 +33,10 @@ pub fn scenario_list(
     });
 }
 
+/// Runs drawn in the history chart, and listed as numbers under it.
+const CHART_RUNS: usize = 30;
+const LISTED_RUNS: usize = 10;
+
 pub fn scenario_details(
     ui: &mut egui::Ui,
     def: &ScenarioDef,
@@ -54,9 +59,11 @@ pub fn scenario_details(
     if def.player.movement {
         ui.label("Movement: WASD (Shift = walk). Counter-strafe before shooting.");
     }
-    let recent = history.recent(&def.id, 10);
+    let charted = history.recent(&def.id, CHART_RUNS);
+    let recent = &charted[charted.len().saturating_sub(LISTED_RUNS)..];
     if !recent.is_empty() {
         ui.add_space(6.0);
+        history_chart(ui, &charted);
         let list: Vec<String> = recent.iter().map(|s| format!("{s:.0}")).collect();
         ui.label(format!("Last runs: {}", list.join(", ")));
     }
