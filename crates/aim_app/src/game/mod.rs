@@ -32,9 +32,14 @@ pub enum AppState {
 /// A routine in progress: the planned runs and which one is next.
 #[derive(Debug, Clone)]
 pub struct RoutineProgress {
+    pub routine_id: String,
     pub name: String,
     pub plan: Vec<PlannedRun>,
     pub index: usize,
+    /// Difficulty level the routine is played at (a method tier's level, or 0).
+    pub base_level: f32,
+    /// Seed of the shuffled plan, so a split session can be resumed with the same order.
+    pub seed: u64,
 }
 
 #[derive(Resource)]

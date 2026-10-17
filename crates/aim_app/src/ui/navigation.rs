@@ -3,6 +3,7 @@
 use super::UiAction;
 use crate::game::{ActiveRoutine, AppState, RoutineProgress, Run, start_run};
 use crate::persistence::library::Library;
+use aim_core::scenario::parse_run_key;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
@@ -34,32 +35,30 @@ impl Navigator<'_, '_> {
         match action {
             UiAction::StartScenario(id) | UiAction::Retry(id) => {
                 self.routine.0 = None;
-                self.start(&id);
+                // Results carry run keys (`id@+0.50`); retry at the same difficulty.
+                let (base, level) = parse_run_key(&id);
+                let base = base.to_owned();
+                self.start(&base, level);
             }
-            UiAction::StartRoutine(id) => {
-                let Some(r) = self.library.routines.iter().find(|r| r.id == id) else {
-                    return;
-                };
-                let plan = r.plan(&self.library.scenarios, routine_seed());
-                let Some(first) = plan.first().map(|p| p.scenario_id.clone()) else {
-                    return;
-                };
-                self.routine.0 = Some(RoutineProgress {
-                    name: r.name.clone(),
-                    plan,
-                    index: 0,
-                });
-                self.start(&first);
-            }
+            UiAction::StartRoutine(id) => self.start_routine(&id, 0.0, 0, routine_seed()),
+            UiAction::StartRoutineAt {
+                routine,
+                level,
+                index,
+                seed,
+            } => self.start_routine(&routine, level, index, seed),
             UiAction::NextRoutineRun => {
                 let Some(p) = self.routine.0.as_mut() else {
                     return;
                 };
-                let next = p
-                    .plan
-                    .get(p.index + 1)
-                    .and_then(|n| self.library.scenario(&n.scenario_id));
-                let Some(def) = next.cloned() else { return };
+                let Some(next) = p.plan.get(p.index + 1) else {
+                    return;
+                };
+                let level = next.level(p.base_level);
+                let Some(def) = self.library.scenario(&next.scenario_id) else {
+                    return;
+                };
+                let def = def.at_difficulty(level);
                 p.index += 1;
                 start_run(&mut self.commands, &mut self.next, def);
             }
@@ -78,10 +77,29 @@ impl Navigator<'_, '_> {
         }
     }
 
-    fn start(&mut self, scenario_id: &str) {
+    fn start(&mut self, scenario_id: &str, level: f32) {
         if let Some(def) = self.library.scenario(scenario_id) {
-            start_run(&mut self.commands, &mut self.next, def.clone());
+            start_run(&mut self.commands, &mut self.next, def.at_difficulty(level));
         }
+    }
+
+    /// Start `routine` at `level`, from run `index` of the plan shuffled with `seed`.
+    fn start_routine(&mut self, routine: &str, level: f32, index: usize, seed: u64) {
+        let Some(r) = self.library.routines.iter().find(|r| r.id == routine) else {
+            return;
+        };
+        let plan = r.plan(&self.library.scenarios, seed);
+        let Some(run) = plan.get(index) else { return };
+        let (scenario, run_level) = (run.scenario_id.clone(), run.level(level));
+        self.routine.0 = Some(RoutineProgress {
+            routine_id: r.id.clone(),
+            name: r.name.clone(),
+            plan,
+            index,
+            base_level: level,
+            seed,
+        });
+        self.start(&scenario, run_level);
     }
 }
 
@@ -105,6 +123,7 @@ mod tests {
             scenarios: aim_core::scenario::builtin::all(),
             routines: aim_core::training::routine::builtin::all(),
             benchmarks: Vec::new(),
+            methods: Vec::new(),
             errors: Vec::new(),
         });
         world

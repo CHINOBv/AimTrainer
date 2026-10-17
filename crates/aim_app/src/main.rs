@@ -96,11 +96,13 @@ fn main() -> AppExit {
         .add_plugins(EguiPlugin::default())
         .insert_resource(library::Library::load(&paths))
         .insert_resource(history::History::load(&paths))
+        .insert_resource(persistence::method_progress::MethodProgress::load(&paths))
         .add_plugins((
             overlay::OverlayPlugin {
                 hotkey: settings.overlay_hotkey.clone(),
             },
             game::GamePlugin,
+            persistence::method_progress::MethodProgressPlugin,
             ui::UiPlugin,
         ))
         .insert_resource(settings)

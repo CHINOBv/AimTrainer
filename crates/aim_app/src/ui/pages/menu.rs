@@ -3,18 +3,23 @@
 use crate::game::AppState;
 use crate::overlay::{Overlay, background};
 use crate::persistence::history::History;
+use crate::persistence::library::Library;
+use crate::persistence::method_progress::{DayProgress, MethodProgress};
 use crate::persistence::settings::{Paths, Settings};
 use crate::ui::UiAction;
 use crate::ui::atoms::ERROR;
 use crate::ui::molecules::tab_bar;
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::settings_panels::{self, DpiMeter};
+use crate::ui::organisms::today_panel::{self, DayModel, RoutineModel, TodayAction, TodayModel};
 use crate::ui::organisms::{benchmark_panel, routine_list, scenario_browser};
 use aim_core::fov;
+use aim_core::training::method::{MethodDef, Weekday};
 use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+use chrono::Datelike;
 
 pub struct MenuPage;
 
@@ -32,13 +37,15 @@ impl Plugin for MenuPage {
 #[derive(Default, PartialEq, Clone, Copy)]
 enum Tab {
     #[default]
+    Today,
     Scenarios,
     Routines,
     Benchmark,
     Settings,
 }
 
-const TABS: [(Tab, &str); 4] = [
+const TABS: [(Tab, &str); 5] = [
+    (Tab::Today, "Today"),
     (Tab::Scenarios, "Scenarios"),
     (Tab::Routines, "Routines"),
     (Tab::Benchmark, "Benchmark"),
@@ -74,6 +81,7 @@ fn menu(
     mut cfg: SettingsAccess,
     history: Res<History>,
     overlay: Res<Overlay>,
+    mut progress: ResMut<MethodProgress>,
     mut nav: Navigator,
 ) -> Result {
     if !overlay.visible {
@@ -123,7 +131,19 @@ fn menu(
         });
     }
 
+    let (today, weekday) = local_today();
+    let mut today_action: Option<TodayAction> = None;
     match state.tab {
+        Tab::Today => {
+            egui::CentralPanel::default().show(&mut root, |ui| {
+                match today_model(lib, &history, &progress, &today, weekday) {
+                    Some(model) => today_action = today_panel::today_panel(ui, &model),
+                    None => {
+                        ui.label("No weekly training method is available.");
+                    }
+                }
+            });
+        }
         Tab::Scenarios => {
             egui::Panel::left("list")
                 .resizable(true)
@@ -195,10 +215,162 @@ fn menu(
         cfg.settings.save(&cfg.paths);
         *cfg.clear = background(&cfg.settings, overlay.visible);
     }
+    if let Some(t) = today_action {
+        action = apply_today(t, lib, &history, &mut progress, &cfg.paths, &today).or(action);
+    }
     if let Some(action) = action {
         nav.apply(action);
     }
     Ok(())
+}
+
+/// Local date (`YYYY-MM-DD`) and weekday: the method day follows the player's clock.
+fn local_today() -> (String, Weekday) {
+    let now = chrono::Local::now();
+    (
+        now.format("%Y-%m-%d").to_string(),
+        Weekday::from_monday_index(now.weekday().num_days_from_monday()),
+    )
+}
+
+/// The method, the tier in effect and the benchmark energy behind the suggestion.
+fn method_context<'a>(
+    lib: &'a Library,
+    history: &History,
+    progress: &MethodProgress,
+) -> Option<(&'a MethodDef, f32, Option<f32>, String)> {
+    let method = lib.methods.first()?;
+    let result = method
+        .benchmark
+        .as_ref()
+        .and_then(|id| lib.benchmarks.iter().find(|b| &b.id == id))
+        .map(|b| b.evaluate(&history.bests()));
+    let energy = result.as_ref().and_then(|r| r.overall);
+    let suggested = method.suggested_tier(energy);
+    let tier = progress
+        .tier
+        .as_deref()
+        .and_then(|id| method.tier(id))
+        .unwrap_or(suggested);
+    Some((method, tier.level, energy, tier.id.clone()))
+}
+
+fn routine_model(
+    lib: &Library,
+    progress: &MethodProgress,
+    date: &str,
+    id: &str,
+) -> Option<RoutineModel> {
+    let r = lib.routines.iter().find(|r| r.id == id)?;
+    Some(RoutineModel {
+        id: r.id.clone(),
+        name: r.name.clone(),
+        description: r.description.clone(),
+        runs: r.run_count(&lib.scenarios),
+        minutes: r.minutes(&lib.scenarios),
+        progress: progress
+            .resumable(date, id)
+            .map(|d| (d.next_index, d.total_runs)),
+    })
+}
+
+fn today_model(
+    lib: &Library,
+    history: &History,
+    progress: &MethodProgress,
+    date: &str,
+    weekday: Weekday,
+) -> Option<TodayModel> {
+    let (method, _, energy, selected) = method_context(lib, history, progress)?;
+    let plan = method.day(weekday);
+    let day = match &plan.routine {
+        Some(id) => DayModel::Routine(routine_model(lib, progress, date, id)?),
+        None => {
+            let result = method
+                .benchmark
+                .as_ref()
+                .and_then(|id| lib.benchmarks.iter().find(|b| &b.id == id))
+                .map(|b| b.evaluate(&history.bests()));
+            let weakest = result
+                .as_ref()
+                .and_then(|r| method.weakest_day(r))
+                .and_then(|d| method.day(d).routine.clone())
+                .and_then(|id| routine_model(lib, progress, date, &id));
+            DayModel::Flex { weakest }
+        }
+    };
+    Some(TodayModel {
+        weekday: weekday.label(),
+        method_name: method.name.clone(),
+        method_description: method.description.clone(),
+        credit: method.credit.clone(),
+        tiers: method
+            .tiers
+            .iter()
+            .map(|t| (t.id.clone(), t.name.clone()))
+            .collect(),
+        selected_tier: selected,
+        suggested_tier: method.suggested_tier(energy).id.clone(),
+        benchmark_energy: energy,
+        day,
+    })
+}
+
+/// Turn a Today action into progress updates and the navigation action to apply.
+fn apply_today(
+    action: TodayAction,
+    lib: &Library,
+    history: &History,
+    progress: &mut MethodProgress,
+    paths: &Paths,
+    date: &str,
+) -> Option<UiAction> {
+    match action {
+        TodayAction::SelectTier(id) => {
+            progress.tier = Some(id);
+            progress.today = None;
+            progress.save(paths);
+            None
+        }
+        TodayAction::Start(routine) => {
+            let (_, level, _, _) = method_context(lib, history, progress)?;
+            let total_runs = lib
+                .routines
+                .iter()
+                .find(|r| r.id == routine)?
+                .run_count(&lib.scenarios);
+            let seed = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos() as u64);
+            progress.today = Some(DayProgress {
+                date: date.to_owned(),
+                routine: routine.clone(),
+                level,
+                seed,
+                next_index: 0,
+                total_runs,
+            });
+            progress.save(paths);
+            Some(UiAction::StartRoutineAt {
+                routine,
+                level,
+                index: 0,
+                seed,
+            })
+        }
+        TodayAction::Resume(routine) => {
+            let d = progress
+                .resumable(date, &routine)
+                .filter(|d| !d.is_done())?;
+            Some(UiAction::StartRoutineAt {
+                routine,
+                level: d.level,
+                index: d.next_index,
+                seed: d.seed,
+            })
+        }
+        TodayAction::WarmUp => Some(UiAction::StartRoutine("quick-warmup".to_owned())),
+    }
 }
 
 #[cfg(test)]
