@@ -55,6 +55,9 @@ fn hud(
     if run.session.def().player.movement {
         hud_panels::movement_meter(ctx, &run.session);
     }
+    if run.session.recoil_profile().is_some() {
+        hud_panels::spray_meter(ctx, &run.session);
+    }
     if run.countdown > 0.0 {
         hud_panels::countdown(ctx, run.countdown);
     }

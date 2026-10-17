@@ -79,3 +79,24 @@ The source for all of these is the official wiki: https://wiki.playvalorant.com/
 Two of these values are approximate: the Classic's spread and the Guardian/Operator run-spread values.
 
 **Spread model (`session.rs`, used only when `simulate_spread = true`):** spread = first-shot spread + run spread × (how far the speed is between the accuracy threshold and the run speed). This is a linear approximation. It shows why stopping before you shoot matters, but it does not reproduce Riot's internal curve.
+
+## Recoil
+
+Used only when a scenario sets `weapon.recoil = true` (`valorant::RecoilProfile`, `scenario/recoil.rs`). Research: `docs/research/recoil.md` (2026-10-17).
+
+| Value | Vandal | Phantom | Used as | Confidence | Source |
+|---|---|---|---|---|---|
+| Max spread, standing | 1.0° | 0.9° | `max_spread_deg` | verified | https://wiki.playvalorant.com/en-us/Vandal , https://wiki.playvalorant.com/en-us/Phantom |
+| Protected bullets (vertical-only climb) | 6 | 8 | `protected_bullets` | verified | https://playvalorant.com/en-us/news/game-updates/valorant-patch-notes-11-08/ |
+| Yaw switch chance per bullet | 10 % | 10 % | `yaw_switch_chance` | verified | same as above |
+| Yaw switch time | 0.6 s | 0.6 s | `yaw_switch_secs` | verified | same as above |
+| Recovery time (full reset) | 0.375 s | 0.35 s | `recovery_secs` | verified | https://playvalorant.com/en-us/news/game-updates/valorant-patch-notes-0-50/ |
+| Spread grows linearly over 10 bullets | 10 | 10 | `spread_ramp_bullets` | estimate | Riot does not publish spread growth per bullet |
+| Climb per protected bullet | 0.35° | 0.30° | `climb_deg_per_bullet` | estimate | see below |
+| Sway per bullet after the protected ones | 0.30° | 0.25° | `sway_deg_per_bullet` | estimate | see below |
+
+**How the model works.** Bullet 1 of a burst goes where the crosshair points, inside the first-shot spread cone. Each later protected bullet climbs `climb_deg_per_bullet` higher. After the protected bullets the climb holds, and each bullet moves `sway_deg_per_bullet` to one side. The side is random at the first swaying bullet; each later bullet has a 10 % chance to flip it, and the sway eases to the new side over 0.6 s. Spread grows linearly from first-shot spread (bullet 1) to max spread (bullet 11 on). A pause of at least the recovery time resets everything at once; shorter pauses keep the burst going. VALORANT recovers gradually, so this all-or-nothing reset is a simplification.
+
+**Why these climb and sway numbers (estimate).** Riot does not publish recoil in degrees. We use the common spraying advice "start on the chest and let the climb walk up to the head" as a target: the chest-to-head-center distance of our hitbox is ≈0.475 m (1.4 m to 1.875 m), which is ≈1.8° at 15 m. Spreading that over the Vandal's 5 climbing bullets gives ≈0.36° (rounded to 0.35°). The Phantom gets a lower 0.30° per bullet, in line with its reputation as the steadier rifle to spray; over its 7 climbing bullets it reaches a total (≈2.1°) close to the Vandal's (≈1.75°). The sway values are set a little below the climb, so 6 uncorrected swaying bullets drift ≈1.5–1.8°, about 0.3 m at 10 m, enough to walk off a body that is 0.5 m wide. Every one of these values is a guess and lives in one place (`Weapon::recoil`), so it is easy to replace once someone measures it.
+
+**Bullets, not the camera.** In VALORANT the camera kick in hip-fire is smaller than the bullet climb, and how they split is not published. The trainer models only the bullets: the crosshair does not move, so players learn to pull down against an invisible climb, as with the in-game hip-fire crosshair.

@@ -1,0 +1,24 @@
+id = "spray-transfer"
+name = "Spray Transfer"
+category = "switching"
+description = """
+Spray transfers with the Phantom (recoil on: hold to fire full-auto). Three agents stand close together
+at 10–15 m and take three hits each. Kill all three in one spray: pull down against the climb and drag
+the spray from body to body. Body shots count, so start on the chest and let the climb walk up."""
+
+[weapon]
+kind = "phantom"
+recoil = true
+
+[targets]
+shape = { kind = "humanoid" }
+spawn = { kind = "floor", x = [-3.0, 3.0], z = [-15.0, -10.0] }
+max_alive = 3
+health = 3
+min_separation_deg = 4
+lifetime_secs = 2.5
+appear_delay_secs = [0.4, 0.6]
+
+[scoring]
+burst_bonus = 10
+miss_penalty = 0

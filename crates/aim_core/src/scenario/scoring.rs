@@ -1,5 +1,5 @@
-//! Scoring: which hit zones count, how many points each is worth, how shots, hits, kills
-//! and expiries update the run's [`Stats`], and the final [`RunResult`].
+//! Scoring: which hit zones count, how many points each is worth, how shots, hits, burst
+//! bullets, kills and expiries update the run's [`Stats`], and the final [`RunResult`].
 
 use super::def::{FireMode, ScenarioDef, ScoringDef, Shape};
 use super::hit::HitZone;
@@ -42,6 +42,30 @@ pub(super) fn record_hit(stats: &mut Stats, scoring: &ScoringDef, zone: HitZone)
         HitZone::Sphere => {}
     }
     stats.score += zone_points(scoring, zone);
+}
+
+/// Counts the `bullet`-th bullet (1-based) of a recoil burst: a first bullet starts a
+/// new burst.
+pub(super) fn record_bullet(stats: &mut Stats, bullet: u32) {
+    if bullet == 1 {
+        stats.bursts += 1;
+    }
+    stats.longest_burst = stats.longest_burst.max(bullet);
+    stats.shots_by_bullet[Stats::bullet_bucket(bullet)] += 1;
+}
+
+/// Counts a hit by the `bullet`-th bullet of a burst and awards the burst bonus when it
+/// was one of the weapon's `protected` bullets.
+pub(super) fn record_bullet_hit(
+    stats: &mut Stats,
+    scoring: &ScoringDef,
+    bullet: u32,
+    protected: u32,
+) {
+    stats.hits_by_bullet[Stats::bullet_bucket(bullet)] += 1;
+    if bullet <= protected {
+        stats.score += scoring.burst_bonus;
+    }
 }
 
 /// Counts `dt` seconds of hold-mode fire on `zone`, awarding its points per second.

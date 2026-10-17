@@ -1,0 +1,23 @@
+id = "tap-discipline"
+name = "Tap Discipline"
+category = "precision"
+description = """
+Long-range taps with the Vandal (recoil on). Agents stand at 30–40 m, where a head is ≈0.4°, and leave
+after 1.2 s. Spread grows with every bullet of a burst, so only a fully recovered first bullet (wait about
+0.4 s between shots) is reliable here. Hits within the first 6 bullets of a burst earn a bonus; misses
+cost points."""
+
+[weapon]
+kind = "vandal"
+recoil = true
+
+[targets]
+shape = { kind = "humanoid" }
+spawn = { kind = "floor", x = [-10.0, 10.0], z = [-40.0, -30.0] }
+max_alive = 1
+lifetime_secs = 1.2
+appear_delay_secs = [0.35, 0.6]
+
+[scoring]
+burst_bonus = 30
+miss_penalty = 10

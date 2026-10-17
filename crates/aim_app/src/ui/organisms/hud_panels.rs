@@ -1,4 +1,5 @@
-//! In-run overlays: run status, movement accuracy meter, countdown, pause window.
+//! In-run overlays: run status, movement accuracy meter, spray meter, countdown, pause
+//! window.
 
 use crate::ui::UiAction;
 use crate::ui::atoms::{BAD, GOOD, big};
@@ -55,6 +56,50 @@ pub fn movement_meter(ctx: &egui::Context, s: &Session) {
                     "{:.2} m/s  (accurate ≤ {limit:.2})  ·  moving shots {}",
                     s.player_speed(),
                     s.stats().moving_shots
+                ));
+            });
+        });
+}
+
+/// Recoil scenarios only: the bullet index of the burst in progress, a green READY when the
+/// next shot is a fully recovered first bullet, and the recovery countdown otherwise.
+pub fn spray_meter(ctx: &egui::Context, s: &Session) {
+    let (Some(profile), Some(remaining)) = (s.recoil_profile(), s.recoil_recovery_remaining())
+    else {
+        return;
+    };
+    let bullet = s.burst_index();
+    let protected = profile.protected_bullets;
+    egui::Area::new(egui::Id::new("spray"))
+        .anchor(Align2::RIGHT_BOTTOM, [-24.0, -24.0])
+        .show(ctx, |ui| {
+            ui.vertical(|ui| {
+                if bullet == 0 {
+                    ui.label(
+                        RichText::new("READY")
+                            .color(GOOD)
+                            .strong()
+                            .font(FontId::proportional(20.0)),
+                    );
+                    ui.label("next shot: first bullet");
+                } else {
+                    let color = if bullet < protected { GOOD } else { BAD };
+                    ui.label(
+                        RichText::new(format!("BULLET {bullet}"))
+                            .color(color)
+                            .strong()
+                            .font(FontId::proportional(20.0)),
+                    );
+                    ui.label(format!(
+                        "reset in {remaining:.2}s  ·  protected {protected}"
+                    ));
+                }
+                let st = s.stats();
+                ui.small(format!(
+                    "bursts {}  ·  avg {:.1}  ·  first bullets {:.0}%",
+                    st.bursts,
+                    st.avg_burst_len(),
+                    st.first_bullet_share() * 100.0
                 ));
             });
         });

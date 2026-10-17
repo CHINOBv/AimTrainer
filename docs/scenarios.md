@@ -26,6 +26,7 @@ duration_secs = 60           # default 60
 kind = "vandal"              # knife | classic | vandal | phantom | guardian | operator
 fire = "click"               # click (one shot per click, fire-rate capped) | hold (damage while held on target)
 simulate_spread = false      # first-shot spread + running inaccuracy (for movement drills)
+recoil = false               # click + vandal/phantom only: full-auto while held, bullets climb, sway and spread
 
 [player]
 movement = false             # WASD with VALORANT movement for the weapon
@@ -50,7 +51,21 @@ sphere = 100
 miss_penalty = 0
 moving_shot_penalty = 0      # per shot fired above 27.5% of run speed
 expire_penalty = 0
+burst_bonus = 0              # per hit within the weapon's protected bullets; needs weapon.recoil
 ```
+
+### Recoil
+
+With `recoil = true`, holding the fire button fires full-auto at the weapon's fire rate, and every bullet of a burst lands further from the crosshair:
+
+- **Climb:** each of the weapon's protected bullets (Vandal 6, Phantom 8) climbs a little higher.
+- **Sway:** later bullets drift horizontally to a random side, which can switch on any bullet.
+- **Spread:** spread grows from first-shot spread to the weapon's maximum over 10 bullets.
+- **Reset:** pausing for the recovery time (Vandal 0.375 s, Phantom 0.35 s) resets everything, so the next shot is a fresh first bullet.
+
+Recoil moves the bullets, not the camera. `simulate_spread` still adds running inaccuracy on top. The run then also records bursts, average burst length, the share of first bullets, and hits by bullet index (1, 2–3, 4–6, 7+). The per-bullet angles are estimates; see `valorant-mechanics.md`.
+
+`recoil` requires `fire = "click"` and `kind = "vandal"` or `"phantom"`, and `burst_bonus` above 0 requires `recoil`.
 
 ### Spawn areas
 
