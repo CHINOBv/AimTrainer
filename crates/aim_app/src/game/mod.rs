@@ -11,6 +11,7 @@ use aim_core::routine::PlannedRun;
 use aim_core::scenario::{FrameInput, RunResult, ScenarioDef, Session, SessionEvent, Shape};
 use aim_core::valorant::HumanoidDims;
 use bevy::camera::{PerspectiveProjection, Projection};
+use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
@@ -238,17 +239,43 @@ fn look(
     run.view = run.view.rotated(dx as f32, -dy as f32);
 }
 
-#[allow(clippy::too_many_arguments)]
-fn tick(
-    time: Res<Time>,
-    keys: Res<ButtonInput<KeyCode>>,
-    buttons: Res<ButtonInput<MouseButton>>,
-    mut run: ResMut<Run>,
-    mut commands: Commands,
-    mut next: ResMut<NextState<AppState>>,
-    mut history: ResMut<History>,
-    paths: Res<Paths>,
-) {
+/// Raw player input for one frame.
+#[derive(SystemParam)]
+struct PlayerInput<'w> {
+    time: Res<'w, Time>,
+    keys: Res<'w, ButtonInput<KeyCode>>,
+    buttons: Res<'w, ButtonInput<MouseButton>>,
+}
+
+/// Everything needed to close a finished run: record it and show the results screen.
+#[derive(SystemParam)]
+struct RunFinisher<'w, 's> {
+    commands: Commands<'w, 's>,
+    next: ResMut<'w, NextState<AppState>>,
+    history: ResMut<'w, History>,
+    paths: Res<'w, Paths>,
+}
+
+impl RunFinisher<'_, '_> {
+    fn finish(&mut self, session: &Session) {
+        let result = session.result();
+        let previous_best = self.history.best(&result.scenario_id);
+        self.history.append(&self.paths, &result);
+        self.commands.insert_resource(LastResult {
+            name: session.def().name.clone(),
+            result,
+            previous_best,
+        });
+        self.next.set(AppState::Results);
+    }
+}
+
+fn tick(input: PlayerInput, mut run: ResMut<Run>, mut finisher: RunFinisher) {
+    let PlayerInput {
+        time,
+        keys,
+        buttons,
+    } = input;
     if run.paused {
         return;
     }
@@ -277,17 +304,7 @@ fn tick(
         match event {
             SessionEvent::Shot { hit: Some(_), .. } => run.hit_flash = 0.08,
             SessionEvent::Killed { .. } => run.kill_flash = 0.12,
-            SessionEvent::Finished => {
-                let result = run.session.result();
-                let previous_best = history.best(&result.scenario_id);
-                history.append(&paths, &result);
-                commands.insert_resource(LastResult {
-                    name: run.session.def().name.clone(),
-                    result,
-                    previous_best,
-                });
-                next.set(AppState::Results);
-            }
+            SessionEvent::Finished => finisher.finish(&run.session),
             _ => {}
         }
     }
@@ -436,5 +453,24 @@ fn manage_cursor(
     }
     if cursor.visible != visible {
         cursor.visible = visible;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::assert_is_system;
+
+    #[test]
+    fn systems_have_no_conflicting_access() {
+        assert_is_system(pause_input);
+        assert_is_system(look);
+        assert_is_system(tick);
+        assert_is_system(sync_targets);
+        assert_is_system(update_camera);
+        assert_is_system(manage_cursor);
+        assert_is_system(refresh_target_color);
+        assert_is_system(clear_targets);
+        assert_is_system(setup_world);
     }
 }

@@ -1,0 +1,61 @@
+//! In-run HUD: crosshair, status, movement meter, countdown and pause menu.
+
+use crate::game::AppState;
+use crate::overlay::Overlay;
+use crate::persistence::settings::Settings;
+use crate::ui::atoms::crosshair;
+use crate::ui::navigation::Navigator;
+use crate::ui::organisms::hud_panels;
+use bevy::prelude::*;
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
+
+pub struct HudPage;
+
+impl Plugin for HudPage {
+    fn build(&self, app: &mut App) {
+        app.add_systems(
+            EguiPrimaryContextPass,
+            hud.run_if(in_state(AppState::Playing)),
+        );
+    }
+}
+
+fn hud(
+    mut contexts: EguiContexts,
+    settings: Res<Settings>,
+    overlay: Res<Overlay>,
+    mut nav: Navigator,
+) -> Result {
+    if !overlay.visible {
+        return Ok(());
+    }
+    let ctx = contexts.ctx_mut()?;
+    let Some(run) = nav.run() else { return Ok(()) };
+    crosshair::draw(ctx, &settings.crosshair, run.hit_flash > 0.0);
+    hud_panels::run_status(ctx, &run.session);
+    if run.session.def().player.movement {
+        hud_panels::movement_meter(ctx, &run.session);
+    }
+    if run.countdown > 0.0 {
+        hud_panels::countdown(ctx, run.countdown);
+    }
+    let action = run
+        .paused
+        .then(|| hud_panels::pause_window(ctx, &run.session.def().description))
+        .flatten();
+    if let Some(action) = action {
+        nav.apply(action);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy::ecs::system::assert_is_system;
+    use bevy::prelude::Result;
+
+    #[test]
+    fn systems_have_no_conflicting_access() {
+        assert_is_system::<(), Result, _>(super::hud);
+    }
+}

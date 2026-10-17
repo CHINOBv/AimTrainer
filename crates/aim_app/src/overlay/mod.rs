@@ -94,6 +94,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn systems_have_no_conflicting_access() {
+        bevy::ecs::system::assert_is_system(poll_ipc);
+        bevy::ecs::system::assert_is_system(apply_overlay);
+    }
+
+    #[test]
     fn commands_drive_visibility() {
         let mut o = Overlay { visible: true };
         o.apply(Command::Toggle);
