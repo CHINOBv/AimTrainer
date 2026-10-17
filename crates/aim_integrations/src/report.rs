@@ -27,6 +27,9 @@ pub struct MatchReport {
     pub player: PlayerSummary,
     pub analysis: Analysis,
     pub insights: Vec<Insight>,
+    /// The match's duels rebuilt as a drill (see `rebuild`), when enough deaths have a
+    /// known distance.
+    pub rebuilt_drill: Option<aim_core::scenario::ScenarioDef>,
 }
 
 fn percent(value: Option<f64>) -> String {
@@ -111,6 +114,14 @@ impl MatchReport {
                     insight.drills.join(", ")
                 ));
             }
+        }
+        line(String::new());
+        match &self.rebuilt_drill {
+            Some(d) => line(format!("Rebuilt drill '{}': {}", d.id, d.description)),
+            None => line(format!(
+                "No rebuilt drill: it needs {} deaths with a known distance.",
+                crate::insight::MIN_DEATHS
+            )),
         }
         line(String::new());
         line(RIOT_NOTICE.to_owned());

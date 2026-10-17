@@ -2,11 +2,12 @@
 //!
 //! The input is a Riot VAL-MATCH-V1 `MatchDto` JSON file. This crate makes no network
 //! calls, ships no API key and never reads the game process; it only analyzes a finished
-//! match. See docs/match-analysis.md.
+//! match, and can rebuild its duels as a drill. See docs/match-analysis.md.
 
 mod analysis;
 mod dto;
 mod insight;
+mod rebuild;
 mod report;
 mod select;
 
@@ -20,6 +21,10 @@ pub use dto::{
 pub use insight::{
     Insight, LOW_HEADSHOT_RATE, MIN_DEATHS, MIN_HITS, MIN_OPENING_DUELS, OPENING_LOST_SHARE,
     RANGE_DEATH_SHARE, recommend,
+};
+pub use rebuild::{
+    MAX_DISTANCE_M, MIN_DISTANCE_M, REBUILD_BASE, REBUILD_ID, SPREAD_DEG, death_band_m,
+    rebuild_duels,
 };
 pub use report::{MatchReport, PlayerSummary, RIOT_NOTICE};
 pub use select::PlayerSelector;
@@ -52,6 +57,7 @@ pub fn analyze(match_dto: &MatchDto, player: &PlayerSelector) -> Result<MatchRep
         stats.assists,
     );
     let insights = recommend(&analysis);
+    let rebuilt_drill = rebuild_duels(&analysis, &match_dto.match_info.match_id);
     let team_won = match_dto
         .teams
         .iter()
@@ -71,6 +77,7 @@ pub fn analyze(match_dto: &MatchDto, player: &PlayerSelector) -> Result<MatchRep
         },
         analysis,
         insights,
+        rebuilt_drill,
     })
 }
 

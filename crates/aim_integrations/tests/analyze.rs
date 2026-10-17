@@ -274,3 +274,27 @@ fn every_recommended_drill_is_a_builtin_scenario() {
         assert!(ids.iter().any(|id| id == drill), "{drill} is not built in");
     }
 }
+
+#[test]
+fn reports_rebuild_the_duels_at_the_players_death_distances() {
+    let r = report("p-me");
+    let drill = r
+        .rebuilt_drill
+        .as_ref()
+        .expect("three deaths with a distance");
+    assert_eq!(drill.id, aim_integrations::REBUILD_ID);
+    assert!(drill.validate().is_empty());
+    assert!(drill.description.contains("fixture-match-0001"));
+    assert!(
+        r.to_text().contains("Rebuilt drill 'match-rebuild'"),
+        "{}",
+        r.to_text()
+    );
+    let other = report("Rival#NA1");
+    assert!(other.rebuilt_drill.is_none(), "two deaths are not enough");
+    assert!(
+        other
+            .to_text()
+            .contains("No rebuilt drill: it needs 3 deaths")
+    );
+}
