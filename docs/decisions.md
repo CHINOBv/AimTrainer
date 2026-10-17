@@ -29,6 +29,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Hyprland/Wayland, X11)** and **
 | D11 | Play-area bounds | Bounds act like walls: the player slides along them | done (bug fix) |
 | D12 | Code standard | Binding architecture and coding standards for open-source growth | done |
 | D13 | Maps and IP | **Original** tactical maps, not VALORANT replicas; no Riot assets; never touch the game process | policy |
+| D14 | Primary training method | A VDIM-style weekly plan (one skill per day, drills → variants → benchmark, tiers by rank), built with our own scenarios and credited | planned (roadmap Phase 2) |
 
 ## Details
 
@@ -146,6 +147,23 @@ Full citations are in `docs/training-science.md`.
 - **Decision:** build **original** maps at real-world scale that train the same skills, using common situations such as doorways, long angles, off-angles and boxes. No replicas and no extracted assets.
 - **Reading rounds:** only official APIs with a valid key under their terms (Riot's policy names Riot API keys as the sanctioned route), or files the player exports. Never memory or screen reading.
 - **Caveat:** this is a conservative reading of the policy, not legal advice.
+
+### D14 Primary training method: VDIM-style
+
+- **The request:** the user named VDIM (Voltaic Daily Improvement Method) as the main method or playlist to add.
+- **Decision:** make it the primary method, as roadmap Phase 2.
+  - Same week: Clicking I/II, Tracking I/II, Switching I/II, and a flexible Sunday.
+  - Same day structure: 3 blocks of drills → variants (Hard last) → benchmark ×4.
+  - Tiers are chosen from the benchmark rank.
+- **Fits the current model:** a VDIM day is an ordered routine.
+- **New pieces needed:**
+  - benchmark tiers;
+  - authored difficulty variants;
+  - a weekly method definition (`training::method`, `content/methods/`);
+  - routine progress that persists, so a split day can be resumed;
+  - a "Today" page.
+- **Attribution:** we credit VDIM (Lowgravity56, 4rK, Voltaic) and use original scenarios. Ask Voltaic before naming anything after VDIM.
+- **Tradeoff recorded in `training-science.md`:** VDIM's ~90 min days versus the ~1 h daily-gain peak in Listman 2021, plus blocking versus interleaving.
 
 ## Known limitations
 

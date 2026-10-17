@@ -49,6 +49,7 @@ New code follows this layout; existing code migrates as described in [Conformanc
 │   ├── scenarios/<id>.toml     file name == id
 │   ├── routines/<id>.toml
 │   ├── benchmarks/<id>.toml
+│   ├── methods/<id>.toml       planned: weekly training methods (VDIM-style plan)
 │   ├── games/<id>.toml         planned: sensitivity profiles for the converter
 │   └── crosshairs/<id>.toml    planned: crosshair presets
 ├── crates/
@@ -60,7 +61,7 @@ New code follows this layout; existing code migrates as described in [Conformanc
 │   │   │   ├── games/          per-game constants (VALORANT today), FOV models
 │   │   │   ├── movement/       ground movement model, stop curves
 │   │   │   ├── scenario/       def (data), session (runtime), spawn, motion, weapon, scoring, hit
-│   │   │   ├── training/       routine, benchmark, difficulty*, recommend*
+│   │   │   ├── training/       routine, benchmark, method* (weekly plans), progress*, difficulty*, recommend*
 │   │   │   ├── analytics/*     telemetry, flick segmentation, skill profile
 │   │   │   ├── crosshair/*     crosshair model, import/export codes
 │   │   │   └── sim/            simulated aimer (tests, calibration, bot aim later)
@@ -98,6 +99,7 @@ This is where the codebase is designed to grow. Prefer extending one of these ov
 |---|---|---|
 | An exercise | A TOML file in `content/scenarios/` | Data only |
 | A routine or playlist | A TOML file in `content/routines/` | Data only |
+| A weekly training method (VDIM-style) | A TOML file in `content/methods/` mapping tier × weekday to routines | Data only, once `training::method` exists |
 | A target shape, spawn area, motion or scoring rule | A new variant in `scenario/def.rs`, its logic in the matching `scenario/` module, `validate()`, and tests | `aim_core` |
 | A game to the sensitivity converter | A profile (yaw constant, FOV model) in `games/`; later a TOML file in `content/games/` | `aim_core` |
 | An analysis metric | A pure function `fn(&Telemetry) -> Metric` in `analytics/` | `aim_core` |

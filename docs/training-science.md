@@ -58,6 +58,62 @@ The profile parameters are assumptions, which is why the benchmark is marked `ca
 | Benchmark rarely, train often | Voltaic: benchmarks measure, routines train (verified, https://docs.google.com/document/d/1BPiDxbaqQVxInKwFfdr_AJdJDYVGKbUBGHJDKOeUy-Q/mobilebasic) | The benchmark description says to run it once a week |
 | Order: tracking → clicking → switching | Voltaic's skill routines use this order (verified, same doc) | `fundamentals-hour` follows it |
 
+## VDIM (Voltaic Daily Improvement Method)
+
+This is the structure behind our primary training method (roadmap Phase 2). It was researched on 2026-10-17.
+
+**Origin.** Created by Lowgravity56 and introduced on 2022-06-16 (verified, https://www.youtube.com/watch?v=XMxIHLXJhY8). The S5 rework was published on 2025-03-06 and is credited "by Lowgravity56 & 4rK" (verified, https://www.youtube.com/watch?v=ZEH4CfytNyo and the S5 doc below).
+
+**Goal.** In the S5 doc's own words: "isolating specific aiming subcategories each day of the week to build proper technique, and also to be able to beat your previous high scores because of the gradual increments of difficulty leading to the benchmark scenarios on each playlist" (verified, https://docs.google.com/document/d/1R4IyJqYmprRauaACt6bah7YzOOVuG6GqXlB03clNHeU).
+
+**Week (verified, S5 doc):**
+
+| Day | Skill |
+|---|---|
+| Monday | Clicking I (static + linear) |
+| Tuesday | Clicking II (dynamic + linear) |
+| Wednesday | Tracking I |
+| Thursday | Tracking II |
+| Friday | Switching I |
+| Saturday | Switching II |
+| Sunday | Benchmark focus routine (recommended), replay a weak day, or rest |
+
+**Inside a day (verified, from KovaaK's public playlist data):**
+
+- A day has 3 blocks, one per benchmark scenario.
+- Each block runs in this order:
+  1. 3–7 related drills, 2–3 runs each.
+  2. 2–7 benchmark variants, ending with a "Hard" one, 2–3 runs each.
+  3. The benchmark itself, 4 runs.
+- A day totals 72–80 runs.
+- The doc says the playlist is "roughly an hour and a half long" and should be played "in the order they are presented".
+
+**Tiers (verified, S5 doc).** There are six tiers, picked from your Voltaic rank. They are recommendations; move up or down if a tier is too easy or too hard.
+
+| Tier | Recommended rank band | Ends on |
+|---|---|---|
+| Entry | Unranked to Bronze | Novice benchmarks |
+| Novice | Bronze Complete to Gold | Novice benchmarks |
+| Adept | Gold Complete to Diamond | Intermediate benchmarks |
+| Intermediate | Diamond Complete to Master | Intermediate benchmarks |
+| Advanced | Master Complete to Nova | Advanced benchmarks |
+| Elite | Aiming for Astra and above | Advanced benchmarks |
+
+**Progression.** VDIM sets no pass or fail thresholds of its own. Progress is measured by the benchmark runs included each day; no separate weekly benchmark day is needed (verified, S5 doc).
+
+**Rationale given by its authors.** Frustration signals that something must change, and noticing your errors matters. Sleep is essential to learning. One technique per day keeps a consistent visual theme and FOV (verified, S5 doc). The doc itself cites no peer-reviewed studies.
+
+**How it relates to the rest of this page.** VDIM blocks one skill per day for about 90 minutes:
+
+| Evidence | What it suggests | How it compares with VDIM |
+|---|---|---|
+| Listman et al. 2021 | Daily gains peak at about 1 h, with 90% of the benefit in 30–50 min | VDIM's ~90 min day is longer |
+| Shea & Morgan 1979 | Mixing exercises within a session aids retention | VDIM uses one skill per day |
+
+Spreading the skills across the week does give VDIM spacing between sessions. Our implementation keeps VDIM's structure, recommends splitting long days into 2–3 sessions (the S5 doc allows this), and keeps the interleaved `valorant-daily` as an alternative.
+
+**Reuse.** No license or reuse terms were found on the VDIM docs (verified). We reproduce the method with original scenarios and credit it; we do not copy scenario files or use the names as our own branding.
+
 ## Difficulty
 
 - **Challenge Point Framework** (Guadagnoli & Lee 2004): the best difficulty depends on the learner's skill (verified).

@@ -6,12 +6,13 @@ This is where the project is going, and which part of the architecture owns each
 |---|---|---|---|
 | 0 ✅ | Foundation: exact sensitivity, VALORANT movement, 14 scenarios, routines, benchmark, overlay | `aim_core`, `aim_app` | — |
 | 1 | Open-source readiness | repository | 0 |
-| 2 | Player tools: custom crosshairs, sensitivity converter | `aim_core::crosshair`, `aim_core::sensitivity` + `games` | 1 |
-| 3 | Analytics: flicks, corrections, strengths and weaknesses, recommendations | `aim_core::analytics`, `training::recommend` | 1 |
-| 4 | Adaptive training: dynamic difficulty, personalized playlists | `aim_core::training` | 3 |
-| 5 | Game-mixed training: activities, deathmatch with bots | `aim_core` (`Activity`, bots), new app plugin | 4 |
-| 6 | Tactical drills: original maps for angles, peeks and clearing | `aim_world` (new crate) | 5 |
-| 7 | Match integration: read rounds, then suggest or rebuild drills | `aim_integrations` (new crate) | 3, 6 |
+| 2 ⭐ | **Primary training method:** a weekly skill-focus plan in the style of Voltaic's VDIM | `aim_core::training` + `content/` | 0, 1 (C1, C4) |
+| 3 | Player tools: custom crosshairs, sensitivity converter | `aim_core::crosshair`, `aim_core::sensitivity` + `games` | 1 |
+| 4 | Analytics: flicks, corrections, strengths and weaknesses, recommendations | `aim_core::analytics`, `training::recommend` | 1 |
+| 5 | Adaptive training: dynamic difficulty, personalized playlists | `aim_core::training` | 2, 4 |
+| 6 | Game-mixed training: activities, deathmatch with bots | `aim_core` (`Activity`, bots), new app plugin | 5 |
+| 7 | Tactical drills: original maps for angles, peeks and clearing | `aim_world` (new crate) | 6 |
+| 8 | Match integration: read rounds, then suggest or rebuild drills | `aim_integrations` (new crate) | 4, 7 |
 
 ## Phase 1: open-source readiness
 
@@ -21,7 +22,36 @@ This is where the project is going, and which part of the architecture owns each
 - [ ] **Manual Windows verification:** transparency, hotkey, Raw Input.
 - [ ] **Issue templates:** bug report (OS, GPU, compositor) and scenario proposal.
 
-## Phase 2: player tools
+## Phase 2: primary training method (VDIM-style weekly plan) ⭐
+
+This is the project's main training method. It is modelled on **VDIM, the Voltaic Daily Improvement Method**, created by Lowgravity56 (2022). The S5 version (2025) is co-credited to 4rK and published as "by Lowgravity56 & Voltaic". The full research, with sources, is in [`training-science.md`](training-science.md#vdim-voltaic-daily-improvement-method).
+
+**Attribution and IP.** We reproduce the *method*, meaning the structure and the run counts, with **our own scenarios**, and we credit VDIM in the UI and docs. We do not copy KovaaK's or Aimlabs scenario files, and we do not use the "Voltaic"/"VDIM" names as our own branding. Before we name anything after VDIM, we ask Voltaic.
+
+**How VDIM is structured (what we implement):**
+
+| Element | VDIM S5 | Our version |
+|---|---|---|
+| Week | Mon Clicking I, Tue Clicking II, Wed Tracking I, Thu Tracking II, Fri Switching I, Sat Switching II | Same skill split, mapped to our benchmark subcategories |
+| Sunday | Benchmark focus routine, replay a weak day, or rest | Same three options; the "weak day" comes from the skill profile once Phase 4 exists |
+| Day = 3 blocks | One block per benchmark scenario of that day | Same |
+| Block order | Related drills (2–3 runs each) → harder benchmark variants, "Hard" last (2–3 runs) → benchmark (4 runs) | Same; variants come before the benchmark so it "feels easier" |
+| Tiers | Entry, Novice, Adept, Intermediate, Advanced, Elite, chosen from the benchmark rank | Tiers chosen from our benchmark rank; the player can move up or down |
+| Progression | No thresholds of its own; the day's benchmark runs track progress | Same; best benchmark scores feed the benchmark energy |
+| Length | About 1.5 h a day; can be split into 2–3 sessions, or runs cut from 3 to 2 | Split and resume supported; a "short" variant with fewer runs |
+| VALORANT | No VALORANT-specific VDIM exists | Our adaptation adds VALORANT-relevant drills (head height, counter-strafe) inside the matching skill days |
+
+**Pieces to build, in this order:**
+
+1. **Benchmark tiers:** the same scenario families at three difficulties (novice, intermediate, advanced), each tier with its own thresholds. This extends `benchmark` and adds content.
+2. **Difficulty variants as content:** for each benchmark scenario, authored "drill", "variant" and "hard" TOML files. YAGNI: write them by hand now; generate them from difficulty knobs only once Phase 5 exists.
+3. **`training::method`:** a weekly method definition (TOML in `content/methods/`). It maps each tier and weekday to a routine, defines the Sunday options, and maps rank bands to tiers. It is pure and validated against the routine and benchmark libraries.
+4. **Routine progress persistence:** "today's" plan, its position in it, and resuming a split session. A small port in the core, stored by the app.
+5. **App "Today" page:** today's skill, tier, remaining runs, a resume button, and a credit line for VDIM.
+
+**Research tension to surface to players.** VDIM blocks one skill per day for about 90 minutes. Listman et al. (2021) saw daily gains peak at about 1 h, and contextual interference (Shea & Morgan 1979) favors mixing exercises within a session. Our version keeps VDIM's structure as designed, recommends splitting long days into 2–3 sessions, and keeps `valorant-daily` (interleaved) as the alternative. The docs explain the tradeoff instead of picking a winner without evidence.
+
+## Phase 3: player tools
 
 **Custom crosshairs**
 - `aim_core::crosshair`: one crosshair model (lines, outline, dot, opacity, gap), presets in `content/crosshairs/`.
@@ -33,7 +63,7 @@ This is where the project is going, and which part of the architecture owns each
 - Matching methods: 360° distance (today), plus monitor-distance matching (0%, 75%, 100%) for zoomed and different-FOV cases.
 - A standalone converter page that does not require a run.
 
-## Phase 3: analytics (Aimlabs-style feedback)
+## Phase 4: analytics (Aimlabs-style feedback)
 
 Analytics are pure functions over recorded runs. Each one explains itself: it shows the metric and the threshold behind the verdict.
 
@@ -48,7 +78,7 @@ Analytics are pure functions over recorded runs. Each one explains itself: it sh
 
 Before this phase starts, a `RunStore` port moves history behind a trait (backlog C7).
 
-## Phase 4: adaptive training
+## Phase 5: adaptive training
 
 - **Difficulty knobs:** scenarios declare which parameters scale (target size, speed, lifetime, count) and their easy/hard bounds.
 - **Controller:** a staircase that keeps success around **80%** (challenge-point framework; Wilson et al. 2019; see `training-science.md`).
@@ -56,7 +86,7 @@ Before this phase starts, a `RunStore` port moves history behind a trait (backlo
 - **Benchmark recalibration:** set thresholds from real-player score percentiles, then flip `calibrated = true`.
 - **Reload mechanic** for clicking scenarios: misses cost ammo, as in Voltaic's S5 clicking scenarios (https://app.voltaic.gg/blog/announcing-the-voltaic-season-5-aiming-benchmarks-beta-for-kovaaks/). It is a new scoring building block in `scenario/`.
 
-## Phase 5: game-mixed training and bots
+## Phase 6: game-mixed training and bots
 
 - **`Activity` trait:** introduce the trait sketched in the architecture; the scenario session is its first implementation. Routines then sequence activities.
 - **Hybrid activities:** game-like objectives combined with aim drills (similar in spirit to Aimstars on Roblox, which mixes ranked scenarios with game modes and human-like AI).
@@ -65,13 +95,13 @@ Before this phase starts, a `RunStore` port moves history behind a trait (backlo
   - Aim with `sim::SimAimer`: the Fitts-law model already provides reaction time, movement time and endpoint error, so difficulty is a profile.
   - Behavior (peek, strafe, hold) as a separate, testable state machine.
 
-## Phase 6: tactical drills on original maps
+## Phase 7: tactical drills on original maps
 
 - **New crate `aim_world`:** map loading (glTF), collision, line-of-sight and occlusion for hit tests, spawn and angle markers.
 - **Maps are original:** common tactical-shooter situations (doorways, boxes, long angles, off-angles, multi-angle clears) built at real-world scale. **No replicas of VALORANT maps** (Riot's fan policy forbids using their IP in games and apps; see the integrity section of the coding standards).
 - **Drills:** angle clearing, jiggle-peeks, crosshair placement at head level, pre-aim, with analytics hooks such as crosshair-placement error at first sight.
 
-## Phase 7: match integration (later)
+## Phase 8: match integration (later)
 
 - **New crate `aim_integrations`,** feature-gated.
 - **Data sources:** only official, documented sources, such as the Riot API with a valid key under its terms, or files the player exports. **Never memory reading or screen capture of the game** (account-ban risk and against the integrity rules).

@@ -122,6 +122,7 @@ cargo run -p aim_core --release --example calibrate     # simulated-player score
 The plan, phase by phase, is in [`docs/roadmap.md`](docs/roadmap.md):
 
 - open-source readiness;
+- a VDIM-style weekly training method as the primary plan;
 - custom crosshairs and a sensitivity converter;
 - flick and correction analytics with recommendations;
 - adaptive difficulty;
