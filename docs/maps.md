@@ -99,3 +99,84 @@ Geometry alone decides blocking; the kind tells drills and renderers how the box
 2. Write `content/maps/<id>.toml`. The file name must equal the `id`.
 3. Register it in `SOURCES` in `crates/aim_world/src/builtin.rs` (keep the list sorted).
 4. Run `cargo test -p aim_world`. The built-in tests validate every map and check that a walkable path joins every player spawn to every bot spawn.
+
+## Arenas
+
+An arena is an activity played on a map against bots. It lives in `aim_world::arena`, is pure and deterministic (seeded with `aim_core::rng::Rng`), and is driven by the same `aim_core::scenario::FrameInput` the scenario session uses: view angles, `fire_pressed`, WASD movement and walk.
+
+### Format
+
+Arenas are TOML files in `content/arenas/<id>.toml`, registered in `SOURCES` in `crates/aim_world/src/arena/builtin.rs`. Unknown fields are rejected, also inside `[mode]`.
+
+```toml
+id = "yard-deathmatch"        # a-z, 0-9, '-' or '_'; must equal the file name
+name = "Yard Deathmatch"
+description = "What the arena trains."
+map = "training-yard"         # id of the map it is played on
+duration_secs = 120.0
+weapon = "vandal"             # the player's weapon: fire rate, spread, damage, movement
+
+[mode]
+kind = "deathmatch"
+bots = 4                      # 1..=16
+bot_skill = "contender"       # recruit | contender | veteran | elite (sim::AimerProfile)
+respawn_secs = 3.0
+bots_shoot_back = true
+```
+
+```toml
+[mode]
+kind = "angle_clear"
+angles = ["doorway", "close-corner"]   # angle marker ids of the map, cleared in order
+hold_secs = 1.5                        # how long a bot holds the angle before hiding
+bot_reaction_secs = [0.35, 0.6]        # bot reaction time, sampled per sighting
+bots_shoot_back = true
+```
+
+`ArenaDef::validate` checks the definition alone; `ArenaDef::validate_with_map` also checks that the map id matches, that a deathmatch map has bot spawns and that every angle id exists. `ArenaSession::new(def, map, seed)` runs both and returns `ArenaError::Invalid` on failure. `arena::builtin::load(id)` returns a built-in arena together with its built-in map.
+
+### Modes
+
+- **`deathmatch`:** `bots` bots spawn at bot spawns the player cannot see. They roam between the map's waypoints and bot spawns along `MapDef::path`, pause at the end of each route, and stop to fight when they notice the player. A killed bot respawns after `respawn_secs`. When the player dies, they respawn at the spawn (player or bot) seen by the fewest living bots, and bots ignore them for `RESPAWN_GRACE_SECS` (1.5 s, an arena rule against spawn kills, not a VALORANT value).
+- **`angle_clear`:** one bot per listed angle, in order. Each angle starts with the player at the player spawn that sees the marker's peek position but not its hidden spot. The bot waits at the hidden spot; once the player can see the angle it peeks after 0.4–1.2 s (`PEEK_DELAY_SECS`), holds for `hold_secs`, hides again and repeats until it dies. Killing it starts the next angle; clearing every angle ends the run early.
+
+### Player
+
+- Movement uses `movement::step` with the weapon's movement profile and `MapDef::move_with_collision`; velocity pushing into a wall is lost.
+- Shooting is one shot per click, capped by the weapon's fire rate. Every shot has the weapon's first-shot spread, plus run spread when the speed is above the accuracy limit (27.5% of run speed for rifles), the same rule as the scenario session. Such shots count as moving shots.
+- A shot hits the nearest living bot whose hitbox (`ray_humanoid`) it crosses, unless a map box is hit first. Damage comes from `Weapon::stats()` per zone.
+- The player has 100 health and respawns at once when it reaches 0; each death is counted.
+
+### Bot model
+
+| Part | Rule |
+|---|---|
+| Health | 150: 100 health plus 50 armor as one pool (simplification: armor damage reduction is not modeled). |
+| Weapon | Vandal (`BOT_WEAPON`) for damage, fire rate and spread. |
+| Movement | `movement::step` with the rifle profile; bots walk toward their next route point and brake with the stop curve when they stop to fight. Angle bots stop exactly on the peek position (a perfect counter-strafe). |
+| Sight | Line of sight from the bot's eye to any part of the player's head (`visible_head`). Roaming bots only notice the player within 60° of where they face (`BOT_NOTICE_HALF_ANGLE_DEG`, an estimate from VALORANT's 103° horizontal field of view); once engaged they track at any angle. |
+| Aim | The `sim::AimerProfile` model: a reaction delay, then a minimum-jerk flick to the player's head whose duration follows Fitts' law (`fitts_a + fitts_b · log2(d / 2r + 1)`) and whose endpoint misses by a Gaussian error of `endpoint_noise · r`, where `r` is the head's angular radius. After each shot the bot plans a corrective flick after half its reaction time. Deathmatch bots use the `bot_skill` preset; angle bots use the contender flick constants with `bot_reaction_secs` as their reaction time. |
+| Fire | When the flick has landed, at the Vandal fire rate, only if `bots_shoot_back`. Bot shots are occluded by the map like the player's. |
+
+### Crosshair placement metric
+
+At the first frame each bot life becomes visible to the player, the arena records the angle in degrees between the player's view direction and the bot's head (`ArenaStats::crosshair_errors_deg`); `ArenaStats::median_crosshair_error_deg` summarizes it. A player who pre-aims where the head appears scores close to 0°; one who looks elsewhere scores tens of degrees. It trains pre-aim and head-level placement (roadmap Phase 7).
+
+### Result
+
+`ArenaSession::result()` returns an `aim_core::scenario::RunResult` so arenas share history and the results UI with scenarios: `scenario_id` is the arena id, `score = kills × 100 − deaths × 50 + headshot hits × 25`, `accuracy = hits / shots`, `expired` is the number of player deaths, and kills per minute, average time to kill (from first sight) and headshot rate (headshot hits / hits) are as in scenarios.
+
+### Simplifications
+
+- Bots have 150 HP in one pool; the player has 100 health and no armor.
+- The world is "2D-ish": a flat floor of boxes, no jumping, crouching, stairs or height differences.
+- No abilities, utility, recoil patterns beyond first-shot and run spread, reloads or economy.
+- Bots do not collide with each other or with the player.
+
+### Built-in arenas
+
+| Id | Map | Mode |
+|---|---|---|
+| `yard-deathmatch` | `training-yard` | Deathmatch, 4 contender bots that shoot back, 120 s. |
+| `angles-lab-clear` | `angles-lab` | Angle clear of all five markers in order, reaction 0.35–0.6 s, bots shoot back, 90 s. |
+| `corridor-duels` | `duel-corridor` | Deathmatch, 2 veteran bots that shoot back, 90 s. |

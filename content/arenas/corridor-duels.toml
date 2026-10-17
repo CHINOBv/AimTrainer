@@ -1,0 +1,14 @@
+# Peek duels in the original Duel Corridor against two veteran bots.
+id = "corridor-duels"
+name = "Corridor Duels"
+description = "Two veteran bots roam the Duel Corridor and its pockets. Win the duels at 15-25 m."
+map = "duel-corridor"
+duration_secs = 90.0
+weapon = "vandal"
+
+[mode]
+kind = "deathmatch"
+bots = 2
+bot_skill = "veteran"
+respawn_secs = 2.0
+bots_shoot_back = true

@@ -17,7 +17,9 @@ pub(super) fn can_fire(weapon: &WeaponStats, now: f32, last_shot_at: f32) -> boo
 /// The direction a shot travels and whether the player was moving too fast to be accurate.
 /// With `simulate_spread`, the direction is sampled inside the weapon's spread cone, which
 /// widens with the player's speed above the accuracy limit.
-pub(super) fn shot_direction(
+/// Shot direction with first-shot spread and running inaccuracy (VALORANT's accuracy
+/// threshold); returns the direction and whether the shooter was moving too fast.
+pub fn shot_direction(
     view: ViewAngles,
     speed: f32,
     profile: &MovementProfile,

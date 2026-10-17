@@ -1,0 +1,14 @@
+# Deathmatch on the original Training Yard against four contender bots that shoot back.
+id = "yard-deathmatch"
+name = "Yard Deathmatch"
+description = "Four contender bots roam the Training Yard and fight back. Hold head level, clear cover and take first-shot duels."
+map = "training-yard"
+duration_secs = 120.0
+weapon = "vandal"
+
+[mode]
+kind = "deathmatch"
+bots = 4
+bot_skill = "contender"
+respawn_secs = 3.0
+bots_shoot_back = true

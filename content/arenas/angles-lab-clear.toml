@@ -1,0 +1,15 @@
+# Clear the five marked angles of the original Angles Lab, in order. Each angle starts from
+# the player spawn that sees it; the bot peeks, holds and hides again until it dies.
+id = "angles-lab-clear"
+name = "Angles Lab Clear"
+description = "Clear the doorway, close corner, off-angle, box and long angle in order. Pre-aim where the head appears: the crosshair placement error at first sight is measured."
+map = "angles-lab"
+duration_secs = 90.0
+weapon = "vandal"
+
+[mode]
+kind = "angle_clear"
+angles = ["doorway", "close-corner", "off-angle", "box", "long-angle"]
+hold_secs = 1.5
+bot_reaction_secs = [0.35, 0.6]
+bots_shoot_back = true

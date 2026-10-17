@@ -1,6 +1,6 @@
 [package]
 name = "aim_world"
-description = "Original training maps: box geometry, line of sight, collision and spawn markers (engine-agnostic)."
+description = "Original training maps (box geometry, line of sight, collision, spawn markers) and bot arenas, engine-agnostic."
 edition.workspace = true
 version.workspace = true
 license.workspace = true
