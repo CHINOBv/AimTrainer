@@ -9,6 +9,7 @@ pub mod crosshair;
 pub mod fov;
 pub mod math;
 pub mod movement;
+pub mod profile;
 pub mod rng;
 pub mod scenario;
 pub mod sensitivity;
