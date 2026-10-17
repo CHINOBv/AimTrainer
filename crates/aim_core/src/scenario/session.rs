@@ -15,7 +15,7 @@ use crate::rng::Rng;
 use crate::valorant::{HumanoidDims, WeaponStats};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct FrameInput {
     pub dt: f32,
     pub view: ViewAngles,

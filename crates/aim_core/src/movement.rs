@@ -115,7 +115,7 @@ impl MovementProfile {
 }
 
 /// What the player is pressing this frame, in the player's local frame.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct MoveInput {
     /// -1 (A) .. 1 (D).
     pub right: f32,

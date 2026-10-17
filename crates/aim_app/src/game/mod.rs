@@ -7,7 +7,9 @@ use crate::persistence::settings::{Paths, Settings};
 use aim_core::fov;
 use aim_core::math::ViewAngles;
 use aim_core::movement::MoveInput;
-use aim_core::scenario::{FrameInput, RunResult, ScenarioDef, Session, SessionEvent, Shape};
+use aim_core::scenario::{
+    FrameInput, Recording, RunResult, ScenarioDef, Session, SessionEvent, Shape,
+};
 use aim_core::training::routine::PlannedRun;
 use aim_core::valorant::HumanoidDims;
 use bevy::camera::{PerspectiveProjection, Projection};
@@ -45,6 +47,8 @@ pub struct Run {
     /// Seconds left on the hit-marker flash.
     pub hit_flash: f32,
     pub kill_flash: f32,
+    /// Definition, seed and every input fed to the session, for analysis and replays.
+    pub recording: Recording,
     entities: HashMap<u64, Entity>,
 }
 
@@ -53,7 +57,9 @@ impl Run {
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_nanos() as u64);
+        let recording = Recording::new(def.clone(), seed);
         Self {
+            recording,
             session: Session::new(def, seed),
             view: ViewAngles::default(),
             countdown: COUNTDOWN_SECS,
@@ -76,6 +82,8 @@ pub struct LastResult {
     pub name: String,
     pub result: RunResult,
     pub previous_best: Option<f32>,
+    /// The run's input log, for post-run analysis.
+    pub recording: Recording,
 }
 
 #[derive(Component)]
@@ -257,7 +265,8 @@ struct RunFinisher<'w, 's> {
 }
 
 impl RunFinisher<'_, '_> {
-    fn finish(&mut self, session: &Session) {
+    fn finish(&mut self, run: &Run) {
+        let session = &run.session;
         let result = session.result();
         let previous_best = self.history.best(&result.scenario_id);
         self.history.append(&self.paths, &result);
@@ -265,6 +274,7 @@ impl RunFinisher<'_, '_> {
             name: session.def().name.clone(),
             result,
             previous_best,
+            recording: run.recording.clone(),
         });
         self.next.set(AppState::Results);
     }
@@ -300,11 +310,12 @@ fn tick(input: PlayerInput, mut run: ResMut<Run>, mut finisher: RunFinisher) {
             walk: keys.pressed(KeyCode::ShiftLeft),
         },
     };
+    run.recording.inputs.push(input);
     for event in run.session.update(input) {
         match event {
             SessionEvent::Shot { hit: Some(_), .. } => run.hit_flash = 0.08,
             SessionEvent::Killed { .. } => run.kill_flash = 0.12,
-            SessionEvent::Finished => finisher.finish(&run.session),
+            SessionEvent::Finished => finisher.finish(&run),
             _ => {}
         }
     }

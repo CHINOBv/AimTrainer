@@ -1,0 +1,16 @@
+[package]
+name = "aim_integrations"
+description = "Post-match analysis from official match data the player provides (offline import)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+aim_core.workspace = true
+serde.workspace = true
+toml.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
