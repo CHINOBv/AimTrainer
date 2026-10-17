@@ -107,6 +107,17 @@ fn analyze_match(file: &str, player: &str) -> AppExit {
     match aim_integrations::analyze_json(&json, player) {
         Ok(report) => {
             println!("{}", report.to_text());
+            if let Some(drill) = &report.rebuilt_drill {
+                let dir = crate::persistence::settings::Paths::resolve().scenarios_dir;
+                match save_drill(&dir, drill) {
+                    Ok(path) => println!(
+                        "Saved to {}. Play it with: aimtrainer play {}",
+                        path.display(),
+                        drill.id
+                    ),
+                    Err(e) => eprintln!("cannot save the rebuilt drill in {}: {e}", dir.display()),
+                }
+            }
             AppExit::Success
         }
         Err(e) => {
@@ -114,6 +125,20 @@ fn analyze_match(file: &str, player: &str) -> AppExit {
             AppExit::error()
         }
     }
+}
+
+/// Write `drill` as `<dir>/<id>.toml` (the file name must equal the id), replacing the
+/// previous rebuild.
+#[cfg(feature = "match-analysis")]
+fn save_drill(
+    dir: &std::path::Path,
+    drill: &aim_core::scenario::ScenarioDef,
+) -> std::io::Result<std::path::PathBuf> {
+    let toml = toml::to_string(drill).map_err(std::io::Error::other)?;
+    std::fs::create_dir_all(dir)?;
+    let path = dir.join(format!("{}.toml", drill.id));
+    std::fs::write(&path, toml)?;
+    Ok(path)
 }
 
 #[cfg(not(feature = "match-analysis"))]

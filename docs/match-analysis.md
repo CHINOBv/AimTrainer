@@ -8,7 +8,8 @@ The `aim_integrations` crate reads one finished VALORANT match and suggests dril
 2. It selects one player by PUUID or by Riot ID (`gameName#tagLine`, case-insensitive).
 3. It computes that player's numbers for the match (see [What it measures](#what-it-measures)).
 4. It applies a small set of explainable rules that map findings to drills (see [Rules](#rules)).
-5. It renders a plain-text report with `MatchReport::to_text`.
+5. It rebuilds the match's duels as a drill (see [Rebuilt drill](#rebuilt-drill)).
+6. It renders a plain-text report with `MatchReport::to_text`.
 
 ```rust
 let report = aim_integrations::analyze_json(&json, "Ace#EUW")?;
@@ -51,6 +52,19 @@ The text report ends with it (`RIOT_NOTICE`).
 | Opening duels | The earliest kill of each round: won if the player killed, lost if the player died | Exact |
 | Damage sources | Kills counted by `finishingDamage.damageType` and `damageItem` | Exact; items are Riot ids, not names |
 | Time to first kill | Mean of `timeSinceRoundStartMillis` of the player's first kill, over rounds with a kill | Exact |
+
+## Rebuilt drill
+
+`rebuild_duels` turns the deaths of the match into a scenario, `match-rebuild`, that `aimtrainer analyze-match` saves to the user's scenarios folder (`~/.config/aimtrainer/scenarios/match-rebuild.toml` on Linux). Play it with `aimtrainer play match-rebuild`; analyzing another match replaces it.
+
+| Part | Value | Source |
+|---|---|---|
+| Base drill | `dynamic-strafe-heads` (strafing humanoid heads, Vandal-like stops) | Closest built-in to a duel against a moving player |
+| Distance band | 25th–75th percentile of the deaths with a known distance, clamped to 3–50 m and at least 2 m wide | `death_band_m`; inherits the assumed distance unit |
+| Width | ±25° either side of forward at the near distance | A design choice that keeps targets on screen |
+| Minimum data | 3 deaths with a known distance, the same minimum the rules use | `MIN_DEATHS` |
+
+It rebuilds **range only**. Angles are left out on purpose: `viewRadians` has no published axis or zero direction, so the angle between where you faced and your killer cannot be computed reliably.
 
 ## Limits of the data
 
