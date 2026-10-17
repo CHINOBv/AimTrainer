@@ -70,21 +70,27 @@ pub struct ArenaPlugin;
 impl Plugin for ArenaPlugin {
     fn build(&self, app: &mut App) {
         let playing = in_state(AppState::Playing).and_then(resource_exists::<ArenaRun>);
+        add_map_lifecycle(app);
         app.add_systems(
             Update,
-            (
-                spawn_map.run_if(resource_added::<ArenaRun>),
-                pause_input,
-                look,
-                tick,
-                sync_bots,
-                update_camera,
-            )
+            (pause_input, look, tick, sync_bots, update_camera)
                 .chain()
                 .run_if(playing),
-        )
-        .add_systems(OnExit(AppState::Playing), clear_map);
+        );
     }
+}
+
+/// Build the arena's map meshes every time `Playing` is entered with an arena run, and
+/// remove them on leaving it. `start_arena` always sets `Playing` (`NextState::set` runs the
+/// exit and enter schedules even from `Playing`), so a retry, another arena or a routine step
+/// rebuilds the map. Watching for the `ArenaRun` resource to be added would miss those:
+/// inserting over an existing run replaces it without counting as added.
+fn add_map_lifecycle(app: &mut App) {
+    app.add_systems(
+        OnEnter(AppState::Playing),
+        spawn_map.run_if(resource_exists::<ArenaRun>),
+    )
+    .add_systems(OnExit(AppState::Playing), clear_map);
 }
 
 fn spawn_map(
@@ -311,7 +317,7 @@ fn update_camera(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy::ecs::system::assert_is_system;
+    use bevy::ecs::system::{RunSystemOnce, assert_is_system};
 
     #[test]
     fn systems_have_no_conflicting_access() {
@@ -322,6 +328,77 @@ mod tests {
         assert_is_system(tick);
         assert_is_system(sync_bots);
         assert_is_system(update_camera);
+    }
+
+    fn map_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(bevy::state::app::StatesPlugin)
+            .init_state::<AppState>()
+            .init_resource::<Assets<Mesh>>()
+            .init_resource::<Assets<StandardMaterial>>();
+        add_map_lifecycle(&mut app);
+        app
+    }
+
+    /// Start `id` through `start_arena`, as the menu and the results screen do, and return
+    /// how many boxes its map has.
+    fn start(app: &mut App, id: &str) -> usize {
+        let (def, map) = aim_world::arena::builtin::load(id).unwrap().unwrap();
+        let boxes = map.boxes.len();
+        let mut run = Some(ArenaRun::new(ArenaSession::new(def, map, 1).unwrap()));
+        app.world_mut()
+            .run_system_once(
+                move |mut commands: Commands, mut next: ResMut<NextState<AppState>>| {
+                    if let Some(run) = run.take() {
+                        start_arena(&mut commands, &mut next, run);
+                    }
+                },
+            )
+            .unwrap();
+        app.update();
+        app.update();
+        boxes
+    }
+
+    fn leave(app: &mut App) {
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::Results);
+        app.update();
+    }
+
+    fn map_visuals(app: &mut App) -> usize {
+        app.world_mut()
+            .query_filtered::<(), With<MapVisual>>()
+            .iter(app.world())
+            .count()
+    }
+
+    #[test]
+    fn every_arena_start_draws_exactly_one_map() {
+        let mut app = map_app();
+        let yard = start(&mut app, "yard-deathmatch");
+        assert!(yard > 0);
+        assert_eq!(map_visuals(&mut app), yard, "first start");
+
+        leave(&mut app);
+        assert_eq!(map_visuals(&mut app), 0, "results clear the map");
+
+        assert_eq!(start(&mut app, "yard-deathmatch"), yard);
+        assert_eq!(map_visuals(&mut app), yard, "retry of the same arena");
+
+        leave(&mut app);
+        let corridor = start(&mut app, "corridor-duels");
+        assert_ne!(corridor, yard);
+        assert_eq!(
+            map_visuals(&mut app),
+            corridor,
+            "another arena after results"
+        );
+
+        // Straight from one arena into another (a routine step), without the results screen.
+        let lab = start(&mut app, "angles-lab-clear");
+        assert_eq!(map_visuals(&mut app), lab, "another arena while playing");
     }
 
     #[test]
