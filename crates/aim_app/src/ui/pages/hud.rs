@@ -1,6 +1,8 @@
-//! In-run HUD: crosshair, status, movement meter, countdown and pause menu.
+//! In-run HUD: crosshair, status, off-screen target arrows, movement meter, countdown and
+//! pause menu.
 
 use crate::game::AppState;
+use crate::game::MainCamera;
 use crate::game::arena::ArenaRun;
 use crate::overlay::Overlay;
 use crate::persistence::settings::Settings;
@@ -26,6 +28,7 @@ fn hud(
     settings: Res<Settings>,
     overlay: Res<Overlay>,
     arena: Option<ResMut<ArenaRun>>,
+    camera: Query<&Projection, With<MainCamera>>,
     mut nav: Navigator,
 ) -> Result {
     if !overlay.visible {
@@ -50,6 +53,18 @@ fn hud(
         return Ok(());
     }
     let Some(run) = nav.run() else { return Ok(()) };
+    if settings.offscreen_arrows
+        && !run.paused
+        && let Ok(Projection::Perspective(p)) = camera.single()
+    {
+        let cam = hud_panels::ArrowCamera {
+            eye: run.session.eye_position(),
+            view: run.view,
+            vfov_deg: p.fov.to_degrees(),
+            aspect: p.aspect_ratio,
+        };
+        hud_panels::offscreen_arrows(ctx, &run.session, &cam, settings.target_color);
+    }
     crosshair::draw(ctx, &settings.crosshair, run.hit_flash > 0.0);
     hud_panels::run_status(ctx, &run.session);
     if run.session.def().player.movement {
