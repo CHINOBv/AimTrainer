@@ -1,0 +1,12 @@
+[package]
+name = "aim_core"
+description = "Engine-agnostic domain for the aim trainer: sensitivity math, game profiles, movement and scenarios."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+toml.workspace = true
+thiserror.workspace = true

@@ -1,0 +1,22 @@
+[package]
+name = "aim_app"
+description = "Bevy front-end for the aim trainer (rendering, input, overlay)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "aimtrainer"
+path = "src/main.rs"
+
+[dependencies]
+aim_core.workspace = true
+serde.workspace = true
+toml.workspace = true
+bevy = { version = "0.20", default-features = false, features = ["3d"] }
+bevy_egui = "0.43"
+directories = "6.0"
+
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
+global-hotkey = "0.9"

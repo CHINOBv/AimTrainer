@@ -1,0 +1,26 @@
+[workspace]
+resolver = "3"
+members = ["crates/aim_core", "crates/aim_app"]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "MIT"
+rust-version = "1.97.1"
+
+[workspace.dependencies]
+aim_core = { path = "crates/aim_core" }
+serde = { version = "1.0", features = ["derive"] }
+toml = "1.1"
+thiserror = "2.0"
+
+# Bevy compiles slowly in debug; optimize dependencies but keep our code fast to rebuild.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
