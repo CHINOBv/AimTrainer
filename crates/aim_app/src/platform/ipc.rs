@@ -23,6 +23,7 @@ impl Command {
         }
     }
 
+    #[cfg(unix)]
     fn as_str(self) -> &'static str {
         match self {
             Self::Toggle => "toggle",
