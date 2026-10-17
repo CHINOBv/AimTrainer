@@ -39,12 +39,12 @@ Branch: `feat/roadmap-completion` (worktree `../CustomAimTrainer-worktrees/roadm
 | T7 | S9 | inline | done | c0a8d9c, 48d668e |
 | T8 | S10 | inline | done (offline only) | 59f6fff, 424f185 |
 | T9 | S11 | inline + 2 delegated (F7, F9) | done: F1–F12 in docs/feature-analysis.md | e483507, b7f0457, 24ba88f, e5f2239, cef2223, 803fcd6, 53dc3bd, a83c32a, 65c65ad |
-| T10 | S12a | delegated (parallel, benchmark unit) | in progress | |
-| T11 | S12f, S12g | delegated (parallel, world unit) | in progress | |
-| T12 | S12d (profile, rules, trends, charts) | delegated (parallel, analytics unit) | in progress | |
-| T13 | S12b, S12d (RunStore) | inline | pending | |
-| T14 | S12c, S12e | inline | pending | |
-| T15 | S12h | inline | pending | |
+| T10 | S12a | delegated (parallel, benchmark unit) | done | 72af253, 1f36e78 |
+| T11 | S12f, S12g | delegated (parallel, world unit) | done (site hold is a deathmatch objective, not a new mode) | 1295e51, f7e2b45 |
+| T12 | S12d (profile, rules, trends, charts) | delegated (parallel, analytics unit) | done | 5b8f333, 1f36e78 |
+| T13 | S12b, S12d (RunStore) | inline | done | 70b3d9b, 1f36e78 |
+| T14 | S12c, S12e | inline | done | 4634f43, 1f36e78 |
+| T15 | S12h | inline (C9 docs delegated to 3 parallel writers) | done: C5, C6, C7, C9 | 70b3d9b, 2d8e3e5, 98378cc |
 
 ## Log
 
@@ -55,3 +55,5 @@ Branch: `feat/roadmap-completion` (worktree `../CustomAimTrainer-worktrees/roadm
 - L5 Stop-hook review: S8's `Activity` abstraction had been skipped unilaterally. Implemented it (`aim_core::activity`, `ArenaSession` impl, arena routine blocks, `aim-and-duel` routine, results/next-run naming). Verification: 280 tests, clippy clean.
 - L6 Roadmap Phase 8 also asks to rebuild match situations as drills: added `aim_integrations::rebuild` (distance band of deaths → `match-rebuild` scenario saved by `analyze-match`). Angles omitted: `viewRadians` has no documented convention. Online fetch stays out (production key + RSO; see docs/research/riot-match-api.md). Verification: 283 tests with all features, clippy clean, CLI smoke run in scratch XDG.
 - L7 Audit (explorer) found S12a–h partial or missing. Route: three parallel writers (disjoint surfaces: benchmark, world, analytics; writer trigger (a)), the rest inline. Parent owns git and `menu.rs`.
+- L8 T10, T12, T13, T14 committed; C9 done (missing_docs enforced). Waiting for T11 (world) before C5 and the full verification.
+- L9 All S12 tasks done. Verification: `cargo test --workspace --all-features` 334 passed; clippy `-D warnings` clean with default and all features; `cargo fmt --check` clean; calibrate order recruit<contender<veteran<elite holds everywhere (advisory: track-close-strafe 0.43 and track-reactive-strafe 0.41 contender accuracy, slightly under the 45% band, level-0 behavior unchanged by S12). Needs playtest: Tools tab, resume button, tier selector, skills section, site-hold HUD, new arenas.
