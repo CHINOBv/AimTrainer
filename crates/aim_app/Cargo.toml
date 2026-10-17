@@ -14,12 +14,12 @@ path = "src/main.rs"
 aim_core.workspace = true
 serde.workspace = true
 toml.workspace = true
-bevy = { version = "0.20", default-features = false, features = ["3d"] }
-bevy_egui = "0.43"
-directories = "6.0"
+bevy.workspace = true
+bevy_egui.workspace = true
+directories.workspace = true
 
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
-global-hotkey = "0.9"
+global-hotkey.workspace = true
 
 [lints]
 workspace = true

@@ -1,7 +1,7 @@
 //! Loads built-in content plus the user's TOML files. A user file with the same id as a
 //! built-in replaces it.
 
-use crate::settings::Paths;
+use crate::persistence::settings::Paths;
 use aim_core::benchmark::{self, BenchmarkDef};
 use aim_core::routine::{self, RoutineDef};
 use aim_core::scenario::{self, ScenarioDef};

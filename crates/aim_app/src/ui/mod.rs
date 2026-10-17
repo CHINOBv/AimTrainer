@@ -1,10 +1,10 @@
 //! egui front-end: HUD + crosshair while playing, menus, settings and results.
 
 use crate::game::{ActiveRoutine, AppState, LastResult, RoutineProgress, Run, start_run};
-use crate::history::History;
-use crate::library::Library;
 use crate::overlay::{Overlay, background};
-use crate::settings::{Paths, Settings};
+use crate::persistence::history::History;
+use crate::persistence::library::Library;
+use crate::persistence::settings::{Paths, Settings};
 use aim_core::fov;
 use aim_core::scenario::{Category, FireMode, ScenarioDef};
 use aim_core::sensitivity::Game;

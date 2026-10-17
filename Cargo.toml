@@ -13,6 +13,10 @@ aim_core = { path = "crates/aim_core" }
 serde = { version = "1.0", features = ["derive"] }
 toml = "1.1"
 thiserror = "2.0"
+bevy = { version = "0.20", default-features = false, features = ["3d"] }
+bevy_egui = "0.43"
+directories = "6.0"
+global-hotkey = "0.9"
 
 # Part of the coding standard (docs/coding-standards.md): enforced in every crate.
 [workspace.lints.rust]

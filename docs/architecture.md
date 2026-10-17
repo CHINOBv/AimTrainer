@@ -163,11 +163,11 @@ These are known gaps between the current code and this document. Fix them **when
 |---|---|---|
 | C1 ✅ | ~~Content TOML lives in `crates/aim_core/{scenarios,routines,benchmarks}`~~ | Done: moved to `content/` |
 | C2 | `aim_app/src/ui.rs` (≈735 lines) mixes ECS access and drawing | `ui/` folder: pages, organisms, molecules, atoms; containers build view models; views return actions |
-| C3 | Flat files `game.rs`, `overlay.rs`, `ipc.rs`, `settings.rs`, `history.rs` | Folders `game/`, `overlay/`, `platform/`, `persistence/` |
+| C3 ✅ | ~~Flat files `game.rs`, `overlay.rs`, `ipc.rs`, `settings.rs`, `history.rs`~~ | Done: `game/`, `overlay/`, `platform/` (ipc, hotkey), `persistence/` (settings, history, library) |
 | C4 | `scenario/session.rs` (≈880 lines with tests) does spawning, motion, weapons and scoring | Split into `scenario/{spawn,motion,weapon,scoring}.rs` before adding new building blocks |
 | C5 | `valorant.rs` and `sensitivity.rs` are flat modules | `games/` and `sensitivity/` folders, once the converter grows (data-driven game profiles) |
 | C6 | The crosshair model lives in `aim_app/settings.rs` | `aim_core::crosshair`, when custom crosshairs start |
 | C7 | History is written as CSV directly by the app; no port | Define a `RunStore` port in the core when analytics needs history |
 | C8 | Three `#[allow(clippy::too_many_arguments)]` on Bevy systems | `SystemParam` groups |
 | C9 | Public items in `aim_core` are not all documented | Enable `missing_docs` for `aim_core` after the docs pass |
-| C10 | Bevy and bevy_egui versions are declared in `aim_app`, not the workspace | Move to `[workspace.dependencies]` |
+| C10 ✅ | ~~Bevy and bevy_egui versions are declared in `aim_app`~~ | Done: `[workspace.dependencies]` |

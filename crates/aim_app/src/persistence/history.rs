@@ -1,6 +1,6 @@
 //! Run history stored as CSV so it is easy to inspect or import into a spreadsheet.
 
-use crate::settings::Paths;
+use crate::persistence::settings::Paths;
 use aim_core::scenario::RunResult;
 use bevy::prelude::Resource;
 use std::collections::HashMap;

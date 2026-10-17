@@ -6,12 +6,13 @@
 //!   aimtrainer show|hide
 
 mod game;
-mod history;
-mod ipc;
-mod library;
 mod overlay;
-mod settings;
+mod persistence;
+mod platform;
 mod ui;
+
+use persistence::{history, library, settings};
+use platform::ipc;
 
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;

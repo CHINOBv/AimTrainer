@@ -7,8 +7,9 @@
 //! - Linux (any session, required on Wayland): `aimtrainer toggle` over IPC, typically
 //!   bound in the compositor, e.g. Hyprland `bind = CTRL SHIFT, F10, exec, aimtrainer toggle`.
 
-use crate::ipc::{Command, IpcReceiver};
-use crate::settings::Settings;
+use crate::persistence::settings::Settings;
+use crate::platform::ipc::{Command, IpcReceiver};
+use crate::platform::{self, is_wayland};
 use bevy::prelude::*;
 use bevy::window::{CursorOptions, PrimaryWindow};
 
@@ -27,10 +28,6 @@ impl Overlay {
     }
 }
 
-pub fn is_wayland() -> bool {
-    cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_some()
-}
-
 pub struct OverlayPlugin {
     pub hotkey: String,
 }
@@ -43,7 +40,7 @@ impl Plugin for OverlayPlugin {
                 PostUpdate,
                 apply_overlay.run_if(resource_changed::<Overlay>),
             );
-        hotkey::install(app, &self.hotkey);
+        platform::hotkey::install(app, &self.hotkey);
     }
 }
 
@@ -90,66 +87,6 @@ pub fn background(settings: &Settings, visible: bool) -> ClearColor {
     // Premultiplied alpha: scale the color with its alpha.
     let base = 0.06 * alpha;
     ClearColor(Color::srgba(base, base, base * 1.2, alpha))
-}
-
-#[cfg(any(windows, target_os = "linux"))]
-mod hotkey {
-    use super::{Overlay, is_wayland};
-    use crate::ipc::Command;
-    use bevy::prelude::*;
-    use global_hotkey::hotkey::HotKey;
-    use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, HotKeyState};
-
-    struct Registered {
-        _manager: GlobalHotKeyManager,
-        id: u32,
-    }
-
-    pub fn install(app: &mut App, spec: &str) {
-        if is_wayland() {
-            info!(
-                "Wayland session: bind `aimtrainer toggle` in your compositor to show/hide the overlay"
-            );
-            return;
-        }
-        let hotkey: HotKey = match spec.parse() {
-            Ok(h) => h,
-            Err(e) => {
-                warn!("invalid overlay hotkey '{spec}': {e}");
-                return;
-            }
-        };
-        let manager = match GlobalHotKeyManager::new() {
-            Ok(m) => m,
-            Err(e) => {
-                warn!("global hotkeys unavailable: {e}");
-                return;
-            }
-        };
-        if let Err(e) = manager.register(hotkey) {
-            warn!("could not register overlay hotkey '{spec}': {e}");
-            return;
-        }
-        info!("overlay hotkey: {spec}");
-        app.insert_non_send(Registered {
-            _manager: manager,
-            id: hotkey.id(),
-        })
-        .add_systems(PreUpdate, poll);
-    }
-
-    fn poll(registered: NonSend<Registered>, mut overlay: ResMut<Overlay>) {
-        while let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
-            if event.id == registered.id && event.state == HotKeyState::Pressed {
-                overlay.apply(Command::Toggle);
-            }
-        }
-    }
-}
-
-#[cfg(not(any(windows, target_os = "linux")))]
-mod hotkey {
-    pub fn install(_app: &mut bevy::prelude::App, _spec: &str) {}
 }
 
 #[cfg(test)]

@@ -1,9 +1,9 @@
 //! Playing a scenario: mouse look with exact degrees-per-count, feeding the core session,
 //! and mirroring its targets as meshes. All gameplay rules live in `aim_core`.
 
-use crate::history::History;
 use crate::overlay::Overlay;
-use crate::settings::{Paths, Settings};
+use crate::persistence::history::History;
+use crate::persistence::settings::{Paths, Settings};
 use aim_core::fov;
 use aim_core::math::ViewAngles;
 use aim_core::movement::MoveInput;

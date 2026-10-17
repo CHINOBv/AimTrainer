@@ -1,0 +1,9 @@
+//! Operating-system specifics: the single-instance IPC channel and global hotkeys.
+
+pub mod hotkey;
+pub mod ipc;
+
+/// True when running inside a Wayland session (Linux).
+pub fn is_wayland() -> bool {
+    cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_some()
+}
