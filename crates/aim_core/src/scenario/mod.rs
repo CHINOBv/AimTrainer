@@ -3,7 +3,11 @@
 pub mod builtin;
 pub mod def;
 pub mod hit;
+mod motion;
+mod scoring;
 pub mod session;
+mod spawn;
+mod weapon;
 
 pub use def::{Category, FireMode, Motion, ScenarioDef, Shape, SpawnArea, ValidationError};
 pub use hit::HitZone;

@@ -1,18 +1,19 @@
 //! Runtime simulation of one scenario run. The engine feeds view angles, buttons and
 //! movement keys every frame and renders whatever `targets()` returns.
+//!
+//! [`Session`] owns the run state and orchestrates each frame; spawning, target motion,
+//! weapons and scoring live in the sibling `spawn`, `motion`, `weapon` and `scoring`
+//! modules.
 
-use super::def::{FireMode, Motion, ScenarioDef, Shape, SpawnArea};
-use super::hit::{HitZone, Ray, ray_humanoid, ray_sphere};
-use crate::math::{Range, Vec3, ViewAngles, angle_between_deg};
+use super::def::{FireMode, ScenarioDef, Shape};
+use super::hit::{HitZone, Ray};
+use super::motion::MotionState;
+use super::{scoring, spawn, weapon};
+use crate::math::{Vec3, ViewAngles};
 use crate::movement::{self, LocalVelocity, MoveInput, MovementProfile};
 use crate::rng::Rng;
 use crate::valorant::{HumanoidDims, WeaponStats};
 use serde::{Deserialize, Serialize};
-
-const SPAWN_ATTEMPTS: usize = 24;
-const MIN_SPHERE_HEIGHT: f32 = 0.3;
-/// Area under VALORANT's counter-strafe curve: braking distance ≈ speed × this.
-const STRAFE_BRAKE_SECS: f32 = 0.075;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct FrameInput {
@@ -55,12 +56,7 @@ pub struct Target {
     pub max_health: f32,
     pub visible_at: f32,
     expires_at: Option<f32>,
-    anchor: Vec3,
-    lateral: Vec3,
-    strafe: LocalVelocity,
-    intent: f32,
-    drift: Vec3,
-    next_change_at: f32,
+    motion: MotionState,
 }
 
 impl Target {
@@ -69,7 +65,7 @@ impl Target {
     }
 
     pub fn velocity(&self) -> Vec3 {
-        self.lateral * self.strafe.right + self.drift
+        self.motion.velocity()
     }
 }
 
@@ -215,31 +211,7 @@ impl Session {
     }
 
     pub fn result(&self) -> RunResult {
-        let s = &self.stats;
-        let hold = self.def.weapon.fire == FireMode::Hold;
-        let ratio = |a: f32, b: f32| if b > 0.0 { a / b } else { 0.0 };
-        let elapsed = self.time.max(f32::EPSILON);
-        RunResult {
-            scenario_id: self.def.id.clone(),
-            score: s.score.max(0.0),
-            accuracy: if hold {
-                ratio(s.on_target_secs, s.hold_secs)
-            } else {
-                ratio(s.hits as f32, s.shots as f32)
-            },
-            kills: s.kills,
-            kills_per_min: s.kills as f32 * 60.0 / elapsed,
-            avg_time_to_kill: (!s.kill_times.is_empty())
-                .then(|| s.kill_times.iter().sum::<f32>() / s.kill_times.len() as f32),
-            headshot_rate: if hold {
-                ratio(s.head_on_target_secs, s.on_target_secs)
-            } else {
-                ratio(s.head_hits as f32, s.hits as f32)
-            },
-            moving_shots: s.moving_shots,
-            expired: s.expired,
-            duration_secs: self.time,
-        }
+        scoring::run_result(&self.def, &self.stats, self.time)
     }
 
     fn move_player(&mut self, input: MoveInput, dt: f32) {
@@ -270,157 +242,52 @@ impl Session {
 
     fn move_targets(&mut self, dt: f32) {
         let now = self.time;
-        let motion = self.def.targets.motion.clone();
+        let motion = &self.def.targets.motion;
+        let humanoid = matches!(self.def.targets.shape, Shape::Humanoid { .. });
         for t in &mut self.targets {
-            if !t.is_visible(now) {
-                continue;
-            }
-            match &motion {
-                Motion::Static => {}
-                Motion::Strafe {
-                    weapon,
-                    change_secs,
-                    stop_chance,
-                    max_offset,
-                } => {
-                    let offset = (t.position - t.anchor).dot(t.lateral);
-                    if now >= t.next_change_at {
-                        t.intent = if self.rng.next_f32() < *stop_chance {
-                            0.0
-                        } else if t.intent == 0.0 {
-                            self.rng.sign()
-                        } else {
-                            -t.intent
-                        };
-                        t.next_change_at = now + self.rng.in_range(*change_secs);
-                    }
-                    let profile = weapon.movement();
-                    // Reverse early enough that the counter-strafe braking distance keeps the
-                    // target inside its lane.
-                    let braking = t.strafe.right.abs() * STRAFE_BRAKE_SECS;
-                    if t.intent != 0.0 && offset * t.intent + braking >= *max_offset {
-                        t.intent = -t.intent;
-                    }
-                    let input = MoveInput {
-                        right: t.intent,
-                        ..Default::default()
-                    };
-                    t.strafe = movement::step(&profile, t.strafe, input, dt);
-                    t.position += t.lateral * (t.strafe.right * dt);
-                }
-                Motion::Drift {
-                    speed,
-                    change_secs,
-                    max_offset,
-                } => {
-                    let humanoid = matches!(self.def.targets.shape, Shape::Humanoid { .. });
-                    if now >= t.next_change_at {
-                        let a = self.rng.next_f32() * std::f32::consts::TAU;
-                        let up = if humanoid { 0.0 } else { a.sin() };
-                        t.drift = (t.lateral * a.cos() + Vec3::UP * up) * self.rng.in_range(*speed);
-                        t.next_change_at = now + self.rng.in_range(*change_secs);
-                    }
-                    let away = t.position - t.anchor;
-                    if away.length() >= *max_offset && away.dot(t.drift) > 0.0 {
-                        t.drift = -t.drift;
-                    }
-                    t.position += t.drift * dt;
-                    if !humanoid {
-                        t.position.y = t.position.y.max(MIN_SPHERE_HEIGHT);
-                    }
-                }
+            if t.is_visible(now) {
+                t.motion
+                    .step(&mut t.position, motion, humanoid, &mut self.rng, now, dt);
             }
         }
     }
 
     fn shot_direction(&mut self) -> (Vec3, bool) {
-        let speed = self.player_speed();
-        let limit = self.profile.accuracy_speed_limit();
-        let moving = speed > limit;
-        let mut dir = self.view.direction();
-        if self.def.weapon.simulate_spread {
-            let mut spread = self.weapon.first_shot_spread_deg;
-            if moving {
-                let run = self.profile.run_speed;
-                let t = ((speed - limit) / (run - limit).max(f32::EPSILON)).clamp(0.0, 1.0);
-                spread += self.weapon.run_spread_deg * t;
-            }
-            // Uniform sample inside the spread cone's disk.
-            let r = spread * self.rng.next_f32().sqrt();
-            let phi = self.rng.next_f32() * std::f32::consts::TAU;
-            let v = self.view.rotated(r * phi.cos(), r * phi.sin());
-            dir = v.direction();
-        }
-        (dir, moving)
+        weapon::shot_direction(
+            self.view,
+            self.player_speed(),
+            &self.profile,
+            &self.weapon,
+            self.def.weapon.simulate_spread,
+            &mut self.rng,
+        )
     }
 
-    fn raycast(&self, ray: Ray) -> Option<(usize, HitZone)> {
-        let now = self.time;
-        self.targets
-            .iter()
-            .enumerate()
-            .filter(|(_, t)| t.is_visible(now))
-            .filter_map(|(i, t)| {
-                let hit = match self.def.targets.shape {
-                    Shape::Sphere { radius } => {
-                        ray_sphere(ray, t.position, radius).map(|d| (d, HitZone::Sphere))
-                    }
-                    Shape::Humanoid { .. } => {
-                        ray_humanoid(ray, t.position, t.facing_yaw_deg, &self.dims)
-                    }
-                };
-                hit.map(|(d, z)| (d, i, z))
-            })
-            .min_by(|a, b| a.0.total_cmp(&b.0))
-            .map(|(_, i, z)| (i, z))
-    }
-
-    fn counts(&self, zone: HitZone) -> bool {
-        !matches!(self.def.targets.shape, Shape::Humanoid { head_only: true })
-            || zone == HitZone::Head
-    }
-
-    fn zone_points(&self, zone: HitZone) -> f32 {
-        let s = &self.def.scoring;
-        match zone {
-            HitZone::Head => s.head,
-            HitZone::Body => s.body,
-            HitZone::Legs => s.legs,
-            HitZone::Sphere => s.sphere,
-        }
+    /// The target index and counted zone that a shot along `dir` from the eye hits.
+    fn hit_along(&self, dir: Vec3) -> Option<(usize, HitZone)> {
+        let ray = Ray {
+            origin: self.eye_position(),
+            dir,
+        };
+        let shape = &self.def.targets.shape;
+        weapon::raycast(ray, &self.targets, shape, &self.dims, self.time)
+            .filter(|(_, z)| scoring::counts(shape, *z))
     }
 
     fn shoot(&mut self, events: &mut Vec<SessionEvent>) {
-        if self.time - self.last_shot_at < 1.0 / self.weapon.fire_rate {
+        if !weapon::can_fire(&self.weapon, self.time, self.last_shot_at) {
             return;
         }
         self.last_shot_at = self.time;
         let (dir, moving) = self.shot_direction();
-        self.stats.shots += 1;
-        if moving {
-            self.stats.moving_shots += 1;
-            self.stats.score -= self.def.scoring.moving_shot_penalty;
-        }
+        scoring::record_shot(&mut self.stats, &self.def.scoring, moving);
 
-        let hit = self
-            .raycast(Ray {
-                origin: self.eye_position(),
-                dir,
-            })
-            .filter(|(_, z)| self.counts(*z));
-        let Some((idx, zone)) = hit else {
-            self.stats.score -= self.def.scoring.miss_penalty;
+        let Some((idx, zone)) = self.hit_along(dir) else {
+            scoring::record_miss(&mut self.stats, &self.def.scoring);
             events.push(SessionEvent::Shot { hit: None, moving });
             return;
         };
-        self.stats.hits += 1;
-        match zone {
-            HitZone::Head => self.stats.head_hits += 1,
-            HitZone::Body => self.stats.body_hits += 1,
-            HitZone::Legs => self.stats.leg_hits += 1,
-            HitZone::Sphere => {}
-        }
-        self.stats.score += self.zone_points(zone);
+        scoring::record_hit(&mut self.stats, &self.def.scoring, zone);
         let id = self.targets[idx].id;
         events.push(SessionEvent::Shot {
             hit: Some((id, zone)),
@@ -435,18 +302,10 @@ impl Session {
     fn hold_fire(&mut self, dt: f32, events: &mut Vec<SessionEvent>) {
         self.stats.hold_secs += dt;
         let (dir, _) = self.shot_direction();
-        let hit = self
-            .raycast(Ray {
-                origin: self.eye_position(),
-                dir,
-            })
-            .filter(|(_, z)| self.counts(*z));
-        let Some((idx, zone)) = hit else { return };
-        self.stats.on_target_secs += dt;
-        if zone == HitZone::Head {
-            self.stats.head_on_target_secs += dt;
-        }
-        self.stats.score += self.zone_points(zone) * dt;
+        let Some((idx, zone)) = self.hit_along(dir) else {
+            return;
+        };
+        scoring::record_on_target(&mut self.stats, &self.def.scoring, zone, dt);
         self.targets[idx].health -= dt;
         if self.targets[idx].health <= 0.0 {
             self.kill(idx, events);
@@ -456,8 +315,7 @@ impl Session {
     fn kill(&mut self, idx: usize, events: &mut Vec<SessionEvent>) {
         let t = self.targets.swap_remove(idx);
         let time_to_kill = self.time - t.visible_at;
-        self.stats.kills += 1;
-        self.stats.kill_times.push(time_to_kill);
+        scoring::record_kill(&mut self.stats, time_to_kill);
         events.push(SessionEvent::Killed {
             id: t.id,
             time_to_kill,
@@ -466,12 +324,12 @@ impl Session {
 
     fn expire(&mut self, events: &mut Vec<SessionEvent>) {
         let now = self.time;
-        let penalty = self.def.scoring.expire_penalty;
+        let scoring_def = &self.def.scoring;
+        let stats = &mut self.stats;
         self.targets.retain(|t| {
             let alive = t.expires_at.is_none_or(|e| now < e);
             if !alive {
-                self.stats.expired += 1;
-                self.stats.score -= penalty;
+                scoring::record_expired(stats, scoring_def);
                 events.push(SessionEvent::Expired { id: t.id });
             }
             alive
@@ -486,113 +344,16 @@ impl Session {
         }
     }
 
-    fn sample_point(&mut self) -> Vec3 {
-        let eye = self.eye_position();
-        let humanoid = matches!(self.def.targets.shape, Shape::Humanoid { .. });
-        let mut p = match self.def.targets.spawn {
-            SpawnArea::Angular {
-                yaw_deg,
-                pitch_deg,
-                distance,
-            } => {
-                let yaw = self.rng.in_range(yaw_deg);
-                let pitch = if humanoid {
-                    0.0
-                } else {
-                    self.rng.in_range(pitch_deg)
-                };
-                eye + ViewAngles::new(yaw, pitch).direction() * self.rng.in_range(distance)
-            }
-            SpawnArea::AroundCrosshair {
-                offset_deg,
-                distance,
-                pitch_limit_deg,
-            } => {
-                let offset = self.rng.in_range(offset_deg);
-                let dist = self.rng.in_range(distance);
-                if humanoid {
-                    let yaw = self.view.yaw_deg + offset * self.rng.sign();
-                    eye + ViewAngles::new(yaw, 0.0).direction() * dist
-                } else {
-                    self.crosshair_sphere_point(eye, offset, dist, pitch_limit_deg)
-                }
-            }
-            SpawnArea::Floor { x, z, height } => Vec3::new(
-                self.rng.in_range(x),
-                self.rng.in_range(height),
-                self.rng.in_range(z),
-            ),
-        };
-        if humanoid {
-            p.y = 0.0;
-        } else {
-            p.y = p.y.max(MIN_SPHERE_HEIGHT);
-        }
-        p
-    }
-
-    /// A point `offset` degrees away from the current aim, in a random direction, that stays
-    /// inside the pitch band and above the floor. Each spawn is relative to the previous aim,
-    /// so without the band chained flicks drift into the sky or the floor.
-    fn crosshair_sphere_point(&mut self, eye: Vec3, offset: f32, dist: f32, limit: Range) -> Vec3 {
-        let fits = |v: ViewAngles| {
-            let p = eye + v.direction() * dist;
-            let in_band = (limit.min..=limit.max).contains(&v.pitch_deg);
-            (in_band && p.y >= MIN_SPHERE_HEIGHT).then_some(p)
-        };
-        for _ in 0..SPAWN_ATTEMPTS {
-            let phi = self.rng.next_f32() * std::f32::consts::TAU;
-            let (d_yaw, d_pitch) = (offset * phi.cos(), offset * phi.sin());
-            // Try the sampled direction, then its vertical mirror.
-            for v in [
-                self.view.rotated(d_yaw, d_pitch),
-                self.view.rotated(d_yaw, -d_pitch),
-            ] {
-                if let Some(p) = fits(v) {
-                    return p;
-                }
-            }
-        }
-        // The aim itself is outside the band (e.g. looking at the sky): flick horizontally
-        // and bring the pitch back into the band.
-        let yaw = self.view.yaw_deg + offset * self.rng.sign();
-        let pitch = self.view.pitch_deg.clamp(limit.min, limit.max);
-        let mut p = eye + ViewAngles::new(yaw, pitch).direction() * dist;
-        p.y = p.y.max(MIN_SPHERE_HEIGHT);
-        p
-    }
-
-    fn aim_point(&self, p: Vec3) -> Vec3 {
-        match self.def.targets.shape {
-            Shape::Humanoid { .. } => p + Vec3::new(0.0, self.dims.head_center_height(), 0.0),
-            Shape::Sphere { .. } => p,
-        }
-    }
-
     fn spawn_target(&mut self) -> Target {
-        let eye = self.eye_position();
-        let sep = self.def.targets.min_separation_deg;
-        let mut point = self.sample_point();
-        for _ in 1..SPAWN_ATTEMPTS {
-            let dir = self.aim_point(point) - eye;
-            let far_enough = self
-                .targets
-                .iter()
-                .all(|t| angle_between_deg(dir, self.aim_point(t.position) - eye) >= sep);
-            if far_enough {
-                break;
-            }
-            point = self.sample_point();
-        }
-
-        let to_player = (self.player_pos - point).horizontal();
-        let facing_yaw_deg = to_player.x.atan2(to_player.z).to_degrees();
-        let lateral = Vec3::UP.cross(to_player).normalize_or_zero();
-        let lateral = if lateral == Vec3::ZERO {
-            Vec3::new(1.0, 0.0, 0.0)
-        } else {
-            lateral
-        };
+        let point = spawn::separated_point(
+            &self.def.targets,
+            &self.targets,
+            self.eye_position(),
+            self.view,
+            &self.dims,
+            &mut self.rng,
+        );
+        let (facing_yaw_deg, lateral) = spawn::face_player(point, self.player_pos);
         let delay = self.rng.in_range(self.def.targets.appear_delay_secs);
         let visible_at = self.time + delay;
         let id = self.next_id;
@@ -605,12 +366,7 @@ impl Session {
             max_health: self.def.targets.health,
             visible_at,
             expires_at: self.def.targets.lifetime_secs.map(|l| visible_at + l),
-            anchor: point,
-            lateral,
-            strafe: LocalVelocity::default(),
-            intent: 0.0,
-            drift: Vec3::ZERO,
-            next_change_at: visible_at,
+            motion: MotionState::new(point, lateral, visible_at),
         }
     }
 }
@@ -618,7 +374,7 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::math::Range;
+    use crate::math::{Range, angle_between_deg};
     use crate::scenario::def::default_pitch_limit;
     use crate::scenario::def::*;
 
@@ -841,7 +597,7 @@ mod tests {
             });
             let t = s.targets().next().unwrap();
             max_speed = max_speed.max(t.velocity().length());
-            assert!((t.position - t.anchor).length() <= 2.0 + 0.1);
+            assert!((t.position - t.motion.anchor).length() <= 2.0 + 0.1);
         }
         assert!(max_speed <= 5.4 + 1e-3 && max_speed > 4.0, "{max_speed}");
     }
