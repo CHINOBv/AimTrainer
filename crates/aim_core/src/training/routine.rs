@@ -1,9 +1,10 @@
-//! Training routines: ordered blocks of scenarios, written as TOML.
+//! Training routines: ordered blocks of activities (scenarios or arenas), written as TOML.
 //!
 //! Design follows the evidence in `docs/training-science.md`: a short warm-up kept in order,
 //! then the remaining runs interleaved (contextual interference, Shea & Morgan 1979),
 //! and session lengths around 30–60 minutes (Listman et al. 2021).
 
+use crate::activity::ActivityKind;
 use crate::rng::Rng;
 use crate::scenario::ScenarioDef;
 use serde::{Deserialize, Serialize};
@@ -24,7 +25,13 @@ pub struct RoutineDef {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Block {
+    /// Scenario id. A block names either a `scenario` or an `arena`.
+    #[serde(default)]
     pub scenario: String,
+    /// Arena id (deathmatch or angle clearing, defined in `aim_world`). Arena blocks set
+    /// `runs`, because their length is only known to `aim_world`.
+    #[serde(default)]
+    pub arena: Option<String>,
     /// Exact number of runs. Takes precedence over `minutes`.
     #[serde(default)]
     pub runs: Option<u32>,
@@ -45,13 +52,25 @@ pub struct Block {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlannedRun {
+    /// Scenario id, or arena id when `kind` is [`ActivityKind::Arena`].
     pub scenario_id: String,
+    pub kind: ActivityKind,
     pub block: usize,
     pub note: String,
     /// Offset relative to the routine's base level.
     pub difficulty: f32,
     /// Duration override for this run.
     pub duration_secs: Option<f32>,
+}
+
+impl Block {
+    /// The activity this block plays and its id.
+    pub fn activity(&self) -> (ActivityKind, &str) {
+        match &self.arena {
+            Some(a) => (ActivityKind::Arena, a),
+            None => (ActivityKind::Scenario, &self.scenario),
+        }
+    }
 }
 
 impl PlannedRun {
@@ -82,11 +101,19 @@ impl RoutineDef {
             if !(b.difficulty.is_finite() && (-2.0..=2.0).contains(&b.difficulty)) {
                 errs.push(format!("blocks[{i}].difficulty: must be within [-2, 2]"));
             }
-            if !library.iter().any(|d| d.id == b.scenario) {
-                errs.push(format!(
+            match (&b.arena, b.scenario.is_empty()) {
+                (Some(_), false) => errs.push(format!(
+                    "blocks[{i}]: set either `scenario` or `arena`, not both"
+                )),
+                (Some(_), true) if b.runs.is_none() => {
+                    errs.push(format!("blocks[{i}]: arena blocks need `runs`"))
+                }
+                (Some(_), true) => {}
+                (None, _) if !library.iter().any(|d| d.id == b.scenario) => errs.push(format!(
                     "blocks[{i}].scenario: unknown scenario '{}'",
                     b.scenario
-                ));
+                )),
+                (None, _) => {}
             }
             match (b.runs, b.minutes) {
                 (None, None) => errs.push(format!("blocks[{i}]: set `runs` or `minutes`")),
@@ -98,6 +125,19 @@ impl RoutineDef {
             }
         }
         errs
+    }
+
+    /// Arena blocks whose arena is not in `arenas` (arenas live in `aim_world`, so the
+    /// caller that knows them runs this check next to [`Self::validate`]).
+    pub fn validate_arenas(&self, arenas: &[&str]) -> Vec<String> {
+        self.blocks
+            .iter()
+            .enumerate()
+            .filter_map(|(i, b)| {
+                let a = b.arena.as_deref()?;
+                (!arenas.contains(&a)).then(|| format!("blocks[{i}].arena: unknown arena '{a}'"))
+            })
+            .collect()
     }
 
     fn runs_for(block: &Block, library: &[ScenarioDef]) -> u32 {
@@ -121,8 +161,10 @@ impl RoutineDef {
             for i in range {
                 let b = &self.blocks[i];
                 for _ in 0..Self::runs_for(b, library) {
+                    let (kind, id) = b.activity();
                     runs.push(PlannedRun {
-                        scenario_id: b.scenario.clone(),
+                        scenario_id: id.to_owned(),
+                        kind,
                         block: i,
                         note: b.note.clone(),
                         difficulty: b.difficulty,
@@ -162,11 +204,14 @@ impl RoutineDef {
             .sum()
     }
 
-    /// Total planned minutes.
+    /// Total planned minutes. Arena runs count only when their block sets `duration_secs`.
     pub fn minutes(&self, library: &[ScenarioDef]) -> f32 {
         self.plan(library, 0)
             .iter()
             .filter_map(|r| {
+                if r.kind == ActivityKind::Arena {
+                    return r.duration_secs.map(|s| s / 60.0);
+                }
                 let d = library.iter().find(|d| d.id == r.scenario_id)?;
                 Some(r.duration_secs.unwrap_or(d.duration_secs) / 60.0)
             })
@@ -178,6 +223,10 @@ pub mod builtin {
     use super::RoutineDef;
 
     pub const SOURCES: &[(&str, &str)] = &[
+        (
+            "aim-and-duel.toml",
+            include_str!("../../../../content/routines/aim-and-duel.toml"),
+        ),
         (
             "fundamentals-hour.toml",
             include_str!("../../../../content/routines/fundamentals-hour.toml"),
@@ -315,5 +364,89 @@ mod tests {
         .unwrap();
         let errs = r.validate(&lib);
         assert_eq!(errs.len(), 3, "{errs:?}");
+    }
+
+    #[test]
+    fn arena_blocks_plan_arena_runs_and_are_validated() {
+        let lib = scenario::builtin::all();
+        let r = RoutineDef::from_toml(
+            r#"
+            id = "mixed"
+            name = "Mixed"
+            [[blocks]]
+            scenario = "micro-adjust"
+            runs = 1
+            [[blocks]]
+            arena = "yard-deathmatch"
+            runs = 2
+            duration_secs = 90.0
+            "#,
+        )
+        .unwrap();
+        assert!(r.validate(&lib).is_empty(), "{:?}", r.validate(&lib));
+        let plan = r.plan(&lib, 1);
+        let kinds: Vec<_> = plan
+            .iter()
+            .map(|p| (p.kind, p.scenario_id.as_str()))
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                (ActivityKind::Scenario, "micro-adjust"),
+                (ActivityKind::Arena, "yard-deathmatch"),
+                (ActivityKind::Arena, "yard-deathmatch"),
+            ]
+        );
+        let micro = lib
+            .iter()
+            .find(|d| d.id == "micro-adjust")
+            .unwrap()
+            .duration_secs;
+        assert!((r.minutes(&lib) - (micro / 60.0 + 3.0)).abs() < 1e-4);
+        assert!(r.validate_arenas(&["yard-deathmatch"]).is_empty());
+        assert_eq!(
+            r.validate_arenas(&["other"]),
+            ["blocks[1].arena: unknown arena 'yard-deathmatch'"]
+        );
+    }
+
+    #[test]
+    fn arena_blocks_need_runs_and_exclude_a_scenario() {
+        let lib = scenario::builtin::all();
+        let r = RoutineDef::from_toml(
+            r#"
+            id = "x"
+            name = "x"
+            [[blocks]]
+            arena = "yard-deathmatch"
+            minutes = 4.0
+            [[blocks]]
+            arena = "yard-deathmatch"
+            scenario = "micro-adjust"
+            runs = 1
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            r.validate(&lib),
+            [
+                "blocks[0]: arena blocks need `runs`",
+                "blocks[1]: set either `scenario` or `arena`, not both",
+            ]
+        );
+    }
+
+    #[test]
+    fn scenario_blocks_still_plan_scenario_runs() {
+        let lib = scenario::builtin::all();
+        let r = builtin::all()
+            .into_iter()
+            .find(|r| r.id == "valorant-daily")
+            .unwrap();
+        assert!(
+            r.plan(&lib, 3)
+                .iter()
+                .all(|p| p.kind == ActivityKind::Scenario)
+        );
     }
 }

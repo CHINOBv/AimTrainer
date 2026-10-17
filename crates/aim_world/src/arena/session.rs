@@ -3,6 +3,7 @@
 use super::bot::{Bot, Brain, Ctx, Phase, head_of, yaw_of};
 use super::def::{ArenaDef, ArenaError, ArenaMode, bot_profile};
 use crate::map::{DEFAULT_PLAYER_RADIUS, MapDef, SpawnKind};
+use aim_core::activity::{Activity, ActivityEvent};
 use aim_core::math::{Vec3, ViewAngles, angle_between_deg};
 use aim_core::movement::{self, LocalVelocity, MovementProfile};
 use aim_core::rng::Rng;
@@ -192,6 +193,17 @@ impl ArenaSession {
             ArenaMode::AngleClear { .. } => s.start_angle(),
         }
         Ok(s)
+    }
+
+    /// Change the run's length before it starts (routines shorten arenas). The result's id
+    /// becomes `id~Ns`, the key shortened scenarios use, so the history never mixes
+    /// lengths. A non-positive length, or a run that has already started, is left as is.
+    pub fn with_duration(mut self, secs: f32) -> Self {
+        if secs.is_finite() && secs > 0.0 && self.time == 0.0 {
+            self.def.id = format!("{}~{}s", self.def.id, secs.round() as u32);
+            self.def.duration_secs = secs;
+        }
+        self
     }
 
     pub fn def(&self) -> &ArenaDef {
@@ -636,5 +648,38 @@ impl ArenaSession {
                 self.spawn_roaming_bot(Some(i));
             }
         }
+    }
+}
+
+impl Activity for ArenaSession {
+    fn update(&mut self, input: FrameInput) -> Vec<ActivityEvent> {
+        ArenaSession::update(self, input)
+            .into_iter()
+            .filter_map(|e| match e {
+                ArenaEvent::Shot { hit, .. } => Some(ActivityEvent::Shot { hit: hit.is_some() }),
+                ArenaEvent::BotKilled {
+                    time_to_kill_secs, ..
+                } => Some(ActivityEvent::Kill { time_to_kill_secs }),
+                ArenaEvent::PlayerHit { .. } => Some(ActivityEvent::Damaged),
+                ArenaEvent::Finished => Some(ActivityEvent::Finished),
+                ArenaEvent::PlayerDied | ArenaEvent::BotSpawned { .. } => None,
+            })
+            .collect()
+    }
+
+    fn is_finished(&self) -> bool {
+        ArenaSession::is_finished(self)
+    }
+
+    fn result(&self) -> RunResult {
+        ArenaSession::result(self)
+    }
+
+    fn time(&self) -> f32 {
+        ArenaSession::time(self)
+    }
+
+    fn view(&self) -> Option<ViewAngles> {
+        Some(ArenaSession::view(self))
     }
 }
