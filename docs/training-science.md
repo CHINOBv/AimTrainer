@@ -126,6 +126,53 @@ Spreading the skills across the week does give VDIM spacing between sessions. Ou
 - No controlled evidence supports or rejects sensitivity randomization.
 - **Our default:** train at your exact VALORANT sensitivity. The trainer converts it to the same cm/360.
 
+## Analytics metrics
+
+Post-run analysis (`aim_core::analytics`) re-simulates the recorded run and measures it. Every number below is shown with the metric that produced it. **All thresholds are provisional:** they are estimates chosen against the simulated aimer, not calibrated on player data, and will be revised once real runs exist.
+
+**Sources.**
+
+- **Fitts' law** (Fitts 1954, *J. Exp. Psychol.* 47(6), 381–391): movement time grows with the index of difficulty `log2(D/W + 1)` (Shannon form, MacKenzie 1992, *Human–Computer Interaction* 7, 91–139). The simulated aimer already uses it.
+- **Effective throughput, ISO 9241-9** (Soukoreff & MacKenzie 2004, *Int. J. Human-Computer Studies* 61, 751–789): `We = 4.133 · SD` of the endpoint error along the movement axis, `IDe = log2(De/We + 1)` with `De` the mean effective distance, `TP = IDe / MT` in bits/s.
+- **Optimized sub-movement model** (Meyer, Abrams, Kornblum, Wright & Smith 1988, *Psychological Review* 95(3), 340–370): an aimed movement is a primary sub-movement followed by zero or more corrective sub-movements; the primary endpoint error shows the speed–accuracy trade-off.
+- Confidence: the citations are standard references (not re-checked online in this pass). Applying them to mouse flicks in an aim trainer, and the thresholds, are our inference.
+
+**Flick metrics (click scenarios).** A flick runs from when its target could first be aimed at (it became visible, or the previous shot was fired, whichever is later) to the shot.
+
+| Metric | Definition |
+|---|---|
+| Reaction time | Start → movement onset. Onset is the first frame whose angular speed reaches 10% of the flick's peak (floor 5°/s), a common kinematic criterion (estimate). Fresh flicks only; a retry after a miss is a correction. Onset detection adds ~45 ms to the simulated aimer's nominal delay |
+| Movement time | Onset → shot |
+| Sub-movements | A new sub-movement starts when speed drops to a valley ≤ 50% of the preceding peak and rises again by ≥ 20% of that peak, or after the crosshair stops (< floor) and moves again. Corrections = sub-movements − 1 |
+| Overshoot / undershoot | Signed crosshair error at the end of the primary sub-movement, along the start→target direction, in target radii. > +1 radius (ended past the far edge) is an overshoot, < −1 an undershoot |
+| Settle time | End of the primary sub-movement → shot |
+| Path efficiency | Straight-line angle start→shot ÷ angle travelled (1 = perfectly straight) |
+| Throughput | ISO 9241-9 effective throughput over fresh flicks (needs ≥ 5). Mixed distances per run make it an approximation of the per-condition ISO value |
+
+**Tracking metrics (hold scenarios).**
+
+| Metric | Definition |
+|---|---|
+| Time on target | Seconds on a counted zone (the session's own hit test) ÷ seconds firing with a target visible |
+| Error from center | Angle from the crosshair to the aim point (sphere center, humanoid head center) |
+| Lag vs lead | Sign of the crosshair error projected on the target's angular velocity (target moving ≥ 5°/s). Lag ratio = time behind ÷ time moving |
+| Reaction to direction changes | After the target's direction of motion reverses (dot product < 0), the time until the crosshair moves the new way. Responses over 1 s are dropped as lapses |
+
+**Rules (provisional).** A category needs ≥ 5 flicks or ≥ 3 s of firing before it is judged.
+
+| Metric | Weakness | Strength | Recommended practice |
+|---|---|---|---|
+| Median reaction time | > 300 ms | < 220 ms | `peek-reaction`, `quick-warmup` routine |
+| Overshoot rate | > 35% | < 10% | `micro-adjust`, `static-headline`; slow flicks slightly, check sensitivity |
+| Undershoot rate | > 35% | — | `flick-wide`; commit to the full distance |
+| Corrections per flick | > 1.0 | — | `micro-adjust`, `flick-headshot` |
+| Path efficiency | < 85% | — | `flick-headshot` |
+| Time on target | < 50% | > 75% | `track-precise` |
+| Lag ratio | > 65% (trailing) or < 35% (over-leading) | — | `track-precise`, `track-reactive-micro` |
+| Reaction to direction changes | > 250 ms | — | `track-reactive-strafe`, `track-reactive-micro` |
+
+The 300 ms and 220 ms reaction thresholds bracket the simulated recruit (0.32 s + onset) and elite (0.20 s + onset); the rest are estimates.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.
