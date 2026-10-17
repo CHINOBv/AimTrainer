@@ -1,16 +1,26 @@
-//! In-run HUD: crosshair, status, movement meter, countdown and pause menu.
+//! In-run HUD: crosshair, status, off-screen target arrows, movement meter, countdown and
+//! pause menu.
 
 use crate::game::AppState;
+use crate::game::MainCamera;
 use crate::game::arena::ArenaRun;
 use crate::overlay::Overlay;
 use crate::persistence::settings::Settings;
 use crate::ui::atoms::crosshair;
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::hud_panels;
+use aim_core::scenario::RunKey;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
 
 pub struct HudPage;
+
+/// Floor height picked in the pause window, for the run it was picked in.
+#[derive(Default)]
+struct FloorChoice {
+    run_id: String,
+    chosen: f32,
+}
 
 impl Plugin for HudPage {
     fn build(&self, app: &mut App) {
@@ -26,6 +36,8 @@ fn hud(
     settings: Res<Settings>,
     overlay: Res<Overlay>,
     arena: Option<ResMut<ArenaRun>>,
+    camera: Query<&Projection, With<MainCamera>>,
+    mut floor: Local<FloorChoice>,
     mut nav: Navigator,
 ) -> Result {
     if !overlay.visible {
@@ -40,7 +52,7 @@ fn hud(
         }
         let action = arena
             .paused
-            .then(|| hud_panels::pause_window(ctx, &arena.session.def().description))
+            .then(|| hud_panels::pause_window(ctx, &arena.session.def().description, None))
             .flatten();
         match action {
             Some(crate::ui::UiAction::Resume) => arena.paused = false,
@@ -50,6 +62,18 @@ fn hud(
         return Ok(());
     }
     let Some(run) = nav.run() else { return Ok(()) };
+    if settings.offscreen_arrows
+        && !run.paused
+        && let Ok(Projection::Perspective(p)) = camera.single()
+    {
+        let cam = hud_panels::ArrowCamera {
+            eye: run.session.eye_position(),
+            view: run.view,
+            vfov_deg: p.fov.to_degrees(),
+            aspect: p.aspect_ratio,
+        };
+        hud_panels::offscreen_arrows(ctx, &run.session, &cam, settings.target_color);
+    }
     crosshair::draw(ctx, &settings.crosshair, run.hit_flash > 0.0);
     hud_panels::run_status(ctx, &run.session);
     if run.session.def().player.movement {
@@ -61,9 +85,25 @@ fn hud(
     if run.countdown > 0.0 {
         hud_panels::countdown(ctx, run.countdown);
     }
+    let def = run.session.def();
+    let current = def.player.elevation;
+    // A new run (or a restart) resets the picker to the height being played.
+    if floor.run_id != def.id {
+        floor.run_id = def.id.clone();
+        floor.chosen = current;
+    }
+    // Only library scenarios can be rebuilt at another height (not e.g. daily challenges).
+    let restartable = nav
+        .library()
+        .scenario(RunKey::parse(&def.id).base)
+        .is_some();
+    let pick = restartable.then(|| hud_panels::FloorPick {
+        current,
+        chosen: &mut floor.chosen,
+    });
     let action = run
         .paused
-        .then(|| hud_panels::pause_window(ctx, &run.session.def().description))
+        .then(|| hud_panels::pause_window(ctx, &def.description, pick))
         .flatten();
     if let Some(action) = action {
         nav.apply(action);

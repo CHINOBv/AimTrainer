@@ -185,7 +185,18 @@ pub struct PlayerDef {
     /// Allowed range of the player's feet along world z, meters.
     #[serde(default = "default_bounds")]
     pub bounds_z: Range,
+    /// Height of the player's floor above the targets' floor, meters (default 0). Within
+    /// [`ELEVATION_RANGE`]. Targets keep their floor at 0, so a positive value looks down
+    /// on them and a negative one looks up.
+    #[serde(default)]
+    pub elevation: f32,
 }
+
+/// Allowed `player.elevation`, meters.
+pub const ELEVATION_RANGE: Range = Range {
+    min: -3.0,
+    max: 6.0,
+};
 
 fn default_bounds() -> Range {
     Range::fixed(0.0)
@@ -197,6 +208,7 @@ impl Default for PlayerDef {
             movement: false,
             bounds_x: default_bounds(),
             bounds_z: default_bounds(),
+            elevation: 0.0,
         }
     }
 }
@@ -282,6 +294,12 @@ pub enum SpawnArea {
         /// horizon, because every spawn is relative to the previous aim.
         #[serde(default = "default_pitch_limit")]
         pitch_limit_deg: Range,
+        /// Keep every spawn inside VALORANT's view as seen from the crosshair at spawn
+        /// time (minus a margin, see [`crate::fov::ON_SCREEN_MARGIN_DEG`]), so a flick
+        /// never starts with a search. `offset_deg.max` must then stay within
+        /// [`crate::fov::valorant_on_screen_half_h_deg`].
+        #[serde(default)]
+        on_screen: bool,
     },
     /// World-space box on the floor. Spheres are placed at `height` above the floor.
     Floor {
@@ -487,6 +505,12 @@ impl ScenarioDef {
             "player.bounds",
             "must contain the origin (player start)",
         );
+        check(
+            p.elevation.is_finite()
+                && (ELEVATION_RANGE.min..=ELEVATION_RANGE.max).contains(&p.elevation),
+            "player.elevation",
+            "must be within [-3, 6] m",
+        );
 
         let t = &self.targets;
         check(
@@ -554,6 +578,7 @@ impl ScenarioDef {
                 offset_deg,
                 distance,
                 pitch_limit_deg,
+                on_screen,
             } => {
                 check(
                     pitch_limit_deg.is_valid()
@@ -566,6 +591,12 @@ impl ScenarioDef {
                     offset_deg.is_valid() && offset_deg.min >= 0.0 && offset_deg.max <= 180.0,
                     "targets.spawn.offset_deg",
                     "must be within [0, 180]",
+                );
+                let on_screen_limit = crate::fov::valorant_on_screen_half_h_deg() as f32;
+                check(
+                    !on_screen || offset_deg.max <= on_screen_limit,
+                    "targets.spawn.offset_deg",
+                    &format!("with on_screen, must stay within {on_screen_limit}°"),
                 );
                 check(
                     distance.is_valid() && distance.min >= 1.0,
@@ -664,6 +695,31 @@ mod tests {
     }
 
     #[test]
+    fn on_screen_defaults_off_and_rejects_offsets_past_the_screen_edge() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        let SpawnArea::AroundCrosshair { on_screen, .. } = d.targets.spawn else {
+            panic!("wrong spawn kind")
+        };
+        assert!(!on_screen);
+
+        let src = MINIMAL.replace(
+            "distance = [10, 10] }",
+            "distance = [10, 10], on_screen = true }",
+        );
+        let ok = ScenarioDef::from_toml(&src).unwrap();
+        assert!(ok.validate().is_empty(), "{:?}", ok.validate());
+
+        let wide = src.replace("[10, 40]", "[20, 70]");
+        let fields: Vec<_> = ScenarioDef::from_toml(&wide)
+            .unwrap()
+            .validate()
+            .into_iter()
+            .map(|e| e.field)
+            .collect();
+        assert_eq!(fields, ["targets.spawn.offset_deg"]);
+    }
+
+    #[test]
     fn validation_reports_every_problem() {
         let mut d = ScenarioDef::from_toml(MINIMAL).unwrap();
         d.id = "Bad Id".into();
@@ -671,6 +727,27 @@ mod tests {
         d.targets.health = f32::INFINITY;
         let fields: Vec<_> = d.validate().into_iter().map(|e| e.field).collect();
         assert_eq!(fields, ["id", "duration_secs", "targets.health"]);
+    }
+
+    #[test]
+    fn player_elevation_defaults_to_zero_parses_and_is_range_checked() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!(d.player.elevation, 0.0);
+        let src = format!("{MINIMAL}\n[player]\nelevation = 1.5\n");
+        let raised = ScenarioDef::from_toml(&src).unwrap();
+        assert_eq!(raised.player.elevation, 1.5);
+        assert!(raised.validate().is_empty(), "{:?}", raised.validate());
+        for bad in [-3.5, 6.5, f32::NAN] {
+            let mut b = d.clone();
+            b.player.elevation = bad;
+            let fields: Vec<_> = b.validate().into_iter().map(|e| e.field).collect();
+            assert_eq!(fields, ["player.elevation"], "{bad}");
+        }
+        for ok in [ELEVATION_RANGE.min, ELEVATION_RANGE.max] {
+            let mut b = d.clone();
+            b.player.elevation = ok;
+            assert!(b.validate().is_empty(), "{ok}");
+        }
     }
 
     #[test]

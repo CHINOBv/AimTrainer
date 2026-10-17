@@ -165,6 +165,16 @@ Full citations are in `docs/training-science.md`.
 - **Attribution:** we credit VDIM (Lowgravity56, 4rK, Voltaic) and use original scenarios. Ask Voltaic before naming anything after VDIM.
 - **Tradeoff recorded in `training-science.md`:** VDIM's ~90 min days versus the ~1 h daily-gain peak in Listman 2021, plus blocking versus interleaving.
 
+### D15 Flick targets stay on screen
+
+- **The problem:** wide flicks spawned 20–70° from the crosshair (headshot flicks 10–60°). VALORANT shows 103° × 70.53°, which is ±51.5° sideways and ±35.27° vertically from the crosshair, so many targets spawned off-screen. The player had to search for the target instead of flicking to it.
+- **Why it matters:** a flick is a ballistic move to a target you can already see. Searching first adds a visual-search reaction to every rep and trains something else.
+- **Decision:** `around_crosshair` gets `on_screen = true`, which keeps every spawn inside VALORANT's view from the crosshair at spawn time.
+  - The margin is 4°, a design choice so the target is not clipped by the screen edge. The limits are 47.5° sideways and ≈31.3° vertically (`fov::valorant_on_screen_half_h_deg`, `valorant_on_screen_half_v_deg`).
+  - `flick-wide` now uses 20–47° and `flick-headshot` 10–47°. They stay wide flicks: up to about 90 % of the half-screen.
+  - Difficulty scaling clamps the offset to the on-screen limit.
+- **Backup:** a semi-transparent chevron at the screen edge points to every target outside the current view (including the ADS zoom), for scenarios that can still leave the screen. It is on by default (`offscreen_arrows`) and does not show in arenas.
+
 ## Known limitations
 
 | Limitation | Impact |

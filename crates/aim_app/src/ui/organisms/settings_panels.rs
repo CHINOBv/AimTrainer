@@ -130,6 +130,10 @@ pub fn display_panel(ui: &mut egui::Ui, settings: &mut Settings) {
         ui.label("Target color");
         ui.color_edit_button_rgb(&mut settings.target_color);
     });
+    ui.checkbox(
+        &mut settings.offscreen_arrows,
+        "Arrows towards off-screen targets",
+    );
     ui.checkbox(&mut settings.fullscreen, "Borderless fullscreen (restart)");
     ui.checkbox(
         &mut settings.always_on_top,

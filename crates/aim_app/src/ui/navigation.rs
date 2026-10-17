@@ -9,7 +9,7 @@ use crate::game::{
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::library::Library;
 use aim_core::activity::ActivityKind;
-use aim_core::scenario::{ScenarioDef, parse_run_key_full};
+use aim_core::scenario::{RunKey, ScenarioDef};
 use aim_core::training::routine::{PlannedRun, RoutineDef};
 use aim_world::arena::ArenaSession;
 use bevy::ecs::system::SystemParam;
@@ -44,10 +44,16 @@ impl Navigator<'_, '_> {
         match action {
             UiAction::StartScenario(id) | UiAction::Retry(id) => {
                 self.routine.0 = None;
-                // Results carry run keys (`id@+0.50`); retry at the same difficulty.
-                let (base, level, secs) = parse_run_key_full(&id);
-                let base = base.to_owned();
-                self.start_with(&base, level, secs);
+                // Results carry run keys (`id@+0.50~20s^+1.50m`); retry the same variant.
+                let key = RunKey::parse(&id);
+                if let Some(def) = self.library.scenario(key.base) {
+                    let def = shaped(def, key.level, key.secs);
+                    let def = match key.elevation {
+                        Some(m) => def.with_elevation(m),
+                        None => def,
+                    };
+                    start_run(&mut self.commands, &mut self.next, def);
+                }
             }
             UiAction::StartRoutine(id) => self.start_routine(&id, 0.0, 0, routine_seed()),
             UiAction::StartAdaptive(id) => {
@@ -127,6 +133,7 @@ impl Navigator<'_, '_> {
                 p.index += 1;
                 self.start_planned(&next, level);
             }
+            UiAction::RestartAtElevation(m) => self.restart_at_elevation(m),
             UiAction::Resume => {
                 if let Some(run) = self.run.as_mut() {
                     run.paused = false;
@@ -140,6 +147,24 @@ impl Navigator<'_, '_> {
                 self.commands.write_message(AppExit::Success);
             }
         }
+    }
+
+    /// Restart the current scenario run as a fresh run with the player's floor at `m`
+    /// meters: same scenario, level, duration, flags and routine position.
+    fn restart_at_elevation(&mut self, m: f32) {
+        let Some(current) = self.run.as_deref() else {
+            return;
+        };
+        let key = RunKey::parse(&current.session.def().id);
+        let Some(def) = self.library.scenario(key.base) else {
+            return;
+        };
+        let mut run = Run::new(shaped(def, key.level, key.secs).with_elevation(m));
+        run.adaptive = current.adaptive;
+        run.auto_hide = current.auto_hide;
+        run.sens_override = current.sens_override;
+        run.finder_slot = current.finder_slot;
+        start_run_with(&mut self.commands, &mut self.next, run);
     }
 
     fn start_with(&mut self, scenario_id: &str, level: f32, secs: Option<f32>) {
@@ -222,6 +247,7 @@ fn routine_seed() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aim_core::scenario::parse_run_key_full;
     use aim_core::sensitivity::finder::Slot;
     use bevy::ecs::system::RunSystemOnce;
 
@@ -431,6 +457,53 @@ mod tests {
         assert!(first.starts_with("track-precise@-0.50~30s"), "{first}");
         apply(&mut w, UiAction::Retry(first.clone()));
         assert_eq!(running(&w), Some(first), "retry keeps level and duration");
+    }
+
+    #[test]
+    fn restarting_at_a_floor_height_keeps_level_duration_and_routine() {
+        let mut w = world();
+        apply(&mut w, UiAction::StartRoutine("quick-warmup".into()));
+        apply(&mut w, UiAction::NextRoutineRun);
+        let before = running(&w).unwrap();
+        apply(&mut w, UiAction::RestartAtElevation(1.5));
+        assert_eq!(routine_index(&w), Some(1), "the routine position is kept");
+        let run = w.resource::<Run>();
+        assert_eq!(run.session.def().player.elevation, 1.5);
+        assert_eq!(run.session.player_position().y, 1.5);
+        let id = run.session.def().id.clone();
+        assert_eq!(
+            parse_run_key_full(&id),
+            parse_run_key_full(&before),
+            "same scenario, level and duration"
+        );
+        assert_eq!(RunKey::parse(&id).elevation, Some(1.5));
+        assert_eq!(pending(&w), Some(AppState::Playing));
+        apply(&mut w, UiAction::RestartAtElevation(0.0));
+        assert_eq!(running(&w), Some(before), "back to the authored height");
+    }
+
+    #[test]
+    fn restarting_a_shortened_difficulty_run_and_retrying_keeps_the_height() {
+        let mut w = world();
+        apply(&mut w, UiAction::Retry("counter-strafe@+0.50~20s".into()));
+        w.resource_mut::<Run>().adaptive = true;
+        apply(&mut w, UiAction::RestartAtElevation(-2.0));
+        let run = w.resource::<Run>();
+        assert!(run.adaptive, "the run keeps its flags");
+        assert_eq!(run.session.def().duration_secs, 20.0);
+        let id = run.session.def().id.clone();
+        assert_eq!(id, "counter-strafe@+0.50~20s^-2.00m");
+        apply(&mut w, UiAction::Retry(id.clone()));
+        assert_eq!(running(&w), Some(id), "retry keeps the height");
+        assert_eq!(w.resource::<Run>().session.def().player.elevation, -2.0);
+    }
+
+    #[test]
+    fn restarting_without_a_run_changes_nothing() {
+        let mut w = world();
+        apply(&mut w, UiAction::RestartAtElevation(1.0));
+        assert_eq!(running(&w), None);
+        assert_eq!(pending(&w), None);
     }
 
     #[test]

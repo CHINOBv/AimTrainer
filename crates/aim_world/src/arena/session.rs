@@ -22,8 +22,9 @@ pub const BOT_WEAPON: Weapon = Weapon::Vandal;
 pub const KILL_POINTS: f32 = 100.0;
 pub const DEATH_POINTS: f32 = 50.0;
 pub const HEADSHOT_BONUS: f32 = 25.0;
-/// Seconds after a respawn during which bots ignore the player. An arena rule, not a
-/// VALORANT value: it stops bots from killing the player again on the spawn point.
+/// Seconds after a spawn (entering the arena or a respawn) during which bots ignore the
+/// player. An arena rule, not a VALORANT value: it stops bots from killing the player on the
+/// spawn point before they can move.
 pub const RESPAWN_GRACE_SECS: f32 = 1.5;
 /// Score per pre-aimed bot life in arenas that set `pre_aim_tolerance_deg`. A design
 /// choice: half a kill, so pre-aiming matters without outweighing the kill itself.
@@ -176,7 +177,7 @@ pub struct ArenaSession {
     roam_points: Vec<Vec3>,
     /// Angle clear: index into the mode's angle list of the angle being cleared.
     angle_index: usize,
-    /// Bots ignore the player until this time (respawn grace).
+    /// Bots ignore the player until this time (spawn grace).
     grace_until: f32,
     /// Deathmatch with a site objective.
     site: Option<Site>,
@@ -228,7 +229,8 @@ impl ArenaSession {
             stats: ArenaStats::default(),
             roam_points,
             angle_index: 0,
-            grace_until: 0.0,
+            // Entering the arena is a spawn too.
+            grace_until: RESPAWN_GRACE_SECS,
             site: None,
             def,
             map,
@@ -313,6 +315,10 @@ impl ArenaSession {
     }
     pub fn player_speed(&self) -> f32 {
         self.player.vel.speed()
+    }
+    /// Seconds left of the spawn grace during which bots ignore the player (0 when over).
+    pub fn spawn_protection_secs(&self) -> f32 {
+        (self.grace_until - self.time).max(0.0)
     }
     /// Whether the player is slow enough for the weapon's first-shot accuracy.
     pub fn is_accurate(&self) -> bool {

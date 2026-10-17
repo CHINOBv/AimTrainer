@@ -410,7 +410,9 @@ fn a_shortened_arena_ends_early_under_its_own_key() {
 
 /// Results recorded from the arenas before bot strafing, jiggle peeks, pre-aim checks and
 /// site objectives existed. Arenas that do not opt in to those features must keep exactly
-/// these results for the same seed and inputs.
+/// these results for the same seed and inputs. Re-recorded when the spawn grace started to
+/// cover entering the arena, not only respawns (bots now hold fire for the first
+/// `RESPAWN_GRACE_SECS`).
 ///
 /// The numbers were recorded on Linux x86_64 (glibc). Other math libraries round
 /// `sin`/`cos` differently and the run drifts, so this is a local regression check, not a CI
@@ -428,19 +430,19 @@ fn existing_arenas_keep_their_results_for_a_fixed_seed_and_input() {
         Golden {
             id: "yard-deathmatch",
             seed: 11,
-            perfect: (20000.0, 160, 0.96428573),
-            idle: (-1900.0, 38, 6320.0, 318.109),
+            perfect: (20000.0, 160, 0.94736844),
+            idle: (-1950.0, 39, 6760.0, 318.109),
         },
         Golden {
             id: "corridor-duels",
             seed: 42,
-            perfect: (8875.0, 71, 0.54615384),
-            idle: (-1150.0, 23, 3680.0, 58.630672),
+            perfect: (8750.0, 70, 0.53435117),
+            idle: (-850.0, 17, 2800.0, 58.630672),
         },
         Golden {
             id: "angles-lab-clear",
             seed: 2,
-            perfect: (625.0, 5, 0.5),
+            perfect: (625.0, 5, 0.625),
             idle: (-1850.0, 37, 6040.0, 6.2998023),
         },
     ];
@@ -684,4 +686,81 @@ fn running_out_the_clock_also_holds_the_site() {
     assert!(s.is_finished());
     assert!(!s.objective().unwrap().lost);
     assert_eq!(s.result().score, SITE_HELD_BONUS);
+}
+
+/// Holds W from the spawn: the player walks the map and only changes place abruptly when
+/// the session relocates them (a death, or the next angle of an angle clear).
+#[test]
+fn a_player_walks_freely_and_is_only_relocated_on_death_or_the_next_angle() {
+    for def in builtin::all() {
+        let (def, map) = builtin(&def.id);
+        let id = def.id.clone();
+        let max_step = def.weapon.movement().run_speed * DT + 1e-3;
+        let mut s = ArenaSession::new(def, map, 7).unwrap();
+        let start = s.player_feet();
+        let mut prev = start;
+        let mut walked = 0.0;
+        let mut t = 0.0;
+        while t < 10.0 && !s.is_finished() {
+            let events = s.update(FrameInput {
+                dt: DT,
+                view: s.view(),
+                movement: MoveInput {
+                    forward: 1.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            });
+            t += DT;
+            let step = (s.player_feet() - prev).length();
+            let relocated = events
+                .iter()
+                .any(|e| matches!(e, ArenaEvent::PlayerDied | ArenaEvent::BotKilled { .. }));
+            assert!(
+                step <= max_step || relocated,
+                "{id}: jumped {step} m at {t:.2} s without a death: {events:?}"
+            );
+            if !relocated {
+                walked += step;
+            }
+            prev = s.player_feet();
+        }
+        assert!(walked > 2.0, "{id}: the player barely moved ({walked} m)");
+    }
+}
+
+/// Entering an arena is a spawn like any other: bots hold fire during the spawn grace, so
+/// the player is not killed (and silently respawned elsewhere) before they can move.
+#[test]
+fn bots_do_not_shoot_a_player_who_just_entered_the_arena() {
+    let mut arenas: Vec<(ArenaDef, MapDef)> =
+        builtin::all().into_iter().map(|d| builtin(&d.id)).collect();
+    arenas.push((duel_def(true), duel_room(false)));
+    for (def, map) in arenas {
+        let id = def.id.clone();
+        for seed in 0..8 {
+            let mut s = ArenaSession::new(def.clone(), map.clone(), seed).unwrap();
+            let events = run(&mut s, RESPAWN_GRACE_SECS - DT, idle);
+            assert!(
+                !events
+                    .iter()
+                    .any(|e| matches!(e, ArenaEvent::PlayerHit { .. })),
+                "{id} seed {seed}: shot during the entry grace"
+            );
+        }
+    }
+}
+
+#[test]
+fn spawn_protection_is_reported_on_entry_and_after_each_death() {
+    let mut s = ArenaSession::new(duel_def(true), duel_room(false), 3).unwrap();
+    assert_eq!(s.spawn_protection_secs(), RESPAWN_GRACE_SECS);
+    run(&mut s, RESPAWN_GRACE_SECS + DT, idle);
+    assert_eq!(s.spawn_protection_secs(), 0.0);
+    let mut died = false;
+    while !died && !s.is_finished() {
+        died = s.update(idle(&s)).contains(&ArenaEvent::PlayerDied);
+    }
+    assert!(died, "the open duel kills an idle player");
+    assert_eq!(s.spawn_protection_secs(), RESPAWN_GRACE_SECS);
 }
