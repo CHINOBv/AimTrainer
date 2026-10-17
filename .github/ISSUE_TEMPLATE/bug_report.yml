@@ -1,0 +1,52 @@
+name: Bug report
+description: Something does not work or feels wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open scenario `flick-wide`
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: scenario
+    attributes:
+      label: Scenario or routine id
+      placeholder: counter-strafe
+  - type: input
+    id: os
+    attributes:
+      label: OS and version
+      placeholder: Arch Linux / Windows 11 24H2
+    validations:
+      required: true
+  - type: input
+    id: desktop
+    attributes:
+      label: Compositor or desktop
+      placeholder: Hyprland 0.56 / KDE Wayland / X11 / Windows
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and driver
+      placeholder: RTX 4070, driver 580 / RX 7800 XT, Mesa 26
+  - type: textarea
+    id: input
+    attributes:
+      label: For aim, input or feel issues
+      description: Your sensitivity, DPI and the result of the DPI check in Settings.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Terminal output from running `aimtrainer`.
+      render: text

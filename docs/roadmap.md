@@ -17,10 +17,10 @@ This is where the project is going, and which part of the architecture owns each
 ## Phase 1: open-source readiness
 
 - [ ] **License.** `Cargo.toml` declares MIT, but no `LICENSE` file exists yet. The project owner decides between MIT and the Rust-ecosystem norm, MIT OR Apache-2.0.
-- [ ] **CI on Linux and Windows:** `fmt --check`, `clippy`, `test`. This also gives Windows its first build check.
-- [ ] **Conformance backlog** C1–C4 from [`architecture.md`](architecture.md): content folder, UI split, app folders, session split.
-- [ ] **Manual Windows verification:** transparency, hotkey, Raw Input.
-- [ ] **Issue templates:** bug report (OS, GPU, compositor) and scenario proposal.
+- [x] **CI on Linux and Windows:** `fmt --check`, `clippy`, `test` (`.github/workflows/ci.yml`). The Windows build was also cross-checked locally with `cargo check --target x86_64-pc-windows-msvc`.
+- [x] **Conformance backlog** C1–C4 from [`architecture.md`](architecture.md): content folder, UI split, app folders, session split. C8 and C10 are done too.
+- [ ] **Manual Windows verification:** transparency, hotkey, Raw Input. It compiles for Windows; running it needs a Windows machine.
+- [x] **Issue templates:** bug report (OS, GPU, compositor) and scenario proposal, plus a PR template.
 
 ## Phase 2: primary training method (VDIM-style weekly plan) ⭐
 

@@ -1,0 +1,30 @@
+name: Scenario or routine proposal
+description: Suggest a new exercise, routine or training method
+labels: [content]
+body:
+  - type: textarea
+    id: skill
+    attributes:
+      label: What skill does it train?
+      description: Clicking (static, dynamic), tracking (precise, reactive), switching (speed, evasive), movement, reaction, precision.
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: How does it work?
+      description: Targets, spawn area, motion, fire mode, duration. A TOML draft is welcome (see docs/scenarios.md).
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Sources
+      description: For game-specific values or training claims, link where they come from (see docs/coding-standards.md, "Accuracy and research").
+  - type: checkboxes
+    id: integrity
+    attributes:
+      label: Integrity
+      options:
+        - label: It uses no assets from games, and it is not a replica of a game's map
+          required: true
