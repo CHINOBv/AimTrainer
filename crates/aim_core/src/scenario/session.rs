@@ -405,6 +405,7 @@ mod tests {
                 min_separation_deg: 5.0,
             },
             scoring: ScoringDef::default(),
+            difficulty: Default::default(),
         }
     }
 
