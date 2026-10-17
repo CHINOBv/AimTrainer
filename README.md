@@ -15,7 +15,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
 - **Exercises are data:** each one is a TOML file. Drop new ones into a folder; no rebuild needed. Ships with 14, covering flicking, microcorrections, switching, tracking, movement (counter-strafe), angle holding and long-range precision.
 - **Evidence-based routines and a Voltaic-style benchmark:** subcategory energy combined with a harmonic mean. See [`docs/training-science.md`](docs/training-science.md).
 
-Every value has a source in [`docs/valorant-mechanics.md`](docs/valorant-mechanics.md).
+Every value has a source in [`docs/valorant-mechanics.md`](docs/valorant-mechanics.md). Design decisions and known limitations: [`docs/decisions.md`](docs/decisions.md).
 
 ## Build
 
