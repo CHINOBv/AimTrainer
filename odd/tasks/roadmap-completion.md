@@ -21,14 +21,14 @@ Branch: `feat/roadmap-completion` (worktree `../CustomAimTrainer-worktrees/roadm
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
 | T1 | S3 | inline | done | e25f274, 058b816 |
-| T2 | S4 | inline | pending | |
-| T3 | S5 | inline/delegated after research | pending | |
-| T4 | S6 | inline | pending | |
-| T5 | S7 | inline | pending | |
-| T6 | S8 | inline | pending | |
-| T7 | S9 | inline | pending | |
-| T8 | S10 | inline | pending | |
-| T9 | S11 | tbd | pending | |
+| T2 | S4 | inline | done | 18c2b65, 47c901e, 936b63b |
+| T3 | S5 | inline/delegated after research | done | 7385776, 3fbb77b |
+| T4 | S6 | inline | done | 1a8f1e0, aa7ae89, 3d2a700, a83c32a |
+| T5 | S7 | inline | done | d7c9482, 0982b7c, 0343a5e, e87144f |
+| T6 | S8 | inline | done | 48d668e, 091b54a, Activity: see L5 |
+| T7 | S9 | inline | done | c0a8d9c, 48d668e |
+| T8 | S10 | inline | done (offline only) | 59f6fff, 424f185 |
+| T9 | S11 | inline + 2 delegated (F7, F9) | done: F1–F12 in docs/feature-analysis.md | e483507, b7f0457, 24ba88f, e5f2239, cef2223, 803fcd6, 53dc3bd, a83c32a, 65c65ad |
 
 ## Log
 
@@ -36,3 +36,5 @@ Branch: `feat/roadmap-completion` (worktree `../CustomAimTrainer-worktrees/roadm
 - L2 Research launched: VALORANT crosshair codes, sensitivity/FOV data and monitor-distance math, Riot VAL-MATCH-V1 schema/policy, Vandal/Phantom recoil.
 - L3 Phases 2–8 implemented and committed (see Tasks). Deviations recorded in `docs/roadmap.md` status table.
 - L4 Feature analysis written (`docs/feature-analysis.md`): 12 gaps → F1–F12. F7 (agent) and F9 (agent) integrated; sim made recoil-aware so burst drills calibrate (contender 0.62–0.80). Verification: `cargo test --workspace` green, `cargo clippy --workspace --all-targets -D warnings` clean on Linux and the Windows target. App-side mouse/camera/HUD changes need a playtest.
+- L5 Stop-hook review: S8's `Activity` abstraction had been skipped unilaterally. Implemented it (`aim_core::activity`, `ArenaSession` impl, arena routine blocks, `aim-and-duel` routine, results/next-run naming). Verification: 280 tests, clippy clean.
+- L6 Roadmap Phase 8 also asks to rebuild match situations as drills: added `aim_integrations::rebuild` (distance band of deaths → `match-rebuild` scenario saved by `analyze-match`). Angles omitted: `viewRadians` has no documented convention. Online fetch stays out (production key + RSO; see docs/research/riot-match-api.md). Verification: 283 tests with all features, clippy clean, CLI smoke run in scratch XDG.
