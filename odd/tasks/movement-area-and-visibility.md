@@ -24,12 +24,14 @@ Branch: `feat/movement-area-and-visibility` (worktree `../CustomAimTrainer-workt
 
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
-| T1 | S4 | delegated (parallel, isolated worktree B) | in progress | |
-| T2 | S1, S2, S3 | delegated (parallel, isolated worktree C) | in progress | |
-| T3 | S5, S6 | delegated (parallel, isolated worktree A) | in progress | |
+| T1 | S4 | delegated (parallel, isolated worktree B) | done | 5c62916, 22004d3 |
+| T2 | S1, S2, S3 | delegated (parallel, isolated worktree C) | done | d9eab06, 0e13a96 |
+| T3 | S5, S6 | delegated (parallel, isolated worktree A) | done | fd1fc29, 866ceee |
 
 ## Log
 
 - L1 (2026-10-17) User request (verbatim): "El tema son las paredes invisibles, hazlas un poco mas anchas y visuales pero a nivel del suelo no tan altas para que no interfieran porfa, tambien haz que pueda moverme mas hacia atras y pueda escojer cierto desnivel del suelo si es posible ya dentro del escenario, otra cosa, en los wide flicks, es complicado saber a donde se movio el objetivo cuando sale de mi campo de vision, investiga como podemos suplir o arreglar esto sin afectar el proposito del escenario"
 - L2 Investigation: core movement has no stalls away from the play-area edges (probe over ADAD at yaw 0–90°); the reported blocking is the invisible edges (counter-strafe z ±1 m, strafe-shot z ±2 m). The user confirmed (option a).
 - L3 Route: three parallel writers in isolated worktrees (S7; shared files such as `scenario/def.rs` and the HUD rule out a shared tree); the parent merges, resolves seams and runs the full suite once.
+- L4 S5 root cause (writer A, with evidence): bots one-tap the 100-health player (Vandal headshot 160) 1.3–2.1 s after the countdown and the session respawns silently, which reads as a teleport. Fix: entry spawn protection (`RESPAWN_GRACE_SECS`) and HUD cues. Open balance question for the user: bots still kill within ~2 s of seeing you.
+- L5 Integration: B and C conflicted only in `difficulty.rs` (two new tests) and `pages/hud.rs` (two new system params); both sides kept. Seam check: `cargo test --workspace --all-features` 358 passed, 1 ignored (arena golden, passes with `--ignored`); clippy clean with default and all features; fmt clean; calibrate order holds (flick-wide 0.66, flick-headshot 0.70, counter-strafe 0.70, strafe-shot 0.69 contender accuracy). Needs a playtest: edge strips, floor slab and pause picker, off-screen arrows, spawn-protection HUD, arena walls after retry.
