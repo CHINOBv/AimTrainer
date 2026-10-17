@@ -143,6 +143,17 @@ impl LocalVelocity {
         let right = Vec3::new(c, 0.0, s);
         right * self.right + forward * self.forward
     }
+
+    /// Inverse of [`LocalVelocity::to_world`] for a horizontal world velocity.
+    pub fn from_world(world: Vec3, yaw_deg: f32) -> Self {
+        let (s, c) = yaw_deg.to_radians().sin_cos();
+        let forward = Vec3::new(s, 0.0, -c);
+        let right = Vec3::new(c, 0.0, s);
+        Self {
+            right: world.dot(right),
+            forward: world.dot(forward),
+        }
+    }
 }
 
 /// Advance velocity by one step. Axes are handled independently, like strafing in
@@ -288,6 +299,18 @@ mod tests {
             v = step(&p, v, diag, DT);
         }
         assert!((v.speed() - 5.4).abs() < 1e-3, "{}", v.speed());
+    }
+
+    #[test]
+    fn local_world_conversion_round_trips() {
+        let v = LocalVelocity {
+            right: 1.5,
+            forward: -2.0,
+        };
+        for yaw in [0.0, 37.0, -120.0] {
+            let back = LocalVelocity::from_world(v.to_world(yaw), yaw);
+            assert!((back.right - v.right).abs() < 1e-5 && (back.forward - v.forward).abs() < 1e-5);
+        }
     }
 
     #[test]

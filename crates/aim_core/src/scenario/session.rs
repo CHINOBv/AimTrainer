@@ -247,17 +247,24 @@ impl Session {
             return;
         }
         self.player_vel = movement::step(&self.profile, self.player_vel, input, dt);
-        let next = self.player_pos + self.player_vel.to_world(self.view.yaw_deg) * dt;
+        let yaw = self.view.yaw_deg;
+        let mut world = self.player_vel.to_world(yaw);
+        let next = self.player_pos + world * dt;
         let (bx, bz) = (self.def.player.bounds_x, self.def.player.bounds_z);
         let clamped = Vec3::new(
             next.x.clamp(bx.min, bx.max),
             0.0,
             next.z.clamp(bz.min, bz.max),
         );
-        if clamped != Vec3::new(next.x, 0.0, next.z) {
-            // Hitting the edge of the play area stops the player, like walking into a wall.
-            self.player_vel = LocalVelocity::default();
+        // Hitting an edge of the play area behaves like a wall: only the velocity pushing
+        // into it is lost, so the player keeps sliding along the edge.
+        if clamped.x != next.x {
+            world.x = 0.0;
         }
+        if clamped.z != next.z {
+            world.z = 0.0;
+        }
+        self.player_vel = LocalVelocity::from_world(world, yaw);
         self.player_pos = clamped;
     }
 
@@ -812,5 +819,64 @@ mod tests {
             assert!((t.position - t.anchor).length() <= 2.0 + 0.1);
         }
         assert!(max_speed <= 5.4 + 1e-3 && max_speed > 4.0, "{max_speed}");
+    }
+
+    fn movement_def() -> ScenarioDef {
+        let mut def = sphere_def(FireMode::Click, 1.0);
+        def.player = PlayerDef {
+            movement: true,
+            bounds_x: Range::new(-6.0, 6.0),
+            bounds_z: Range::new(-1.0, 1.0),
+        };
+        def
+    }
+
+    #[test]
+    fn pushing_into_a_bound_still_lets_the_player_slide_along_it() {
+        let mut s = Session::new(movement_def(), 2);
+        let input = MoveInput {
+            right: 1.0,
+            forward: 1.0,
+            walk: false,
+        };
+        // Long enough to reach the front edge (z = -1) and keep strafing right.
+        for _ in 0..150 {
+            s.update(FrameInput {
+                dt: 0.01,
+                movement: input,
+                ..Default::default()
+            });
+        }
+        let p = s.player_position();
+        assert!(
+            (p.z + 1.0).abs() < 1e-4,
+            "should be held at the front edge: {p:?}"
+        );
+        assert!(
+            p.x > 3.0,
+            "strafing right must not be blocked by the front edge: {p:?}"
+        );
+    }
+
+    #[test]
+    fn hitting_a_bound_only_stops_the_blocked_direction_when_the_camera_is_turned() {
+        let mut s = Session::new(movement_def(), 2);
+        // Looking 45° right, D moves diagonally into the back edge (+z) and to the right.
+        let view = ViewAngles::new(45.0, 0.0);
+        let input = MoveInput {
+            right: 1.0,
+            ..Default::default()
+        };
+        for _ in 0..150 {
+            s.update(FrameInput {
+                dt: 0.01,
+                view,
+                movement: input,
+                ..Default::default()
+            });
+        }
+        let p = s.player_position();
+        assert!((p.z - 1.0).abs() < 1e-4, "{p:?}");
+        assert!(p.x > 2.0, "must keep sliding right along the edge: {p:?}");
     }
 }
