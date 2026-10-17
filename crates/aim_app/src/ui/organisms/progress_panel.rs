@@ -139,17 +139,20 @@ pub fn trend_points(s: &SubcategoryStanding) -> Vec<f32> {
     s.weekly.iter().flatten().copied().collect()
 }
 
-/// "+120 energy over the last 8 weeks", or `None` with fewer than two played weeks.
+/// "+120 energy over the last 3 weeks": change between the first and last played weeks and
+/// the weeks between them, or `None` with fewer than two played weeks.
 pub fn trend_text(s: &SubcategoryStanding) -> Option<String> {
-    let points = trend_points(s);
-    let (first, last) = (points.first()?, points.last()?);
-    (points.len() >= 2).then(|| {
-        format!(
-            "{:+.0} energy over the last {} weeks",
-            last - first,
-            points.len()
-        )
-    })
+    let played = || {
+        s.weekly
+            .iter()
+            .enumerate()
+            .filter_map(|(i, e)| Some((i, (*e)?)))
+    };
+    let (i0, first) = played().next()?;
+    let (i1, last) = played().next_back()?;
+    let weeks = i1 - i0;
+    let unit = if weeks == 1 { "week" } else { "weeks" };
+    (weeks >= 1).then(|| format!("{:+.0} energy over the last {weeks} {unit}", last - first))
 }
 
 /// Skills section: each benchmark subcategory's strength or weakness, its weekly energy
@@ -222,7 +225,8 @@ mod tests {
         assert_eq!(trend_text(&standing(vec![None, Some(100.0)])), None);
         assert_eq!(
             trend_text(&standing(vec![Some(300.0), Some(250.0)])).as_deref(),
-            Some("-50 energy over the last 2 weeks")
+            Some("-50 energy over the last 1 week"),
+            "two consecutive weekly points span one week"
         );
     }
 
