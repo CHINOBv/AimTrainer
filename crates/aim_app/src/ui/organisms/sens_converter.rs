@@ -11,15 +11,17 @@ use bevy_egui::egui;
 pub enum Method {
     Distance360,
     Mdh0,
+    Mdh75,
     Mdh100,
     Mdv0,
     Custom,
 }
 
 impl Method {
-    pub const ALL: [Method; 5] = [
+    pub const ALL: [Method; 6] = [
         Method::Distance360,
         Method::Mdh0,
+        Method::Mdh75,
         Method::Mdh100,
         Method::Mdv0,
         Method::Custom,
@@ -29,6 +31,7 @@ impl Method {
         match self {
             Method::Distance360 => "360° distance (same cm/360)",
             Method::Mdh0 => "Monitor distance horizontal 0%",
+            Method::Mdh75 => "Monitor distance horizontal 75%",
             Method::Mdh100 => "Monitor distance horizontal 100%",
             Method::Mdv0 => "Monitor distance vertical 0%",
             Method::Custom => "Monitor distance, custom %",
@@ -73,6 +76,7 @@ impl ConverterState {
         match self.method {
             Method::Distance360 => Matching::Distance360,
             Method::Mdh0 => Matching::MDH_0,
+            Method::Mdh75 => Matching::MDH_75,
             Method::Mdh100 => Matching::MDH_100,
             Method::Mdv0 => Matching::MDV_0,
             Method::Custom => Matching::Monitor {
@@ -269,6 +273,8 @@ mod tests {
             ..ConverterState::default()
         };
         assert_eq!(s.matching(), Matching::MDH_0);
+        s.method = Method::Mdh75;
+        assert_eq!(s.matching(), Matching::MDH_75);
         s.method = Method::Custom;
         s.custom_axis = FovAxis::Vertical;
         s.custom_percent = 75.0;

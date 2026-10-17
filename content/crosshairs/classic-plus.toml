@@ -1,0 +1,4 @@
+# Crosshair preset as a VALORANT profile code (paste it in the game's crosshair import).
+id = "classic-plus"
+name = "Classic cyan plus"
+code = "0;P;c;5;0l;4;0o;2;0a;1;0f;0;1b;0"

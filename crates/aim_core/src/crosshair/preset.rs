@@ -1,50 +1,67 @@
-//! Built-in crosshair presets, stored as VALORANT profile codes so they can be pasted
-//! straight into the game.
+//! Built-in crosshair presets: one TOML file per preset in `content/crosshairs/`, each a
+//! VALORANT profile code so it can be pasted straight into the game.
 
 use super::{Crosshair, code};
+use serde::Deserialize;
+use std::sync::LazyLock;
 
-/// A named built-in crosshair.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A named crosshair preset.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Preset {
-    /// Stable kebab-case ID.
-    pub id: &'static str,
-    pub name: &'static str,
+    /// Stable kebab-case ID (equal to the file name).
+    pub id: String,
+    pub name: String,
     /// Canonical VALORANT profile code (what [`code::encode`] produces).
-    pub code: &'static str,
+    pub code: String,
 }
 
 impl Preset {
+    pub fn from_toml(src: &str) -> Result<Self, toml::de::Error> {
+        toml::from_str(src)
+    }
+
     pub fn crosshair(&self) -> Crosshair {
-        code::parse(self.code).expect("built-in preset codes are valid (see tests)")
+        code::parse(&self.code).expect("built-in preset codes are valid (see tests)")
     }
 }
 
-pub const PRESETS: &[Preset] = &[
-    Preset {
-        id: "valorant-default",
-        name: "VALORANT default",
-        code: "0",
-    },
-    Preset {
-        id: "small-dot",
-        name: "Small dot",
-        code: "0;P;d;1;0b;0;1b;0",
-    },
-    Preset {
-        id: "classic-plus",
-        name: "Classic cyan plus",
-        code: "0;P;c;5;0l;4;0o;2;0a;1;0f;0;1b;0",
-    },
-    Preset {
-        id: "tiny-plus",
-        name: "Tiny plus, no outlines",
-        code: "0;P;h;0;0t;1;0l;2;0o;1;0a;1;1b;0",
-    },
+pub const SOURCES: &[(&str, &str)] = &[
+    (
+        "valorant-default.toml",
+        include_str!("../../../../content/crosshairs/valorant-default.toml"),
+    ),
+    (
+        "small-dot.toml",
+        include_str!("../../../../content/crosshairs/small-dot.toml"),
+    ),
+    (
+        "classic-plus.toml",
+        include_str!("../../../../content/crosshairs/classic-plus.toml"),
+    ),
+    (
+        "tiny-plus.toml",
+        include_str!("../../../../content/crosshairs/tiny-plus.toml"),
+    ),
 ];
+
+static PRESETS: LazyLock<Vec<Preset>> = LazyLock::new(|| {
+    SOURCES
+        .iter()
+        .map(|(file, src)| {
+            Preset::from_toml(src).unwrap_or_else(|e| panic!("built-in {file}: {e}"))
+        })
+        .collect()
+});
+
+/// Every built-in preset, in `SOURCES` order (parsed once).
+pub fn all() -> &'static [Preset] {
+    &PRESETS
+}
 
 /// Looks a preset up by ID.
 pub fn find(id: &str) -> Option<&'static Preset> {
-    PRESETS.iter().find(|p| p.id == id)
+    all().iter().find(|p| p.id == id)
 }
 
 #[cfg(test)]
@@ -53,12 +70,17 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn presets_are_valid_canonical_and_unique() {
+    fn presets_are_valid_canonical_unique_and_named_after_their_file() {
         let mut ids = HashSet::new();
-        for p in PRESETS {
-            assert!(ids.insert(p.id), "duplicate id {}", p.id);
+        for (file, _) in SOURCES {
+            let p = all().iter().find(|p| format!("{}.toml", p.id) == *file);
+            assert!(p.is_some(), "{file}: file name must equal its id");
+        }
+        for p in all() {
+            assert!(ids.insert(p.id.clone()), "duplicate id {}", p.id);
             assert_eq!(code::encode(&p.crosshair()), p.code, "{}", p.id);
         }
+        assert_eq!(ids.len(), 4);
     }
 
     #[test]

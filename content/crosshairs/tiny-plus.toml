@@ -1,0 +1,4 @@
+# Crosshair preset as a VALORANT profile code (paste it in the game's crosshair import).
+id = "tiny-plus"
+name = "Tiny plus, no outlines"
+code = "0;P;h;0;0t;1;0l;2;0o;1;0a;1;1b;0"

@@ -1,0 +1,4 @@
+# Crosshair preset as a VALORANT profile code (paste it in the game's crosshair import).
+id = "small-dot"
+name = "Small dot"
+code = "0;P;d;1;0b;0;1b;0"

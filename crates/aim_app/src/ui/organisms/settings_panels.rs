@@ -1,7 +1,6 @@
 //! Sensitivity (with converter and DPI check) and display settings forms, including the
 //! crosshair editor with VALORANT code import/export.
 
-use super::sens_converter::{ConverterState, sens_converter};
 use crate::persistence::settings::Settings;
 use aim_core::crosshair::{
     CUSTOM_COLOR_INDEX, Crosshair, DOT_THICKNESS_PX, ERROR_MULTIPLIER_MAX, LINE_THICKNESS_MAX_PX,
@@ -116,14 +115,7 @@ pub fn sensitivity_panel(
     });
 
     ui.add_space(8.0);
-    ui.collapsing("Sensitivity converter (other games)", |ui| {
-        let id = egui::Id::new("sens_converter_state");
-        let mut state = ui
-            .data_mut(|d| d.get_temp::<ConverterState>(id))
-            .unwrap_or_else(|| ConverterState::from_sensitivity(settings.sensitivity));
-        sens_converter(ui, settings, &mut state);
-        ui.data_mut(|d| d.insert_temp(id, state));
-    });
+    ui.small("Converting from another game? Use the Tools tab.");
 }
 
 pub fn display_panel(ui: &mut egui::Ui, settings: &mut Settings) {
@@ -183,14 +175,14 @@ fn crosshair_editor(ui: &mut egui::Ui, ch: &mut Crosshair) {
         ui.label("Preset");
         egui::ComboBox::from_id_salt("crosshair_preset")
             .selected_text(
-                preset::PRESETS
+                preset::all()
                     .iter()
                     .find(|p| p.crosshair() == *ch)
-                    .map_or("custom", |p| p.name),
+                    .map_or("custom", |p| p.name.as_str()),
             )
             .show_ui(ui, |ui| {
-                for p in preset::PRESETS {
-                    if ui.selectable_label(p.crosshair() == *ch, p.name).clicked() {
+                for p in preset::all() {
+                    if ui.selectable_label(p.crosshair() == *ch, &p.name).clicked() {
                         *ch = p.crosshair();
                     }
                 }
