@@ -132,7 +132,8 @@ pub fn pause_window(ctx: &egui::Context, description: &str) -> Option<UiAction> 
     action
 }
 
-/// Arena status: time, health, kills/deaths, and a red vignette for `damage_flash` seconds.
+/// Arena status: time, health, kills/deaths, the site objective (when the arena has one),
+/// and a red vignette for `damage_flash` seconds.
 pub fn arena_status(ctx: &egui::Context, s: &aim_world::arena::ArenaSession, damage_flash: f32) {
     let stats = s.stats();
     egui::Area::new(egui::Id::new("arena-hud"))
@@ -146,6 +147,20 @@ pub fn arena_status(ctx: &egui::Context, s: &aim_world::arena::ArenaSession, dam
                     stats.kills,
                     stats.deaths
                 ));
+                if let Some(o) = s.objective() {
+                    let site = if o.capture_progress > 0.0 {
+                        RichText::new(format!("SITE CONTESTED {:.0}%", o.capture_progress * 100.0))
+                            .color(BAD)
+                            .strong()
+                    } else {
+                        RichText::new("Site held").color(GOOD)
+                    };
+                    ui.label(site);
+                    ui.label(format!(
+                        "{} of {} attackers left",
+                        o.attackers_left, o.attackers
+                    ));
+                }
             });
         });
     let health = s.player_health();

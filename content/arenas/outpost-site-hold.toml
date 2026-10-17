@@ -1,0 +1,21 @@
+# Hybrid activity on the original Signal Outpost: hold the site against six attackers.
+id = "outpost-site-hold"
+name = "Outpost Site Hold"
+description = "Six attackers push the site from two lanes, two at a time, and strafe when they fight. Kill them all or keep them off the site until time runs out; an attacker that stands on the site for 3 s captures it and ends the run."
+map = "signal-outpost"
+duration_secs = 90.0
+weapon = "vandal"
+
+[mode]
+kind = "deathmatch"
+bots = 2
+bot_skill = "contender"
+respawn_secs = 2.0
+bots_shoot_back = true
+bot_strafe = true
+
+[mode.objective]
+site = "site"
+site_radius = 2.5
+capture_secs = 3.0
+attackers = 6

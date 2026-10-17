@@ -1,0 +1,114 @@
+# Original geometry: a small fenced outpost for site holds. A site in the middle with two
+# crates and a pillar, a long divider that splits the attackers' approach into a west and
+# an east lane, and a defender area behind the site. Not modeled on any game map.
+# Coordinates in meters, +Y up, -Z forward.
+id = "signal-outpost"
+name = "Signal Outpost"
+description = "A site between two attacker lanes, with crates and a pillar on the site and a defender area behind it. For site holds."
+floor_x = [-15.0, 15.0]
+floor_z = [-25.0, 15.0]
+
+# Divider between the two attacker lanes, z in [-18, -8].
+[[boxes]]
+kind = "wall"
+min = [-3.0, 0.0, -18.0]
+max = [3.0, 3.5, -8.0]
+
+# Crates on the defender side of the site.
+[[boxes]]
+kind = "low_cover"
+min = [-3.0, 0.0, 1.0]
+max = [-2.0, 1.0, 2.0]
+
+[[boxes]]
+kind = "low_cover"
+min = [2.0, 0.0, 1.0]
+max = [3.0, 1.0, 2.0]
+
+# Pillar on the west edge of the site.
+[[boxes]]
+kind = "cover"
+min = [-6.0, 0.0, -2.0]
+max = [-4.8, 2.5, -0.8]
+
+# Wall stubs that close the outer edges of the defender area.
+[[boxes]]
+kind = "wall"
+min = [-15.0, 0.0, 4.0]
+max = [-9.0, 3.5, 4.4]
+
+[[boxes]]
+kind = "wall"
+min = [9.0, 0.0, 4.0]
+max = [15.0, 3.5, 4.4]
+
+[[spawns]]
+id = "defender-back"
+kind = "player"
+position = [0.0, 0.0, 10.0]
+yaw_deg = 0.0
+
+[[spawns]]
+id = "defender-west"
+kind = "player"
+position = [-6.0, 0.0, 8.0]
+yaw_deg = 0.0
+
+[[spawns]]
+id = "defender-east"
+kind = "player"
+position = [6.0, 0.0, 8.0]
+yaw_deg = 0.0
+
+[[spawns]]
+id = "attacker-west"
+kind = "bot"
+position = [-10.0, 0.0, -22.0]
+yaw_deg = 180.0
+
+[[spawns]]
+id = "attacker-mid"
+kind = "bot"
+position = [0.0, 0.0, -22.0]
+yaw_deg = 180.0
+
+[[spawns]]
+id = "attacker-east"
+kind = "bot"
+position = [10.0, 0.0, -22.0]
+yaw_deg = 180.0
+
+[[waypoints]]
+id = "atk-west"
+position = [-9.0, 0.0, -20.0]
+links = ["atk-mid", "lane-west"]
+
+[[waypoints]]
+id = "atk-mid"
+position = [0.0, 0.0, -21.0]
+links = ["atk-east"]
+
+[[waypoints]]
+id = "atk-east"
+position = [9.0, 0.0, -20.0]
+links = ["lane-east"]
+
+[[waypoints]]
+id = "lane-west"
+position = [-9.0, 0.0, -6.0]
+links = ["site"]
+
+[[waypoints]]
+id = "lane-east"
+position = [9.0, 0.0, -6.0]
+links = ["site"]
+
+# The site the attackers push and the defender holds.
+[[waypoints]]
+id = "site"
+position = [0.0, 0.0, -1.0]
+links = ["defense"]
+
+[[waypoints]]
+id = "defense"
+position = [0.0, 0.0, 9.0]

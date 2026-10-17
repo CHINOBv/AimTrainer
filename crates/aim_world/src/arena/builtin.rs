@@ -9,8 +9,20 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/arenas/angles-lab-clear.toml"),
     ),
     (
+        "angles-lab-prefire.toml",
+        include_str!("../../../../content/arenas/angles-lab-prefire.toml"),
+    ),
+    (
         "corridor-duels.toml",
         include_str!("../../../../content/arenas/corridor-duels.toml"),
+    ),
+    (
+        "corridor-jiggle.toml",
+        include_str!("../../../../content/arenas/corridor-jiggle.toml"),
+    ),
+    (
+        "outpost-site-hold.toml",
+        include_str!("../../../../content/arenas/outpost-site-hold.toml"),
     ),
     (
         "yard-deathmatch.toml",

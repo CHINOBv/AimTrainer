@@ -20,6 +20,11 @@ pub fn arena_list(
             ui.label(&a.description);
             let mode = match &a.mode {
                 ArenaMode::Deathmatch {
+                    bot_skill,
+                    objective: Some(o),
+                    ..
+                } => format!("Site hold · {} {bot_skill} attackers", o.attackers),
+                ArenaMode::Deathmatch {
                     bots, bot_skill, ..
                 } => format!("Deathmatch · {bots} {bot_skill} bots"),
                 ArenaMode::AngleClear { angles, .. } => {

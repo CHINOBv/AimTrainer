@@ -407,3 +407,276 @@ fn a_shortened_arena_ends_early_under_its_own_key() {
         .with_duration(0.0);
     assert_eq!(unchanged.def(), &def);
 }
+
+/// Results recorded from the arenas before bot strafing, jiggle peeks, pre-aim checks and
+/// site objectives existed. Arenas that do not opt in to those features must keep exactly
+/// these results for the same seed and inputs.
+#[test]
+fn existing_arenas_keep_their_results_for_a_fixed_seed_and_input() {
+    struct Golden {
+        id: &'static str,
+        seed: u64,
+        perfect: (f32, u32, f32),
+        idle: (f32, u32, f32, f32),
+    }
+    let goldens = [
+        Golden {
+            id: "yard-deathmatch",
+            seed: 11,
+            perfect: (20000.0, 160, 0.96428573),
+            idle: (-1900.0, 38, 6320.0, 318.109),
+        },
+        Golden {
+            id: "corridor-duels",
+            seed: 42,
+            perfect: (8875.0, 71, 0.54615384),
+            idle: (-1150.0, 23, 3680.0, 58.630672),
+        },
+        Golden {
+            id: "angles-lab-clear",
+            seed: 2,
+            perfect: (625.0, 5, 0.5),
+            idle: (-1850.0, 37, 6040.0, 6.2998023),
+        },
+    ];
+    for g in goldens {
+        let (def, map) = builtin(g.id);
+        let mut s = ArenaSession::new(def.clone(), map.clone(), g.seed).unwrap();
+        run(&mut s, 300.0, perfect);
+        let r = s.result();
+        assert_eq!((r.score, r.kills, r.accuracy), g.perfect, "{}: {r:?}", g.id);
+
+        let mut s = ArenaSession::new(def, map, g.seed).unwrap();
+        run(&mut s, 300.0, idle);
+        let r = s.result();
+        let st = s.stats();
+        let err_sum: f32 = st.crosshair_errors_deg.iter().sum();
+        assert_eq!(
+            (r.score, r.expired, st.damage_taken, err_sum),
+            g.idle,
+            "{}: {r:?}",
+            g.id
+        );
+    }
+}
+
+fn site_hold(shoot_back: bool) -> (ArenaDef, MapDef) {
+    let (mut def, map) = builtin("outpost-site-hold");
+    if let ArenaMode::Deathmatch {
+        bots_shoot_back, ..
+    } = &mut def.mode
+    {
+        *bots_shoot_back = shoot_back;
+    }
+    (def, map)
+}
+
+#[test]
+fn the_site_hold_arena_matches_its_spec() {
+    let (def, map) = builtin("outpost-site-hold");
+    let ArenaMode::Deathmatch {
+        bots,
+        bot_strafe,
+        objective: Some(o),
+        ..
+    } = &def.mode
+    else {
+        panic!("outpost-site-hold is a deathmatch with a site objective");
+    };
+    assert_eq!((*bots, *bot_strafe, o.attackers), (2, true, 6));
+    assert!(map.waypoints.iter().any(|w| w.id == o.site));
+    let s = ArenaSession::new(def, map, 1).unwrap();
+    assert_eq!(
+        s.objective(),
+        Some(ObjectiveStatus {
+            attackers: 6,
+            attackers_left: 6,
+            capture_progress: 0.0,
+            lost: false,
+        })
+    );
+    assert_eq!(s.bots().count(), 2, "two attackers alive at once");
+}
+
+#[test]
+fn attackers_capture_the_site_of_a_player_who_never_shoots() {
+    let (def, map) = site_hold(false);
+    let mut s = ArenaSession::new(def, map, 7).unwrap();
+    let events = run(&mut s, 90.0, idle);
+    let o = s.objective().unwrap();
+    assert!(o.lost, "{o:?}");
+    assert_eq!(o.capture_progress, 1.0);
+    assert!(
+        s.is_finished() && s.time() < 90.0,
+        "lost before time ran out"
+    );
+    assert_eq!(events.last(), Some(&ArenaEvent::Finished));
+    assert_eq!(s.result().score, 0.0, "no kills and no site bonus");
+}
+
+#[test]
+fn a_perfect_defender_holds_the_site_and_earns_the_bonus() {
+    let (def, map) = site_hold(true);
+    let mut s = ArenaSession::new(def, map, 7).unwrap();
+    run(&mut s, 90.0, perfect);
+    let o = s.objective().unwrap();
+    assert!(!o.lost, "{o:?} {:?}", s.stats());
+    assert!(s.is_finished());
+    let st = s.stats();
+    assert_eq!((st.kills, o.attackers_left), (6, 0));
+    assert!(s.time() < 90.0, "killing every attacker ends the run early");
+    assert!(
+        s.bots().all(|b| !b.alive),
+        "no attacker respawns after the sixth"
+    );
+    let r = s.result();
+    let base = st.kills as f32 * KILL_POINTS - st.deaths as f32 * DEATH_POINTS
+        + st.headshots as f32 * HEADSHOT_BONUS;
+    assert_eq!(r.score, base + SITE_HELD_BONUS);
+    assert_eq!(r.scenario_id, "outpost-site-hold");
+}
+
+#[test]
+fn site_hold_runs_are_deterministic() {
+    let go = || {
+        let (def, map) = site_hold(true);
+        let mut s = ArenaSession::new(def, map, 99).unwrap();
+        let events = run(&mut s, 90.0, idle);
+        (events, s.result(), s.stats().clone(), s.objective())
+    };
+    assert_eq!(go(), go());
+}
+
+fn strafe_duel_def(strafe: bool) -> ArenaDef {
+    let mut def = duel_def(true);
+    if let ArenaMode::Deathmatch { bot_strafe, .. } = &mut def.mode {
+        *bot_strafe = strafe;
+    }
+    def
+}
+
+/// Runs an idle player against one bot in the open duel room and returns the bot's x
+/// offsets and, for every frame the player was hit, the bot's speed in that frame.
+fn strafe_duel(strafe: bool) -> (Vec<f32>, Vec<f32>) {
+    let mut s = ArenaSession::new(strafe_duel_def(strafe), duel_room(false), 3).unwrap();
+    let (mut xs, mut hit_speeds) = (Vec::new(), Vec::new());
+    let mut t = 0.0;
+    while !s.is_finished() && t < 10.0 {
+        let before: Vec<BotView> = s.bots().collect();
+        let events = s.update(idle(&s));
+        let after: Vec<BotView> = s.bots().collect();
+        if let (Some(a), Some(b)) = (before.first(), after.first())
+            && a.id == b.id
+            && b.alive
+        {
+            xs.push(b.feet.x);
+            if events
+                .iter()
+                .any(|e| matches!(e, ArenaEvent::PlayerHit { .. }))
+            {
+                hit_speeds.push((b.feet - a.feet).horizontal().length() / DT);
+            }
+        }
+        t += DT;
+    }
+    (xs, hit_speeds)
+}
+
+#[test]
+fn strafing_bots_move_side_to_side_and_only_hit_when_slow() {
+    let limit = BOT_WEAPON.movement().accuracy_speed_limit();
+    let (xs, hits) = strafe_duel(true);
+    let spread = xs.iter().fold(0.0f32, |m, x| m.max(x.abs()));
+    assert!(spread > 0.5, "the bot strafes: max |x| = {spread}");
+    assert!(!hits.is_empty(), "a strafing bot still lands hits");
+    for v in &hits {
+        assert!(*v <= limit + 1e-3, "hit while moving at {v} m/s");
+    }
+
+    // Control: the same duel without strafing stays on its spawn line.
+    let (xs, hits) = strafe_duel(false);
+    assert!(xs.iter().all(|x| x.abs() < 1e-4));
+    assert!(!hits.is_empty());
+}
+
+#[test]
+fn jiggle_peeks_show_the_enemy_only_briefly_and_repeat() {
+    let (mut def, map) = builtin("corridor-jiggle");
+    def.duration_secs = 10.0;
+    let mut s = ArenaSession::new(def, map, 4).unwrap();
+    let (mut streak, mut streaks) = (0u32, Vec::new());
+    run(&mut s, 10.0, |s| {
+        let seen = s.bots().any(|b| b.visible_to_player);
+        if seen {
+            streak += 1;
+        } else if streak > 0 {
+            streaks.push(streak);
+            streak = 0;
+        }
+        idle(s)
+    });
+    assert!(streaks.len() >= 3, "{streaks:?}");
+    let longest = *streaks.iter().max().unwrap() as f32 * DT;
+    assert!(longest < 0.7, "a jiggle peek shows for {longest} s");
+
+    let (def, map) = builtin("corridor-jiggle");
+    let mut sharp = ArenaSession::new(def, map, 4).unwrap();
+    run(&mut sharp, 60.0, perfect);
+    assert_eq!(sharp.stats().kills, 8, "{:?}", sharp.stats());
+}
+
+/// Plays the pre-aim drill's first angle looking `offset` (yaw, pitch) degrees away from
+/// where the head appears.
+fn prefire(offset: (f32, f32)) -> ArenaSession {
+    let (mut def, map) = builtin("angles-lab-prefire");
+    if let ArenaMode::AngleClear {
+        bots_shoot_back, ..
+    } = &mut def.mode
+    {
+        *bots_shoot_back = false;
+    }
+    let head = first_angle_head(&map);
+    let mut s = ArenaSession::new(def, map, 9).unwrap();
+    run(&mut s, 10.0, |s| {
+        let v = ViewAngles::from_direction(head - s.eye_position());
+        FrameInput {
+            dt: DT,
+            view: v.rotated(offset.0, offset.1),
+            ..Default::default()
+        }
+    });
+    s
+}
+
+#[test]
+fn the_pre_aim_drill_counts_and_scores_pre_aimed_sightings() {
+    let pre_aimed = prefire((0.0, 0.0));
+    assert_eq!(pre_aimed.stats().pre_aimed, 1);
+    assert_eq!(pre_aimed.result().score, PRE_AIM_POINTS);
+
+    let low = prefire((0.0, -10.0));
+    assert_eq!(low.stats().pre_aimed, 0);
+    assert_eq!(low.result().score, 0.0);
+    let h = low.stats().median_head_level_error_deg().unwrap();
+    assert!(
+        (h - 10.0).abs() < 1.5,
+        "aiming 10 degrees low: head-level error {h}"
+    );
+
+    // Arenas without a tolerance never count pre-aims, even when pre-aimed.
+    assert!(placement_error(0.0) < 5.0);
+    let (def, map) = builtin("angles-lab-clear");
+    let mut s = ArenaSession::new(def, map, 9).unwrap();
+    run(&mut s, 5.0, idle);
+    assert_eq!(s.stats().pre_aimed, 0);
+}
+
+#[test]
+fn running_out_the_clock_also_holds_the_site() {
+    let (def, map) = site_hold(false);
+    let mut s = ArenaSession::new(def, map, 7).unwrap().with_duration(3.0);
+    run(&mut s, 10.0, idle);
+    assert!(s.is_finished());
+    assert!(!s.objective().unwrap().lost);
+    assert_eq!(s.result().score, SITE_HELD_BONUS);
+}
