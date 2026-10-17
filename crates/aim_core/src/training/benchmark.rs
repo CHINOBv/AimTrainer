@@ -128,6 +128,10 @@ impl BenchmarkDef {
         if !self.tiers.windows(2).all(|w| w[0].level < w[1].level) {
             errs.push("tiers: levels must increase from tier to tier (easiest first)".to_owned());
         }
+        let mut seen = std::collections::HashSet::new();
+        if !self.tiers.iter().all(|t| seen.insert(t.id.as_str())) {
+            errs.push("tiers: tier ids must be unique".to_owned());
+        }
         if !self.tiers.is_empty() && !self.tiers.iter().any(|t| t.level == 0.0) {
             errs.push("tiers: one tier must have level 0 (it uses `thresholds`)".to_owned());
         }
@@ -468,5 +472,12 @@ mod tests {
         assert_eq!(out_of_range.len(), 1, "{out_of_range:?}");
         let no_base = errs(&|b| b.tiers.retain(|t| t.level != 0.0));
         assert!(!no_base.is_empty(), "{no_base:?}");
+        let duplicate = errs(&|b| b.tiers[2].id = b.tiers[0].id.clone());
+        assert!(
+            duplicate
+                .iter()
+                .any(|e| e.contains("tier ids must be unique")),
+            "{duplicate:?}"
+        );
     }
 }

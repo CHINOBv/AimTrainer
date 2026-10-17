@@ -119,6 +119,58 @@ mod tests {
     }
 
     #[test]
+    fn a_routine_run_outside_the_method_day_is_saved_and_resumable() {
+        use crate::game::RoutineProgress;
+        use aim_core::training::resume::PositionStore;
+        use bevy::ecs::system::RunSystemOnce;
+        let dir = std::env::temp_dir().join(format!("aimtrainer-progress-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let paths = Paths {
+            settings_file: dir.join("settings.toml"),
+            scenarios_dir: dir.join("scenarios"),
+            routines_dir: dir.join("routines"),
+            benchmarks_dir: dir.join("benchmarks"),
+            history_file: dir.join("history.csv"),
+        };
+        let lib = aim_core::scenario::builtin::all();
+        let routine = aim_core::training::routine::builtin::all()
+            .into_iter()
+            .find(|r| r.id == "quick-warmup")
+            .unwrap();
+        let plan = routine.plan(&lib, 9);
+        let total = plan.len();
+        let mut world = World::new();
+        world.insert_resource(paths.clone());
+        world.insert_resource(MethodProgress {
+            tier: None,
+            today: Some(day("2000-01-01")),
+            routines: Vec::new(),
+        });
+        world.insert_resource(ActiveRoutine(Some(RoutineProgress {
+            routine_id: routine.id.clone(),
+            name: routine.name.clone(),
+            plan,
+            index: 1,
+            base_level: 0.25,
+            seed: 9,
+        })));
+        world.run_system_once(advance_day).unwrap();
+
+        let saved = MethodProgress::load(&paths);
+        assert_eq!(
+            saved.today,
+            Some(day("2000-01-01")),
+            "the method day is untouched"
+        );
+        let p = saved.resumable(&local_date(), "quick-warmup").unwrap();
+        assert_eq!(
+            (p.next_index, p.total_runs, p.seed, p.level),
+            (2, total, 9, 0.25)
+        );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn systems_have_no_conflicting_access() {
         bevy::ecs::system::assert_is_system(advance_day);
     }

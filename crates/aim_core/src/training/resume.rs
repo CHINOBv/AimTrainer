@@ -27,7 +27,8 @@ impl RoutinePosition {
         self.next_index >= self.total_runs
     }
 
-    /// The position for `date` and `routine`, if this is it and it has runs left.
+    /// Whether this is the position of `routine` on `date` (finished or not; see
+    /// [`Self::is_done`]).
     pub fn resumes(&self, date: &str, routine: &str) -> bool {
         self.date == date && self.routine == routine
     }

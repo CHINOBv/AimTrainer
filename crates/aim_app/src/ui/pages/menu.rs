@@ -241,9 +241,16 @@ fn menu(
                     lib,
                     personalized.as_ref(),
                     |id| {
+                        // A routine edited since it was split may have another run count.
+                        let runs = lib
+                            .routines
+                            .iter()
+                            .find(|r| r.id == id)
+                            .map_or(0, |r| r.run_count(&lib.scenarios));
                         training
                             .progress
                             .resumable(&crate::persistence::method_progress::local_date(), id)
+                            .filter(|p| p.total_runs == runs)
                             .cloned()
                     },
                 ));
