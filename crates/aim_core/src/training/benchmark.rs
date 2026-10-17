@@ -159,7 +159,7 @@ pub mod builtin {
 
     pub const SOURCES: &[(&str, &str)] = &[(
         "valorant-benchmark.toml",
-        include_str!("../../../content/benchmarks/valorant-benchmark.toml"),
+        include_str!("../../../../content/benchmarks/valorant-benchmark.toml"),
     )];
 
     pub fn all() -> Vec<BenchmarkDef> {

@@ -103,7 +103,7 @@ mod tests {
         world.insert_resource(ActiveRoutine::default());
         world.insert_resource(Library {
             scenarios: aim_core::scenario::builtin::all(),
-            routines: aim_core::routine::builtin::all(),
+            routines: aim_core::training::routine::builtin::all(),
             benchmarks: Vec::new(),
             errors: Vec::new(),
         });

@@ -170,5 +170,6 @@ These are known gaps between the current code and this document. Fix them **when
 | C6 | The crosshair model lives in `aim_app/settings.rs` | `aim_core::crosshair`, when custom crosshairs start |
 | C7 | History is written as CSV directly by the app; no port | Define a `RunStore` port in the core when analytics needs history |
 | C8 ✅ | ~~`#[allow(clippy::too_many_arguments)]` on Bevy systems~~ | Done: `SystemParam` groups (`Navigator`, `RunFinisher`, `PlayerInput`, `SettingsAccess`) |
+| C11 ✅ | ~~`routine.rs`, `benchmark.rs` at the crate root~~ | Done: `training/{routine,benchmark}` |
 | C9 | Public items in `aim_core` are not all documented | Enable `missing_docs` for `aim_core` after the docs pass |
 | C10 ✅ | ~~Bevy and bevy_egui versions are declared in `aim_app`~~ | Done: `[workspace.dependencies]` |
