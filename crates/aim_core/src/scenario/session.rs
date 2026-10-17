@@ -3,7 +3,7 @@
 
 use super::def::{FireMode, Motion, ScenarioDef, Shape, SpawnArea};
 use super::hit::{HitZone, Ray, ray_humanoid, ray_sphere};
-use crate::math::{Vec3, ViewAngles, angle_between_deg};
+use crate::math::{Range, Vec3, ViewAngles, angle_between_deg};
 use crate::movement::{self, LocalVelocity, MoveInput, MovementProfile};
 use crate::rng::Rng;
 use crate::valorant::{HumanoidDims, WeaponStats};
@@ -506,6 +506,7 @@ impl Session {
             SpawnArea::AroundCrosshair {
                 offset_deg,
                 distance,
+                pitch_limit_deg,
             } => {
                 let offset = self.rng.in_range(offset_deg);
                 let dist = self.rng.in_range(distance);
@@ -513,15 +514,7 @@ impl Session {
                     let yaw = self.view.yaw_deg + offset * self.rng.sign();
                     eye + ViewAngles::new(yaw, 0.0).direction() * dist
                 } else {
-                    let phi = self.rng.next_f32() * std::f32::consts::TAU;
-                    let mut v = self.view.rotated(offset * phi.cos(), offset * phi.sin());
-                    let mut p = eye + v.direction() * dist;
-                    if p.y < MIN_SPHERE_HEIGHT {
-                        // Mirror spawns that would end up under the floor.
-                        v = self.view.rotated(offset * phi.cos(), -offset * phi.sin());
-                        p = eye + v.direction() * dist;
-                    }
-                    p
+                    self.crosshair_sphere_point(eye, offset, dist, pitch_limit_deg)
                 }
             }
             SpawnArea::Floor { x, z, height } => Vec3::new(
@@ -535,6 +528,37 @@ impl Session {
         } else {
             p.y = p.y.max(MIN_SPHERE_HEIGHT);
         }
+        p
+    }
+
+    /// A point `offset` degrees away from the current aim, in a random direction, that stays
+    /// inside the pitch band and above the floor. Each spawn is relative to the previous aim,
+    /// so without the band chained flicks drift into the sky or the floor.
+    fn crosshair_sphere_point(&mut self, eye: Vec3, offset: f32, dist: f32, limit: Range) -> Vec3 {
+        let fits = |v: ViewAngles| {
+            let p = eye + v.direction() * dist;
+            let in_band = (limit.min..=limit.max).contains(&v.pitch_deg);
+            (in_band && p.y >= MIN_SPHERE_HEIGHT).then_some(p)
+        };
+        for _ in 0..SPAWN_ATTEMPTS {
+            let phi = self.rng.next_f32() * std::f32::consts::TAU;
+            let (d_yaw, d_pitch) = (offset * phi.cos(), offset * phi.sin());
+            // Try the sampled direction, then its vertical mirror.
+            for v in [
+                self.view.rotated(d_yaw, d_pitch),
+                self.view.rotated(d_yaw, -d_pitch),
+            ] {
+                if let Some(p) = fits(v) {
+                    return p;
+                }
+            }
+        }
+        // The aim itself is outside the band (e.g. looking at the sky): flick horizontally
+        // and bring the pitch back into the band.
+        let yaw = self.view.yaw_deg + offset * self.rng.sign();
+        let pitch = self.view.pitch_deg.clamp(limit.min, limit.max);
+        let mut p = eye + ViewAngles::new(yaw, pitch).direction() * dist;
+        p.y = p.y.max(MIN_SPHERE_HEIGHT);
         p
     }
 
@@ -595,6 +619,7 @@ impl Session {
 mod tests {
     use super::*;
     use crate::math::Range;
+    use crate::scenario::def::default_pitch_limit;
     use crate::scenario::def::*;
 
     fn sphere_def(fire: FireMode, health: f32) -> ScenarioDef {
@@ -878,5 +903,102 @@ mod tests {
         let p = s.player_position();
         assert!((p.z - 1.0).abs() < 1e-4, "{p:?}");
         assert!(p.x > 2.0, "must keep sliding right along the edge: {p:?}");
+    }
+
+    fn crosshair_def(offset_deg: Range) -> ScenarioDef {
+        let mut def = sphere_def(FireMode::Click, 1.0);
+        def.duration_secs = 1000.0;
+        def.targets.max_alive = 1;
+        def.targets.spawn = SpawnArea::AroundCrosshair {
+            offset_deg,
+            distance: Range::fixed(12.0),
+            pitch_limit_deg: default_pitch_limit(),
+        };
+        def
+    }
+
+    /// Kill the current target with a perfect flick and return the pitch (from the eye) of
+    /// every target that spawns afterwards.
+    fn chained_flick_pitches(def: ScenarioDef, kills: usize) -> Vec<f32> {
+        let mut s = Session::new(def, 21);
+        let mut pitches = Vec::new();
+        for _ in 0..kills {
+            let t = s
+                .targets()
+                .next()
+                .expect("a target is always alive")
+                .clone();
+            let view = aim_at(&s, t.position);
+            s.update(FrameInput {
+                dt: 0.2,
+                view,
+                fire_pressed: true,
+                ..Default::default()
+            });
+            let next = s.targets().next().expect("respawned").position;
+            pitches.push(aim_at(&s, next).pitch_deg);
+        }
+        pitches
+    }
+
+    #[test]
+    fn chained_wide_flicks_never_climb_into_the_sky() {
+        let limit = default_pitch_limit();
+        let pitches = chained_flick_pitches(crosshair_def(Range::new(20.0, 70.0)), 300);
+        let (lo, hi) = pitches
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(a, b), p| (a.min(*p), b.max(*p)));
+        assert!(
+            hi <= limit.max + 1e-3,
+            "a target spawned at pitch {hi}° (limit {})",
+            limit.max
+        );
+        assert!(
+            lo >= limit.min - 1e-3,
+            "a target spawned at pitch {lo}° (limit {})",
+            limit.min
+        );
+    }
+
+    #[test]
+    fn custom_pitch_limit_is_respected_and_flicks_still_go_up_and_down() {
+        let mut def = crosshair_def(Range::new(5.0, 20.0));
+        if let SpawnArea::AroundCrosshair {
+            pitch_limit_deg, ..
+        } = &mut def.targets.spawn
+        {
+            *pitch_limit_deg = Range::new(-5.0, 10.0);
+        }
+        let pitches = chained_flick_pitches(def, 200);
+        assert!(
+            pitches
+                .iter()
+                .all(|p| (-5.0 - 1e-3..=10.0 + 1e-3).contains(p)),
+            "{pitches:?}"
+        );
+        // The band must not collapse every flick to the horizon.
+        assert!(pitches.iter().any(|p| *p > 3.0) && pitches.iter().any(|p| *p < 0.0));
+    }
+
+    #[test]
+    fn pitch_limit_defaults_when_omitted_in_toml() {
+        let def = ScenarioDef::from_toml(
+            r#"
+            id = "x"
+            name = "x"
+            category = "flicking"
+            [targets]
+            shape = { kind = "sphere", radius = 0.2 }
+            spawn = { kind = "around_crosshair", offset_deg = [10, 40], distance = [10, 10] }
+            "#,
+        )
+        .unwrap();
+        let SpawnArea::AroundCrosshair {
+            pitch_limit_deg, ..
+        } = def.targets.spawn
+        else {
+            panic!("wrong spawn kind")
+        };
+        assert_eq!(pitch_limit_deg, default_pitch_limit());
     }
 }

@@ -196,7 +196,15 @@ pub enum SpawnArea {
     },
     /// Offset from wherever the crosshair currently points (flicks, microcorrections).
     /// Humanoids only use the horizontal component.
-    AroundCrosshair { offset_deg: Range, distance: Range },
+    AroundCrosshair {
+        offset_deg: Range,
+        distance: Range,
+        /// Absolute pitch band (degrees from the horizon, seen from the eye) that spawns
+        /// must stay inside. Without it, chained flicks random-walk away from the
+        /// horizon, because every spawn is relative to the previous aim.
+        #[serde(default = "default_pitch_limit")]
+        pitch_limit_deg: Range,
+    },
     /// World-space box on the floor. Spheres are placed at `height` above the floor.
     Floor {
         x: Range,
@@ -208,6 +216,12 @@ pub enum SpawnArea {
 
 fn default_height() -> Range {
     Range::fixed(1.6)
+}
+
+/// Default vertical band for crosshair-relative spawns: duels in tactical shooters happen
+/// close to the horizon, a little below eye level up to elevated positions.
+pub fn default_pitch_limit() -> Range {
+    Range::new(-15.0, 30.0)
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -417,7 +431,15 @@ impl ScenarioDef {
             SpawnArea::AroundCrosshair {
                 offset_deg,
                 distance,
+                pitch_limit_deg,
             } => {
+                check(
+                    pitch_limit_deg.is_valid()
+                        && pitch_limit_deg.min >= -89.0
+                        && pitch_limit_deg.max <= 89.0,
+                    "targets.spawn.pitch_limit_deg",
+                    "must be a [min, max] within ±89",
+                );
                 check(
                     offset_deg.is_valid() && offset_deg.min >= 0.0 && offset_deg.max <= 180.0,
                     "targets.spawn.offset_deg",

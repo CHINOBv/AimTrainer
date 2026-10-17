@@ -13,7 +13,7 @@ energy_per_rank = 100
 skill = "clicking"
 name = "Static clicking"
 scenarios = [
-  { id = "micro-adjust", thresholds = [3300, 6000, 9400, 12650] },
+  { id = "micro-adjust", thresholds = [3300, 6000, 9400, 12600] },
   { id = "static-headline", thresholds = [2600, 4700, 7050, 9500] },
 ]
 

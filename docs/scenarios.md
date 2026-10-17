@@ -57,7 +57,7 @@ expire_penalty = 0
 | `kind` | Fields | Meaning |
 |---|---|---|
 | `angular` | `yaw_deg`, `pitch_deg`, `distance` | A direction relative to the starting view. Humanoids ignore pitch and stand on the floor. |
-| `around_crosshair` | `offset_deg`, `distance` | Spawns relative to where you aim right now. Use it for flicks (large offsets) and microcorrections (1–6°). |
+| `around_crosshair` | `offset_deg`, `distance`, `pitch_limit_deg` (default `[-15, 30]`) | Spawns relative to where you aim right now. Use it for flicks (large offsets) and microcorrections (1–6°). `pitch_limit_deg` keeps every spawn inside a vertical band around the horizon, so chained flicks cannot drift into the sky or the floor. |
 | `floor` | `x`, `z`, `height` | A world-space box. Use it for agents at realistic positions, or spheres at head height (`height = [1.8, 1.95]`). |
 
 ### Motions
