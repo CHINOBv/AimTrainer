@@ -16,7 +16,8 @@ const LEGACY_DURATION_SECS: f32 = 60.0;
 
 /// Run history kept in `history.csv`: the app's adapter for the core's [`RunStore`] port.
 /// The file keeps every column of the result; the store keeps what the core queries.
-#[derive(Resource, Debug, Default)]
+/// Built only by [`History::load`], so every run reaches the file (no `Default`).
+#[derive(Resource, Debug)]
 pub struct History {
     records: Vec<RunRecord>,
     file: Option<PathBuf>,
