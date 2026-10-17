@@ -157,6 +157,7 @@ struct ArenaFinisher<'w, 's> {
     commands: Commands<'w, 's>,
     next: ResMut<'w, NextState<AppState>>,
     history: ResMut<'w, History>,
+    settings: Res<'w, Settings>,
     paths: Res<'w, Paths>,
 }
 
@@ -166,10 +167,11 @@ impl ArenaFinisher<'_, '_> {
         let previous_best = self.history.best(&result.scenario_id);
         self.history.append(&self.paths, &result);
         let stats = run.session.stats();
-        let mut notes = vec![format!(
+        let mut notes = super::progress_notes(&self.history, self.settings.daily_goal_minutes);
+        notes.extend([format!(
             "Kills {} · deaths {} · damage taken {:.0}",
             stats.kills, stats.deaths, stats.damage_taken
-        )];
+        )]);
         if let Some(e) = stats.median_crosshair_error_deg() {
             notes.push(format!(
                 "Crosshair placement: median {e:.1}° from the head when an enemy appeared (lower is better; under ~5° means pre-aimed)"

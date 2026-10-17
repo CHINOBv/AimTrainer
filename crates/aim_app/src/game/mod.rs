@@ -305,6 +305,7 @@ struct RunFinisher<'w, 's> {
     history: ResMut<'w, History>,
     adaptive: ResMut<'w, AdaptiveLevels>,
     overlay: ResMut<'w, Overlay>,
+    settings: Res<'w, Settings>,
     paths: Res<'w, Paths>,
 }
 
@@ -325,7 +326,7 @@ impl RunFinisher<'_, '_> {
             result,
             previous_best,
             recording: Some(run.recording.clone()),
-            notes: Vec::new(),
+            notes: progress_notes(&self.history, self.settings.daily_goal_minutes),
             adaptive_next,
         });
         self.next.set(AppState::Results);
@@ -333,6 +334,28 @@ impl RunFinisher<'_, '_> {
             self.overlay.visible = false;
         }
     }
+}
+
+/// Daily-goal and fatigue lines for the results screen.
+pub(crate) fn progress_notes(history: &History, goal_minutes: f32) -> Vec<String> {
+    use aim_core::training::progress;
+    let records = history.run_records();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let offset = chrono::Local::now().offset().local_minus_utc() as i64;
+    let mut notes = vec![crate::ui::progress_goal_text(&progress::daily_goal(
+        &records,
+        goal_minutes,
+        now,
+        offset,
+    ))];
+    notes.extend(
+        progress::fatigue(progress::current_session(&records))
+            .iter()
+            .map(crate::ui::progress_fatigue_text),
+    );
+    notes
 }
 
 fn tick(input: PlayerInput, mut run: ResMut<Run>, mut finisher: RunFinisher) {

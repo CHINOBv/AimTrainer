@@ -11,6 +11,7 @@ use crate::ui::UiAction;
 use crate::ui::atoms::ERROR;
 use crate::ui::molecules::tab_bar;
 use crate::ui::navigation::Navigator;
+use crate::ui::organisms::progress_panel::{self, ProgressModel};
 use crate::ui::organisms::settings_panels::{self, DpiMeter};
 use crate::ui::organisms::today_panel::{self, DayModel, RoutineModel, TodayAction, TodayModel};
 use crate::ui::organisms::{arena_list, benchmark_panel, routine_list, scenario_browser};
@@ -40,6 +41,7 @@ impl Plugin for MenuPage {
 enum Tab {
     #[default]
     Today,
+    Progress,
     Scenarios,
     Routines,
     Arenas,
@@ -47,8 +49,9 @@ enum Tab {
     Settings,
 }
 
-const TABS: [(Tab, &str); 6] = [
+const TABS: [(Tab, &str); 7] = [
     (Tab::Today, "Today"),
+    (Tab::Progress, "Progress"),
     (Tab::Scenarios, "Scenarios"),
     (Tab::Routines, "Routines"),
     (Tab::Arenas, "Arenas"),
@@ -155,6 +158,12 @@ fn menu(
                 }
             });
         }
+        Tab::Progress => {
+            egui::CentralPanel::default().show(&mut root, |ui| {
+                let model = progress_model(lib, &history, cfg.settings.daily_goal_minutes);
+                action = action.take().or(progress_panel::progress_panel(ui, &model));
+            });
+        }
         Tab::Scenarios => {
             egui::Panel::left("list")
                 .resizable(true)
@@ -251,6 +260,60 @@ fn menu(
         nav.apply(action);
     }
     Ok(())
+}
+
+/// Scenarios whose readiness is checked: one smooth, one flick, one precision drill.
+const READINESS_SCENARIOS: [&str; 3] = ["track-precise", "flick-headshot", "micro-adjust"];
+const TREND_WEEKS: u32 = 8;
+
+/// Seconds east of UTC for the player's clock (days start at local midnight).
+pub fn local_utc_offset_secs() -> i64 {
+    chrono::Local::now().offset().local_minus_utc() as i64
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+fn progress_model(lib: &Library, history: &History, goal_minutes: f32) -> ProgressModel {
+    use aim_core::training::progress;
+    let records = history.run_records();
+    let (now, offset) = (now_secs(), local_utc_offset_secs());
+    let name = |id: &str| lib.scenario(id).map_or(id.to_owned(), |d| d.name.clone());
+    let mut readiness = Vec::new();
+    let mut readiness_missing = Vec::new();
+    for id in READINESS_SCENARIOS {
+        match progress::readiness(&records, id, now, offset) {
+            Some(r) => readiness.push((name(id), r)),
+            None => readiness_missing.push((id.to_owned(), name(id))),
+        }
+    }
+    let bench = lib.benchmarks.first();
+    let bests = history.bests();
+    ProgressModel {
+        goal: progress::daily_goal(&records, goal_minutes, now, offset),
+        readiness,
+        readiness_missing,
+        fatigue: progress::fatigue(progress::current_session(&records)),
+        trend: bench.map_or_else(Vec::new, |b| {
+            progress::benchmark_trend(b, &records, now, TREND_WEEKS)
+        }),
+        bests: bench
+            .map(|b| {
+                b.subcategories
+                    .iter()
+                    .flat_map(|sub| {
+                        sub.scenarios
+                            .iter()
+                            .map(move |s| (sub.name.clone(), s.id.clone()))
+                    })
+                    .map(|(sub, id)| (sub, name(&id), bests.get(&id).copied()))
+                    .collect()
+            })
+            .unwrap_or_default(),
+    }
 }
 
 /// Local date (`YYYY-MM-DD`) and weekday: the method day follows the player's clock.
