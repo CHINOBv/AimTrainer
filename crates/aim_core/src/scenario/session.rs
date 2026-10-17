@@ -42,6 +42,10 @@ pub enum SessionEvent {
     Expired {
         id: u64,
     },
+    /// Ran out of ammo; firing is blocked for `secs`.
+    Reload {
+        secs: f32,
+    },
     Finished,
 }
 
@@ -80,6 +84,7 @@ pub struct Stats {
     pub kills: u32,
     pub expired: u32,
     pub moving_shots: u32,
+    pub reloads: u32,
     pub hold_secs: f32,
     pub on_target_secs: f32,
     pub head_on_target_secs: f32,
@@ -118,6 +123,8 @@ pub struct Session {
     weapon: WeaponStats,
     dims: HumanoidDims,
     last_shot_at: f32,
+    ammo: f32,
+    reload_until: f32,
 }
 
 impl Session {
@@ -139,7 +146,10 @@ impl Session {
             weapon,
             dims: HumanoidDims::default(),
             last_shot_at: f32::NEG_INFINITY,
+            ammo: 0.0,
+            reload_until: f32::NEG_INFINITY,
         };
+        s.ammo = s.def.weapon.ammo.map_or(0.0, |a| a.clip);
         s.refill(&mut Vec::new());
         s
     }
@@ -275,8 +285,11 @@ impl Session {
     }
 
     fn shoot(&mut self, events: &mut Vec<SessionEvent>) {
-        if !weapon::can_fire(&self.weapon, self.time, self.last_shot_at) {
+        if !weapon::can_fire(&self.weapon, self.time, self.last_shot_at) || self.is_reloading() {
             return;
+        }
+        if let Some(a) = self.def.weapon.ammo {
+            self.ammo -= a.cost;
         }
         self.last_shot_at = self.time;
         let (dir, moving) = self.shot_direction();
@@ -285,9 +298,14 @@ impl Session {
         let Some((idx, zone)) = self.hit_along(dir) else {
             scoring::record_miss(&mut self.stats, &self.def.scoring);
             events.push(SessionEvent::Shot { hit: None, moving });
+            self.reload_if_dry(events);
             return;
         };
         scoring::record_hit(&mut self.stats, &self.def.scoring, zone);
+        if let Some(a) = self.def.weapon.ammo {
+            self.ammo = (self.ammo + a.refund).min(a.clip);
+        }
+        self.reload_if_dry(events);
         let id = self.targets[idx].id;
         events.push(SessionEvent::Shot {
             hit: Some((id, zone)),
@@ -296,6 +314,53 @@ impl Session {
         self.targets[idx].health -= 1.0;
         if self.targets[idx].health <= 0.0 {
             self.kill(idx, events);
+        }
+    }
+
+    /// Start a reload when the next shot cannot be paid for.
+    fn reload_if_dry(&mut self, events: &mut Vec<SessionEvent>) {
+        let Some(a) = self.def.weapon.ammo else {
+            return;
+        };
+        if self.ammo < a.cost {
+            self.ammo = a.clip;
+            self.reload_until = self.time + a.reload_secs;
+            self.stats.reloads += 1;
+            events.push(SessionEvent::Reload {
+                secs: a.reload_secs,
+            });
+        }
+    }
+
+    /// `(current, clip)` when the scenario uses an ammo economy.
+    pub fn ammo(&self) -> Option<(f32, f32)> {
+        self.def.weapon.ammo.map(|a| (self.ammo, a.clip))
+    }
+
+    pub fn is_reloading(&self) -> bool {
+        self.time < self.reload_until
+    }
+
+    /// Share of attempts that succeeded, the signal adaptive difficulty steers to ~80%:
+    /// hits over shots plus expired targets in click mode, time on target in hold mode.
+    pub fn success_rate(&self) -> f32 {
+        let s = &self.stats;
+        match self.def.weapon.fire {
+            FireMode::Hold => {
+                if s.hold_secs > 0.0 {
+                    s.on_target_secs / s.hold_secs
+                } else {
+                    0.0
+                }
+            }
+            FireMode::Click => {
+                let attempts = s.shots + s.expired;
+                if attempts > 0 {
+                    s.hits as f32 / attempts as f32
+                } else {
+                    0.0
+                }
+            }
         }
     }
 
@@ -757,5 +822,76 @@ mod tests {
             panic!("wrong spawn kind")
         };
         assert_eq!(pitch_limit_deg, default_pitch_limit());
+    }
+
+    fn ammo_def() -> ScenarioDef {
+        let mut def = sphere_def(FireMode::Click, 1.0);
+        def.weapon.ammo = Some(crate::scenario::def::AmmoDef::default());
+        def
+    }
+
+    #[test]
+    fn misses_drain_ammo_hits_refund_and_running_dry_reloads() {
+        let mut s = Session::new(ammo_def(), 3);
+        assert_eq!(s.ammo(), Some((100.0, 100.0)));
+        let away = ViewAngles::new(180.0, 0.0);
+        let shoot = |s: &mut Session, view| {
+            s.update(FrameInput {
+                dt: 0.2,
+                view,
+                fire_pressed: true,
+                ..Default::default()
+            })
+        };
+        shoot(&mut s, away);
+        shoot(&mut s, away);
+        assert_eq!(s.ammo().unwrap().0, 40.0, "two misses cost 60");
+        let t = s.targets().next().unwrap().position;
+        let view = aim_at(&s, t);
+        shoot(&mut s, view);
+        assert_eq!(s.ammo().unwrap().0, 47.0, "a hit costs 30 and refunds 37");
+        // 47 - 30 = 17 cannot pay for the next shot, so this miss starts a reload.
+        let ev = shoot(&mut s, away);
+        assert!(
+            ev.iter().any(|e| matches!(e, SessionEvent::Reload { .. })),
+            "{ev:?}"
+        );
+        assert!(s.is_reloading());
+        assert_eq!(s.stats().reloads, 1);
+        let shots = s.stats().shots;
+        shoot(&mut s, away);
+        assert_eq!(s.stats().shots, shots, "no shots while reloading");
+        for _ in 0..10 {
+            s.update(FrameInput {
+                dt: 0.2,
+                ..Default::default()
+            });
+        }
+        assert!(!s.is_reloading());
+        assert_eq!(s.ammo().unwrap().0, 100.0);
+    }
+
+    #[test]
+    fn success_rate_counts_expired_targets_as_failures() {
+        let mut def = sphere_def(FireMode::Click, 1.0);
+        def.targets.max_alive = 1;
+        def.targets.lifetime_secs = Some(0.3);
+        let mut s = Session::new(def, 2);
+        let t = s.targets().next().unwrap().position;
+        s.update(FrameInput {
+            dt: 0.05,
+            view: aim_at(&s, t),
+            fire_pressed: true,
+            ..Default::default()
+        });
+        for _ in 0..8 {
+            s.update(FrameInput {
+                dt: 0.05,
+                ..Default::default()
+            });
+        }
+        assert_eq!(s.stats().hits, 1);
+        assert_eq!(s.stats().expired, 1);
+        assert!((s.success_rate() - 0.5).abs() < 1e-6);
     }
 }

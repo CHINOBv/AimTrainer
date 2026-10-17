@@ -85,6 +85,31 @@ pub struct WeaponDef {
     /// drills, on for movement drills where stopping before shooting matters.
     #[serde(default)]
     pub simulate_spread: bool,
+    /// Ammo economy that punishes spamming (clicking only): every shot costs ammo, every hit
+    /// refunds some, and running dry forces a reload. Modelled on Voltaic S5 clicking.
+    #[serde(default)]
+    pub ammo: Option<AmmoDef>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct AmmoDef {
+    pub clip: f32,
+    pub cost: f32,
+    pub refund: f32,
+    pub reload_secs: f32,
+}
+
+impl Default for AmmoDef {
+    /// Voltaic S5 "ww5t Intermediate" economy: clip 100, shot 30, hit refunds 37.
+    fn default() -> Self {
+        Self {
+            clip: 100.0,
+            cost: 30.0,
+            refund: 37.0,
+            reload_secs: 1.5,
+        }
+    }
 }
 
 fn default_weapon() -> Weapon {
@@ -97,6 +122,7 @@ impl Default for WeaponDef {
             kind: default_weapon(),
             fire: FireMode::default(),
             simulate_spread: false,
+            ammo: None,
         }
     }
 }
@@ -353,6 +379,13 @@ impl ScenarioDef {
             "duration_secs",
             "must be > 0",
         );
+        if let Some(a) = self.weapon.ammo {
+            check(
+                a.cost > 0.0 && a.clip >= a.cost && a.refund >= 0.0 && a.reload_secs >= 0.0,
+                "weapon.ammo",
+                "needs cost > 0, clip >= cost, refund >= 0, reload_secs >= 0",
+            );
+        }
         check(
             self.difficulty.is_valid(),
             "difficulty",
