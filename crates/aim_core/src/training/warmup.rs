@@ -7,6 +7,7 @@
 
 use super::routine::{Block, RoutineDef};
 
+/// Id of the generated queue warm-up routine.
 pub const QUEUE_WARMUP_ID: &str = "queue-warmup";
 /// Length of each warm-up run, seconds.
 pub const WARMUP_RUN_SECS: f32 = 30.0;

@@ -5,26 +5,36 @@
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, AddAssign, Mul, Neg, Sub};
 
+/// A 3D vector or point in world space, in meters.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct Vec3 {
+    /// Right (+X) component.
     pub x: f32,
+    /// Up (+Y) component.
     pub y: f32,
+    /// Backward (+Z) component; forward is -Z.
     pub z: f32,
 }
 
 impl Vec3 {
+    /// The zero vector.
     pub const ZERO: Self = Self::new(0.0, 0.0, 0.0);
+    /// Unit vector pointing up (+Y).
     pub const UP: Self = Self::new(0.0, 1.0, 0.0);
+    /// Unit vector pointing forward (-Z).
     pub const FORWARD: Self = Self::new(0.0, 0.0, -1.0);
 
+    /// Builds a vector from its components.
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
     }
 
+    /// Dot product.
     pub fn dot(self, o: Self) -> f32 {
         self.x * o.x + self.y * o.y + self.z * o.z
     }
 
+    /// Cross product (right-handed).
     pub fn cross(self, o: Self) -> Self {
         Self::new(
             self.y * o.z - self.z * o.y,
@@ -33,10 +43,12 @@ impl Vec3 {
         )
     }
 
+    /// Euclidean length.
     pub fn length(self) -> f32 {
         self.dot(self).sqrt()
     }
 
+    /// Unit-length copy, or zero when the length is negligible.
     pub fn normalize_or_zero(self) -> Self {
         let len = self.length();
         if len > f32::EPSILON {
@@ -46,6 +58,7 @@ impl Vec3 {
         }
     }
 
+    /// Copy with the vertical (Y) component set to zero.
     pub fn horizontal(self) -> Self {
         Self::new(self.x, 0.0, self.z)
     }
@@ -89,13 +102,17 @@ impl Neg for Vec3 {
 /// Positive pitch looks up.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct ViewAngles {
+    /// Horizontal rotation in degrees.
     pub yaw_deg: f32,
+    /// Vertical rotation in degrees.
     pub pitch_deg: f32,
 }
 
 impl ViewAngles {
+    /// Largest absolute pitch allowed, in degrees, to avoid flipping over the vertical.
     pub const PITCH_LIMIT_DEG: f32 = 89.0;
 
+    /// Builds view angles from yaw and pitch in degrees.
     pub fn new(yaw_deg: f32, pitch_deg: f32) -> Self {
         Self { yaw_deg, pitch_deg }
     }
@@ -146,23 +163,29 @@ pub fn angle_between_deg(a: Vec3, b: Vec3) -> f32 {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(from = "[f32; 2]", into = "[f32; 2]")]
 pub struct Range {
+    /// Lower bound (inclusive).
     pub min: f32,
+    /// Upper bound (inclusive).
     pub max: f32,
 }
 
 impl Range {
+    /// Builds a range from its bounds.
     pub const fn new(min: f32, max: f32) -> Self {
         Self { min, max }
     }
 
+    /// Degenerate range that always yields `v`.
     pub const fn fixed(v: f32) -> Self {
         Self { min: v, max: v }
     }
 
+    /// Whether both bounds are finite and `min <= max`.
     pub fn is_valid(&self) -> bool {
         self.min.is_finite() && self.max.is_finite() && self.min <= self.max
     }
 
+    /// Linear interpolation from `min` (t = 0) to `max` (t = 1).
     pub fn lerp(&self, t: f32) -> f32 {
         self.min + (self.max - self.min) * t
     }

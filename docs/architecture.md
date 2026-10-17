@@ -176,5 +176,5 @@ These are known gaps between the current code and this document. Fix them **when
 | C7 ✅ | ~~History is written as CSV directly by the app; no port~~ | Done: `aim_core::training::store::RunStore` (queries live in the core); `aim_app::persistence::history::History` is the CSV adapter. Routine positions use the same pattern: `training::resume::PositionStore` |
 | C8 ✅ | ~~`#[allow(clippy::too_many_arguments)]` on Bevy systems~~ | Done: `SystemParam` groups (`Navigator`, `RunFinisher`, `PlayerInput`, `SettingsAccess`) |
 | C11 ✅ | ~~`routine.rs`, `benchmark.rs` at the crate root~~ | Done: `training/{routine,benchmark}` |
-| C9 | Public items in `aim_core` are not all documented | Enable `missing_docs` for `aim_core` after the docs pass |
+| C9 ✅ | ~~Public items in `aim_core` are not all documented~~ | Done: every public item is documented and `#![warn(missing_docs)]` (an error under CI's `-D warnings`) keeps it that way |
 | C10 ✅ | ~~Bevy and bevy_egui versions are declared in `aim_app`~~ | Done: `[workspace.dependencies]` |

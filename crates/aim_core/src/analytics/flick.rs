@@ -18,6 +18,7 @@ pub const MIN_MOVEMENT_SPEED_DEG_PER_SEC: f32 = 5.0;
 /// A new sub-movement starts when speed falls to a valley at most this fraction of the
 /// preceding peak and then rises again by at least `REACCELERATION_FRACTION` of that peak.
 pub const VALLEY_FRACTION_OF_PEAK: f32 = 0.5;
+/// A new sub-movement needs the speed to rise again by at least this fraction of the preceding peak.
 pub const REACCELERATION_FRACTION: f32 = 0.2;
 /// Primary endpoint error, in target radii along the movement direction, beyond which the
 /// primary movement counts as an overshoot (positive) or undershoot (negative): it ended
@@ -28,6 +29,7 @@ pub const EFFECTIVE_WIDTH_FACTOR: f32 = 4.133;
 /// Fewer flicks than this give no throughput (the endpoint SD is unreliable).
 pub const MIN_FLICKS_FOR_THROUGHPUT: usize = 5;
 
+/// Whether a flick goes to a new target or retries one just missed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlickKind {
     /// Towards a target the previous shot did not just miss.
@@ -36,18 +38,24 @@ pub enum FlickKind {
     Correction,
 }
 
+/// The analysis of one shot: the crosshair's approach from the start of the flick to the shot.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Flick {
+    /// Whether this is a fresh target or a correction after a miss.
     pub kind: FlickKind,
+    /// Id of the target the flick was aimed at.
     pub target_id: u64,
+    /// The shot hit a counted zone.
     pub hit: bool,
     /// Angle from the crosshair at the start to the target at the shot, degrees.
     pub distance_deg: f32,
+    /// Angular radius of the target's aim zone at the shot, degrees.
     pub target_radius_deg: f32,
     /// Start to movement onset. `None` when the crosshair never moved.
     pub reaction_secs: Option<f32>,
     /// Movement onset to the shot.
     pub movement_secs: Option<f32>,
+    /// Highest crosshair angular speed in the flick, degrees/s.
     pub peak_speed_deg_per_sec: f32,
     /// Signed error at the end of the primary sub-movement, along the movement direction,
     /// in target radii: positive past the target, negative short of it.
@@ -65,10 +73,12 @@ pub struct Flick {
 }
 
 impl Flick {
+    /// Whether the primary movement ended past the target's far edge.
     pub fn overshot(&self) -> bool {
         self.primary_error_radii
             .is_some_and(|e| e > OVERSHOOT_RADII)
     }
+    /// Whether the primary movement ended short of the target's near edge.
     pub fn undershot(&self) -> bool {
         self.primary_error_radii
             .is_some_and(|e| e < -OVERSHOOT_RADII)
@@ -78,23 +88,32 @@ impl Flick {
 /// Aggregates over a set of flicks.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FlickSummary {
+    /// Number of flicks summarized.
     pub flicks: usize,
+    /// Share of flicks that hit (0-1).
     pub hit_rate: f32,
     /// Median over fresh flicks only (corrections react to the miss, not a new target).
     pub median_reaction_secs: Option<f32>,
+    /// Median onset-to-shot time over all flicks, seconds.
     pub median_movement_secs: Option<f32>,
+    /// Median of the flicks' peak crosshair speed, degrees/s.
     pub median_peak_speed_deg_per_sec: Option<f32>,
     /// Share of flicks with a detected primary movement that overshot / undershot.
     pub overshoot_rate: f32,
+    /// Share of flicks with a detected primary movement that undershot (0-1).
     pub undershoot_rate: f32,
+    /// Mean number of corrective sub-movements per flick.
     pub mean_corrections: f32,
+    /// Median time from the end of the primary movement to the shot, seconds.
     pub median_settle_secs: Option<f32>,
+    /// Median path efficiency (1 = straight line).
     pub median_path_efficiency: Option<f32>,
     /// Fitts' law effective throughput (ISO 9241-9), bits/s.
     pub throughput_bits_per_sec: Option<f32>,
 }
 
 impl FlickSummary {
+    /// Summarize `flicks`; every statistic is `None` or zero for an empty set.
     pub fn from_flicks(flicks: &[Flick]) -> Self {
         let collect = |f: fn(&Flick) -> Option<f32>| -> Vec<f32> {
             flicks.iter().filter_map(f).collect::<Vec<f32>>()

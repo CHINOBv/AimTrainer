@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 /// Supported level range.
 pub const MIN_LEVEL: f32 = -1.0;
+/// Lowest supported difficulty level (easiest); the highest is `MAX_LEVEL`.
 pub const MAX_LEVEL: f32 = 1.0;
 
 /// How far one parameter moves at the ends of the level range.
@@ -21,10 +22,16 @@ pub enum Knob {
     /// The same fraction at level −1 and +1.
     Symmetric(f32),
     /// Fraction of change at level −1 (`easy`) and at +1 (`hard`).
-    Bounds { easy: f32, hard: f32 },
+    Bounds {
+        /// Fraction of change at level -1.
+        easy: f32,
+        /// Fraction of change at level +1.
+        hard: f32,
+    },
 }
 
 impl Knob {
+    /// Knob that changes by the same fraction at both ends of the level range.
     pub const fn symmetric(fraction: f32) -> Self {
         Knob::Symmetric(fraction)
     }
@@ -47,6 +54,7 @@ impl Knob {
     }
 }
 
+/// How each scenario parameter scales with the difficulty level.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct DifficultyDef {
@@ -79,6 +87,7 @@ impl Default for DifficultyDef {
 }
 
 impl DifficultyDef {
+    /// Whether every knob is finite.
     pub fn is_valid(&self) -> bool {
         [
             self.size,

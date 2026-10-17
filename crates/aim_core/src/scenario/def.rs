@@ -7,22 +7,31 @@ use crate::valorant::Weapon;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+/// Complete definition of a scenario.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScenarioDef {
     /// Unique, stable identifier (`[a-z0-9_-]`). Used for score history.
     pub id: String,
+    /// Name shown in the UI.
     pub name: String,
+    /// Training category the scenario belongs to.
     pub category: Category,
+    /// Short text shown in the scenario list.
     #[serde(default)]
     pub description: String,
+    /// Run length in seconds.
     #[serde(default = "default_duration")]
     pub duration_secs: f32,
+    /// Weapon and firing settings.
     #[serde(default)]
     pub weapon: WeaponDef,
+    /// Player movement settings.
     #[serde(default)]
     pub player: PlayerDef,
+    /// Target shape, spawning and motion.
     pub targets: TargetsDef,
+    /// Points awarded and subtracted.
     #[serde(default)]
     pub scoring: ScoringDef,
     /// How difficulty levels scale this scenario (see `scenario::difficulty`).
@@ -34,20 +43,30 @@ fn default_duration() -> f32 {
     60.0
 }
 
+/// Training skill a scenario exercises.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Category {
+    /// Fast target-to-target flicks.
     Flicking,
+    /// Small adjustments around the crosshair.
     Microcorrection,
+    /// Switching between several targets.
     Switching,
+    /// Following a moving target.
     Tracking,
+    /// Aiming while moving.
     Movement,
+    /// Reacting to targets appearing.
     Reaction,
+    /// Precise, deliberate shots.
     Precision,
+    /// User-written scenarios.
     Custom,
 }
 
 impl Category {
+    /// Every category, in display order.
     pub const ALL: [Category; 8] = [
         Category::Flicking,
         Category::Microcorrection,
@@ -59,6 +78,7 @@ impl Category {
         Category::Custom,
     ];
 
+    /// Name shown in the UI.
     pub fn label(self) -> &'static str {
         match self {
             Category::Flicking => "Flicking",
@@ -73,12 +93,14 @@ impl Category {
     }
 }
 
+/// Weapon and firing settings of a scenario.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WeaponDef {
     /// Determines run speed, fire rate, spread and damage zones.
     #[serde(default = "default_weapon")]
     pub kind: Weapon,
+    /// How the weapon fires.
     #[serde(default)]
     pub fire: FireMode,
     /// Apply first-shot spread and movement inaccuracy to shots. Off for pure aim
@@ -96,12 +118,17 @@ pub struct WeaponDef {
     pub recoil: bool,
 }
 
+/// Ammo economy parameters.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, default)]
 pub struct AmmoDef {
+    /// Ammo capacity of a full clip.
     pub clip: f32,
+    /// Ammo spent per shot.
     pub cost: f32,
+    /// Ammo refunded per hit.
     pub refund: f32,
+    /// Reload duration in seconds.
     pub reload_secs: f32,
 }
 
@@ -133,6 +160,7 @@ impl Default for WeaponDef {
     }
 }
 
+/// How the weapon fires.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FireMode {
@@ -143,6 +171,7 @@ pub enum FireMode {
     Hold,
 }
 
+/// Player settings of a scenario.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlayerDef {
@@ -153,6 +182,7 @@ pub struct PlayerDef {
     /// the origin facing -Z.
     #[serde(default = "default_bounds")]
     pub bounds_x: Range,
+    /// Allowed range of the player's feet along world z, meters.
     #[serde(default = "default_bounds")]
     pub bounds_z: Range,
 }
@@ -171,11 +201,15 @@ impl Default for PlayerDef {
     }
 }
 
+/// Target settings of a scenario.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TargetsDef {
+    /// Shape of each target.
     pub shape: Shape,
+    /// Where targets spawn.
     pub spawn: SpawnArea,
+    /// How targets move after spawning.
     #[serde(default)]
     pub motion: Motion,
     /// Targets alive at the same time.
@@ -205,10 +239,13 @@ fn zero_range() -> Range {
     Range::fixed(0.0)
 }
 
+/// Target shape.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Shape {
+    /// Sphere target.
     Sphere {
+        /// Sphere radius in meters.
         radius: f32,
     },
     /// VALORANT-sized agent standing on the floor (head / body / legs zones).
@@ -219,20 +256,26 @@ pub enum Shape {
     },
 }
 
+/// Where targets spawn.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SpawnArea {
     /// Direction relative to the starting forward view (yaw 0, pitch 0) at a distance from
     /// the eye. Humanoids ignore pitch and stand on the floor.
     Angular {
+        /// Horizontal angle in degrees.
         yaw_deg: Range,
+        /// Vertical angle in degrees.
         pitch_deg: Range,
+        /// Distance from the eye in meters.
         distance: Range,
     },
     /// Offset from wherever the crosshair currently points (flicks, microcorrections).
     /// Humanoids only use the horizontal component.
     AroundCrosshair {
+        /// Angular offset from the crosshair, in degrees.
         offset_deg: Range,
+        /// Distance from the eye in meters.
         distance: Range,
         /// Absolute pitch band (degrees from the horizon, seen from the eye) that spawns
         /// must stay inside. Without it, chained flicks random-walk away from the
@@ -242,8 +285,11 @@ pub enum SpawnArea {
     },
     /// World-space box on the floor. Spheres are placed at `height` above the floor.
     Floor {
+        /// Range of world x, meters.
         x: Range,
+        /// Range of world z, meters.
         z: Range,
+        /// Height above the floor, meters.
         #[serde(default = "default_height")]
         height: Range,
     },
@@ -259,9 +305,11 @@ pub fn default_pitch_limit() -> Range {
     Range::new(-15.0, 30.0)
 }
 
+/// How a target moves.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Motion {
+    /// Stays where it spawned.
     #[default]
     Static,
     /// A/D strafing perpendicular to the player, using VALORANT movement physics
@@ -283,6 +331,7 @@ pub enum Motion {
     Drift {
         /// Speed in m/s.
         speed: Range,
+        /// Time in seconds between direction changes.
         change_secs: Range,
         /// Max distance from the spawn point, meters.
         #[serde(default = "default_strafe_width")]
@@ -294,13 +343,17 @@ fn default_strafe_width() -> f32 {
     3.0
 }
 
+/// Points awarded and subtracted by a scenario.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScoringDef {
+    /// Points for a body hit.
     #[serde(default = "pts_head")]
     pub head: f32,
+    /// Points for a leg hit.
     #[serde(default = "pts_body")]
     pub body: f32,
+    /// Points for a head hit.
     #[serde(default = "pts_legs")]
     pub legs: f32,
     /// Points for a sphere hit.
@@ -346,9 +399,12 @@ impl Default for ScoringDef {
     }
 }
 
+/// A semantic problem found by validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationError {
+    /// Name of the offending field.
     pub field: &'static str,
+    /// Human-readable description of the problem.
     pub message: String,
 }
 
@@ -359,6 +415,7 @@ impl fmt::Display for ValidationError {
 }
 
 impl ScenarioDef {
+    /// Parses a scenario from TOML source.
     pub fn from_toml(src: &str) -> Result<Self, toml::de::Error> {
         toml::from_str(src)
     }

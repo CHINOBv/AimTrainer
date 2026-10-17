@@ -4,19 +4,28 @@
 use crate::movement::MovementProfile;
 use serde::{Deserialize, Serialize};
 
+/// Weapons a scenario can use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Weapon {
+    /// Melee; fastest movement.
     Knife,
+    /// Starting sidearm.
     Classic,
+    /// Full-auto rifle.
     Vandal,
+    /// Full-auto rifle.
     Phantom,
+    /// Semi-auto rifle with optional scope.
     Guardian,
+    /// Scoped sniper rifle.
     Operator,
 }
 
+/// Reference stats of a weapon.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WeaponStats {
+    /// Name shown in the UI.
     pub display_name: &'static str,
     /// Run speed while holding the weapon, m/s.
     pub run_speed: f32,
@@ -30,12 +39,16 @@ pub struct WeaponStats {
     pub accuracy_threshold: f32,
     /// ADS/scope zoom factor (1.0 = no zoom).
     pub zoom: f32,
+    /// Damage per head hit.
     pub damage_head: f32,
+    /// Damage per body hit.
     pub damage_body: f32,
+    /// Damage per leg hit.
     pub damage_legs: f32,
 }
 
 impl Weapon {
+    /// Reference stats of this weapon.
     pub fn stats(self) -> WeaponStats {
         match self {
             Weapon::Knife => WeaponStats {
@@ -178,9 +191,13 @@ pub struct RecoilProfile {
 /// dimensions are not published, so these are documented estimates.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct HumanoidDims {
+    /// Total height in meters.
     pub height: f32,
+    /// Head diameter in meters.
     pub head_size: f32,
+    /// Body width in meters.
     pub body_width: f32,
+    /// Body depth in meters.
     pub body_depth: f32,
     /// Height where legs end and torso starts.
     pub waist_height: f32,
@@ -203,6 +220,7 @@ impl Default for HumanoidDims {
 }
 
 impl HumanoidDims {
+    /// Height in meters of the head center above the floor.
     pub fn head_center_height(&self) -> f32 {
         self.height - self.head_size / 2.0
     }

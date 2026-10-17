@@ -10,21 +10,32 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Game {
+    /// VALORANT.
     Valorant,
+    /// Counter-Strike 2.
     Cs2,
+    /// Apex Legends.
     Apex,
+    /// Overwatch 2.
     Overwatch2,
+    /// Fortnite.
     Fortnite,
+    /// Call of Duty.
     CallOfDuty,
+    /// Destiny 2.
     Destiny2,
+    /// Rainbow Six Siege.
     RainbowSixSiege,
+    /// Deadlock.
     Deadlock,
 }
 
 /// Which screen axis a game's FOV setting measures.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FovAxis {
+    /// The in-game FOV is the horizontal angle.
     Horizontal,
+    /// The in-game FOV is the vertical angle.
     Vertical,
 }
 
@@ -50,6 +61,7 @@ pub struct FovModel {
 /// Everything the converter knows about one game.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GameProfile {
+    /// Game name for display.
     pub display_name: &'static str,
     /// Degrees per count at sensitivity 1.0.
     pub yaw_deg_per_count: f64,
@@ -145,6 +157,7 @@ const DEADLOCK: GameProfile = GameProfile {
 };
 
 impl Game {
+    /// Every supported game.
     pub const ALL: [Game; 9] = [
         Game::Valorant,
         Game::Cs2,
@@ -177,6 +190,7 @@ impl Game {
         self.profile().yaw_deg_per_count
     }
 
+    /// Game name for display.
     pub fn display_name(self) -> &'static str {
         self.profile().display_name
     }

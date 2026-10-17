@@ -21,7 +21,9 @@ use crate::math::ViewAngles;
 use crate::movement::MoveInput;
 use crate::scenario::{FrameInput, Recording, ScenarioDef};
 
+/// Four-byte file signature at the start of every replay.
 pub const MAGIC: [u8; 4] = *b"AIMR";
+/// Current replay format version.
 pub const VERSION: u16 = 1;
 
 const FIRE_PRESSED: u8 = 1 << 0;
@@ -29,20 +31,27 @@ const FIRE_HELD: u8 = 1 << 1;
 const WALK: u8 = 1 << 2;
 const MOVEMENT: u8 = 1 << 3;
 
+/// Why a replay could not be encoded or decoded.
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum CodecError {
+    /// The data does not start with [`MAGIC`].
     #[error("not a replay file")]
     BadMagic,
+    /// The format version is not [`VERSION`]; carries the version found.
     #[error("unsupported replay version {0}")]
     UnsupportedVersion(u16),
+    /// The data ended before the record was complete.
     #[error("replay data ends early")]
     Truncated,
+    /// Bytes remained after the last frame; carries how many.
     #[error("replay has {0} unexpected trailing bytes")]
     TrailingBytes(usize),
+    /// The embedded scenario could not be written or parsed; carries the reason.
     #[error("embedded scenario is invalid: {0}")]
     Scenario(String),
 }
 
+/// Encode a recording as a replay file.
 pub fn encode(recording: &Recording) -> Result<Vec<u8>, CodecError> {
     let def = toml::to_string(&recording.def).map_err(|e| CodecError::Scenario(e.to_string()))?;
     let mut out = Vec::with_capacity(22 + def.len() + recording.inputs.len() * 13);
@@ -112,6 +121,7 @@ impl<'a> Reader<'a> {
     }
 }
 
+/// Decode a replay file back into the identical recording.
 pub fn decode(bytes: &[u8]) -> Result<Recording, CodecError> {
     let mut r = Reader { bytes };
     if r.take(4).map_err(|_| CodecError::BadMagic)? != MAGIC {

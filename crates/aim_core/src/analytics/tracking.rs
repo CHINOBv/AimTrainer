@@ -24,6 +24,7 @@ pub struct TrackingAnalysis {
     pub errors_deg: Vec<f32>,
     /// Seconds behind / ahead of a moving target, along its direction of motion.
     pub lag_secs: f32,
+    /// Seconds ahead of a moving target, along its direction of motion.
     pub lead_secs: f32,
     /// Time-weighted sum of the signed along-motion error (negative = behind), deg·s.
     pub along_error_deg_secs: f32,
@@ -31,21 +32,29 @@ pub struct TrackingAnalysis {
     pub reversal_responses_secs: Vec<f32>,
 }
 
+/// Aggregates of a tracking analysis.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrackingSummary {
+    /// Seconds spent firing with a target visible.
     pub hold_secs: f32,
+    /// Share of firing time on a counted zone (0-1).
     pub on_target_ratio: f32,
+    /// Mean angle from the crosshair to the target's aim point, degrees.
     pub mean_error_deg: Option<f32>,
+    /// Median angle from the crosshair to the target's aim point, degrees.
     pub median_error_deg: Option<f32>,
     /// Share of moving-target time spent behind the target (0.5 = balanced).
     pub lag_ratio: Option<f32>,
     /// Mean signed error along the target's motion, degrees (negative = lagging).
     pub mean_along_error_deg: Option<f32>,
+    /// Number of target direction reversals that were followed.
     pub reversals: usize,
+    /// Median seconds to follow a reversal.
     pub median_reversal_response_secs: Option<f32>,
 }
 
 impl TrackingAnalysis {
+    /// Add another run's accumulators to this one.
     pub fn merge(&mut self, other: &TrackingAnalysis) {
         self.hold_secs += other.hold_secs;
         self.on_target_secs += other.on_target_secs;
@@ -57,6 +66,7 @@ impl TrackingAnalysis {
             .extend_from_slice(&other.reversal_responses_secs);
     }
 
+    /// Reduce the accumulators to ratios, means and medians.
     pub fn summary(&self) -> TrackingSummary {
         let moving_secs = self.lag_secs + self.lead_secs;
         TrackingSummary {
@@ -92,6 +102,7 @@ struct Reversal {
     new_dir: (f32, f32),
 }
 
+/// Analyze the hold-mode `samples` of one run.
 pub fn analyze(samples: &[Sample]) -> TrackingAnalysis {
     let mut out = TrackingAnalysis::default();
     // Last significant target direction per tracked target, and a reversal awaiting a response.

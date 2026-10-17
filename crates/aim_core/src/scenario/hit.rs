@@ -4,22 +4,30 @@ use crate::math::Vec3;
 use crate::valorant::HumanoidDims;
 use serde::{Deserialize, Serialize};
 
+/// Part of a target that was hit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HitZone {
+    /// Head hit.
     Head,
+    /// Torso hit.
     Body,
+    /// Leg hit.
     Legs,
+    /// Sphere target hit.
     Sphere,
 }
 
+/// A ray with an origin and a direction.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Ray {
+    /// Start point in meters.
     pub origin: Vec3,
     /// Unit direction.
     pub dir: Vec3,
 }
 
+/// Distance along the ray to the nearest sphere intersection, if any.
 pub fn ray_sphere(ray: Ray, center: Vec3, radius: f32) -> Option<f32> {
     let oc = ray.origin - center;
     let b = oc.dot(ray.dir);
@@ -33,6 +41,7 @@ pub fn ray_sphere(ray: Ray, center: Vec3, radius: f32) -> Option<f32> {
     (t >= 0.0).then_some(t)
 }
 
+/// Distance along the ray to an axis-aligned box intersection, if any.
 pub fn ray_aabb(ray: Ray, min: Vec3, max: Vec3) -> Option<f32> {
     let mut t0 = 0.0_f32;
     let mut t1 = f32::INFINITY;

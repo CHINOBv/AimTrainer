@@ -21,16 +21,24 @@ pub const MIN_FLICKS: usize = 5;
 /// Less firing time than this in a category gives no tracking findings.
 pub const MIN_TRACKING_SECS: f32 = 3.0;
 
+/// One strength or weakness found by applying a rule to a category's metrics.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Finding {
+    /// Category whose runs were measured.
     pub category: Category,
+    /// Whether the metric is a strength or a weakness.
     pub verdict: Verdict,
+    /// The metric the rule examined.
     pub metric: Metric,
+    /// The measured value, in the metric's own unit.
     pub value: f32,
+    /// The rule's threshold, in the metric's own unit.
     pub threshold: f32,
+    /// Which side of the threshold fires the rule.
     pub direction: Direction,
     /// "Overshoot rate 42% is above the 35% threshold: …"
     pub explanation: String,
+    /// What to practice, when the rule carries a recommendation.
     pub recommendation: Option<Recommendation>,
 }
 
@@ -45,15 +53,22 @@ impl Finding {
     }
 }
 
+/// Summary and findings for one scenario category.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CategoryProfile {
+    /// The summarized category.
     pub category: Category,
+    /// Number of analyzed runs in the category.
     pub runs: usize,
+    /// Flick aggregates, if enough flicks were recorded.
     pub flick: Option<FlickSummary>,
+    /// Tracking aggregates, if enough firing time was recorded.
     pub tracking: Option<TrackingSummary>,
+    /// Findings whose rules fired, in rules-table order.
     pub findings: Vec<Finding>,
 }
 
+/// Findings per scenario category, built from run analyses.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SkillProfile {
     /// One entry per category present in the analyses, in `Category::ALL` order.
@@ -132,6 +147,7 @@ impl SkillProfile {
         Self { categories }
     }
 
+    /// Every finding across all categories.
     pub fn findings(&self) -> impl Iterator<Item = &Finding> {
         self.categories.iter().flat_map(|c| c.findings.iter())
     }
@@ -146,6 +162,7 @@ impl SkillProfile {
         v
     }
 
+    /// Findings that are strengths.
     pub fn strengths(&self) -> impl Iterator<Item = &Finding> {
         self.findings().filter(|f| f.verdict == Verdict::Strength)
     }

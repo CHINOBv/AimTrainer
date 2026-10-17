@@ -19,15 +19,21 @@ use thiserror::Error;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct Rgba {
+    /// Red channel, 0-255.
     pub r: u8,
+    /// Green channel, 0-255.
     pub g: u8,
+    /// Blue channel, 0-255.
     pub b: u8,
+    /// Alpha channel, 0-255 (255 = opaque).
     pub a: u8,
 }
 
 impl Rgba {
+    /// Opaque white.
     pub const WHITE: Rgba = Rgba::opaque(0xFF, 0xFF, 0xFF);
 
+    /// An opaque color from red, green and blue.
     pub const fn opaque(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b, a: 0xFF }
     }
@@ -38,6 +44,7 @@ impl Rgba {
     }
 }
 
+/// A string that is not a valid hex color; holds the rejected text.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[error("expected an RRGGBB or RRGGBBAA hex color, got {0:?}")]
 pub struct HexColorError(pub String);
@@ -108,15 +115,19 @@ pub const ERROR_MULTIPLIER_MAX: f64 = 3.0;
 /// Slider maxima that differ between inner and outer lines.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LineLimits {
+    /// Longest arm length allowed, in pixels.
     pub max_length_px: u8,
+    /// Largest center gap allowed, in pixels.
     pub max_offset_px: u8,
 }
 
 impl LineLimits {
+    /// Limits for the inner lines.
     pub const INNER: LineLimits = LineLimits {
         max_length_px: 20,
         max_offset_px: 20,
     };
+    /// Limits for the outer lines.
     pub const OUTER: LineLimits = LineLimits {
         max_length_px: 10,
         max_offset_px: 40,
@@ -129,10 +140,13 @@ impl LineLimits {
 /// partial table has no single sensible default to fall back to.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Lines {
+    /// Whether this set of lines is drawn.
     pub show: bool,
+    /// Line thickness in pixels.
     pub thickness_px: u8,
     /// Horizontal arm length (and vertical too unless `separate_vertical`).
     pub length_px: u8,
+    /// Whether the vertical arms use `vertical_length_px`.
     pub separate_vertical: bool,
     /// Vertical arm length, used only when `separate_vertical` is set.
     pub vertical_length_px: u8,
@@ -140,9 +154,13 @@ pub struct Lines {
     pub offset_px: u8,
     /// 0–1.
     pub opacity: f64,
+    /// Whether the lines react to movement.
     pub movement_error: bool,
+    /// Scale of the movement reaction.
     pub movement_error_multiplier: f64,
+    /// Whether the lines react to firing.
     pub firing_error: bool,
+    /// Scale of the firing reaction.
     pub firing_error_multiplier: f64,
 }
 
@@ -200,18 +218,27 @@ pub struct Crosshair {
     pub color_index: u8,
     /// Used when `color_index` is custom; kept otherwise so codes round-trip.
     pub custom_color: Rgba,
+    /// Whether the outlines are drawn.
     pub outlines: bool,
+    /// Outline thickness in pixels.
     pub outline_thickness_px: u8,
     /// 0–1.
     pub outline_opacity: f64,
+    /// Whether the center dot is drawn.
     pub center_dot: bool,
+    /// Center dot thickness in pixels.
     pub dot_thickness_px: u8,
     /// 0–1.
     pub dot_opacity: f64,
+    /// Whether the crosshair fades as firing error grows.
     pub fade_with_firing_error: bool,
+    /// Whether the crosshair is shown to spectators.
     pub show_spectated: bool,
+    /// Whether firing error uses its own offset instead of the line offset.
     pub override_firing_offset: bool,
+    /// The inner lines.
     pub inner: Lines,
+    /// The outer lines.
     pub outer: Lines,
 }
 

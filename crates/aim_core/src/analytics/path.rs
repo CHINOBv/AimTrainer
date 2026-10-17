@@ -25,19 +25,24 @@ pub struct ShotPoint {
     /// Crosshair offset from the target's aim point at the shot, degrees:
     /// `.0` horizontal (positive right), `.1` vertical (positive up).
     pub offset_deg: (f32, f32),
+    /// The shot hit a counted zone.
     pub hit: bool,
 }
 
 /// The crosshair's approach to, and shots at, one target.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Engagement {
+    /// Id of the target.
     pub target_id: u64,
     /// Angular radius of the target's aim zone at the last frame, degrees.
     pub radius_deg: f32,
+    /// Session time when the engagement started, seconds.
     pub start_secs: f32,
+    /// Session time when the engagement ended, seconds.
     pub end_secs: f32,
     /// Crosshair offset from the target's aim point, one per frame, oldest first.
     pub path_deg: Vec<(f32, f32)>,
+    /// Shots fired at this target during the engagement, in order.
     pub shots: Vec<ShotPoint>,
     /// The engagement ended because a hit removed the target.
     pub killed: bool,
@@ -52,6 +57,7 @@ pub struct Engagement {
 }
 
 impl Engagement {
+    /// Number of shots in this engagement that missed.
     pub fn misses(&self) -> usize {
         self.shots.iter().filter(|s| !s.hit).count()
     }
@@ -60,7 +66,9 @@ impl Engagement {
 /// A whole run as engagements.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReplayPath {
+    /// Id of the scenario the run was played on.
     pub scenario_id: String,
+    /// One engagement per target, in time order.
     pub engagements: Vec<Engagement>,
 }
 

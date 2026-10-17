@@ -10,29 +10,39 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ActivityKind {
+    /// A single scenario drill run through a `Session`.
     #[default]
     Scenario,
+    /// An arena session (aim_world).
     Arena,
 }
 
 /// What happened in a frame, in terms every activity shares.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ActivityEvent {
+    /// A shot was fired.
     Shot {
+        /// Whether the shot hit a target.
         hit: bool,
     },
+    /// A target was killed.
     Kill {
+        /// Seconds from the target becoming visible to its death.
         time_to_kill_secs: f32,
     },
     /// The player took damage (arenas only).
     Damaged,
+    /// The activity reached its end.
     Finished,
 }
 
 /// Anything the player can do for a while that produces a result.
 pub trait Activity {
+    /// Advance by one frame and return what happened.
     fn update(&mut self, input: FrameInput) -> Vec<ActivityEvent>;
+    /// Whether the activity has ended.
     fn is_finished(&self) -> bool;
+    /// Final numbers of the run so far.
     fn result(&self) -> RunResult;
     /// Seconds played.
     fn time(&self) -> f32;

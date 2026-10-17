@@ -16,12 +16,16 @@ pub const STANDOUT_MARGIN: f32 = 0.15;
 /// Fewer played subcategories than this give no verdicts (there is nothing to compare).
 pub const MIN_PLAYED: usize = 2;
 
+/// The standing of one benchmark subcategory.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SubcategoryStanding {
+    /// Subcategory name as defined in the benchmark.
     pub name: String,
+    /// The skill the subcategory trains.
     pub skill: String,
     /// Current energy from personal bests; `None` until one of its scenarios was played.
     pub energy: Option<f32>,
+    /// Strength or weakness relative to the player's average, if comparable.
     pub verdict: Option<Verdict>,
     /// "Static clicking 150 energy is 40% below your average of 250 …", or why there is no
     /// verdict.
@@ -32,6 +36,7 @@ pub struct SubcategoryStanding {
     pub scenario_ids: Vec<String>,
 }
 
+/// Standing of every benchmark subcategory, with the player's average.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BenchmarkProfile {
     /// Arithmetic mean of the played subcategories' energy.
@@ -90,6 +95,7 @@ impl BenchmarkProfile {
         v
     }
 
+    /// Strong subcategories, in benchmark order.
     pub fn strengths(&self) -> impl Iterator<Item = &SubcategoryStanding> {
         self.subcategories
             .iter()

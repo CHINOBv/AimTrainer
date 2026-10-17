@@ -9,20 +9,30 @@ use super::flick::FlickSummary;
 use super::tracking::TrackingSummary;
 use serde::Deserialize;
 
+/// A measurable quantity a rule can threshold.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Metric {
+    /// Median reaction time of fresh flicks, seconds.
     ReactionTime,
+    /// Share of flicks whose primary movement overshot.
     OvershootRate,
+    /// Share of flicks whose primary movement undershot.
     UndershootRate,
+    /// Mean corrective sub-movements per flick.
     Corrections,
+    /// Median path efficiency of flicks (1 = straight).
     PathEfficiency,
+    /// Share of firing time spent on a counted zone (tracking).
     OnTargetRatio,
+    /// Share of moving-target time spent behind the target (tracking).
     LagRatio,
+    /// Median seconds to follow a target that reversed direction (tracking).
     ReversalResponse,
 }
 
 impl Metric {
+    /// Human-readable name of the metric.
     pub fn label(self) -> &'static str {
         match self {
             Metric::ReactionTime => "Median reaction time",
@@ -65,21 +75,28 @@ impl Metric {
     }
 }
 
+/// Whether a fired rule marks a strength or a weakness.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Verdict {
+    /// A skill the player does well.
     Strength,
+    /// A skill to improve.
     Weakness,
 }
 
+/// Which side of a threshold fires a rule.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Direction {
+    /// Fires when the value is above the threshold.
     Above,
+    /// Fires when the value is below the threshold.
     Below,
 }
 
 impl Direction {
+    /// The direction as a lowercase word for explanations.
     pub fn word(self) -> &'static str {
         match self {
             Direction::Above => "above",
@@ -94,8 +111,10 @@ impl Direction {
 pub struct Recommendation {
     /// Built-in scenario ids, best first.
     pub scenario_ids: Vec<String>,
+    /// Routine to start for this weakness, if one fits.
     #[serde(default)]
     pub routine_id: Option<String>,
+    /// Short advice shown to the player.
     pub tip: String,
 }
 
@@ -103,12 +122,17 @@ pub struct Recommendation {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Rule {
+    /// The metric the rule examines.
     pub metric: Metric,
+    /// Which side of the threshold fires the rule.
     pub direction: Direction,
+    /// The threshold, in the metric's own unit.
     pub threshold: f32,
+    /// Whether firing marks a strength or a weakness.
     pub verdict: Verdict,
     /// What the number means for the player.
     pub meaning: String,
+    /// What to practice when the rule fires.
     #[serde(default)]
     pub recommendation: Option<Recommendation>,
 }
@@ -127,11 +151,14 @@ impl Rule {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RuleSet {
+    /// Stable id (equal to the file name).
     pub id: String,
+    /// The rules, applied in order.
     pub rules: Vec<Rule>,
 }
 
 impl RuleSet {
+    /// Parse a rules file from TOML.
     pub fn from_toml(src: &str) -> Result<Self, toml::de::Error> {
         toml::from_str(src)
     }
@@ -172,10 +199,12 @@ impl RuleSet {
     }
 }
 
+/// The rule sets shipped with the trainer.
 pub mod builtin {
     use super::RuleSet;
     use std::sync::LazyLock;
 
+    /// Built-in rules files as `(file name, TOML source)`.
     pub const SOURCES: &[(&str, &str)] = &[(
         "recommendations.toml",
         include_str!("../../../../content/rules/recommendations.toml"),

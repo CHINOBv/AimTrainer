@@ -2,16 +2,19 @@
 
 use crate::math::Range;
 
+/// SplitMix64 generator; the same seed always yields the same sequence.
 #[derive(Debug, Clone)]
 pub struct Rng {
     state: u64,
 }
 
 impl Rng {
+    /// Creates a generator from a seed.
     pub fn new(seed: u64) -> Self {
         Self { state: seed }
     }
 
+    /// Next raw 64-bit value.
     pub fn next_u64(&mut self) -> u64 {
         self.state = self.state.wrapping_add(0x9E37_79B9_7F4A_7C15);
         let mut z = self.state;
@@ -25,10 +28,12 @@ impl Rng {
         (self.next_u64() >> 40) as f32 / (1u64 << 24) as f32
     }
 
+    /// Uniform value inside the inclusive range.
     pub fn in_range(&mut self, r: Range) -> f32 {
         r.lerp(self.next_f32())
     }
 
+    /// Randomly returns 1.0 or -1.0.
     pub fn sign(&mut self) -> f32 {
         if self.next_u64() & 1 == 0 { 1.0 } else { -1.0 }
     }

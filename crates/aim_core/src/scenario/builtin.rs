@@ -3,6 +3,7 @@
 
 use super::def::ScenarioDef;
 
+/// Embedded built-in scenario files as `(file name, TOML source)`.
 pub const SOURCES: &[(&str, &str)] = &[
     (
         "ammo-discipline.toml",

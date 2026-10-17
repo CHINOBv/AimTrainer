@@ -11,21 +11,25 @@ use std::sync::LazyLock;
 pub struct Preset {
     /// Stable kebab-case ID (equal to the file name).
     pub id: String,
+    /// Display name shown to the player.
     pub name: String,
     /// Canonical VALORANT profile code (what [`code::encode`] produces).
     pub code: String,
 }
 
 impl Preset {
+    /// Parse a preset file from TOML.
     pub fn from_toml(src: &str) -> Result<Self, toml::de::Error> {
         toml::from_str(src)
     }
 
+    /// The crosshair the preset's code describes.
     pub fn crosshair(&self) -> Crosshair {
         code::parse(&self.code).expect("built-in preset codes are valid (see tests)")
     }
 }
 
+/// Built-in preset files as `(file name, TOML source)`.
 pub const SOURCES: &[(&str, &str)] = &[
     (
         "valorant-default.toml",

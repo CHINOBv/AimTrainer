@@ -14,11 +14,14 @@ const POOL: [&str; 7] = [
     "track-reactive-strafe",
 ];
 
+/// The deterministic daily challenge: one scenario and seed per calendar day.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DailyChallenge {
     /// Days since the Unix epoch (UTC), so every player gets the same challenge on the same date.
     pub day: i64,
+    /// Id of the scenario to play.
     pub scenario_id: String,
+    /// Seed for the run, derived from the day.
     pub seed: u64,
 }
 

@@ -16,78 +16,116 @@ use crate::rng::Rng;
 use crate::valorant::{HumanoidDims, RecoilProfile, WeaponStats};
 use serde::{Deserialize, Serialize};
 
+/// Player input for one frame.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct FrameInput {
+    /// Frame duration in seconds.
     pub dt: f32,
+    /// View orientation this frame.
     pub view: ViewAngles,
     /// Fire button went down this frame.
     pub fire_pressed: bool,
     /// Fire button is held.
     pub fire_held: bool,
+    /// Movement keys pressed.
     pub movement: MoveInput,
 }
 
+/// Something that happened during a session update.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SessionEvent {
+    /// A target appeared.
     Spawned {
+        /// Id of the new target.
         id: u64,
     },
+    /// A shot was fired.
     Shot {
+        /// Target id and zone hit, if any.
         hit: Option<(u64, HitZone)>,
+        /// Whether the player was moving above the accuracy threshold.
         moving: bool,
     },
+    /// A target was killed.
     Killed {
+        /// Id of the killed target.
         id: u64,
+        /// Seconds from the target becoming visible to its death.
         time_to_kill: f32,
     },
+    /// A target was removed because its lifetime ran out.
     Expired {
+        /// Id of the expired target.
         id: u64,
     },
     /// Ran out of ammo; firing is blocked for `secs`.
     Reload {
+        /// Reload duration in seconds.
         secs: f32,
     },
+    /// The run reached its duration.
     Finished,
 }
 
+/// A live target.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Target {
+    /// Unique id within the session.
     pub id: u64,
     /// Sphere center, or humanoid feet.
     pub position: Vec3,
     /// Yaw the humanoid faces (towards the player at spawn).
     pub facing_yaw_deg: f32,
+    /// Remaining health.
     pub health: f32,
+    /// Health at spawn.
     pub max_health: f32,
+    /// Session time in seconds when the target becomes visible.
     pub visible_at: f32,
     expires_at: Option<f32>,
     motion: MotionState,
 }
 
 impl Target {
+    /// Whether the target is visible at session time `now` (seconds).
     pub fn is_visible(&self, now: f32) -> bool {
         now >= self.visible_at
     }
 
+    /// Current velocity in m/s.
     pub fn velocity(&self) -> Vec3 {
         self.motion.velocity()
     }
 }
 
+/// Counters accumulated during a run.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Stats {
+    /// Points scored so far.
     pub score: f32,
+    /// Shots fired.
     pub shots: u32,
+    /// Shots that hit a target.
     pub hits: u32,
+    /// Hits on the head.
     pub head_hits: u32,
+    /// Hits on the body.
     pub body_hits: u32,
+    /// Hits on the legs.
     pub leg_hits: u32,
+    /// Targets killed.
     pub kills: u32,
+    /// Targets that expired.
     pub expired: u32,
+    /// Shots fired while moving above the accuracy threshold.
     pub moving_shots: u32,
+    /// Reloads forced by running out of ammo.
     pub reloads: u32,
+    /// Seconds the fire button was held (hold mode).
     pub hold_secs: f32,
+    /// Seconds the crosshair was on a target while firing (hold mode).
     pub on_target_secs: f32,
+    /// Seconds the crosshair was on a head while firing (hold mode).
     pub head_on_target_secs: f32,
     /// Seconds from a target becoming visible to its death.
     pub kill_times: Vec<f32>,
@@ -149,19 +187,29 @@ impl Stats {
 /// Final numbers of a run, ready to display and persist.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RunResult {
+    /// Id of the scenario played.
     pub scenario_id: String,
+    /// Points scored.
     pub score: f32,
     /// Hits / shots in click mode, time on target / time firing in hold mode.
     pub accuracy: f32,
+    /// Targets killed.
     pub kills: u32,
+    /// Kills per minute of run time.
     pub kills_per_min: f32,
+    /// Mean seconds to kill, if any target was killed.
     pub avg_time_to_kill: Option<f32>,
+    /// Fraction of hits that landed on the head.
     pub headshot_rate: f32,
+    /// Shots fired while moving above the accuracy threshold.
     pub moving_shots: u32,
+    /// Targets that expired.
     pub expired: u32,
+    /// Run length in seconds.
     pub duration_secs: f32,
 }
 
+/// A running scenario: owns targets, player state and scoring, and advances deterministically from `FrameInput`s.
 pub struct Session {
     def: ScenarioDef,
     rng: Rng,
@@ -184,6 +232,7 @@ pub struct Session {
 }
 
 impl Session {
+    /// Starts a session of `def` with a seeded random generator.
     pub fn new(def: ScenarioDef, seed: u64) -> Self {
         let weapon = def.weapon.kind.stats();
         let profile = def.weapon.kind.movement();
@@ -217,36 +266,47 @@ impl Session {
         s
     }
 
+    /// Scenario being played.
     pub fn def(&self) -> &ScenarioDef {
         &self.def
     }
+    /// Seconds elapsed.
     pub fn time(&self) -> f32 {
         self.time
     }
+    /// Seconds left before the run ends.
     pub fn remaining(&self) -> f32 {
         (self.def.duration_secs - self.time).max(0.0)
     }
+    /// Whether the run has ended.
     pub fn is_finished(&self) -> bool {
         self.finished
     }
+    /// Counters so far.
     pub fn stats(&self) -> &Stats {
         &self.stats
     }
+    /// Humanoid hitbox dimensions in use.
     pub fn dims(&self) -> &HumanoidDims {
         &self.dims
     }
+    /// Player feet position in meters.
     pub fn player_position(&self) -> Vec3 {
         self.player_pos
     }
+    /// Player eye position in meters.
     pub fn eye_position(&self) -> Vec3 {
         self.player_pos + Vec3::new(0.0, self.dims.eye_height, 0.0)
     }
+    /// Horizontal speed in m/s.
     pub fn player_speed(&self) -> f32 {
         self.player_vel.speed()
     }
+    /// Movement parameters of the equipped weapon.
     pub fn movement_profile(&self) -> &MovementProfile {
         &self.profile
     }
+    /// Whether the current speed allows fully accurate shots.
     pub fn is_accurate(&self) -> bool {
         self.player_speed() <= self.profile.accuracy_speed_limit()
     }
@@ -257,6 +317,7 @@ impl Session {
         self.targets.iter().filter(move |t| t.is_visible(now))
     }
 
+    /// Advances the session by one frame and returns what happened.
     pub fn update(&mut self, input: FrameInput) -> Vec<SessionEvent> {
         let mut events = Vec::new();
         if self.finished {
@@ -285,6 +346,7 @@ impl Session {
         events
     }
 
+    /// Final numbers of the run so far.
     pub fn result(&self) -> RunResult {
         scoring::run_result(&self.def, &self.stats, self.time)
     }
@@ -462,6 +524,7 @@ impl Session {
         self.def.weapon.ammo.map(|a| (self.ammo, a.clip))
     }
 
+    /// Whether firing is blocked by a reload.
     pub fn is_reloading(&self) -> bool {
         self.time < self.reload_until
     }

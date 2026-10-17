@@ -15,29 +15,39 @@ use crate::scenario::run_key;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 
+/// A benchmark definition: ranked skill measurement across subcategories, loaded from TOML.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BenchmarkDef {
+    /// Stable identifier; equals the content file name.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// Short description shown in the UI.
     #[serde(default)]
     pub description: String,
     /// `false` while thresholds are provisional (not derived from real player data).
     #[serde(default)]
     pub calibrated: bool,
+    /// Rank names, lowest first.
     pub ranks: Vec<String>,
+    /// Energy gained per rank threshold reached.
     #[serde(default = "default_energy_per_rank")]
     pub energy_per_rank: f32,
     /// Difficulty tiers, easiest first. Empty means one tier: the scenarios as authored.
     #[serde(default)]
     pub tiers: Vec<BenchTier>,
+    /// Skill subcategories; overall energy is the harmonic mean of their energies.
     pub subcategories: Vec<Subcategory>,
 }
 
+/// A difficulty tier: the same scenarios played at another level with their own thresholds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BenchTier {
+    /// Stable identifier, unique within the benchmark.
     pub id: String,
+    /// Display name.
     pub name: String,
     /// Difficulty level every scenario of this tier is played at (see `scenario::difficulty`).
     /// The tier at level 0 uses each scenario's `thresholds`.
@@ -48,17 +58,23 @@ fn default_energy_per_rank() -> f32 {
     100.0
 }
 
+/// A skill subcategory: a group of scenarios whose best energy counts.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Subcategory {
+    /// Skill key this subcategory measures.
     pub skill: String,
+    /// Display name.
     pub name: String,
+    /// Scenarios of this subcategory; the best energy among them counts.
     pub scenarios: Vec<BenchScenario>,
 }
 
+/// A scenario entry in a benchmark with its rank thresholds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BenchScenario {
+    /// Scenario id.
     pub id: String,
     /// Score needed for each rank, ascending, one per entry in `ranks`.
     pub thresholds: Vec<f32>,
@@ -67,24 +83,33 @@ pub struct BenchScenario {
     pub tiers: BTreeMap<String, Vec<f32>>,
 }
 
+/// Energy result of one subcategory.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SubcategoryResult {
+    /// Display name of the subcategory.
     pub name: String,
+    /// Skill key of the subcategory.
     pub skill: String,
+    /// Best energy among its scenarios; `None` until one was played.
     pub energy: Option<f32>,
 }
 
+/// Energy results for a whole benchmark.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BenchmarkResult {
+    /// Per-subcategory results, in definition order.
     pub subcategories: Vec<SubcategoryResult>,
+    /// Harmonic mean of subcategory energies; `None` until every subcategory has a score.
     pub overall: Option<f32>,
 }
 
 impl BenchmarkDef {
+    /// Parses a benchmark from TOML source.
     pub fn from_toml(src: &str) -> Result<Self, toml::de::Error> {
         toml::from_str(src)
     }
 
+    /// Problems with this benchmark given the available scenario ids; empty when valid.
     pub fn validate(&self, scenario_ids: &[&str]) -> Vec<String> {
         let mut errs = Vec::new();
         if self.ranks.is_empty() {
@@ -145,6 +170,7 @@ impl BenchmarkDef {
         errs
     }
 
+    /// The tier with this id, if any.
     pub fn tier(&self, id: &str) -> Option<&BenchTier> {
         self.tiers.iter().find(|t| t.id == id)
     }
@@ -233,14 +259,17 @@ impl BenchmarkDef {
     }
 }
 
+/// Benchmarks shipped with the application.
 pub mod builtin {
     use super::BenchmarkDef;
 
+    /// Embedded `(file name, TOML source)` pairs of the built-in benchmarks.
     pub const SOURCES: &[(&str, &str)] = &[(
         "valorant-benchmark.toml",
         include_str!("../../../../content/benchmarks/valorant-benchmark.toml"),
     )];
 
+    /// Parses every built-in benchmark; panics if a bundled file is invalid.
     pub fn all() -> Vec<BenchmarkDef> {
         SOURCES
             .iter()
