@@ -923,6 +923,7 @@ mod tests {
             offset_deg,
             distance: Range::fixed(12.0),
             pitch_limit_deg: default_pitch_limit(),
+            on_screen: false,
         };
         def
     }

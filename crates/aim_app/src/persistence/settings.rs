@@ -72,6 +72,8 @@ pub struct Settings {
     /// Daily training goal, minutes (30–50 min captures most daily gains, Listman 2021).
     pub daily_goal_minutes: f32,
     pub target_color: [f32; 3],
+    /// Draw an arrow at the screen edge towards each target outside the view (scenarios only).
+    pub offscreen_arrows: bool,
 }
 
 impl Default for Settings {
@@ -89,6 +91,7 @@ impl Default for Settings {
             warmup_minutes: 5,
             daily_goal_minutes: 30.0,
             target_color: [1.0, 0.27, 0.33],
+            offscreen_arrows: true,
         }
     }
 }
@@ -210,6 +213,14 @@ mod tests {
         let settings: Settings = toml::from_str("fullscreen = false").unwrap();
         assert_eq!(settings.crosshair, Crosshair::default());
         assert!(!settings.fullscreen);
+    }
+
+    #[test]
+    fn offscreen_arrows_default_on_for_old_settings_files() {
+        let settings: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert!(settings.offscreen_arrows);
+        let off: Settings = toml::from_str("offscreen_arrows = false").unwrap();
+        assert!(!off.offscreen_arrows);
     }
 
     #[test]
