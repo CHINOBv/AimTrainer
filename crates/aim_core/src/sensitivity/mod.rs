@@ -7,10 +7,9 @@
 use serde::{Deserialize, Serialize};
 
 pub mod finder;
-mod games;
 pub mod matching;
 
-pub use games::{FovAxis, FovModel, Game, GameProfile};
+pub use crate::games::{FovAxis, FovModel, Game, GameProfile};
 
 const CM_PER_INCH: f64 = 2.54;
 

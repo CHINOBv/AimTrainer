@@ -2,10 +2,10 @@
 
 use super::*;
 use crate::map::MapDef;
+use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::{Vec3, ViewAngles};
 use aim_core::movement::MoveInput;
 use aim_core::scenario::FrameInput;
-use aim_core::valorant::HumanoidDims;
 use std::collections::HashSet;
 
 const DT: f32 = 1.0 / 60.0;

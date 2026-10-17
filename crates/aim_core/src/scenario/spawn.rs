@@ -4,9 +4,9 @@
 use super::MIN_SPHERE_HEIGHT;
 use super::def::{Shape, SpawnArea, TargetsDef};
 use super::session::Target;
+use crate::games::valorant::HumanoidDims;
 use crate::math::{Range, Vec3, ViewAngles, angle_between_deg};
 use crate::rng::Rng;
-use crate::valorant::HumanoidDims;
 
 const SPAWN_ATTEMPTS: usize = 24;
 

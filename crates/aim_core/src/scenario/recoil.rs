@@ -7,8 +7,8 @@
 //! Recoil moves the bullet, not the camera. The model and which of its numbers are
 //! estimates are documented in `docs/valorant-mechanics.md` ("Recoil").
 
+use crate::games::valorant::RecoilProfile;
 use crate::rng::Rng;
-use crate::valorant::RecoilProfile;
 
 /// Where one bullet of a spray goes relative to the crosshair.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -131,7 +131,7 @@ impl RecoilState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::valorant::Weapon;
+    use crate::games::valorant::Weapon;
 
     fn vandal() -> RecoilState {
         RecoilState::new(Weapon::Vandal.recoil().unwrap(), 0.25)

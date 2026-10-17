@@ -34,7 +34,7 @@ A PR that fails the first three is not ready for review.
 
 ### DRY: one source of truth for each piece of *knowledge*
 
-- **Constants:** each game constant exists once (`valorant.rs`), with its source documented once (`docs/valorant-mechanics.md`).
+- **Constants:** each game constant exists once (`games/valorant.rs`; other games' profiles in `games/profiles.rs`), with its source documented once (`docs/valorant-mechanics.md`).
 - **Shared rules:** reuse the existing function. Bots will move with `movement::step`, the same as the player and strafing targets do today. Never re-implement a rule in a different shape.
 - **Rule of three:** duplicate twice if the cases may still diverge; extract on the third occurrence.
 - **Same code is not always the same knowledge.** Do not merge code that looks alike but changes for different reasons, such as player bounds and target lanes.

@@ -5,13 +5,13 @@ use super::bot::{Bot, Brain, Ctx, PEEK_DELAY_SECS, head_of, yaw_of};
 use super::def::{ArenaDef, ArenaError, ArenaMode, SiteObjective, bot_profile};
 use crate::map::{DEFAULT_PLAYER_RADIUS, MapDef, SpawnKind};
 use aim_core::activity::{Activity, ActivityEvent};
+use aim_core::games::valorant::{HumanoidDims, Weapon, WeaponStats};
 use aim_core::math::{Vec3, ViewAngles, angle_between_deg};
 use aim_core::movement::{self, LocalVelocity, MovementProfile};
 use aim_core::rng::Rng;
 use aim_core::scenario::hit::{HitZone, Ray, ray_humanoid};
 use aim_core::scenario::{FrameInput, RunResult, shot_direction};
 use aim_core::sim::AimerProfile;
-use aim_core::valorant::{HumanoidDims, Weapon, WeaponStats};
 
 /// Player health. VALORANT players start a deathmatch life with 100 health and 50 armor;
 /// the arena gives the player health only, so a bot body shot matters (a simplification).

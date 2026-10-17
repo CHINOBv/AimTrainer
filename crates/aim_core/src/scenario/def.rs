@@ -2,8 +2,8 @@
 //! building blocks (target shape, spawn area, motion, fire mode, scoring), so new
 //! exercises are written as data instead of code. See `docs/scenarios.md`.
 
+use crate::games::valorant::Weapon;
 use crate::math::Range;
-use crate::valorant::Weapon;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
