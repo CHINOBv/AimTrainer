@@ -1,0 +1,4 @@
+# Crosshair preset as a VALORANT profile code (paste it in the game's crosshair import).
+id = "valorant-default"
+name = "VALORANT default"
+code = "0"

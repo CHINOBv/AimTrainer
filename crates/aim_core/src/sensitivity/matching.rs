@@ -23,6 +23,11 @@ impl Matching {
         axis: FovAxis::Horizontal,
         percent: 0.0,
     };
+    /// A common compromise between 0 % (micro adjustments) and 100 % (flicks to the edge).
+    pub const MDH_75: Matching = Matching::Monitor {
+        axis: FovAxis::Horizontal,
+        percent: 75.0,
+    };
     pub const MDH_100: Matching = Matching::Monitor {
         axis: FovAxis::Horizontal,
         percent: 100.0,
@@ -182,6 +187,11 @@ mod tests {
         assert!((cs2_to_valorant(Matching::Distance360) - 0.3143).abs() < 1e-4);
         assert!((cs2_to_valorant(Matching::MDH_0) - 0.2963).abs() < 1e-4);
         assert!((cs2_to_valorant(Matching::MDH_100) - 0.3046).abs() < 1e-4);
+        let mdh75 = cs2_to_valorant(Matching::MDH_75);
+        assert!(
+            mdh75 > cs2_to_valorant(Matching::MDH_0) && mdh75 < cs2_to_valorant(Matching::MDH_100),
+            "{mdh75}"
+        );
     }
 
     #[test]
