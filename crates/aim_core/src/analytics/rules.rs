@@ -222,7 +222,7 @@ pub mod builtin {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     type Expected = (
@@ -370,9 +370,9 @@ mod tests {
         ),
     ];
 
-    #[test]
-    fn builtin_rules_equal_the_former_rust_table() {
-        let want: Vec<Rule> = FORMER_RULES
+    /// The recommendation table as it was written in Rust before it moved to TOML.
+    pub(crate) fn former_rule_set() -> RuleSet {
+        let rules = FORMER_RULES
             .iter()
             .map(
                 |(metric, direction, threshold, verdict, meaning, rec)| Rule {
@@ -389,7 +389,15 @@ mod tests {
                 },
             )
             .collect();
-        assert_eq!(builtin::rules().rules, want);
+        RuleSet {
+            id: "recommendations".to_owned(),
+            rules,
+        }
+    }
+
+    #[test]
+    fn builtin_rules_equal_the_former_rust_table() {
+        assert_eq!(builtin::rules().rules, former_rule_set().rules);
     }
 
     #[test]

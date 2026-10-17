@@ -174,6 +174,7 @@ Full citations are in `docs/training-science.md`.
 | Approximate hitbox dimensions | Riot does not publish them; values are in `HumanoidDims` |
 | Provisional benchmark thresholds | Ranks are guidance, not a real comparison with other players |
 | No controlled study shows aim training transferring to in-game skill | Use the trainer alongside real games |
+| Determinism is per platform | `sin`, `cos` and `atan2` come from each OS's math library, so a replay recorded on one OS can drift when replayed on another, and simulated scores differ slightly between machines. Tests compare results computed in the same process, never pinned simulated numbers |
 
 ## Next steps
 
