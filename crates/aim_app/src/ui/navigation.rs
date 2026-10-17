@@ -8,8 +8,9 @@ use crate::game::{
 };
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::library::Library;
+use aim_core::activity::ActivityKind;
 use aim_core::scenario::{ScenarioDef, parse_run_key_full};
-use aim_core::training::routine::RoutineDef;
+use aim_core::training::routine::{PlannedRun, RoutineDef};
 use aim_world::arena::ArenaSession;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -61,16 +62,7 @@ impl Navigator<'_, '_> {
             UiAction::StartRoutineDef(def) => self.start_routine_def(&def, 0.0, 0, routine_seed()),
             UiAction::StartArena(id) => {
                 self.routine.0 = None;
-                match aim_world::arena::builtin::load(&id) {
-                    Some(Ok((def, map))) => match ArenaSession::new(def, map, routine_seed()) {
-                        Ok(session) => {
-                            start_arena(&mut self.commands, &mut self.next, ArenaRun::new(session))
-                        }
-                        Err(e) => bevy::log::error!("arena {id}: {e}"),
-                    },
-                    Some(Err(e)) => bevy::log::error!("arena {id}: {e}"),
-                    None => {}
-                }
+                self.launch_arena(&id, None);
             }
             UiAction::StartFinderTest { slot, sens } => {
                 self.routine.0 = None;
@@ -119,17 +111,21 @@ impl Navigator<'_, '_> {
                 let Some(p) = self.routine.0.as_mut() else {
                     return;
                 };
-                let Some(next) = p.plan.get(p.index + 1) else {
+                let Some(next) = p.plan.get(p.index + 1).cloned() else {
                     return;
                 };
                 let level = next.level(p.base_level);
-                let secs = next.duration_secs;
-                let Some(def) = self.library.scenario(&next.scenario_id) else {
-                    return;
+                let known = match next.kind {
+                    ActivityKind::Scenario => self.library.scenario(&next.scenario_id).is_some(),
+                    ActivityKind::Arena => {
+                        aim_world::arena::builtin::get(&next.scenario_id).is_some()
+                    }
                 };
-                let def = shaped(def, level, secs);
+                if !known {
+                    return;
+                }
                 p.index += 1;
-                start_run(&mut self.commands, &mut self.next, def);
+                self.start_planned(&next, level);
             }
             UiAction::Resume => {
                 if let Some(run) = self.run.as_mut() {
@@ -168,8 +164,7 @@ impl Navigator<'_, '_> {
     fn start_routine_def(&mut self, r: &RoutineDef, level: f32, index: usize, seed: u64) {
         let plan = r.plan(&self.library.scenarios, seed);
         let Some(run) = plan.get(index) else { return };
-        let (scenario, run_level, secs) =
-            (run.scenario_id.clone(), run.level(level), run.duration_secs);
+        let (run, run_level) = (run.clone(), run.level(level));
         self.routine.0 = Some(RoutineProgress {
             routine_id: r.id.clone(),
             name: r.name.clone(),
@@ -178,7 +173,33 @@ impl Navigator<'_, '_> {
             base_level: level,
             seed,
         });
-        self.start_with(&scenario, run_level, secs);
+        self.start_planned(&run, run_level);
+    }
+
+    /// Start one planned routine run: a scenario at its level, or an arena.
+    fn start_planned(&mut self, run: &PlannedRun, level: f32) {
+        match run.kind {
+            ActivityKind::Scenario => self.start_with(&run.scenario_id, level, run.duration_secs),
+            ActivityKind::Arena => self.launch_arena(&run.scenario_id, run.duration_secs),
+        }
+    }
+
+    /// Start an arena, keeping any routine in progress. `secs` overrides its length.
+    fn launch_arena(&mut self, id: &str, secs: Option<f32>) {
+        match aim_world::arena::builtin::load(id) {
+            Some(Ok((def, map))) => match ArenaSession::new(def, map, routine_seed()) {
+                Ok(session) => {
+                    let session = match secs {
+                        Some(s) => session.with_duration(s),
+                        None => session,
+                    };
+                    start_arena(&mut self.commands, &mut self.next, ArenaRun::new(session))
+                }
+                Err(e) => bevy::log::error!("arena {id}: {e}"),
+            },
+            Some(Err(e)) => bevy::log::error!("arena {id}: {e}"),
+            None => {}
+        }
     }
 }
 
@@ -472,5 +493,40 @@ mod tests {
             .map(|t| t.position)
             .collect();
         assert_eq!(a, b, "same seed, same targets for everyone");
+    }
+
+    #[test]
+    fn routines_sequence_scenarios_and_arenas() {
+        let mut w = world();
+        let r = RoutineDef::from_toml(
+            r#"
+            id = "mixed"
+            name = "Mixed"
+            [[blocks]]
+            scenario = "micro-adjust"
+            runs = 1
+            [[blocks]]
+            arena = "yard-deathmatch"
+            runs = 1
+            duration_secs = 60.0
+            "#,
+        )
+        .unwrap();
+        apply(&mut w, UiAction::StartRoutineDef(Box::new(r)));
+        assert_eq!(running(&w).as_deref(), Some("micro-adjust"));
+
+        apply(&mut w, UiAction::NextRoutineRun);
+        assert_eq!(
+            routine_index(&w),
+            Some(1),
+            "the routine continues into the arena"
+        );
+        let arena = w.resource::<ArenaRun>();
+        assert_eq!(arena.session.def().id, "yard-deathmatch~60s");
+        assert_eq!(arena.session.def().duration_secs, 60.0);
+        assert!(
+            !w.contains_resource::<Run>(),
+            "the scenario run was replaced"
+        );
     }
 }

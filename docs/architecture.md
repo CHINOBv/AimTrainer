@@ -104,7 +104,7 @@ This is where the codebase is designed to grow. Prefer extending one of these ov
 | A game to the sensitivity converter | A profile (yaw constant, FOV model) in `games/`; later a TOML file in `content/games/` | `aim_core` |
 | An analysis metric | A pure function `fn(&Telemetry) -> Metric` in `analytics/` | `aim_core` |
 | A recommendation rule | Data that maps weaknesses to scenarios or routines, evaluated in `training/recommend` | `aim_core` + content |
-| A new activity type (deathmatch round, map drill) | A new `Activity` implementation (see below) | `aim_core` + new app plugin |
+| A new activity type (deathmatch round, map drill) | A new `Activity` implementation and `ActivityKind` variant (see below) | `aim_core` or a domain crate + an app plugin |
 | A screen or panel | A page or organism in `aim_app/src/ui/` | `aim_app` |
 | A storage backend or external service | Implement the core's port trait in `aim_app/src/persistence/` or an integration crate | adapter |
 
@@ -129,20 +129,25 @@ FrameInput { dt, view angles, buttons, move keys }  ──►  Session::update  
 - **No hidden inputs:** the session reads nothing that is not in `FrameInput`, such as globals, wall-clock time or the OS.
 - **Simulation runs at the render frame rate,** with the real `dt`. Mouse look is applied in the same frame it arrives; it is never smoothed or delayed (see the latency rules in the coding standards).
 
-### Planned generalization: activities
+### Activities
 
-Today a routine sequences **scenarios**. When the second kind of activity arrives (deathmatch with bots, a map drill, a game-mixed activity in the style of Aimstars), introduce the trait below, **not before**:
+A routine sequences **activities**. `aim_core::activity` defines the trait, the shared event vocabulary and `ActivityKind` (which kind a routine block names):
 
 ```rust
-/// Anything the player can do for a while that produces a result and telemetry.
+/// Anything the player can do for a while that produces a result.
 pub trait Activity {
-    fn update(&mut self, input: &FrameInput) -> Vec<ActivityEvent>;
+    fn update(&mut self, input: FrameInput) -> Vec<ActivityEvent>;
     fn is_finished(&self) -> bool;
-    fn result(&self) -> ActivityResult;
+    fn result(&self) -> RunResult;
+    fn time(&self) -> f32;
+    fn view(&self) -> Option<ViewAngles> { None }
 }
 ```
 
-The scenario `Session` becomes its first implementation, and routine blocks reference activities instead of scenario IDs. Until then, keep `Session` concrete (YAGNI).
+- The scenario `Session` is the first implementation. `aim_world::arena::ArenaSession` is the second; the trait lives in `aim_core`, so `aim_world` depends on the core and not the other way round.
+- Each session keeps its own rich event type (`SessionEvent`, `ArenaEvent`) for its own renderer. `ActivityEvent` holds only what every activity shares.
+- A routine `Block` names a `scenario` or an `arena`. `PlannedRun::kind` tells the app which plugin starts the run. Arena ids are checked by `RoutineDef::validate_arenas`, because only the caller knows the arena catalogue.
+- To add a third activity, implement the trait, add an `ActivityKind` variant and handle it where the navigator starts planned runs.
 
 ## Bevy adapter rules
 

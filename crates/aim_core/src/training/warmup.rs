@@ -46,6 +46,7 @@ pub fn queue_warmup(minutes: f32) -> RoutineDef {
             WARMUP_ORDER[2 + (i - WARMUP_ORDER.len()) % (WARMUP_ORDER.len() - 2)]
         };
         blocks.push(Block {
+            arena: None,
             scenario: scenario.to_owned(),
             runs: Some(1),
             minutes: None,

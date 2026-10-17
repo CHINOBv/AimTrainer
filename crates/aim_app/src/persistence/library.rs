@@ -100,7 +100,16 @@ impl Library {
         let ids: Vec<&str> = lib.scenarios.iter().map(|d| d.id.as_str()).collect();
         let mut bad_routines = Vec::new();
         for r in &lib.routines {
-            for p in r.validate(&lib.scenarios) {
+            let arenas: Vec<String> = aim_world::arena::builtin::all()
+                .into_iter()
+                .map(|a| a.id)
+                .collect();
+            let arenas: Vec<&str> = arenas.iter().map(String::as_str).collect();
+            let problems = r
+                .validate(&lib.scenarios)
+                .into_iter()
+                .chain(r.validate_arenas(&arenas));
+            for p in problems {
                 lib.errors.push(format!("routine {}: {p}", r.id));
                 bad_routines.push(r.id.clone());
             }

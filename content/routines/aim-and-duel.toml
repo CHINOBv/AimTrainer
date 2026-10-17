@@ -1,0 +1,33 @@
+# Drills, then the same skills against bots that move and shoot back. No study yet shows
+# aim-trainer transfer to games, so docs/training-science.md recommends pairing drills with
+# deathmatch-style play at head level; this routine puts both in one session.
+id = "aim-and-duel"
+name = "Aim and Duel"
+description = "Ten minutes of clicking and switching drills, then two shortened deathmatches and an angle-clearing run on original maps."
+
+[[blocks]]
+scenario = "track-precise"
+minutes = 2.0
+note = "Smooth tracking first: settle the hand."
+
+[[blocks]]
+scenario = "micro-adjust"
+minutes = 3.0
+note = "Small corrections at head height."
+
+[[blocks]]
+scenario = "switch-wide"
+minutes = 3.0
+note = "Fast target switching with a clean stop."
+
+[[blocks]]
+arena = "yard-deathmatch"
+runs = 2
+duration_secs = 90.0
+note = "Now with bots: pre-aim head height, take first-shot duels."
+
+[[blocks]]
+arena = "angles-lab-clear"
+runs = 1
+duration_secs = 90.0
+note = "Clear the angles in order with your crosshair already placed."

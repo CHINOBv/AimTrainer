@@ -68,6 +68,7 @@ pub fn personalized(
     }
 
     let warmup = Block {
+        arena: None,
         scenario: "track-precise".to_owned(),
         runs: Some(1),
         minutes: None,
@@ -78,6 +79,7 @@ pub fn personalized(
     let mut blocks = vec![warmup];
     for ((id, energy), n) in subs.iter().zip(runs) {
         blocks.push(Block {
+            arena: None,
             scenario: (*id).to_owned(),
             runs: Some(n as u32),
             minutes: None,

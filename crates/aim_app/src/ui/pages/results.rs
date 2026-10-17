@@ -9,9 +9,11 @@ use crate::persistence::settings::{Paths, Settings};
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::analysis_panel::RunReport;
 use crate::ui::organisms::results_card::{ResultsContext, results_card};
+use aim_core::activity::ActivityKind;
 use aim_core::analytics::analyze;
 use aim_core::scenario::Recording;
 use aim_core::sensitivity::Sensitivity;
+use aim_core::training::routine::PlannedRun;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
@@ -60,6 +62,21 @@ fn refresh(cache: &mut ReportCache, last: &LastResult, paths: &Paths, lib: &Libr
     cache.0 = Some((key, report));
 }
 
+/// Display name of a planned routine run, or `None` when its scenario or arena is unknown.
+fn planned_name(run: &PlannedRun, library: &Library) -> Option<String> {
+    match run.kind {
+        ActivityKind::Scenario => library.scenario(&run.scenario_id).map(|d| d.name.clone()),
+        ActivityKind::Arena => aim_world::arena::builtin::get(&run.scenario_id).map(|a| a.name),
+    }
+}
+
+/// The arena an arena result came from (a routine may have shortened it to `id~90s`).
+fn arena_base(last: &LastResult, id: &str) -> Option<String> {
+    let (base, _, _) = aim_core::scenario::parse_run_key_full(id);
+    (last.recording.is_none() && aim_world::arena::builtin::get(base).is_some())
+        .then(|| base.to_owned())
+}
+
 /// Inputs, paths and what deciding the Retry action needs beyond the navigator.
 #[derive(SystemParam)]
 struct RetryContext<'w> {
@@ -94,8 +111,7 @@ fn results(
     let next_run = nav
         .routine()
         .and_then(|p| p.plan.get(p.index + 1))
-        .and_then(|p| nav.library().scenario(&p.scenario_id))
-        .map(|d| d.name.clone());
+        .and_then(|p| planned_name(p, nav.library()));
     // Arena results retry the arena; scenario results retry the scenario (with its level).
     let id = &last.result.scenario_id;
     let challenge =
@@ -121,8 +137,8 @@ fn results(
         }
     } else if let Some((slot, sens)) = finder_next {
         crate::ui::UiAction::StartFinderTest { slot, sens }
-    } else if last.recording.is_none() && aim_world::arena::builtin::get(id).is_some() {
-        crate::ui::UiAction::StartArena(id.clone())
+    } else if let Some(arena) = arena_base(&last, id) {
+        crate::ui::UiAction::StartArena(arena)
     } else {
         crate::ui::UiAction::Retry(id.clone())
     };
@@ -141,6 +157,34 @@ fn results(
 
 #[cfg(test)]
 mod tests {
+    use super::planned_name;
+
+    #[test]
+    fn planned_runs_are_named_from_their_scenario_or_arena() {
+        let library = crate::persistence::library::Library {
+            scenarios: aim_core::scenario::builtin::all(),
+            routines: Vec::new(),
+            benchmarks: Vec::new(),
+            methods: Vec::new(),
+            errors: Vec::new(),
+        };
+        let run = |kind, id: &str| aim_core::training::routine::PlannedRun {
+            scenario_id: id.into(),
+            kind,
+            block: 0,
+            note: String::new(),
+            difficulty: 0.0,
+            duration_secs: None,
+        };
+        use aim_core::activity::ActivityKind::{Arena, Scenario};
+        assert_eq!(
+            planned_name(&run(Arena, "yard-deathmatch"), &library).as_deref(),
+            Some("Yard Deathmatch")
+        );
+        assert!(planned_name(&run(Scenario, "micro-adjust"), &library).is_some());
+        assert_eq!(planned_name(&run(Arena, "nope"), &library), None);
+    }
+
     use bevy::ecs::system::assert_is_system;
     use bevy::prelude::Result;
 

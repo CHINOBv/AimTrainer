@@ -111,7 +111,14 @@ note = "Warm-up"
 [[blocks]]
 scenario = "micro-adjust"
 runs = 3                     # an exact run count wins over minutes
+
+[[blocks]]
+arena = "yard-deathmatch"    # an arena instead of a scenario (see maps.md)
+runs = 2                     # arena blocks need `runs`
+duration_secs = 90           # optional: shorter arena runs, stored as `yard-deathmatch~90s`
 ```
+
+A block names a `scenario` or an `arena`, never both. Routines are sequences of *activities*: the scenario session and the arena session both implement `aim_core::activity::Activity`. `content/routines/aim-and-duel.toml` mixes drills with deathmatch.
 
 ## Checking your files
 

@@ -356,3 +356,54 @@ fn an_arena_for_another_map_is_rejected() {
         Err(ArenaError::Invalid(_))
     ));
 }
+
+#[test]
+fn an_arena_session_is_an_activity_with_the_same_result() {
+    use aim_core::activity::{Activity, ActivityEvent};
+    let (def, map) = builtin("yard-deathmatch");
+    let mut direct = ArenaSession::new(def.clone(), map.clone(), 5).unwrap();
+    let direct_events = run(&mut direct, 300.0, perfect);
+
+    let mut session = ArenaSession::new(def, map, 5).unwrap();
+    let mut events = Vec::new();
+    let mut t = 0.0;
+    while !Activity::is_finished(&session) && t < 300.0 {
+        let input = perfect(&session);
+        let activity: &mut dyn Activity = &mut session;
+        events.extend(activity.update(input));
+        t += DT;
+    }
+    assert_eq!(
+        Activity::result(&session),
+        direct.result(),
+        "same seed and inputs, same result"
+    );
+    assert_eq!(Activity::view(&session), Some(session.view()));
+    let activity_kills = events
+        .iter()
+        .filter(|e| matches!(e, ActivityEvent::Kill { .. }))
+        .count();
+    let arena_kills = direct_events
+        .iter()
+        .filter(|e| matches!(e, ArenaEvent::BotKilled { .. }))
+        .count();
+    assert!(activity_kills > 0);
+    assert_eq!(activity_kills, arena_kills);
+    assert_eq!(events.last(), Some(&ActivityEvent::Finished));
+}
+
+#[test]
+fn a_shortened_arena_ends_early_under_its_own_key() {
+    let (def, map) = builtin("yard-deathmatch");
+    let mut s = ArenaSession::new(def, map, 3).unwrap().with_duration(10.0);
+    assert_eq!(s.def().id, "yard-deathmatch~10s");
+    run(&mut s, 300.0, idle);
+    assert!(s.is_finished());
+    assert!((s.time() - 10.0).abs() < 1e-3, "{}", s.time());
+    assert_eq!(s.result().scenario_id, "yard-deathmatch~10s");
+    let (def, map) = builtin("yard-deathmatch");
+    let unchanged = ArenaSession::new(def.clone(), map, 3)
+        .unwrap()
+        .with_duration(0.0);
+    assert_eq!(unchanged.def(), &def);
+}

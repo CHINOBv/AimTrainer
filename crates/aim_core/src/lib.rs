@@ -4,6 +4,7 @@
 //! movement, scenarios, scoring) so it can be unit-tested without a window or GPU.
 //! Front-ends only translate input into [`scenario::FrameInput`] and draw the targets.
 
+pub mod activity;
 pub mod analytics;
 pub mod crosshair;
 pub mod fov;
