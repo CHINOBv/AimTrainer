@@ -157,3 +157,30 @@ fn geometry_that_breaks_map_rules_is_invalid() {
         Err(GltfMapError::Parse(_))
     ));
 }
+
+#[test]
+fn absurdly_deep_node_trees_are_rejected_instead_of_overflowing_the_stack() {
+    let depth = 200;
+    let nodes: Vec<String> = (0..depth)
+        .map(|i| {
+            if i + 1 < depth {
+                format!(r#"{{"name":"group","children":[{}]}}"#, i + 1)
+            } else {
+                r#"{"name":"group"}"#.to_owned()
+            }
+        })
+        .collect();
+    let json = format!(
+        r#"{{"asset":{{"version":"2.0"}},"scene":0,"scenes":[{{"nodes":[0]}}],"nodes":[{}]}}"#,
+        nodes.join(",")
+    );
+    let Err(GltfMapError::Convention(problems)) =
+        MapDef::from_gltf(json.as_bytes(), "deep", "Deep")
+    else {
+        panic!("expected a convention error");
+    };
+    assert!(
+        problems.iter().any(|p| p.contains("nested deeper than")),
+        "{problems:?}"
+    );
+}
