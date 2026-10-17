@@ -4,6 +4,7 @@
 use crate::persistence::settings::Paths;
 use aim_core::scenario::{self, ScenarioDef};
 use aim_core::training::benchmark::{self, BenchmarkDef};
+use aim_core::training::method::{self, MethodDef};
 use aim_core::training::routine::{self, RoutineDef};
 use bevy::prelude::Resource;
 use std::fs;
@@ -14,6 +15,8 @@ pub struct Library {
     pub scenarios: Vec<ScenarioDef>,
     pub routines: Vec<RoutineDef>,
     pub benchmarks: Vec<BenchmarkDef>,
+    /// Weekly training methods (VDIM-style plans).
+    pub methods: Vec<MethodDef>,
     /// Human-readable load problems, shown in the menu.
     pub errors: Vec<String>,
 }
@@ -50,6 +53,7 @@ impl Library {
             scenarios: scenario::builtin::all(),
             routines: routine::builtin::all(),
             benchmarks: benchmark::builtin::all(),
+            methods: method::builtin::all(),
             errors: Vec::new(),
         };
 
@@ -82,6 +86,16 @@ impl Library {
             }
         }
 
+        // Custom methods live next to the routines folder (`<config>/methods`).
+        if let Some(dir) = paths.routines_dir.parent().map(|p| p.join("methods")) {
+            for (file, src) in toml_files(&dir) {
+                match MethodDef::from_toml(&src) {
+                    Ok(m) => upsert(&mut lib.methods, m, |m| &m.id),
+                    Err(e) => lib.errors.push(format!("methods/{file}: {e}")),
+                }
+            }
+        }
+
         // Routines and benchmarks can only be checked once every scenario is known.
         let ids: Vec<&str> = lib.scenarios.iter().map(|d| d.id.as_str()).collect();
         let mut bad_routines = Vec::new();
@@ -99,6 +113,14 @@ impl Library {
             }
         }
         lib.routines.retain(|r| !bad_routines.contains(&r.id));
+        let mut bad_methods = Vec::new();
+        for m in &lib.methods {
+            for p in m.validate(&lib.routines, &lib.benchmarks) {
+                lib.errors.push(format!("method {}: {p}", m.id));
+                bad_methods.push(m.id.clone());
+            }
+        }
+        lib.methods.retain(|m| !bad_methods.contains(&m.id));
         lib.benchmarks.retain(|b| !bad_benchmarks.contains(&b.id));
         lib.scenarios
             .sort_by(|a, b| (a.category, &a.name).cmp(&(b.category, &b.name)));

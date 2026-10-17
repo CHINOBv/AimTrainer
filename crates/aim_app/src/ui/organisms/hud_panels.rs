@@ -2,7 +2,7 @@
 
 use crate::ui::UiAction;
 use crate::ui::atoms::{BAD, GOOD, big};
-use aim_core::scenario::Session;
+use aim_core::scenario::{Session, parse_run_key};
 use bevy_egui::egui::{self, Align2, FontId, RichText};
 
 pub fn run_status(ctx: &egui::Context, s: &Session) {
@@ -14,6 +14,10 @@ pub fn run_status(ctx: &egui::Context, s: &Session) {
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.label(big(format!("{:.1}", s.remaining()), 28.0));
+                let (_, level) = parse_run_key(&s.def().id);
+                if level != 0.0 {
+                    ui.small(format!("difficulty {level:+.2}"));
+                }
                 ui.label(format!(
                     "{}  ·  score {:.0}  ·  {accuracy:.0}% acc  ·  {} kills",
                     s.def().name,

@@ -29,6 +29,14 @@ impl Plugin for UiPlugin {
 pub enum UiAction {
     StartScenario(String),
     StartRoutine(String),
+    /// Start a routine at a difficulty level, from a given run of the plan made with `seed`
+    /// (resuming a split method day).
+    StartRoutineAt {
+        routine: String,
+        level: f32,
+        index: usize,
+        seed: u64,
+    },
     NextRoutineRun,
     Retry(String),
     Resume,

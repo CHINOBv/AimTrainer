@@ -9,3 +9,4 @@ pub mod routine_list;
 pub mod scenario_browser;
 pub mod sens_converter;
 pub mod settings_panels;
+pub mod today_panel;
