@@ -2,45 +2,44 @@
 
 use crate::persistence::settings::Paths;
 use aim_core::scenario::RunResult;
+use aim_core::training::progress::RunRecord;
+use aim_core::training::store::{RunStore, record_of};
 use bevy::prelude::Resource;
-use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const HEADER: &str = "timestamp,scenario,score,accuracy,kills,kills_per_min,avg_time_to_kill,headshot_rate,moving_shots,duration_secs";
 /// Rows written before `duration_secs` existed were full-length runs.
 const LEGACY_DURATION_SECS: f32 = 60.0;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Record {
-    pub timestamp: u64,
-    pub scenario: String,
-    pub score: f32,
-    pub accuracy: f32,
-    pub duration_secs: f32,
-}
-
+/// Run history kept in `history.csv`: the app's adapter for the core's [`RunStore`] port.
+/// The file keeps every column of the result; the store keeps what the core queries.
 #[derive(Resource, Debug, Default)]
 pub struct History {
-    pub records: Vec<Record>,
+    records: Vec<RunRecord>,
+    file: Option<PathBuf>,
 }
 
 impl History {
     pub fn load(paths: &Paths) -> Self {
+        let file = Some(paths.history_file.clone());
         let Ok(src) = fs::read_to_string(&paths.history_file) else {
-            return Self::default();
+            return Self {
+                records: Vec::new(),
+                file,
+            };
         };
         let records = src
             .lines()
             .skip(1)
             .filter_map(|line| {
                 let f: Vec<&str> = line.split(',').collect();
-                Some(Record {
+                Some(RunRecord {
                     timestamp: f.first()?.parse().ok()?,
                     scenario: f.get(1)?.to_string(),
                     score: f.get(2)?.parse().ok()?,
-                    accuracy: f.get(3)?.parse().ok()?,
                     duration_secs: f
                         .get(9)
                         .and_then(|d| d.parse().ok())
@@ -48,89 +47,54 @@ impl History {
                 })
             })
             .collect();
-        Self { records }
+        Self { records, file }
     }
 
-    /// History in the core's format, for progress signals (readiness, fatigue, goals).
-    pub fn run_records(&self) -> Vec<aim_core::training::progress::RunRecord> {
-        self.records
-            .iter()
-            .map(|r| aim_core::training::progress::RunRecord {
-                timestamp: r.timestamp,
-                scenario: r.scenario.clone(),
-                score: r.score,
-                duration_secs: r.duration_secs,
-            })
-            .collect()
-    }
-
-    pub fn best(&self, scenario: &str) -> Option<f32> {
-        self.records
-            .iter()
-            .filter(|r| r.scenario == scenario)
-            .map(|r| r.score)
-            .reduce(f32::max)
-    }
-
-    pub fn bests(&self) -> HashMap<String, f32> {
-        let mut out = HashMap::new();
-        for r in &self.records {
-            let e = out.entry(r.scenario.clone()).or_insert(r.score);
-            *e = e.max(r.score);
-        }
-        out
-    }
-
-    pub fn recent(&self, scenario: &str, n: usize) -> Vec<f32> {
-        let mut v: Vec<f32> = self
-            .records
-            .iter()
-            .filter(|r| r.scenario == scenario)
-            .map(|r| r.score)
-            .collect();
-        let skip = v.len().saturating_sub(n);
-        v.drain(..skip);
-        v
-    }
-
-    pub fn append(&mut self, paths: &Paths, r: &RunResult) {
+    /// Keep a run that finished now.
+    pub fn record(&mut self, r: &RunResult) {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_secs());
-        let new_file = !paths.history_file.exists();
-        let line = format!(
-            "{timestamp},{},{:.1},{:.4},{},{:.2},{},{:.4},{},{:.1}",
-            r.scenario_id,
-            r.score,
-            r.accuracy,
-            r.kills,
-            r.kills_per_min,
-            r.avg_time_to_kill
-                .map_or(String::new(), |t| format!("{t:.4}")),
-            r.headshot_rate,
-            r.moving_shots,
-            r.duration_secs,
-        );
-        let written = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&paths.history_file)
-            .and_then(|mut f| {
-                if new_file {
-                    writeln!(f, "{HEADER}")?;
-                }
-                writeln!(f, "{line}")
-            });
-        if let Err(e) = written {
-            bevy::log::error!("could not write history: {e}");
+        self.append(r, timestamp);
+    }
+}
+
+impl RunStore for History {
+    fn runs(&self) -> &[RunRecord] {
+        &self.records
+    }
+
+    fn append(&mut self, r: &RunResult, timestamp: u64) {
+        if let Some(path) = &self.file {
+            let new_file = !path.exists();
+            let line = format!(
+                "{timestamp},{},{:.1},{:.4},{},{:.2},{},{:.4},{},{:.1}",
+                r.scenario_id,
+                r.score,
+                r.accuracy,
+                r.kills,
+                r.kills_per_min,
+                r.avg_time_to_kill
+                    .map_or(String::new(), |t| format!("{t:.4}")),
+                r.headshot_rate,
+                r.moving_shots,
+                r.duration_secs,
+            );
+            let written = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .and_then(|mut f| {
+                    if new_file {
+                        writeln!(f, "{HEADER}")?;
+                    }
+                    writeln!(f, "{line}")
+                });
+            if let Err(e) = written {
+                bevy::log::error!("could not write history: {e}");
+            }
         }
-        self.records.push(Record {
-            timestamp,
-            scenario: r.scenario_id.clone(),
-            score: r.score,
-            accuracy: r.accuracy,
-            duration_secs: r.duration_secs,
-        });
+        self.records.push(record_of(r, timestamp));
     }
 }
 
@@ -159,7 +123,7 @@ mod tests {
         )
         .unwrap();
         let mut h = History::load(&paths);
-        assert_eq!(h.records[0].duration_secs, LEGACY_DURATION_SECS);
+        assert_eq!(h.runs()[0].duration_secs, LEGACY_DURATION_SECS);
         let result = RunResult {
             scenario_id: "micro-adjust~20s".into(),
             score: 50.0,
@@ -172,11 +136,11 @@ mod tests {
             expired: 0,
             duration_secs: 20.0,
         };
-        h.append(&paths, &result);
+        h.record(&result);
         let reloaded = History::load(&paths);
-        assert_eq!(reloaded.records.len(), 2);
-        assert_eq!(reloaded.records[1].duration_secs, 20.0);
-        assert_eq!(reloaded.run_records()[1].duration_secs, 20.0);
+        assert_eq!(reloaded.runs().len(), 2);
+        assert_eq!(reloaded.runs()[1].duration_secs, 20.0);
+        assert_eq!(reloaded.best("micro-adjust~20s"), Some(50.0));
         fs::remove_dir_all(&dir).unwrap();
     }
 }

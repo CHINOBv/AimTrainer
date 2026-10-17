@@ -17,6 +17,7 @@ use aim_core::scenario::{
 use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::finder::{SensFinder, Slot};
 use aim_core::training::routine::PlannedRun;
+use aim_core::training::store::RunStore;
 use aim_core::valorant::HumanoidDims;
 use bevy::camera::{PerspectiveProjection, Projection};
 use bevy::ecs::system::SystemParam;
@@ -345,7 +346,7 @@ impl RunFinisher<'_, '_> {
             notes.insert(0, finder_note(finder));
         } else {
             // Finder test runs do not enter the regular history.
-            self.history.append(&self.paths, &result);
+            self.history.record(&result);
         }
         let adaptive_next = run.adaptive.then(|| {
             let (base, _) = parse_run_key(&session.def().id);
@@ -390,19 +391,19 @@ pub(crate) fn finder_note(f: &SensFinder) -> String {
 /// Daily-goal and fatigue lines for the results screen.
 pub(crate) fn progress_notes(history: &History, goal_minutes: f32) -> Vec<String> {
     use aim_core::training::progress;
-    let records = history.run_records();
+    let records = history.runs();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
     let offset = chrono::Local::now().offset().local_minus_utc() as i64;
     let mut notes = vec![crate::ui::progress_goal_text(&progress::daily_goal(
-        &records,
+        records,
         goal_minutes,
         now,
         offset,
     ))];
     notes.extend(
-        progress::fatigue(progress::current_session(&records))
+        progress::fatigue(progress::current_session(records))
             .iter()
             .map(crate::ui::progress_fatigue_text),
     );

@@ -1,7 +1,10 @@
-//! Where the player is in the weekly method: chosen tier and today's (possibly split) day.
+//! Where the player is in the weekly method (chosen tier and today's possibly split day)
+//! and in every other routine played today. The resume rules live in
+//! `aim_core::training::resume`; this file stores them.
 
 use crate::game::{ActiveRoutine, AppState};
 use crate::persistence::settings::Paths;
+use aim_core::training::resume::{PositionStore, RoutinePosition, record_played};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -16,20 +19,34 @@ impl Plugin for MethodProgressPlugin {
     }
 }
 
-/// A finished run of today's method session moves its saved position forward.
+/// A finished routine run moves its saved position forward: today's method day, or the
+/// routine's own position.
 fn advance_day(
     routine: Res<ActiveRoutine>,
     mut progress: ResMut<MethodProgress>,
     paths: Res<Paths>,
 ) {
     let Some(p) = routine.0.as_ref() else { return };
-    let Some(day) = progress.today.as_mut() else {
-        return;
-    };
-    if day.routine == p.routine_id && day.seed == p.seed {
-        day.next_index = day.next_index.max(p.index + 1);
-        progress.save(&paths);
+    match progress.today.as_mut() {
+        Some(day) if day.routine == p.routine_id && day.seed == p.seed => {
+            day.next_index = day.next_index.max(p.index + 1);
+        }
+        _ => record_played(
+            &mut *progress,
+            &local_date(),
+            &p.routine_id,
+            p.base_level,
+            p.seed,
+            p.index,
+            p.plan.len(),
+        ),
     }
+    progress.save(&paths);
+}
+
+/// Today's local date, `YYYY-MM-DD`: sessions follow the player's clock.
+pub fn local_date() -> String {
+    chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
 #[derive(Resource, Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -38,25 +55,20 @@ pub struct MethodProgress {
     /// Tier the player picked; `None` follows the benchmark suggestion.
     pub tier: Option<String>,
     pub today: Option<DayProgress>,
+    /// Other routines played today, so a split session resumes where it stopped.
+    pub routines: Vec<RoutinePosition>,
 }
 
-/// A method day in progress. Matching `date` and `routine` means "resume", anything else
-/// means a new day.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct DayProgress {
-    /// Local date, `YYYY-MM-DD`.
-    pub date: String,
-    pub routine: String,
-    pub level: f32,
-    pub seed: u64,
-    /// Index of the next run to play.
-    pub next_index: usize,
-    pub total_runs: usize,
-}
+/// A method day in progress (same shape and rules as any routine position).
+pub type DayProgress = RoutinePosition;
 
-impl DayProgress {
-    pub fn is_done(&self) -> bool {
-        self.next_index >= self.total_runs
+impl PositionStore for MethodProgress {
+    fn positions(&self) -> &[RoutinePosition] {
+        &self.routines
+    }
+
+    fn save_positions(&mut self, positions: Vec<RoutinePosition>) {
+        self.routines = positions;
     }
 }
 
@@ -85,11 +97,9 @@ impl MethodProgress {
         }
     }
 
-    /// Today's day progress if it is still for `date` and `routine`.
-    pub fn resumable(&self, date: &str, routine: &str) -> Option<&DayProgress> {
-        self.today
-            .as_ref()
-            .filter(|d| d.date == date && d.routine == routine)
+    /// Today's method day if it is still for `date` and `routine`.
+    pub fn method_day(&self, date: &str, routine: &str) -> Option<&DayProgress> {
+        self.today.as_ref().filter(|d| d.resumes(date, routine))
     }
 }
 
@@ -118,10 +128,19 @@ mod tests {
         let p = MethodProgress {
             tier: None,
             today: Some(day("2026-10-17")),
+            routines: Vec::new(),
         };
-        assert!(p.resumable("2026-10-17", "r").is_some());
-        assert!(p.resumable("2026-10-18", "r").is_none());
-        assert!(p.resumable("2026-10-17", "other").is_none());
+        assert!(p.method_day("2026-10-17", "r").is_some());
+        assert!(p.method_day("2026-10-18", "r").is_none());
+        assert!(p.method_day("2026-10-17", "other").is_none());
+    }
+
+    #[test]
+    fn files_saved_before_routine_positions_still_load() {
+        let old = "tier = \"advanced\"\n[today]\ndate = \"2026-10-17\"\nroutine = \"r\"\nlevel = 0.0\nseed = 1\nnext_index = 3\ntotal_runs = 10\n";
+        let p: MethodProgress = toml::from_str(old).unwrap();
+        assert_eq!(p.today, Some(day("2026-10-17")));
+        assert!(p.routines.is_empty());
     }
 
     #[test]
@@ -129,6 +148,7 @@ mod tests {
         let p = MethodProgress {
             tier: Some("advanced".into()),
             today: Some(day("2026-10-17")),
+            routines: vec![day("2026-10-17")],
         };
         let s = toml::to_string_pretty(&p).unwrap();
         assert_eq!(toml::from_str::<MethodProgress>(&s).unwrap(), p);

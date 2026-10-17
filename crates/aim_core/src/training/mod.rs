@@ -6,5 +6,7 @@ pub mod challenge;
 pub mod method;
 pub mod playlist;
 pub mod progress;
+pub mod resume;
 pub mod routine;
+pub mod store;
 pub mod warmup;
