@@ -20,7 +20,7 @@ Branch: `feat/roadmap-completion` (worktree `../CustomAimTrainer-worktrees/roadm
 
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
-| T1 | S3 | inline | done (CI rerun pending) | e25f274, 058b816 |
+| T1 | S3 | inline | done | e25f274, 058b816 |
 | T2 | S4 | inline | pending | |
 | T3 | S5 | inline/delegated after research | pending | |
 | T4 | S6 | inline | pending | |
@@ -34,3 +34,5 @@ Branch: `feat/roadmap-completion` (worktree `../CustomAimTrainer-worktrees/roadm
 
 - L1 (2026-10-17) Goal set by the user (S1). PR #1 was merged by the user; Windows CI failed on `Command::as_str` dead code under `-D warnings` → fixed (e25f274). License MIT chosen by default (owner can switch).
 - L2 Research launched: VALORANT crosshair codes, sensitivity/FOV data and monitor-distance math, Riot VAL-MATCH-V1 schema/policy, Vandal/Phantom recoil.
+- L3 Phases 2–8 implemented and committed (see Tasks). Deviations recorded in `docs/roadmap.md` status table.
+- L4 Feature analysis written (`docs/feature-analysis.md`): 12 gaps → F1–F12. F7 (agent) and F9 (agent) integrated; sim made recoil-aware so burst drills calibrate (contender 0.62–0.80). Verification: `cargo test --workspace` green, `cargo clippy --workspace --all-targets -D warnings` clean on Linux and the Windows target. App-side mouse/camera/HUD changes need a playtest.
