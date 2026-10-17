@@ -136,6 +136,18 @@ impl MethodDef {
             .expect("validated methods have at least one tier")
     }
 
+    /// The method's benchmark at the tier played at `tier`'s level, so a player is measured
+    /// on the runs they train (falls back to the benchmark as authored when no benchmark tier
+    /// has that level). Tier suggestion keeps reading the benchmark as authored.
+    pub fn benchmark_for(&self, tier: &Tier, benchmarks: &[BenchmarkDef]) -> Option<BenchmarkDef> {
+        let b = benchmarks
+            .iter()
+            .find(|b| Some(&b.id) == self.benchmark.as_ref())?;
+        b.tier_at_level(tier.level)
+            .and_then(|t| b.at_tier(&t.id))
+            .or_else(|| Some(b.clone()))
+    }
+
     /// Day whose focus contains the weakest benchmark subcategory (unscored counts as 0).
     pub fn weakest_day(&self, result: &BenchmarkResult) -> Option<Weekday> {
         let weakest = result
@@ -326,5 +338,67 @@ mod tests {
         assert_eq!(Weekday::from_monday_index(0), Weekday::Monday);
         assert_eq!(Weekday::from_monday_index(6), Weekday::Sunday);
         assert_eq!(Weekday::from_monday_index(7), Weekday::Monday);
+    }
+
+    #[test]
+    fn each_tier_is_measured_on_the_benchmark_tier_at_its_level() {
+        let m = method();
+        let benchmarks = benchmark::builtin::all();
+        let base = &benchmarks[0].subcategories[0].scenarios[0];
+        for (tier, level) in [("novice", -0.5), ("intermediate", 0.0), ("advanced", 0.5)] {
+            let b = m.benchmark_for(m.tier(tier).unwrap(), &benchmarks).unwrap();
+            let s = &b.subcategories[0].scenarios[0];
+            assert_eq!(s.id, crate::scenario::run_key(&base.id, level), "{tier}");
+        }
+        // A level without a benchmark tier falls back to the benchmark as authored.
+        let odd = Tier {
+            id: "odd".into(),
+            name: "Odd".into(),
+            level: 0.25,
+            up_to_energy: None,
+        };
+        assert_eq!(
+            m.benchmark_for(&odd, &benchmarks).as_ref(),
+            benchmarks.first()
+        );
+        let mut none = m.clone();
+        none.benchmark = None;
+        assert_eq!(none.benchmark_for(&odd, &benchmarks), None);
+    }
+
+    #[test]
+    fn weakest_day_reads_the_scores_of_the_players_tier() {
+        let m = method();
+        let benchmarks = benchmark::builtin::all();
+        let novice = m
+            .benchmark_for(m.tier("novice").unwrap(), &benchmarks)
+            .unwrap();
+        let mut bests = HashMap::new();
+        for sub in &novice.subcategories {
+            let s = &sub.scenarios[0];
+            let score = if sub.name == "Precise tracking" {
+                s.thresholds[0]
+            } else {
+                s.thresholds[3]
+            };
+            bests.insert(s.id.clone(), score);
+        }
+        assert_eq!(
+            m.weakest_day(&novice.evaluate(&bests)),
+            Some(Weekday::Wednesday)
+        );
+    }
+
+    #[test]
+    fn tier_suggestion_still_reads_the_benchmark_as_authored() {
+        let m = method();
+        assert_eq!(m.benchmark.as_deref(), Some("valorant-benchmark"));
+        let b = benchmark::builtin::all().remove(0);
+        let mut bests = HashMap::new();
+        for sub in &b.subcategories {
+            bests.insert(sub.scenarios[0].id.clone(), sub.scenarios[0].thresholds[1]);
+        }
+        let energy = b.evaluate(&bests).overall;
+        assert_eq!(m.suggested_tier(energy).id, "intermediate");
     }
 }
