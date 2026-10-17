@@ -10,14 +10,14 @@ use super::def::{Motion, ScenarioDef, Shape, SpawnArea};
 use crate::math::Range;
 use serde::{Deserialize, Serialize};
 
-/// Supported level range.
+/// Lowest supported difficulty level (easiest).
 pub const MIN_LEVEL: f32 = -1.0;
-/// Lowest supported difficulty level (easiest); the highest is `MAX_LEVEL`.
+/// Highest supported difficulty level (hardest).
 pub const MAX_LEVEL: f32 = 1.0;
 
 /// How far one parameter moves at the ends of the level range.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(untagged, try_from = "RawKnob")]
 pub enum Knob {
     /// The same fraction at level −1 and +1.
     Symmetric(f32),
@@ -28,6 +28,31 @@ pub enum Knob {
         /// Fraction of change at level +1.
         hard: f32,
     },
+}
+
+/// What a knob may be written as. The table form rejects unknown keys, which an untagged
+/// struct variant alone would silently drop.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RawKnob {
+    Symmetric(f32),
+    Bounds(KnobBounds),
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KnobBounds {
+    easy: f32,
+    hard: f32,
+}
+
+impl From<RawKnob> for Knob {
+    fn from(raw: RawKnob) -> Self {
+        match raw {
+            RawKnob::Symmetric(c) => Knob::Symmetric(c),
+            RawKnob::Bounds(KnobBounds { easy, hard }) => Knob::Bounds { easy, hard },
+        }
+    }
 }
 
 impl Knob {
@@ -188,8 +213,11 @@ impl ScenarioDef {
                 *change_secs = scale(*change_secs, 1.0 - c.speed.at(d));
             }
         }
-        let alive = out.targets.max_alive as f32 * (1.0 + c.count.at(d));
-        out.targets.max_alive = (alive.round() as u32).clamp(1, 32);
+        let count = c.count.at(d);
+        if count != 0.0 {
+            let alive = out.targets.max_alive as f32 * (1.0 + count);
+            out.targets.max_alive = (alive.round() as u32).clamp(1, 32);
+        }
         let dist_k = if humanoid {
             1.0 + c.distance.at(d)
         } else {
@@ -387,6 +415,15 @@ mod tests {
             1,
             "never below one"
         );
+    }
+
+    #[test]
+    fn misspelled_keys_inside_a_knob_are_rejected() {
+        let typo = toml::Value::Table(toml::from_str("easy = 0.5\nhrad = 0.1").unwrap());
+        assert!(typo.try_into::<Knob>().is_err());
+        let extra =
+            toml::Value::Table(toml::from_str("easy = 0.5\nhard = 0.1\nmid = 0.2").unwrap());
+        assert!(extra.try_into::<Knob>().is_err());
     }
 
     #[test]
