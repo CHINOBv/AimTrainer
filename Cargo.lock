@@ -126,6 +126,7 @@ name = "aim_app"
 version = "0.1.0"
 dependencies = [
  "aim_core",
+ "aim_integrations",
  "bevy",
  "bevy_egui",
  "chrono",
