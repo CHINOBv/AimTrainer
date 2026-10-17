@@ -178,6 +178,22 @@ mod tests {
     }
 
     #[test]
+    fn next_routine_run_with_an_unknown_scenario_keeps_the_index() {
+        let mut w = world();
+        apply(&mut w, UiAction::StartRoutine("quick-warmup".into()));
+        let current = running(&w);
+        w.resource_mut::<ActiveRoutine>().0.as_mut().unwrap().plan[1].scenario_id =
+            "removed-scenario".into();
+        apply(&mut w, UiAction::NextRoutineRun);
+        assert_eq!(
+            routine_index(&w),
+            Some(0),
+            "the index must not skip an unplayable run"
+        );
+        assert_eq!(running(&w), current, "the current run stays in place");
+    }
+
+    #[test]
     fn retry_and_single_scenarios_leave_the_routine() {
         let mut w = world();
         apply(&mut w, UiAction::StartRoutine("quick-warmup".into()));
