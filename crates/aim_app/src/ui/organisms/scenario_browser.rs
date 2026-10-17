@@ -6,6 +6,7 @@ use crate::ui::UiAction;
 use crate::ui::molecules::scenario_item;
 use crate::ui::organisms::history_chart::history_chart;
 use aim_core::scenario::{Category, FireMode, ScenarioDef};
+use aim_core::training::store::RunStore;
 use bevy_egui::egui;
 
 pub fn scenario_list(
