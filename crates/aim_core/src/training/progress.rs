@@ -235,6 +235,30 @@ pub fn daily_goal(
     }
 }
 
+// ---------------------------------------------------------------- trend
+
+/// Overall benchmark energy at the end of each of the last `weeks` weeks (oldest first),
+/// using every run up to that point. `None` while not every subcategory was played.
+pub fn benchmark_trend(
+    benchmark: &super::benchmark::BenchmarkDef,
+    records: &[RunRecord],
+    now: u64,
+    weeks: u32,
+) -> Vec<Option<f32>> {
+    (0..weeks)
+        .rev()
+        .map(|w| {
+            let cutoff = now.saturating_sub(w as u64 * 7 * SECS_PER_DAY);
+            let mut bests = std::collections::HashMap::<String, f32>::new();
+            for r in records.iter().filter(|r| r.timestamp <= cutoff) {
+                let e = bests.entry(r.scenario.clone()).or_insert(r.score);
+                *e = e.max(r.score);
+            }
+            benchmark.evaluate(&bests).overall
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -338,6 +362,28 @@ mod tests {
         assert!(g.met_today());
         assert_eq!(g.streak_days, 4);
         assert_eq!(daily_goal(&r, 31.0, NOW + 1800, 0).streak_days, 0);
+    }
+
+    #[test]
+    fn benchmark_trend_rises_as_scores_improve() {
+        let b = crate::training::benchmark::builtin::all().remove(0);
+        let mut r = vec![];
+        for (week, factor) in [(3u64, 0.5f32), (1, 1.0)] {
+            for sub in &b.subcategories {
+                let s = &sub.scenarios[0];
+                // One hour after each weekly cutoff, so week 3's runs land after the oldest point.
+                r.push(rec(
+                    NOW - week * 7 * DAY + 3600,
+                    &s.id,
+                    s.thresholds[1] * factor,
+                ));
+            }
+        }
+        let trend = benchmark_trend(&b, &r, NOW, 4);
+        assert_eq!(trend.len(), 4);
+        assert_eq!(trend[0], None, "nothing was played by the oldest cutoff");
+        let (early, late) = (trend[1].unwrap(), trend[3].unwrap());
+        assert!(late > early, "{early} → {late}");
     }
 
     #[test]
