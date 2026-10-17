@@ -85,7 +85,7 @@ aimtrainer play <scenario|arena>                  # start straight into a scenar
 aimtrainer toggle | show | hide                   # control a running trainer (Linux)
 aimtrainer warmup [minutes]                       # show the trainer and start a queue warm-up
 aimtrainer micro                                  # one 20 s buy-phase drill, then hide again
-aimtrainer analyze-match <match.json> --player Name#TAG
+aimtrainer analyze-match <match.json> --player Name#TAG   # report + a drill of your duels
 ```
 
 ## Overlay: show and hide

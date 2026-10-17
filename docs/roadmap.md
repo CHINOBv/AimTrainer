@@ -25,9 +25,9 @@ Phases 1–8 are implemented on `feat/roadmap-completion`. The feature analysis 
 | 3 | `aim_core::crosshair` with VALORANT code import/export; crosshair editor and renderer; data-driven sensitivity converter with monitor-distance matching | — |
 | 4 | Deterministic `Recording` + replay codec; flick/tracking analysis; explainable recommendations; history chart; replay viewer | — |
 | 5 | Adaptive staircase (~80% success); personalized playlist; ammo economy (reload mechanic) | — |
-| 6 | `aim_world::arena` deathmatch with bots using VALORANT movement and a Fitts-law aim model | No shared `Activity` trait: arenas run as their own resource next to scenario runs. A trait would have added no behavior (YAGNI); revisit if a third kind of activity appears |
+| 6 | `aim_core::activity::Activity`, implemented by the scenario session and `aim_world`'s arena session; routine blocks name a scenario or an arena (`aim-and-duel` mixes both); `aim_world::arena` deathmatch with bots using VALORANT movement and a Fitts-law aim model | — |
 | 7 | `aim_world` maps (original geometry), line of sight, collision, navigation; angle-clearing arena with a crosshair-placement metric | — |
-| 8 | `aim_integrations` offline analysis of official match JSON; `aimtrainer analyze-match` | No online fetch: it needs a Riot production key and RSO, which a personal or open-source build cannot ship. See `match-analysis.md` |
+| 8 | `aim_integrations` offline analysis of official match JSON; `aimtrainer analyze-match`; the match's duels rebuilt as a `match-rebuild` drill at your real death distances | No online fetch: it needs a Riot production key and RSO, which a personal or open-source build cannot ship. The rebuild reproduces distance, not angle, because `viewRadians` has no published convention. See `match-analysis.md` |
 
 ## Phase 1: open-source readiness
 
