@@ -1,7 +1,8 @@
 //! A running arena: the player, the bots, shooting with occlusion and the run statistics.
 
-use super::bot::{Bot, Brain, Ctx, Phase, head_of, yaw_of};
-use super::def::{ArenaDef, ArenaError, ArenaMode, bot_profile};
+use super::behavior::{Phase, Push};
+use super::bot::{Bot, Brain, Ctx, PEEK_DELAY_SECS, head_of, yaw_of};
+use super::def::{ArenaDef, ArenaError, ArenaMode, SiteObjective, bot_profile};
 use crate::map::{DEFAULT_PLAYER_RADIUS, MapDef, SpawnKind};
 use aim_core::activity::{Activity, ActivityEvent};
 use aim_core::math::{Vec3, ViewAngles, angle_between_deg};
@@ -24,6 +25,12 @@ pub const HEADSHOT_BONUS: f32 = 25.0;
 /// Seconds after a respawn during which bots ignore the player. An arena rule, not a
 /// VALORANT value: it stops bots from killing the player again on the spawn point.
 pub const RESPAWN_GRACE_SECS: f32 = 1.5;
+/// Score per pre-aimed bot life in arenas that set `pre_aim_tolerance_deg`. A design
+/// choice: half a kill, so pre-aiming matters without outweighing the kill itself.
+pub const PRE_AIM_POINTS: f32 = 50.0;
+/// Score for holding the site of a site objective until the end. A design choice: worth
+/// five kills, so losing the site costs more than a few deaths.
+pub const SITE_HELD_BONUS: f32 = 500.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ArenaEvent {
@@ -82,23 +89,62 @@ pub struct ArenaStats {
     /// Crosshair placement error in degrees at the first frame each bot life became
     /// visible: the angle between the view direction and the bot's head.
     pub crosshair_errors_deg: Vec<f32>,
+    /// The vertical part of the same error: how far above or below head level the
+    /// crosshair was, in degrees of pitch.
+    pub head_level_errors_deg: Vec<f32>,
+    /// Bot lives first seen within the arena's `pre_aim_tolerance_deg` (0 when the arena
+    /// does not set one).
+    pub pre_aimed: u32,
+}
+
+fn median(values: &[f32]) -> Option<f32> {
+    let mut v = values.to_vec();
+    if v.is_empty() {
+        return None;
+    }
+    v.sort_by(f32::total_cmp);
+    let n = v.len();
+    Some(if n % 2 == 1 {
+        v[n / 2]
+    } else {
+        (v[n / 2 - 1] + v[n / 2]) / 2.0
+    })
 }
 
 impl ArenaStats {
     /// Median crosshair placement error, degrees.
     pub fn median_crosshair_error_deg(&self) -> Option<f32> {
-        let mut v = self.crosshair_errors_deg.clone();
-        if v.is_empty() {
-            return None;
-        }
-        v.sort_by(f32::total_cmp);
-        let n = v.len();
-        Some(if n % 2 == 1 {
-            v[n / 2]
-        } else {
-            (v[n / 2 - 1] + v[n / 2]) / 2.0
-        })
+        median(&self.crosshair_errors_deg)
     }
+
+    /// Median head-level (pitch) error at first sight, degrees.
+    pub fn median_head_level_error_deg(&self) -> Option<f32> {
+        median(&self.head_level_errors_deg)
+    }
+}
+
+/// The state of a site objective, for the HUD and the results.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ObjectiveStatus {
+    /// Attackers the run sends in total.
+    pub attackers: u32,
+    /// Attackers not killed yet, alive or still to come.
+    pub attackers_left: u32,
+    /// How far the current capture has progressed, 0 to 1.
+    pub capture_progress: f32,
+    /// An attacker captured the site; the run ended.
+    pub lost: bool,
+}
+
+/// A site objective while it runs.
+#[derive(Debug, Clone)]
+struct Site {
+    center: Vec3,
+    def: SiteObjective,
+    spawned: u32,
+    killed: u32,
+    capture_secs: f32,
+    lost: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -132,6 +178,8 @@ pub struct ArenaSession {
     angle_index: usize,
     /// Bots ignore the player until this time (respawn grace).
     grace_until: f32,
+    /// Deathmatch with a site objective.
+    site: Option<Site>,
 }
 
 /// The aimer preset angle bots use for flick speed and endpoint error; their reaction time
@@ -181,10 +229,36 @@ impl ArenaSession {
             roam_points,
             angle_index: 0,
             grace_until: 0.0,
+            site: None,
             def,
             map,
         };
         match s.def.mode.clone() {
+            ArenaMode::Deathmatch {
+                bots,
+                objective: Some(objective),
+                ..
+            } => {
+                let center = s
+                    .map
+                    .waypoints
+                    .iter()
+                    .find(|w| w.id == objective.site)
+                    .expect("validated above")
+                    .position;
+                let first = bots.min(objective.attackers);
+                s.site = Some(Site {
+                    center,
+                    def: objective,
+                    spawned: 0,
+                    killed: 0,
+                    capture_secs: 0.0,
+                    lost: false,
+                });
+                for _ in 0..first {
+                    s.spawn_roaming_bot(None);
+                }
+            }
             ArenaMode::Deathmatch { bots, .. } => {
                 for _ in 0..bots {
                     s.spawn_roaming_bot(None);
@@ -245,6 +319,16 @@ impl ArenaSession {
         self.player_speed() <= self.profile.accuracy_speed_limit()
     }
 
+    /// The site objective, if the arena has one.
+    pub fn objective(&self) -> Option<ObjectiveStatus> {
+        self.site.as_ref().map(|s| ObjectiveStatus {
+            attackers: s.def.attackers,
+            attackers_left: s.def.attackers - s.killed,
+            capture_progress: (s.capture_secs / s.def.capture_secs).clamp(0.0, 1.0),
+            lost: s.lost,
+        })
+    }
+
     pub fn bots(&self) -> impl Iterator<Item = BotView> + '_ {
         self.bots.iter().map(|b| BotView {
             id: b.id,
@@ -271,6 +355,7 @@ impl ArenaSession {
             self.player_shoot(&mut events);
         }
         self.respawn_bots();
+        self.update_site(dt);
         events.append(&mut self.pending);
 
         if self.time >= self.def.duration_secs && !self.finished {
@@ -289,7 +374,13 @@ impl ArenaSession {
         RunResult {
             scenario_id: self.def.id.clone(),
             score: s.kills as f32 * KILL_POINTS - s.deaths as f32 * DEATH_POINTS
-                + s.headshots as f32 * HEADSHOT_BONUS,
+                + s.headshots as f32 * HEADSHOT_BONUS
+                + s.pre_aimed as f32 * PRE_AIM_POINTS
+                + if self.site_held() {
+                    SITE_HELD_BONUS
+                } else {
+                    0.0
+                },
             accuracy: ratio(s.hits, s.shots),
             kills: s.kills,
             kills_per_min: if minutes > 0.0 {
@@ -321,15 +412,55 @@ impl ArenaSession {
         p.vel = LocalVelocity::from_world((p.feet - before) * (1.0 / dt), yaw);
     }
 
+    /// Whether the run ended with the site of its objective still held.
+    fn site_held(&self) -> bool {
+        self.finished && self.site.as_ref().is_some_and(|s| !s.lost)
+    }
+
+    /// Site objective: advance the capture by living attackers on the site, and end the
+    /// run when it is captured or every attacker is dead.
+    fn update_site(&mut self, dt: f32) {
+        let Some(site) = &mut self.site else {
+            return;
+        };
+        let on_site = self.bots.iter().any(|b| {
+            b.alive && (b.feet - site.center).horizontal().length() <= site.def.site_radius
+        });
+        // Killing or pushing the attacker off the site resets the capture.
+        site.capture_secs = if on_site { site.capture_secs + dt } else { 0.0 };
+        if site.capture_secs >= site.def.capture_secs {
+            site.lost = true;
+            self.finished = true;
+        } else if site.killed >= site.def.attackers {
+            self.finished = true;
+        }
+    }
+
     fn update_player_sight(&mut self) {
         let eye = self.eye_position();
-        let dir = self.player.view.direction();
+        let view = self.player.view;
+        let dir = view.direction();
+        let tolerance = match &self.def.mode {
+            ArenaMode::AngleClear {
+                pre_aim_tolerance_deg,
+                ..
+            } => *pre_aim_tolerance_deg,
+            ArenaMode::Deathmatch { .. } => None,
+        };
         for b in self.bots.iter_mut().filter(|b| b.alive) {
             b.visible_to_player = self.map.visible_head(eye, b.feet);
             if b.visible_to_player && b.first_seen_at.is_none() {
                 b.first_seen_at = Some(self.time);
-                let err = angle_between_deg(dir, head_of(b.feet) - eye);
+                let to_head = head_of(b.feet) - eye;
+                let err = angle_between_deg(dir, to_head);
                 self.stats.crosshair_errors_deg.push(err);
+                let pitch = ViewAngles::from_direction(to_head).pitch_deg;
+                self.stats
+                    .head_level_errors_deg
+                    .push((pitch - view.pitch_deg).abs());
+                if tolerance.is_some_and(|t| err <= t) {
+                    self.stats.pre_aimed += 1;
+                }
             }
         }
     }
@@ -407,6 +538,9 @@ impl ArenaSession {
                 id: bot.id,
                 time_to_kill_secs: ttk,
             });
+            if let Some(site) = &mut self.site {
+                site.killed += 1;
+            }
             if matches!(self.def.mode, ArenaMode::AngleClear { .. }) {
                 self.angle_index += 1;
                 self.start_angle();
@@ -415,14 +549,21 @@ impl ArenaSession {
     }
 
     fn update_bots(&mut self, dt: f32, events: &mut Vec<ArenaEvent>) {
-        let (reaction, hold_secs) = match &self.def.mode {
-            ArenaMode::Deathmatch { .. } => (None, 0.0),
+        let (reaction, hold_secs, peek_delay, bot_strafe) = match &self.def.mode {
+            ArenaMode::Deathmatch { bot_strafe, .. } => (None, 0.0, PEEK_DELAY_SECS, *bot_strafe),
             ArenaMode::AngleClear {
                 bot_reaction_secs,
                 hold_secs,
+                peek_delay_secs,
                 ..
-            } => (Some(*bot_reaction_secs), *hold_secs),
+            } => (
+                Some(*bot_reaction_secs),
+                *hold_secs,
+                peek_delay_secs.unwrap_or(PEEK_DELAY_SECS),
+                false,
+            ),
         };
+        let site = self.site.as_ref().map(|s| s.center);
         let shoot_back = self.def.mode.bots_shoot_back();
         for i in 0..self.bots.len() {
             let ctx = Ctx {
@@ -435,12 +576,18 @@ impl ArenaSession {
                 aimer: &self.aimer,
                 reaction,
                 hold_secs,
+                peek_delay,
                 roam_points: &self.roam_points,
+                bot_strafe,
+                site,
             };
             let bot = &mut self.bots[i];
             let landed = bot.think(&ctx, &mut self.rng);
             let can_fire = self.time - bot.last_shot_at >= 1.0 / self.bot_weapon.fire_rate;
-            if !(landed && shoot_back && can_fire) {
+            // A strafing bot waits for the slow moment of its counter-strafe to fire.
+            let steady = !bot_strafe
+                || bot.vel.horizontal().length() <= self.bot_movement.accuracy_speed_limit();
+            if !(landed && shoot_back && can_fire && steady) {
                 continue;
             }
             bot.last_shot_at = self.time;
@@ -477,7 +624,12 @@ impl ArenaSession {
         self.stats.deaths += 1;
         self.player.health = PLAYER_HEALTH;
         let spawn = match &self.def.mode {
-            ArenaMode::Deathmatch { .. } => self.safest_player_spawn(),
+            ArenaMode::Deathmatch { .. } if self.site.is_some() => {
+                self.safest_spawn(&self.player_spawn_indices())
+            }
+            ArenaMode::Deathmatch { .. } => {
+                self.safest_spawn(&(0..self.map.spawns.len()).collect::<Vec<_>>())
+            }
             ArenaMode::AngleClear { .. } => self.player_spawn_for_angle(),
         };
         self.place_player(spawn);
@@ -506,9 +658,10 @@ impl ArenaSession {
             .collect()
     }
 
-    /// The spawn (player or bot) seen by the fewest alive bots, then the one farthest from
-    /// them. Deathmatch respawns use every spawn so an open map does not spawn-kill.
-    fn safest_player_spawn(&self) -> usize {
+    /// Of the `candidates` spawn indices, the spawn seen by the fewest alive bots, then the
+    /// one farthest from them. Deathmatch respawns use every spawn (player or bot) so an
+    /// open map does not spawn-kill; a site hold keeps the defender on player spawns.
+    fn safest_spawn(&self, candidates: &[usize]) -> usize {
         let alive: Vec<&Bot> = self.bots.iter().filter(|b| b.alive).collect();
         let score = |i: usize| {
             let p = self.map.spawns[i].position;
@@ -522,7 +675,9 @@ impl ArenaSession {
                 .fold(f32::INFINITY, f32::min);
             (seen, -nearest)
         };
-        (0..self.map.spawns.len())
+        candidates
+            .iter()
+            .copied()
             .min_by(|&a, &b| {
                 let (sa, da) = score(a);
                 let (sb, db) = score(b);
@@ -617,20 +772,27 @@ impl ArenaSession {
         pool[(self.rng.next_u64() % pool.len() as u64) as usize]
     }
 
-    /// Deathmatch: spawn a fresh roaming bot into `slot`, or append one.
+    /// Deathmatch: spawn a fresh roaming bot into `slot`, or append one. With a site
+    /// objective the bot is an attacker that pushes the site.
     fn spawn_roaming_bot(&mut self, slot: Option<usize>) {
         let (feet, yaw) = self.pick_bot_spawn();
         let id = self.new_id();
-        let bot = Bot::new(
-            id,
-            feet,
-            yaw,
-            Brain::Roam {
+        let brain = match &mut self.site {
+            Some(site) => {
+                site.spawned += 1;
+                Brain::Push {
+                    route: Vec::new(),
+                    next: 0,
+                    push: Push::default(),
+                }
+            }
+            None => Brain::Roam {
                 route: Vec::new(),
                 next: 0,
                 pause_until: 0.0,
             },
-        );
+        };
+        let bot = Bot::new(id, feet, yaw, brain);
         match slot {
             Some(i) => self.bots[i] = bot,
             None => self.bots.push(bot),
@@ -644,7 +806,11 @@ impl ArenaSession {
         };
         for i in 0..self.bots.len() {
             let b = &self.bots[i];
-            if !b.alive && self.time - b.died_at >= respawn_secs {
+            let more = self
+                .site
+                .as_ref()
+                .is_none_or(|s| s.spawned < s.def.attackers);
+            if more && !b.alive && self.time - b.died_at >= respawn_secs {
                 self.spawn_roaming_bot(Some(i));
             }
         }

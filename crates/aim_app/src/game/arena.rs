@@ -8,9 +8,10 @@ use super::{
 };
 use crate::overlay::Overlay;
 use crate::persistence::history::History;
-use crate::persistence::settings::{Paths, Settings};
+use crate::persistence::settings::Settings;
 use aim_core::math::ViewAngles;
 use aim_core::scenario::Shape;
+use aim_core::training::store::RunStore;
 use aim_world::arena::{ArenaEvent, ArenaSession};
 use aim_world::map::BoxKind;
 use bevy::camera::Projection;
@@ -158,14 +159,13 @@ struct ArenaFinisher<'w, 's> {
     next: ResMut<'w, NextState<AppState>>,
     history: ResMut<'w, History>,
     settings: Res<'w, Settings>,
-    paths: Res<'w, Paths>,
 }
 
 impl ArenaFinisher<'_, '_> {
     fn finish(&mut self, run: &ArenaRun) {
         let result = run.session.result();
         let previous_best = self.history.best(&result.scenario_id);
-        self.history.append(&self.paths, &result);
+        self.history.record(&result);
         let stats = run.session.stats();
         let mut notes = super::progress_notes(&self.history, self.settings.daily_goal_minutes);
         notes.extend([format!(
@@ -176,6 +176,36 @@ impl ArenaFinisher<'_, '_> {
             notes.push(format!(
                 "Crosshair placement: median {e:.1}° from the head when an enemy appeared (lower is better; under ~5° means pre-aimed)"
             ));
+        }
+        if let Some(h) = stats.median_head_level_error_deg() {
+            notes.push(format!(
+                "Head level: median {h:.1}° above or below the head at first sight"
+            ));
+        }
+        if let aim_world::arena::ArenaMode::AngleClear {
+            pre_aim_tolerance_deg: Some(t),
+            ..
+        } = run.session.def().mode
+        {
+            notes.push(format!(
+                "Pre-aimed {} of {} enemies (within {t:.0}° at first sight)",
+                stats.pre_aimed,
+                stats.crosshair_errors_deg.len()
+            ));
+        }
+        if let Some(o) = run.session.objective() {
+            notes.push(if o.lost {
+                format!(
+                    "Site lost: an attacker captured it with {} of {} attackers left",
+                    o.attackers_left, o.attackers
+                )
+            } else {
+                format!(
+                    "Site held: {} of {} attackers killed",
+                    o.attackers - o.attackers_left,
+                    o.attackers
+                )
+            });
         }
         self.commands.insert_resource(LastResult {
             name: run.session.def().name.clone(),

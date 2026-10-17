@@ -69,6 +69,22 @@ position = [-1.4, 0.0, 10.0]
 peek_dir = [1.0, 0.0]
 peek_distance = 2.6
 
+# Jiggle-peek spots: the enemy only shoulders out of each pocket by 1 m, so its head shows
+# at the corridor edge for a moment.
+[[angles]]
+id = "north-jiggle"
+label = "North jiggle"
+position = [1.6, 0.0, -10.0]
+peek_dir = [-1.0, 0.0]
+peek_distance = 1.0
+
+[[angles]]
+id = "south-jiggle"
+label = "South jiggle"
+position = [-1.6, 0.0, 10.0]
+peek_dir = [1.0, 0.0]
+peek_distance = 1.0
+
 [[waypoints]]
 id = "north-end"
 position = [0.0, 0.0, -14.0]

@@ -1,7 +1,8 @@
-//! Bot movement and behavior: a small state machine per mode, VALORANT movement through
-//! `aim_core::movement::step`, and the Fitts-law aim of [`super::aim`].
+//! Bot movement and behavior: the state machines of [`super::behavior`], VALORANT movement
+//! through `aim_core::movement::step`, and the Fitts-law aim of [`super::aim`].
 
 use super::aim::{BotAim, Sight, angular_radius_deg};
+use super::behavior::{PeekSense, Phase, Push, Strafe};
 use crate::map::{AngleMarker, DEFAULT_PLAYER_RADIUS, MapDef};
 use aim_core::math::{Range, Vec3, ViewAngles, angle_between_deg};
 use aim_core::movement::{self, LocalVelocity, MoveInput, MovementProfile};
@@ -22,6 +23,8 @@ pub const ROAM_PAUSE_SECS: Range = Range::new(0.3, 1.2);
 pub const PEEK_DELAY_SECS: Range = Range::new(0.4, 1.2);
 /// Distance under which a bot counts as having reached a point, meters.
 const ARRIVE_EPS: f32 = 0.05;
+/// Distance under which a moving bot counts as having passed a route point, meters.
+const ROUTE_EPS: f32 = 0.3;
 
 /// Yaw (core convention) of a horizontal direction.
 pub(crate) fn yaw_of(dir: Vec3) -> f32 {
@@ -31,19 +34,6 @@ pub(crate) fn yaw_of(dir: Vec3) -> f32 {
 /// Head center of a standing humanoid whose feet are at `feet`.
 pub(crate) fn head_of(feet: Vec3) -> Vec3 {
     feet + Vec3::new(0.0, HumanoidDims::default().head_center_height(), 0.0)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum Phase {
-    /// Waiting at the hidden spot; `peek_at` is set once the player can see the angle.
-    Hidden {
-        peek_at: Option<f32>,
-    },
-    Peeking,
-    Holding {
-        until: f32,
-    },
-    Hiding,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +47,20 @@ pub(crate) enum Brain {
         marker: AngleMarker,
         phase: Phase,
     },
+    /// Walk toward the site of a site objective, stopping to fight on the way.
+    Push {
+        route: Vec<Vec3>,
+        next: usize,
+        push: Push,
+    },
+}
+
+impl Brain {
+    /// Roaming and pushing bots move through the map and fight duels; angle bots hold an
+    /// angle.
+    fn duels(&self) -> bool {
+        matches!(self, Self::Roam { .. } | Self::Push { .. })
+    }
 }
 
 /// What a bot needs to know about the world this frame.
@@ -72,8 +76,14 @@ pub(crate) struct Ctx<'a> {
     /// Reaction time range for angle bots; roaming bots use the aimer's reaction time.
     pub reaction: Option<Range>,
     pub hold_secs: f32,
+    /// Delay before an angle bot peeks once the player sees its angle.
+    pub peek_delay: Range,
     /// Points a roaming bot picks its next destination from.
     pub roam_points: &'a [Vec3],
+    /// Whether dueling bots strafe while they fight.
+    pub bot_strafe: bool,
+    /// Where pushing bots walk to.
+    pub site: Option<Vec3>,
 }
 
 #[derive(Debug, Clone)]
@@ -92,6 +102,7 @@ pub(crate) struct Bot {
     pub visible_to_player: bool,
     pub first_seen_at: Option<f32>,
     pub brain: Brain,
+    pub strafe: Strafe,
 }
 
 impl Bot {
@@ -110,6 +121,7 @@ impl Bot {
             visible_to_player: false,
             first_seen_at: None,
             brain,
+            strafe: Strafe::Idle,
         }
     }
 
@@ -136,10 +148,16 @@ impl Bot {
         }
         let sees = ctx.player_targetable && ctx.map.visible_head(self.eye(), ctx.player_feet);
         let goal = self.move_goal(ctx, sees, rng);
-        self.drive(ctx, goal);
+        let strafe = if ctx.bot_strafe {
+            let dueling = sees && self.aim.is_engaged() && self.brain.duels() && goal.is_none();
+            self.strafe.step(dueling, ctx.now, rng)
+        } else {
+            0.0
+        };
+        self.drive(ctx, goal, strafe);
 
         let sight = self.sight_of_player(ctx.player_feet);
-        let roaming = matches!(self.brain, Brain::Roam { .. });
+        let roaming = self.brain.duels();
         let noticed = sees
             && (self.aim.is_engaged()
                 || !roaming
@@ -200,7 +218,8 @@ impl Bot {
                     *pause_until = ctx.now;
                     return None;
                 }
-                while *next < route.len() && (route[*next] - feet).horizontal().length() < 0.3 {
+                while *next < route.len() && (route[*next] - feet).horizontal().length() < ROUTE_EPS
+                {
                     *next += 1;
                 }
                 if *next < route.len() {
@@ -226,47 +245,67 @@ impl Bot {
                 let player_sees_angle = ctx
                     .map
                     .visible_head(MapDef::eye(ctx.player_feet), marker.position);
-                match *phase {
-                    Phase::Hidden { peek_at } => match peek_at {
-                        None if player_sees_angle => {
-                            *phase = Phase::Hidden {
-                                peek_at: Some(ctx.now + rng.in_range(PEEK_DELAY_SECS)),
-                            };
-                        }
-                        Some(t) if ctx.now >= t => *phase = Phase::Peeking,
-                        _ => {}
-                    },
-                    Phase::Peeking => {
-                        if (marker.position - feet).horizontal().length() < ARRIVE_EPS {
-                            *phase = Phase::Holding {
-                                until: ctx.now + ctx.hold_secs,
-                            };
-                        }
-                    }
-                    Phase::Holding { until } => {
-                        if ctx.now >= until {
-                            *phase = Phase::Hiding;
-                        }
-                    }
-                    Phase::Hiding => {
-                        if (marker.hidden_position() - feet).horizontal().length() < ARRIVE_EPS {
-                            *phase = Phase::Hidden { peek_at: None };
-                        }
-                    }
+                let sense = PeekSense {
+                    now: ctx.now,
+                    player_sees_angle,
+                    at_peek: (marker.position - feet).horizontal().length() < ARRIVE_EPS,
+                    at_hidden: (marker.hidden_position() - feet).horizontal().length() < ARRIVE_EPS,
+                    hold_secs: ctx.hold_secs,
+                    peek_delay: ctx.peek_delay,
+                };
+                *phase = phase.next(&sense, rng);
+                Some(if phase.wants_peek_position() {
+                    marker.position
+                } else {
+                    marker.hidden_position()
+                })
+            }
+            Brain::Push { route, next, push } => {
+                if push.step(sees && engaged, ctx.now) {
+                    route.clear();
+                    return None;
                 }
-                match *phase {
-                    Phase::Peeking | Phase::Holding { .. } => Some(marker.position),
-                    Phase::Hidden { .. } | Phase::Hiding => Some(marker.hidden_position()),
+                let site = ctx.site?;
+                if route.is_empty() && (site - feet).horizontal().length() > ROUTE_EPS {
+                    *route = ctx.map.path(feet, site).unwrap_or_else(|| vec![feet, site]);
+                    *next = 1;
                 }
+                while *next < route.len() && (route[*next] - feet).horizontal().length() < ROUTE_EPS
+                {
+                    *next += 1;
+                }
+                route.get(*next).copied()
             }
         }
     }
 
     /// Walk toward `goal` (or brake without one) with the VALORANT movement model, then
     /// resolve collisions with the map. Bots stop exactly on the final point of an angle
-    /// peek (a simplification: a perfect counter-strafe).
-    fn drive(&mut self, ctx: &Ctx, goal: Option<Vec3>) {
+    /// peek (a simplification: a perfect counter-strafe). A non-zero `strafe` presses that
+    /// strafe key relative to where the bot faces instead.
+    fn drive(&mut self, ctx: &Ctx, goal: Option<Vec3>, strafe: f32) {
         if ctx.dt <= 0.0 {
+            return;
+        }
+        if strafe != 0.0 {
+            let yaw = self.facing_yaw_deg;
+            let input = MoveInput {
+                right: strafe,
+                ..Default::default()
+            };
+            let local = movement::step(
+                ctx.movement,
+                LocalVelocity::from_world(self.vel, yaw),
+                input,
+                ctx.dt,
+            );
+            let before = self.feet;
+            self.feet = ctx.map.move_with_collision(
+                before,
+                local.to_world(yaw) * ctx.dt,
+                DEFAULT_PLAYER_RADIUS,
+            );
+            self.vel = (self.feet - before) * (1.0 / ctx.dt);
             return;
         }
         let to = goal.map_or(Vec3::ZERO, |g| (g - self.feet).horizontal());

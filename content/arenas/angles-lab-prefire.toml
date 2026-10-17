@@ -1,0 +1,16 @@
+# Pre-aim drill on the original Angles Lab: bots react fast, so the angle is won by having
+# the crosshair at head level where the enemy appears.
+id = "angles-lab-prefire"
+name = "Angles Lab Pre-aim"
+description = "Clear the five marked angles against fast bots. Each enemy first seen within 5 degrees of the crosshair counts as pre-aimed and scores extra; the results show the head-level error."
+map = "angles-lab"
+duration_secs = 90.0
+weapon = "vandal"
+
+[mode]
+kind = "angle_clear"
+angles = ["doorway", "close-corner", "off-angle", "box", "long-angle"]
+hold_secs = 1.0
+bot_reaction_secs = [0.2, 0.3]
+bots_shoot_back = true
+pre_aim_tolerance_deg = 5.0

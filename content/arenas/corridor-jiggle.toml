@@ -1,0 +1,16 @@
+# Jiggle-peek drill on the original Duel Corridor: enemies shoulder-peek the pocket
+# corners for a fraction of a second and duck back. Hit them inside the short window.
+id = "corridor-jiggle"
+name = "Corridor Jiggle Peeks"
+description = "Enemies jiggle-peek the two pocket corners, visible for a fraction of a second at a time. Hold the angle at head level and shoot inside the window."
+map = "duel-corridor"
+duration_secs = 60.0
+weapon = "vandal"
+
+[mode]
+kind = "angle_clear"
+angles = ["north-jiggle", "south-jiggle", "north-jiggle", "south-jiggle", "north-jiggle", "south-jiggle", "north-jiggle", "south-jiggle"]
+hold_secs = 0.15
+bot_reaction_secs = [0.35, 0.6]
+bots_shoot_back = false
+peek_delay_secs = [0.3, 0.9]
