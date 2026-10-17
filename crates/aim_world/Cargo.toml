@@ -11,6 +11,12 @@ aim_core.workspace = true
 serde.workspace = true
 toml.workspace = true
 thiserror.workspace = true
+gltf = { workspace = true, optional = true }
+
+[features]
+default = ["gltf"]
+# Load maps from glTF 2.0 files (`map::MapDef::from_gltf`).
+gltf = ["dep:gltf"]
 
 [lints]
 workspace = true

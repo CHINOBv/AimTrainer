@@ -6,10 +6,13 @@
 //! graph for bots. All queries are pure and deterministic, in the core's coordinate system:
 //! right-handed, +Y up, -Z forward, meters, and the floor is the plane `y = 0`.
 //!
-//! Maps must be original geometry. See `docs/maps.md` for the format and the integrity rule.
+//! Maps can also be loaded from glTF 2.0 files (feature `gltf`, on by default) with
+//! [`MapDef::from_gltf`]. Maps must be original geometry. See `docs/maps.md` for the format and the integrity rule.
 
 pub mod arena;
 pub mod builtin;
+#[cfg(feature = "gltf")]
+pub mod gltf;
 pub mod map;
 mod nav;
 mod query;

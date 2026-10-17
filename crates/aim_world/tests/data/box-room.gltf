@@ -1,0 +1,175 @@
+{
+ "asset": {
+  "version": "2.0",
+  "generator": "aim_world test asset (original geometry)"
+ },
+ "scene": 0,
+ "scenes": [
+  {
+   "name": "box-room",
+   "nodes": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    8
+   ]
+  }
+ ],
+ "nodes": [
+  {
+   "name": "floor",
+   "mesh": 0,
+   "translation": [
+    0,
+    -0.05,
+    0
+   ],
+   "scale": [
+    20,
+    0.1,
+    20
+   ]
+  },
+  {
+   "name": "wall.001",
+   "mesh": 0,
+   "translation": [
+    5.25,
+    1.5,
+    -4.5
+   ],
+   "scale": [
+    9.5,
+    3,
+    1
+   ]
+  },
+  {
+   "name": "low_cover:crate",
+   "mesh": 0,
+   "translation": [
+    -5.5,
+    0.5,
+    2.5
+   ]
+  },
+  {
+   "name": "player:start",
+   "translation": [
+    0,
+    0,
+    6
+   ]
+  },
+  {
+   "name": "bot:far",
+   "translation": [
+    0,
+    0,
+    -8
+   ],
+   "rotation": [
+    0,
+    1,
+    0,
+    0
+   ]
+  },
+  {
+   "name": "Markers",
+   "translation": [
+    3,
+    0,
+    -7
+   ],
+   "children": [
+    6,
+    7
+   ]
+  },
+  {
+   "name": "angle_hidden:wall-edge",
+   "translation": [
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "name": "angle:wall-edge",
+   "translation": [
+    -3.5,
+    1.2,
+    0
+   ]
+  },
+  {
+   "name": "Camera",
+   "translation": [
+    0,
+    5,
+    10
+   ]
+  }
+ ],
+ "meshes": [
+  {
+   "name": "unit-cube",
+   "primitives": [
+    {
+     "attributes": {
+      "POSITION": 0
+     },
+     "indices": 1
+    }
+   ]
+  }
+ ],
+ "buffers": [
+  {
+   "byteLength": 168,
+   "uri": "data:application/octet-stream;base64,AAAAvwAAAL8AAAC/AAAAPwAAAL8AAAC/AAAAvwAAAD8AAAC/AAAAPwAAAD8AAAC/AAAAvwAAAL8AAAA/AAAAPwAAAL8AAAA/AAAAvwAAAD8AAAA/AAAAPwAAAD8AAAA/AAACAAMAAAADAAEABAAFAAcABAAHAAYAAAABAAUAAAAFAAQAAgAGAAcAAgAHAAMAAAAEAAYAAAAGAAIAAQADAAcAAQAHAAUA"
+  }
+ ],
+ "bufferViews": [
+  {
+   "buffer": 0,
+   "byteOffset": 0,
+   "byteLength": 96,
+   "target": 34962
+  },
+  {
+   "buffer": 0,
+   "byteOffset": 96,
+   "byteLength": 72,
+   "target": 34963
+  }
+ ],
+ "accessors": [
+  {
+   "bufferView": 0,
+   "componentType": 5126,
+   "count": 8,
+   "type": "VEC3",
+   "min": [
+    -0.5,
+    -0.5,
+    -0.5
+   ],
+   "max": [
+    0.5,
+    0.5,
+    0.5
+   ]
+  },
+  {
+   "bufferView": 1,
+   "componentType": 5123,
+   "count": 36,
+   "type": "SCALAR"
+  }
+ ]
+}

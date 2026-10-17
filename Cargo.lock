@@ -162,6 +162,7 @@ name = "aim_world"
 version = "0.1.0"
 dependencies = [
  "aim_core",
+ "gltf",
  "serde",
  "thiserror 2.0.21",
  "toml",
