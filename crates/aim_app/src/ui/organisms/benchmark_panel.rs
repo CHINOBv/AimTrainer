@@ -1,8 +1,9 @@
-//! Benchmark energies per subcategory, with a play button per scenario.
+//! Benchmark energies per subcategory, with a tier selector and a play button per scenario.
 
 use crate::ui::UiAction;
 use crate::ui::atoms::WARN;
 use crate::ui::molecules::energy_text;
+use aim_core::scenario::parse_run_key;
 use aim_core::training::benchmark::BenchmarkDef;
 use bevy_egui::egui;
 use std::collections::HashMap;
@@ -20,6 +21,8 @@ pub fn benchmark_panel(
             if !b.calibrated {
                 ui.colored_label(WARN, "Provisional thresholds (simulated players).");
             }
+            let view = tier_selector(ui, b);
+            let b = view.as_ref().unwrap_or(b);
             let rank = |e: f32| b.rank_for(e).map(str::to_owned);
             let res = b.evaluate(bests);
             let overall = match res.overall {
@@ -38,7 +41,9 @@ pub fn benchmark_panel(
                             let best = bests
                                 .get(&s.id)
                                 .map_or("—".to_owned(), |v| format!("{v:.0}"));
-                            if ui.button(format!("▶ {} ({best})", s.id)).clicked() {
+                            let name = parse_run_key(&s.id).0;
+                            // A tier's ids are run keys, so this starts it at the tier's level.
+                            if ui.button(format!("▶ {name} ({best})")).clicked() {
                                 action = Some(UiAction::StartScenario(s.id.clone()));
                             }
                         }
@@ -49,4 +54,24 @@ pub fn benchmark_panel(
         }
     });
     action
+}
+
+/// Tier buttons for a tiered benchmark; returns the selected tier's benchmark. The choice
+/// lives in egui memory, so the page needs no extra state. Defaults to the level-0 tier.
+fn tier_selector(ui: &mut egui::Ui, b: &BenchmarkDef) -> Option<BenchmarkDef> {
+    let default = b.tier_at_level(0.0).or(b.tiers.first())?;
+    let key = egui::Id::new(("benchmark-tier", &b.id));
+    let mut selected = ui
+        .data(|d| d.get_temp::<String>(key))
+        .filter(|id| b.tier(id).is_some())
+        .unwrap_or_else(|| default.id.clone());
+    ui.horizontal(|ui| {
+        ui.label("Tier:");
+        for t in &b.tiers {
+            ui.selectable_value(&mut selected, t.id.clone(), &t.name)
+                .on_hover_text(format!("Difficulty level {:+.1}", t.level));
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(key, selected.clone()));
+    b.at_tier(&selected)
 }
