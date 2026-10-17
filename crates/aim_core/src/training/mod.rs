@@ -4,4 +4,6 @@ pub mod adaptive;
 pub mod benchmark;
 pub mod method;
 pub mod playlist;
+pub mod progress;
 pub mod routine;
+pub mod warmup;

@@ -73,6 +73,7 @@ pub fn personalized(
         minutes: None,
         note: "Warm-up: smooth and relaxed.".to_owned(),
         difficulty: -0.25,
+        duration_secs: None,
     };
     let mut blocks = vec![warmup];
     for ((id, energy), n) in subs.iter().zip(runs) {
@@ -82,6 +83,7 @@ pub fn personalized(
             minutes: None,
             note: format!("Focus weight from your benchmark energy ({energy:.0})."),
             difficulty: 0.0,
+            duration_secs: None,
         });
     }
     RoutineDef {
