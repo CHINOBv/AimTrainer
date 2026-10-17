@@ -68,6 +68,17 @@ pub fn run_key(id: &str, level: f32) -> String {
     }
 }
 
+/// Inverse of [`run_key`]: base scenario id and level (`0` when the key has no level).
+pub fn parse_run_key(key: &str) -> (&str, f32) {
+    match key.rsplit_once('@') {
+        Some((id, level)) => match level.parse::<f32>() {
+            Ok(l) if l.is_finite() => (id, l),
+            _ => (key, 0.0),
+        },
+        None => (key, 0.0),
+    }
+}
+
 impl ScenarioDef {
     /// This scenario at difficulty `level` (clamped to [`MIN_LEVEL`], [`MAX_LEVEL`]).
     /// The id becomes [`run_key`] so history keeps difficulties apart.
@@ -140,6 +151,10 @@ mod tests {
         assert_eq!(run_key("x", 0.5), "x@+0.50");
         assert_eq!(run_key("x", -0.25), "x@-0.25");
         assert_eq!(d.at_difficulty(0.5).id, "micro-adjust@+0.50");
+        assert_eq!(parse_run_key("micro-adjust@+0.50"), ("micro-adjust", 0.5));
+        assert_eq!(parse_run_key("micro-adjust@-0.25"), ("micro-adjust", -0.25));
+        assert_eq!(parse_run_key("micro-adjust"), ("micro-adjust", 0.0));
+        assert_eq!(parse_run_key("odd@name"), ("odd@name", 0.0));
     }
 
     #[test]
