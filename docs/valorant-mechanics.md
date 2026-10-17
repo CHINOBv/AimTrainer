@@ -24,7 +24,8 @@ Research date: 2026-10-16.
 | Value | Confidence | Source |
 |---|---|---|
 | Vertical FOV is locked at ≈70.53°, which gives 103° horizontal at 16:9 (Hor+) | verified | https://www.mouse-sensitivity.com/forums/topic/9354-about-wrong-fov-about-valorant-in-43/ |
-| Horizontal FOV per aspect ratio: 4:3 → 86.63°, 16:10 → 97.05°, 21:9 → 117.57° | verified (follows from the formula) | https://fovcalculatorpro.com/games/valorant-fov/ |
+| Horizontal FOV per aspect ratio: 4:3 → 86.63°, 16:10 → 97.05° | verified (follows from the formula) | https://fovcalculatorpro.com/games/valorant-fov/ |
+| Ultrawide (wider than 16:9) is pillarboxed to 16:9, so the horizontal FOV stays 103°; the trainer renders a centered 16:9 viewport | approximate (one forum thread claims a wider FOV) | https://www.evetech.co.za/what-is-ultrawide-21-9-vs-16-9-gaming/e/3723 , https://www.change.org/p/ultrawide-fix-in-valorant , contra: https://www.mouse-sensitivity.com/forums/topic/8438-valorant-locked-fov/ |
 | Zoom levels: Vandal/Phantom 1.25×, Guardian 1.5×, Spectre 1.15×, Marshal/Outlaw 3.5×, Operator 2.5×/5× | verified | https://wiki.playvalorant.com/en-us/Vandal , https://wiki.playvalorant.com/en-us/Operator |
 | Zoomed HFOV = 103 / zoom | approximate (Riot does not document it) | https://game-sens.jor.dev/ |
 
