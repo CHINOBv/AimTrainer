@@ -182,7 +182,8 @@ attackers = 6                 # attackers sent in the run (1..=64), at most `bot
 - Movement uses `movement::step` with the weapon's movement profile and `MapDef::move_with_collision`; velocity pushing into a wall is lost.
 - Shooting is one shot per click, capped by the weapon's fire rate. Every shot has the weapon's first-shot spread, plus run spread when the speed is above the accuracy limit (27.5% of run speed for rifles), the same rule as the scenario session. Such shots count as moving shots.
 - A shot hits the nearest living bot whose hitbox (`ray_humanoid`) it crosses, unless a map box is hit first. Damage comes from `Weapon::stats()` per zone.
-- The player has 100 health and respawns at once when it reaches 0; each death is counted.
+- The player has 100 health and respawns at once when it reaches 0; each death is counted. A bot's Vandal headshot (160) kills in one shot, as in VALORANT.
+- Every spawn is protected: entering the arena and every respawn start `RESPAWN_GRACE_SECS` (1.5 s, an arena rule, not a VALORANT value) during which bots ignore the player, so the player can move off the spawn before the first fight. `ArenaSession::spawn_protection_secs()` reports the time left; the HUD shows it, and after a death it says "You died · respawned", so a respawn is never mistaken for a teleport. Outside a death the player is only moved by the session when an `angle_clear` starts its next angle.
 
 ### Bot model
 
