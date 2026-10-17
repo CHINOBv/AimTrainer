@@ -19,7 +19,8 @@ mod tests;
 pub use behavior::{PUSH_ADVANCE_SECS, PUSH_DUEL_SECS, STRAFE_SECS};
 pub use bot::{BOT_HEALTH, BOT_NOTICE_HALF_ANGLE_DEG, PEEK_DELAY_SECS, ROAM_PAUSE_SECS};
 pub use def::{
-    ArenaDef, ArenaError, ArenaMode, MAX_ATTACKERS, MAX_BOTS, SiteObjective, bot_profile,
+    ArenaDef, ArenaError, ArenaMode, MAX_ATTACKERS, MAX_BOTS, PRACTICE_SUFFIX, SiteObjective,
+    bot_profile, split_practice,
 };
 pub use session::{
     ArenaEvent, ArenaSession, ArenaStats, BOT_WEAPON, BotView, DEATH_POINTS, HEADSHOT_BONUS,
