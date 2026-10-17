@@ -1,0 +1,15 @@
+id = "switch-wide"
+name = "Wide Switch"
+category = "switching"
+description = """
+Speed switching across a wide field of view. Three targets spawn up to 60° to each side.
+Trains large, decisive switches without overshooting."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.25 }
+spawn = { kind = "angular", yaw_deg = [-60.0, 60.0], pitch_deg = [-2.0, 10.0], distance = [12.0, 16.0] }
+max_alive = 3
+min_separation_deg = 25
+
+[scoring]
+miss_penalty = 15

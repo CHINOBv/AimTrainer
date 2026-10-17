@@ -1,0 +1,20 @@
+id = "switch-evasive-small"
+name = "Evasive Micro Switch"
+category = "switching"
+description = """
+Evasive switching with small targets. Three head-sized targets drift and need 0.3 s of
+tracking each. Smaller targets punish sloppy lock-on, so settle before you commit."""
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.18 }
+spawn = { kind = "angular", yaw_deg = [-30.0, 30.0], pitch_deg = [0.0, 10.0], distance = [12.0, 14.0] }
+motion = { kind = "drift", speed = [0.8, 1.5], change_secs = [0.4, 0.9], max_offset = 1.5 }
+max_alive = 3
+health = 0.3
+min_separation_deg = 10
+
+[scoring]
+sphere = 400

@@ -38,6 +38,7 @@ name = "Reactive tracking"
 scenarios = [
   { id = "track-reactive-strafe", thresholds = [1450, 1850, 2250, 2650] },
   { id = "track-reactive-micro", thresholds = [1250, 2150, 4200, 4500] },
+  { id = "track-close-strafe", thresholds = [1575, 1950, 2350, 2800] },
 ]
 
 [[subcategories]]
@@ -45,6 +46,8 @@ skill = "switching"
 name = "Speed switching"
 scenarios = [
   { id = "switch-speed", thresholds = [3350, 5800, 8500, 11200] },
+  { id = "switch-heads", thresholds = [3200, 5100, 7200, 9300] },
+  { id = "switch-wide", thresholds = [3250, 5400, 7950, 10550] },
 ]
 
 [[subcategories]]
@@ -52,6 +55,7 @@ skill = "switching"
 name = "Evasive switching"
 scenarios = [
   { id = "switch-evasive", thresholds = [6250, 11400, 15050, 17100] },
+  { id = "switch-evasive-small", thresholds = [7500, 11900, 14400, 16350] },
 ]
 
 [[subcategories]]

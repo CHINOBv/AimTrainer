@@ -1,0 +1,15 @@
+id = "switch-heads"
+name = "Head Switch"
+category = "switching"
+description = """
+Speed switching between agents' heads. Three agents stand spread across a site at 10–20 m.
+One tap per head, then snap straight to the next: the multi-kill pattern from a retake."""
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-10.0, 10.0], z = [-20.0, -10.0] }
+max_alive = 3
+min_separation_deg = 10
+
+[scoring]
+miss_penalty = 20

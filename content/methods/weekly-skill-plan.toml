@@ -1,0 +1,36 @@
+id = "weekly-skill-plan"
+name = "Weekly Skill Plan"
+description = """
+One skill per day, Monday to Saturday, with a flexible Sunday. Each day builds from drills and
+harder variants up to the day's benchmark scenarios, so progress is measured while you train and
+no separate benchmark day is needed. About 30–40 min a day."""
+credit = "Structure adapted from VDIM (Voltaic Daily Improvement Method) by Lowgravity56 and 4rK, published by Voltaic. Scenarios are original."
+benchmark = "valorant-benchmark"
+
+# Tiers set the base difficulty of every run. Pick by overall benchmark energy; you can always
+# move up or down if a tier feels too easy or too hard.
+[[tiers]]
+id = "novice"
+name = "Novice"
+level = -0.5
+up_to_energy = 200
+
+[[tiers]]
+id = "intermediate"
+name = "Intermediate"
+level = 0.0
+up_to_energy = 400
+
+[[tiers]]
+id = "advanced"
+name = "Advanced"
+level = 0.5
+
+[week]
+monday = { routine = "skill-clicking-static", focus = ["Static clicking"] }
+tuesday = { routine = "skill-clicking-dynamic", focus = ["Dynamic clicking", "Movement accuracy"] }
+wednesday = { routine = "skill-tracking-precise", focus = ["Precise tracking"] }
+thursday = { routine = "skill-tracking-reactive", focus = ["Reactive tracking"] }
+friday = { routine = "skill-switching-speed", focus = ["Speed switching"] }
+saturday = { routine = "skill-switching-evasive", focus = ["Evasive switching"] }
+sunday = { flex = true }
