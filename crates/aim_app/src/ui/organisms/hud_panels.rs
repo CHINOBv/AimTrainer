@@ -132,8 +132,27 @@ pub fn pause_window(ctx: &egui::Context, description: &str) -> Option<UiAction> 
     action
 }
 
+/// While the spawn grace lasts, say why the player stands where they do: a respawn after a
+/// death (deaths otherwise look like a teleport) or the protected entry spawn.
+fn spawn_note(ctx: &egui::Context, s: &aim_world::arena::ArenaSession) {
+    let left = s.spawn_protection_secs();
+    if left <= 0.0 {
+        return;
+    }
+    egui::Area::new(egui::Id::new("arena-spawn-note"))
+        .anchor(Align2::CENTER_CENTER, [0.0, 90.0])
+        .show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                if s.stats().deaths > 0 {
+                    ui.label(big("You died · respawned", 26.0).color(BAD));
+                }
+                ui.label(format!("Spawn protection {left:.1} s"));
+            });
+        });
+}
+
 /// Arena status: time, health, kills/deaths, the site objective (when the arena has one),
-/// and a red vignette for `damage_flash` seconds.
+/// a respawn note during the spawn grace, and a red vignette for `damage_flash` seconds.
 pub fn arena_status(ctx: &egui::Context, s: &aim_world::arena::ArenaSession, damage_flash: f32) {
     let stats = s.stats();
     egui::Area::new(egui::Id::new("arena-hud"))
@@ -178,6 +197,7 @@ pub fn arena_status(ctx: &egui::Context, s: &aim_world::arena::ArenaSession, dam
                 ui.colored_label(BAD, "MOVING");
             }
         });
+    spawn_note(ctx, s);
     if damage_flash > 0.0 {
         let alpha = (damage_flash / 0.25).clamp(0.0, 1.0) * 0.35;
         let painter = ctx.layer_painter(egui::LayerId::new(
