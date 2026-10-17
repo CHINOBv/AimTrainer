@@ -13,7 +13,7 @@ use crate::ui::molecules::tab_bar;
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::settings_panels::{self, DpiMeter};
 use crate::ui::organisms::today_panel::{self, DayModel, RoutineModel, TodayAction, TodayModel};
-use crate::ui::organisms::{benchmark_panel, routine_list, scenario_browser};
+use crate::ui::organisms::{arena_list, benchmark_panel, routine_list, scenario_browser};
 use aim_core::fov;
 use aim_core::training::method::{MethodDef, Weekday};
 use aim_core::training::playlist;
@@ -42,14 +42,16 @@ enum Tab {
     Today,
     Scenarios,
     Routines,
+    Arenas,
     Benchmark,
     Settings,
 }
 
-const TABS: [(Tab, &str); 5] = [
+const TABS: [(Tab, &str); 6] = [
     (Tab::Today, "Today"),
     (Tab::Scenarios, "Scenarios"),
     (Tab::Routines, "Routines"),
+    (Tab::Arenas, "Arenas"),
     (Tab::Benchmark, "Benchmark"),
     (Tab::Settings, "Settings"),
 ];
@@ -192,6 +194,14 @@ fn menu(
                     "Custom routines: {}",
                     cfg.paths.routines_dir.display()
                 ));
+            });
+        }
+        Tab::Arenas => {
+            egui::CentralPanel::default().show(&mut root, |ui| {
+                let arenas = aim_world::arena::builtin::all();
+                action = action
+                    .take()
+                    .or(arena_list::arena_list(ui, &arenas, |id| history.best(id)));
             });
         }
         Tab::Benchmark => {

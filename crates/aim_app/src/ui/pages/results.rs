@@ -36,18 +36,23 @@ fn result_key(rec: &Recording) -> ResultKey {
 #[derive(Default)]
 struct ReportCache(Option<(ResultKey, RunReport)>);
 
-/// Save the replay and analyze the run the first time a result is seen.
+/// Save the replay and analyze the run the first time a result is seen. Arena results
+/// have no scenario recording, so there is nothing to save or analyze.
 fn refresh(cache: &mut ReportCache, last: &LastResult, paths: &Paths, lib: &Library) {
-    let key = result_key(&last.recording);
+    let Some(recording) = &last.recording else {
+        cache.0 = None;
+        return;
+    };
+    let key = result_key(recording);
     if cache.0.as_ref().is_some_and(|(k, _)| *k == key) {
         return;
     }
-    if !last.recording.inputs.is_empty()
-        && let Err(e) = replays::save(paths, &last.recording)
+    if !recording.inputs.is_empty()
+        && let Err(e) = replays::save(paths, recording)
     {
         bevy::log::error!("could not save replay: {e}");
     }
-    let report = RunReport::new(&analyze(&last.recording), |id| {
+    let report = RunReport::new(&analyze(recording), |id| {
         lib.scenario(id).map(|d| d.name.clone())
     });
     cache.0 = Some((key, report));
@@ -81,7 +86,15 @@ fn results(
         .and_then(|p| p.plan.get(p.index + 1))
         .and_then(|p| nav.library().scenario(&p.scenario_id))
         .map(|d| d.name.clone());
+    // Arena results retry the arena; scenario results retry the scenario (with its level).
+    let id = &last.result.scenario_id;
+    let retry = if last.recording.is_none() && aim_world::arena::builtin::get(id).is_some() {
+        crate::ui::UiAction::StartArena(id.clone())
+    } else {
+        crate::ui::UiAction::Retry(id.clone())
+    };
     let rc = ResultsContext {
+        retry,
         routine: nav.routine(),
         next_run: next_run.as_deref(),
         space: keys.just_pressed(KeyCode::Space),

@@ -1,5 +1,8 @@
 //! Playing a scenario: mouse look with exact degrees-per-count, feeding the core session,
-//! and mirroring its targets as meshes. All gameplay rules live in `aim_core`.
+//! and mirroring its targets as meshes. All gameplay rules live in `aim_core`; arenas
+//! (maps with bots) are in `arena`.
+
+pub mod arena;
 
 use crate::overlay::Overlay;
 use crate::persistence::adaptive::AdaptiveLevels;
@@ -94,20 +97,22 @@ pub struct LastResult {
     pub name: String,
     pub result: RunResult,
     pub previous_best: Option<f32>,
-    /// The run's input log, for post-run analysis.
-    pub recording: Recording,
+    /// The run's input log, for post-run analysis (scenarios only).
+    pub recording: Option<Recording>,
+    /// Extra lines for the results screen (e.g. arena K/D and crosshair placement).
+    pub notes: Vec<String>,
     /// Next adaptive level, when the run was played in adaptive mode.
     pub adaptive_next: Option<f32>,
 }
 
 #[derive(Component)]
-struct TargetVisual;
+pub(crate) struct TargetVisual;
 
 #[derive(Component)]
 pub struct MainCamera;
 
 #[derive(Resource)]
-struct WorldAssets {
+pub(crate) struct WorldAssets {
     target: Handle<StandardMaterial>,
     head: Handle<StandardMaterial>,
     body: Handle<StandardMaterial>,
@@ -128,8 +133,9 @@ impl Plugin for GamePlugin {
                 Update,
                 (pause_input, look, tick, sync_targets, update_camera)
                     .chain()
-                    .run_if(in_state(AppState::Playing)),
+                    .run_if(in_state(AppState::Playing).and_then(resource_exists::<Run>)),
             )
+            .add_plugins(arena::ArenaPlugin)
             .add_systems(Update, (manage_cursor, refresh_target_color, fit_viewport))
             .add_systems(OnExit(AppState::Playing), clear_targets);
     }
@@ -142,15 +148,20 @@ pub fn start_run(commands: &mut Commands, next: &mut NextState<AppState>, def: S
 
 /// Start a prepared run (e.g. one flagged as adaptive).
 pub fn start_run_with(commands: &mut Commands, next: &mut NextState<AppState>, run: Run) {
+    // Only one kind of run is active at a time.
+    commands.remove_resource::<arena::ArenaRun>();
     commands.insert_resource(run);
     next.set(AppState::Playing);
 }
 
-fn color(rgb: [f32; 3]) -> Color {
+pub(crate) fn color(rgb: [f32; 3]) -> Color {
     Color::srgb(rgb[0], rgb[1], rgb[2])
 }
 
-fn unlit(materials: &mut Assets<StandardMaterial>, c: Color) -> Handle<StandardMaterial> {
+pub(crate) fn unlit(
+    materials: &mut Assets<StandardMaterial>,
+    c: Color,
+) -> Handle<StandardMaterial> {
     materials.add(StandardMaterial {
         base_color: c,
         unlit: true,
@@ -261,14 +272,26 @@ fn look(
     }
     run.zoomed = buttons.pressed(MouseButton::Right);
     let k = deg_per_count(&settings, &run);
-    // Mouse counts arrive unaccelerated (Raw Input / Wayland relative-pointer). +y is down.
-    let (dx, dy) = (motion.delta.x as f64 * k, motion.delta.y as f64 * k);
-    run.view = run.view.rotated(dx as f32, -dy as f32);
+    run.view = apply_look(run.view, &motion, k);
+}
+
+/// Rotate `view` by this frame's raw mouse counts at `deg_per_count`. Counts arrive
+/// unaccelerated (Raw Input / Wayland relative-pointer); +y is down.
+pub(crate) fn apply_look(
+    view: ViewAngles,
+    motion: &AccumulatedMouseMotion,
+    deg_per_count: f64,
+) -> ViewAngles {
+    let (dx, dy) = (
+        motion.delta.x as f64 * deg_per_count,
+        motion.delta.y as f64 * deg_per_count,
+    );
+    view.rotated(dx as f32, -dy as f32)
 }
 
 /// Raw player input for one frame.
 #[derive(SystemParam)]
-struct PlayerInput<'w> {
+pub(crate) struct PlayerInput<'w> {
     time: Res<'w, Time>,
     keys: Res<'w, ButtonInput<KeyCode>>,
     buttons: Res<'w, ButtonInput<MouseButton>>,
@@ -301,7 +324,8 @@ impl RunFinisher<'_, '_> {
             name: session.def().name.clone(),
             result,
             previous_best,
-            recording: run.recording.clone(),
+            recording: Some(run.recording.clone()),
+            notes: Vec::new(),
             adaptive_next,
         });
         self.next.set(AppState::Results);
@@ -327,20 +351,7 @@ fn tick(input: PlayerInput, mut run: ResMut<Run>, mut finisher: RunFinisher) {
         run.countdown -= dt;
         return;
     }
-    let axis = |pos: KeyCode, neg: KeyCode| {
-        keys.pressed(pos) as i8 as f32 - keys.pressed(neg) as i8 as f32
-    };
-    let input = FrameInput {
-        dt,
-        view: run.view,
-        fire_pressed: buttons.just_pressed(MouseButton::Left),
-        fire_held: buttons.pressed(MouseButton::Left),
-        movement: MoveInput {
-            right: axis(KeyCode::KeyD, KeyCode::KeyA),
-            forward: axis(KeyCode::KeyW, KeyCode::KeyS),
-            walk: keys.pressed(KeyCode::ShiftLeft),
-        },
-    };
+    let input = frame_input(dt, run.view, &keys, &buttons);
     run.recording.inputs.push(input);
     for event in run.session.update(input) {
         match event {
@@ -352,7 +363,30 @@ fn tick(input: PlayerInput, mut run: ResMut<Run>, mut finisher: RunFinisher) {
     }
 }
 
-fn spawn_visual(commands: &mut Commands, assets: &WorldAssets, shape: &Shape) -> Entity {
+/// The core's per-frame input from keys and buttons (WASD, Shift walk, left click).
+pub(crate) fn frame_input(
+    dt: f32,
+    view: ViewAngles,
+    keys: &ButtonInput<KeyCode>,
+    buttons: &ButtonInput<MouseButton>,
+) -> FrameInput {
+    let axis = |pos: KeyCode, neg: KeyCode| {
+        keys.pressed(pos) as i8 as f32 - keys.pressed(neg) as i8 as f32
+    };
+    FrameInput {
+        dt,
+        view,
+        fire_pressed: buttons.just_pressed(MouseButton::Left),
+        fire_held: buttons.pressed(MouseButton::Left),
+        movement: MoveInput {
+            right: axis(KeyCode::KeyD, KeyCode::KeyA),
+            forward: axis(KeyCode::KeyW, KeyCode::KeyS),
+            walk: keys.pressed(KeyCode::ShiftLeft),
+        },
+    }
+}
+
+pub(crate) fn spawn_visual(commands: &mut Commands, assets: &WorldAssets, shape: &Shape) -> Entity {
     let mut e = commands.spawn((TargetVisual, Transform::default(), Visibility::default()));
     match *shape {
         Shape::Sphere { radius } => {
@@ -447,23 +481,40 @@ fn update_camera(
     let Ok((mut tf, mut projection)) = camera.single_mut() else {
         return;
     };
-    let eye = run.session.eye_position();
+    let zoom = run.session.def().weapon.kind.stats().zoom as f64;
+    place_camera(
+        &mut tf,
+        &mut projection,
+        run.session.eye_position(),
+        run.view,
+        run.zoomed,
+        zoom,
+    );
+}
+
+/// Put the camera at `eye` looking along `view`, with VALORANT's FOV for the zoom state.
+pub(crate) fn place_camera(
+    tf: &mut Transform,
+    projection: &mut Projection,
+    eye: aim_core::math::Vec3,
+    view: ViewAngles,
+    zoomed: bool,
+    zoom: f64,
+) {
     tf.translation = Vec3::new(eye.x, eye.y, eye.z);
     // Core yaw turns right (clockwise from above); Bevy's Y rotation is counter-clockwise.
     tf.rotation = Quat::from_euler(
         EulerRot::YXZ,
-        -run.view.yaw_deg.to_radians(),
-        run.view.pitch_deg.to_radians(),
+        -view.yaw_deg.to_radians(),
+        view.pitch_deg.to_radians(),
         0.0,
     );
-
-    let zoom = run.session.def().weapon.kind.stats().zoom as f64;
-    let vfov = if run.zoomed && zoom > 1.0 {
+    let vfov = if zoomed && zoom > 1.0 {
         fov::valorant_zoomed_vertical_fov_deg(zoom)
     } else {
         fov::valorant_vertical_fov_deg()
     };
-    if let Projection::Perspective(p) = &mut *projection {
+    if let Projection::Perspective(p) = projection {
         p.fov = (vfov as f32).to_radians();
     }
 }
@@ -507,13 +558,14 @@ fn manage_cursor(
     state: Res<State<AppState>>,
     overlay: Res<Overlay>,
     run: Option<Res<Run>>,
+    arena: Option<Res<arena::ArenaRun>>,
     mut cursors: Query<&mut CursorOptions, With<PrimaryWindow>>,
 ) {
     let Ok(mut cursor) = cursors.single_mut() else {
         return;
     };
-    let capture =
-        overlay.visible && *state.get() == AppState::Playing && run.is_some_and(|r| !r.paused);
+    let active = run.is_some_and(|r| !r.paused) || arena.is_some_and(|a| !a.paused);
+    let capture = overlay.visible && *state.get() == AppState::Playing && active;
     let (grab, visible) = if capture {
         (CursorGrabMode::Locked, false)
     } else {

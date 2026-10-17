@@ -30,6 +30,20 @@ pub fn launch_requested(mut quick: ResMut<QuickLaunch>, mut nav: Navigator) {
     nav.apply(action);
 }
 
+/// Open the scenario or arena given on the command line, once.
+pub fn launch_startup(mut startup: ResMut<super::StartupPlay>, mut nav: Navigator) {
+    let Some(id) = startup.0.take() else { return };
+    let action = if aim_world::arena::builtin::get(&id).is_some() {
+        UiAction::StartArena(id)
+    } else if nav.library().scenario(&id).is_some() {
+        UiAction::StartScenario(id)
+    } else {
+        bevy::log::warn!("`play {id}`: no scenario or arena with that id");
+        return;
+    };
+    nav.apply(action);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -57,6 +71,7 @@ mod tests {
     #[test]
     fn systems_have_no_conflicting_access() {
         assert_is_system(launch_requested);
+        assert_is_system(launch_startup);
     }
 
     #[test]

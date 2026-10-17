@@ -1,6 +1,7 @@
 //! In-run HUD: crosshair, status, movement meter, countdown and pause menu.
 
 use crate::game::AppState;
+use crate::game::arena::ArenaRun;
 use crate::overlay::Overlay;
 use crate::persistence::settings::Settings;
 use crate::ui::atoms::crosshair;
@@ -24,12 +25,30 @@ fn hud(
     mut contexts: EguiContexts,
     settings: Res<Settings>,
     overlay: Res<Overlay>,
+    arena: Option<ResMut<ArenaRun>>,
     mut nav: Navigator,
 ) -> Result {
     if !overlay.visible {
         return Ok(());
     }
     let ctx = contexts.ctx_mut()?;
+    if let Some(mut arena) = arena {
+        crosshair::draw(ctx, &settings.crosshair, arena.hit_flash > 0.0);
+        hud_panels::arena_status(ctx, &arena.session, arena.damage_flash);
+        if arena.countdown > 0.0 {
+            hud_panels::countdown(ctx, arena.countdown);
+        }
+        let action = arena
+            .paused
+            .then(|| hud_panels::pause_window(ctx, &arena.session.def().description))
+            .flatten();
+        match action {
+            Some(crate::ui::UiAction::Resume) => arena.paused = false,
+            Some(other) => nav.apply(other),
+            None => {}
+        }
+        return Ok(());
+    }
     let Some(run) = nav.run() else { return Ok(()) };
     crosshair::draw(ctx, &settings.crosshair, run.hit_flash > 0.0);
     hud_panels::run_status(ctx, &run.session);

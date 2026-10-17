@@ -22,9 +22,10 @@ use std::sync::Mutex;
 
 fn main() -> AppExit {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    if let Some(exit) = cli::run(&args) {
-        return exit;
-    }
+    let play = match cli::run(&args) {
+        cli::Outcome::Exit(exit) => return exit,
+        cli::Outcome::StartTrainer { play } => play,
+    };
 
     let paths = settings::Paths::resolve();
     let settings = settings::Settings::load(&paths);
@@ -96,6 +97,9 @@ fn main() -> AppExit {
         ))
         .insert_resource(settings)
         .insert_resource(paths);
+    if let Some(id) = play {
+        app.insert_resource(ui::StartupPlay(Some(id)));
+    }
     if let Some(rx) = ipc_rx {
         app.insert_resource(ipc::IpcReceiver(Mutex::new(rx)));
     }

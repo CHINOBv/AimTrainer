@@ -127,6 +127,7 @@ version = "0.1.0"
 dependencies = [
  "aim_core",
  "aim_integrations",
+ "aim_world",
  "bevy",
  "bevy_egui",
  "chrono",
