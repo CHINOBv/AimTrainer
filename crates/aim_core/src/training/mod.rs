@@ -3,4 +3,5 @@
 pub mod adaptive;
 pub mod benchmark;
 pub mod method;
+pub mod playlist;
 pub mod routine;
