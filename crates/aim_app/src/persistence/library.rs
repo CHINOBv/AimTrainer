@@ -2,9 +2,9 @@
 //! built-in replaces it.
 
 use crate::persistence::settings::Paths;
-use aim_core::benchmark::{self, BenchmarkDef};
-use aim_core::routine::{self, RoutineDef};
 use aim_core::scenario::{self, ScenarioDef};
+use aim_core::training::benchmark::{self, BenchmarkDef};
+use aim_core::training::routine::{self, RoutineDef};
 use bevy::prelude::Resource;
 use std::fs;
 use std::path::Path;

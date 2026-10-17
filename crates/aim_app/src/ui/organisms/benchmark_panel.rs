@@ -3,7 +3,7 @@
 use crate::ui::UiAction;
 use crate::ui::atoms::WARN;
 use crate::ui::molecules::energy_text;
-use aim_core::benchmark::BenchmarkDef;
+use aim_core::training::benchmark::BenchmarkDef;
 use bevy_egui::egui;
 use std::collections::HashMap;
 
