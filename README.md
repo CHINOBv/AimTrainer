@@ -3,17 +3,42 @@
 A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **Windows**. It runs as a transparent overlay that you show or hide with a hotkey.
 
 - **Exact sensitivity**
-  - Uses VALORANT's 0.07°/count, both yaw and pitch.
-  - Reads raw, unaccelerated mouse counts: Raw Input on Windows, `zwp_relative_pointer` on Wayland.
-  - Shows cm/360 and eDPI, and converts from CS2, Apex and Overwatch 2.
-  - Includes a DPI check that measures the real counts your mouse sends.
-- **VALORANT FOV:** 70.53° vertical (Hor+), which is 103° horizontal at 16:9. ADS zoom matches each weapon's multiplier.
-- **Real movement**
-  - 5.4 m/s with rifles, 6.75 m/s with the knife.
-  - Deceleration replays the stopping curves a Riot designer measured.
-  - Shots fired above 27.5% of run speed are inaccurate.
-- **Exercises are data:** each one is a TOML file. Drop new ones into a folder; no rebuild needed. Ships with 14, covering flicking, microcorrections, switching, tracking, movement (counter-strafe), angle holding and long-range precision.
-- **Evidence-based routines and a Voltaic-style benchmark:** subcategory energy combined with a harmonic mean. See [`docs/training-science.md`](docs/training-science.md).
+  - Uses VALORANT's 0.07°/count for yaw and pitch, read from raw, unaccelerated mouse counts.
+  - Shows cm/360 and eDPI.
+  - Includes a converter with monitor-distance matching for CS2, Apex, Overwatch 2, Fortnite, Call of Duty, Destiny 2, Rainbow Six Siege and Deadlock.
+  - Includes a DPI check and a guided **sensitivity finder**.
+- **VALORANT FOV and movement**
+  - 70.53° vertical (Hor+, 103° horizontal at 16:9), with ultrawide pillarboxed like the game. ADS zoom follows the weapon.
+  - Rifle and knife speeds and the stopping curves Riot measured.
+  - Shots above 27.5% of run speed are inaccurate.
+- **Training content**
+  - **23 exercises as TOML files**, with difficulty levels generated from one definition.
+  - **Spray and burst drills** with a recoil model built on Riot's published parameters.
+  - **Ammo-economy clicking.**
+  - **Arenas:** deathmatch and angle clearing against bots that move like VALORANT players, on original maps.
+- **How to train**
+  - A **weekly method** in the style of VDIM: one skill per day, drills → variants → benchmark, with tiers.
+  - Interleaved routines and a **personalized playlist**.
+  - **Adaptive difficulty** that holds you near 80% success.
+  - A Voltaic-style **benchmark**.
+- **Ranked days**
+  - A **queue warm-up** sized to your queue.
+  - **20-second buy-phase drills** that hide themselves when done.
+  - A **"ready for ranked?" check.**
+  - **Fatigue warnings.**
+  - **Daily goals and streaks.**
+  - A **daily challenge** that everyone plays with the same seed.
+- **Feedback**
+  - Flick and tracking analysis with explained recommendations.
+  - A **replay viewer** of your crosshair path.
+  - Benchmark trends and personal bests.
+  - Offline **post-match analysis** of official match files.
+- **Your setup**
+  - VALORANT **crosshair codes** (import and export).
+  - A shareable **profile code**.
+  - A **system check**: FPS, 1% lows, vsync, acceleration.
+
+The research behind the training is in [`docs/training-science.md`](docs/training-science.md), and the features are justified in [`docs/feature-analysis.md`](docs/feature-analysis.md).
 
 Every value has a source in [`docs/valorant-mechanics.md`](docs/valorant-mechanics.md). Design decisions and known limitations: [`docs/decisions.md`](docs/decisions.md).
 
@@ -40,6 +65,29 @@ On Windows, install Rust with rustup and run `cargo build --release`. The binary
 | Pause / resume | Esc |
 | Retry or next routine run (on the results screen) | Space |
 
+The menu tabs:
+
+| Tab | What it holds |
+|---|---|
+| Today | The day's method session, the daily challenge |
+| Progress | Goal, readiness, fatigue, trend, bests, replays |
+| Scenarios | Play, or play adaptively |
+| Routines | The routines and your personalized playlist |
+| Arenas | Deathmatch and angle clearing |
+| Benchmark | Your benchmark energy and ranks |
+| Settings | Sensitivity, converter, finder, crosshair, profile code, system check, hotkeys |
+
+## Command line
+
+```sh
+aimtrainer                                        # start the trainer
+aimtrainer play <scenario|arena>                  # start straight into a scenario or arena
+aimtrainer toggle | show | hide                   # control a running trainer (Linux)
+aimtrainer warmup [minutes]                       # show the trainer and start a queue warm-up
+aimtrainer micro                                  # one 20 s buy-phase drill, then hide again
+aimtrainer analyze-match <match.json> --player Name#TAG
+```
+
 ## Overlay: show and hide
 
 When hidden, the trainer draws nothing, becomes click-through, releases the mouse and pauses the run.
@@ -49,8 +97,10 @@ When hidden, the trainer draws nothing, becomes click-through, releases the mous
 Wayland does not let an app grab global shortcuts, so the compositor runs `aimtrainer toggle` instead. Install the binary somewhere on your `PATH` first, for example `cargo install --path crates/aim_app`. Then add this to `~/.config/hypr/user.lua` (Lua config, Hyprland ≥ 0.53):
 
 ```lua
--- Show/hide the aim trainer overlay
+-- Show/hide the overlay, start a queue warm-up, play a buy-phase drill
 hl.bind("CTRL + SHIFT + F10", hl.dsp.exec_cmd("aimtrainer toggle"))
+hl.bind("CTRL + SHIFT + F9",  hl.dsp.exec_cmd("aimtrainer warmup"))
+hl.bind("CTRL + SHIFT + F8",  hl.dsp.exec_cmd("aimtrainer micro"))
 
 hl.window_rule({
     name      = "aimtrainer-overlay",
@@ -67,13 +117,21 @@ If your config uses a rebind helper (`K(...)`), wrap the key string in it. On a 
 
 ```
 bind = CTRL SHIFT, F10, exec, aimtrainer toggle
+bind = CTRL SHIFT, F9, exec, aimtrainer warmup
+bind = CTRL SHIFT, F8, exec, aimtrainer micro
 ```
 
 Other commands: `aimtrainer show` and `aimtrainer hide`.
 
 ### Windows and X11
 
-The trainer registers a global hotkey, **Ctrl+Shift+F10** by default. To change it, set `overlay_hotkey` in Settings or in `settings.toml`, then restart.
+The trainer registers three global hotkeys, which you can change in Settings (a restart is needed):
+
+| Hotkey | Action |
+|---|---|
+| **Ctrl+Shift+F10** | Toggle the overlay |
+| **Ctrl+Shift+F9** | Start a queue warm-up |
+| **Ctrl+Shift+F8** | Play a buy-phase drill |
 
 To draw on top of VALORANT, set VALORANT to **Windowed Fullscreen**, because an exclusive-fullscreen game covers every other window.
 
@@ -104,10 +162,15 @@ See [`docs/scenarios.md`](docs/scenarios.md) for the format; the built-ins in `c
 
 ```
 crates/
-  aim_core/   engine-agnostic domain, fully unit-tested
-              sensitivity · fov · movement · valorant data · scenario engine
-              routines · benchmark · simulated aimer (Fitts' law)
-  aim_app/    Bevy 0.20 + egui adapter: input, rendering, overlay, menus, persistence
+  aim_core/          engine-agnostic domain, fully unit-tested
+                     sensitivity (+ converter, finder) · fov · movement · VALORANT data
+                     scenario engine (difficulty, recoil, recording) · training (routines,
+                     benchmark, weekly method, adaptive, playlists, warm-ups, progress)
+                     analytics · crosshair codes · profile codes · simulated aimer
+  aim_world/         original maps, line of sight, collision, navigation, arenas with bots
+  aim_integrations/  offline post-match analysis of official match JSON
+  aim_app/           Bevy 0.20 + egui adapter: input, rendering, overlay, menus, persistence
+content/             scenarios, routines, benchmarks, methods, maps, arenas (TOML)
 ```
 
 All gameplay rules live in `aim_core`. The app only turns raw input into `FrameInput` and draws whatever the session reports. To add a new mechanic, add a building block in `aim_core::scenario::def` and handle it in `session.rs`; it is then available to every TOML file.
@@ -119,16 +182,7 @@ cargo run -p aim_core --release --example calibrate     # simulated-player score
 
 ## Roadmap
 
-The plan, phase by phase, is in [`docs/roadmap.md`](docs/roadmap.md):
-
-- open-source readiness;
-- a VDIM-style weekly training method as the primary plan;
-- custom crosshairs and a sensitivity converter;
-- flick and correction analytics with recommendations;
-- adaptive difficulty;
-- deathmatch with bots;
-- original tactical maps;
-- match integration through official APIs.
+Phases 1–8 of [`docs/roadmap.md`](docs/roadmap.md) are implemented; its status table lists what shipped and where the implementation deliberately differs from the plan.
 
 ## Contributing
 

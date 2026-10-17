@@ -5,14 +5,29 @@ This is where the project is going, and which part of the architecture owns each
 | Phase | Theme | Main owner | Depends on |
 |---|---|---|---|
 | 0 ✅ | Foundation: exact sensitivity, VALORANT movement, 14 scenarios, routines, benchmark, overlay | `aim_core`, `aim_app` | — |
-| 1 | Open-source readiness | repository | 0 |
-| 2 ⭐ | **Primary training method:** a weekly skill-focus plan in the style of Voltaic's VDIM | `aim_core::training` + `content/` | 0, 1 (C1, C4) |
-| 3 | Player tools: custom crosshairs, sensitivity converter | `aim_core::crosshair`, `aim_core::sensitivity` + `games` | 1 |
-| 4 | Analytics: flicks, corrections, strengths and weaknesses, recommendations | `aim_core::analytics`, `training::recommend` | 1 |
-| 5 | Adaptive training: dynamic difficulty, personalized playlists | `aim_core::training` | 2, 4 |
-| 6 | Game-mixed training: activities, deathmatch with bots | `aim_core` (`Activity`, bots), new app plugin | 5 |
-| 7 | Tactical drills: original maps for angles, peeks and clearing | `aim_world` (new crate) | 6 |
-| 8 | Match integration: read rounds, then suggest or rebuild drills | `aim_integrations` (new crate) | 4, 7 |
+| 1 ✅ | Open-source readiness | repository | 0 |
+| 2 ✅ ⭐ | **Primary training method:** a weekly skill-focus plan in the style of Voltaic's VDIM | `aim_core::training` + `content/` | 0, 1 (C1, C4) |
+| 3 ✅ | Player tools: custom crosshairs, sensitivity converter | `aim_core::crosshair`, `aim_core::sensitivity` + `games` | 1 |
+| 4 ✅ | Analytics: flicks, corrections, strengths and weaknesses, recommendations | `aim_core::analytics`, `training::recommend` | 1 |
+| 5 ✅ | Adaptive training: dynamic difficulty, personalized playlists | `aim_core::training` | 2, 4 |
+| 6 ✅ | Game-mixed training: activities, deathmatch with bots | `aim_core` (`Activity`, bots), new app plugin | 5 |
+| 7 ✅ | Tactical drills: original maps for angles, peeks and clearing | `aim_world` (new crate) | 6 |
+| 8 ✅ | Match integration: read rounds, then suggest or rebuild drills | `aim_integrations` (new crate) | 4, 7 |
+
+## Status (2026-10-17)
+
+Phases 1–8 are implemented on `feat/roadmap-completion`. The feature analysis that followed added 12 features for ranked days; see [`feature-analysis.md`](feature-analysis.md).
+
+| Phase | What shipped | Deviations from the plan, and why |
+|---|---|---|
+| 1 | CI on Linux and Windows; issue and PR templates; MIT license; conformance backlog C1–C4, C8, C10, C11 | — |
+| 2 | Generic difficulty scaling (`scenario::difficulty`); six VDIM-style day routines; `training::method`; Today page with tiers chosen by benchmark energy and resumable split days | Difficulty variants are *generated* from one definition (`at_difficulty`) instead of hand-written files. This is DRY, and Phase 5 needed it anyway |
+| 3 | `aim_core::crosshair` with VALORANT code import/export; crosshair editor and renderer; data-driven sensitivity converter with monitor-distance matching | — |
+| 4 | Deterministic `Recording` + replay codec; flick/tracking analysis; explainable recommendations; history chart; replay viewer | — |
+| 5 | Adaptive staircase (~80% success); personalized playlist; ammo economy (reload mechanic) | — |
+| 6 | `aim_world::arena` deathmatch with bots using VALORANT movement and a Fitts-law aim model | No shared `Activity` trait: arenas run as their own resource next to scenario runs. A trait would have added no behavior (YAGNI); revisit if a third kind of activity appears |
+| 7 | `aim_world` maps (original geometry), line of sight, collision, navigation; angle-clearing arena with a crosshair-placement metric | — |
+| 8 | `aim_integrations` offline analysis of official match JSON; `aimtrainer analyze-match` | No online fetch: it needs a Riot production key and RSO, which a personal or open-source build cannot ship. See `match-analysis.md` |
 
 ## Phase 1: open-source readiness
 
