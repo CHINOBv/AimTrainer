@@ -251,120 +251,31 @@ mod tests {
         );
     }
 
-    /// Findings of simulated runs, captured before the rules moved from Rust to TOML: the
-    /// data table must reproduce them exactly.
+    /// The TOML rules find exactly what the former Rust table found, for the same runs.
+    /// Both run in this process: simulated values differ slightly between platforms' math
+    /// libraries, so pinning their text would make the test pass on one OS only.
     #[test]
     fn simulated_findings_are_unchanged_by_the_rules_file() {
-        let peek = (vec!["peek-reaction"], Some("quick-warmup"));
-        let undershoot = (vec!["flick-wide"], None);
-        let corrections = (vec!["micro-adjust", "flick-headshot"], None);
-        let lag = (vec!["track-precise", "track-reactive-micro"], None);
-        type Practice<'a> = Option<(Vec<&'a str>, Option<&'a str>)>;
-        type Owned = Vec<(String, Option<(Vec<String>, Option<String>)>)>;
-        type Case<'a> = (&'a str, usize, Vec<(&'a str, Practice<'a>)>);
-        let expected: Vec<Case> = vec![
-            (
-                "flick-wide",
-                0,
-                vec![
-                    (
-                        "Median reaction time 419 ms is above the 300 ms threshold: you start moving late after a target appears.",
-                        Some(peek.clone()),
-                    ),
-                    (
-                        "Undershoot rate 52% is above the 35% threshold: your first movement often stops short of the target.",
-                        Some(undershoot.clone()),
-                    ),
-                    (
-                        "Corrections per flick 1.51 is above the 1.00 threshold: you usually need more than one correction after the first movement.",
-                        Some(corrections.clone()),
-                    ),
-                    (
-                        "Overshoot rate 2% is below the 10% threshold: your first movement rarely ends past the target.",
-                        None,
-                    ),
-                ],
-            ),
-            (
-                "flick-wide",
-                3,
-                vec![(
-                    "Overshoot rate 0% is below the 10% threshold: your first movement rarely ends past the target.",
-                    None,
-                )],
-            ),
-            (
-                "track-precise",
-                1,
-                vec![(
-                    "Time behind the target 96% is above the 65% threshold: you trail behind moving targets most of the time.",
-                    Some(lag.clone()),
-                )],
-            ),
-            (
-                "track-reactive-strafe",
-                0,
-                vec![
-                    (
-                        "Time on target 37% is below the 50% threshold: you are off the target for more than half the time you fire.",
-                        Some((vec!["track-precise"], None)),
-                    ),
-                    (
-                        "Time behind the target 82% is above the 65% threshold: you trail behind moving targets most of the time.",
-                        Some(lag),
-                    ),
-                ],
-            ),
-            (
-                "micro-adjust",
-                1,
-                vec![
-                    (
-                        "Median reaction time 358 ms is above the 300 ms threshold: you start moving late after a target appears.",
-                        Some(peek),
-                    ),
-                    (
-                        "Undershoot rate 65% is above the 35% threshold: your first movement often stops short of the target.",
-                        Some(undershoot),
-                    ),
-                    (
-                        "Corrections per flick 2.12 is above the 1.00 threshold: you usually need more than one correction after the first movement.",
-                        Some(corrections),
-                    ),
-                    (
-                        "Overshoot rate 1% is below the 10% threshold: your first movement rarely ends past the target.",
-                        None,
-                    ),
-                ],
-            ),
+        let former = crate::analytics::rules::tests::former_rule_set();
+        let cases = [
+            ("flick-wide", 0),
+            ("flick-wide", 3),
+            ("track-precise", 1),
+            ("track-reactive-strafe", 0),
+            ("micro-adjust", 1),
         ];
-        for (id, preset, want) in expected {
-            let p = SkillProfile::build(&[analyze(&record(id, AimerProfile::PRESETS[preset], 2))]);
-            let got: Owned = p
-                .findings()
-                .map(|f| {
-                    let rec = f.recommendation.as_ref().map(|r| {
-                        (
-                            r.scenario_ids.iter().map(|s| s.to_string()).collect(),
-                            r.routine_id.as_ref().map(|s| s.to_string()),
-                        )
-                    });
-                    (f.explanation.clone(), rec)
-                })
-                .collect();
-            let want: Owned = want
-                .into_iter()
-                .map(|(e, r)| {
-                    let r = r.map(|(ids, routine)| {
-                        (
-                            ids.into_iter().map(str::to_owned).collect(),
-                            routine.map(str::to_owned),
-                        )
-                    });
-                    (e.to_owned(), r)
-                })
-                .collect();
-            assert_eq!(got, want, "{id} preset {preset}");
+        for (id, preset) in cases {
+            let runs = [analyze(&record(id, AimerProfile::PRESETS[preset], 2))];
+            let now = SkillProfile::build(&runs);
+            assert_eq!(
+                now,
+                SkillProfile::build_with(&runs, &former),
+                "{id} preset {preset}"
+            );
+            assert!(
+                now.findings().next().is_some(),
+                "{id} preset {preset}: no findings"
+            );
         }
     }
 
