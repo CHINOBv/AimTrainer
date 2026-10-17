@@ -1,0 +1,198 @@
+{
+  "matchInfo": {
+    "matchId": "fixture-match-0001",
+    "mapId": "/Game/Maps/Ascent/Ascent",
+    "gameLengthMillis": 1800000,
+    "gameStartMillis": 1760000000000,
+    "provisioningFlowId": "Matchmaking",
+    "isCompleted": true,
+    "customGameName": "",
+    "queueId": "competitive",
+    "gameMode": "/Game/GameModes/Bomb/BombGameMode.BombGameMode_C",
+    "isRanked": true,
+    "seasonId": "season-uuid"
+  },
+  "players": [
+    {
+      "puuid": "p-me", "gameName": "Ace", "tagLine": "EUW", "teamId": "Blue",
+      "partyId": "party-1", "characterId": "jett-uuid", "competitiveTier": 12,
+      "stats": { "score": 1500, "roundsPlayed": 4, "kills": 5, "deaths": 3, "assists": 1, "playtimeMillis": 1800000, "abilityCasts": null }
+    },
+    {
+      "puuid": "p-mate", "gameName": "Mate", "tagLine": "EUW", "teamId": "Blue", "characterId": "sova-uuid",
+      "stats": { "score": 300, "roundsPlayed": 4, "kills": 1, "deaths": 0, "assists": 0 }
+    },
+    {
+      "puuid": "p-e1", "gameName": "Foe", "tagLine": "NA1", "teamId": "Red", "characterId": "reyna-uuid",
+      "stats": { "score": 400, "roundsPlayed": 4, "kills": 1, "deaths": 3, "assists": 0 }
+    },
+    {
+      "puuid": "p-e2", "gameName": "Rival", "tagLine": "NA1", "teamId": "Red", "characterId": "phoenix-uuid",
+      "stats": { "score": 600, "roundsPlayed": 4, "kills": 2, "deaths": 2, "assists": 0 }
+    },
+    {
+      "puuid": "p-e3", "gameName": "Third", "tagLine": "NA1", "teamId": "Red", "characterId": "sage-uuid",
+      "stats": { "score": 0, "roundsPlayed": 4, "kills": 0, "deaths": 1, "assists": 0 }
+    }
+  ],
+  "coaches": [],
+  "teams": [
+    { "teamId": "Blue", "won": true, "roundsPlayed": 4, "roundsWon": 3, "numPoints": 3 },
+    { "teamId": "Red", "won": false, "roundsPlayed": 4, "roundsWon": 1, "numPoints": 1 }
+  ],
+  "roundResults": [
+    {
+      "roundNum": 0, "roundResult": "Eliminated", "roundCeremony": "CeremonyDefault", "winningTeam": "Blue",
+      "bombPlanter": null, "plantRoundTime": 0, "plantLocation": { "x": 0, "y": 0 },
+      "playerStats": [
+        {
+          "puuid": "p-me",
+          "kills": [
+            {
+              "timeSinceGameStartMillis": 115000, "timeSinceRoundStartMillis": 15000,
+              "killer": "p-me", "victim": "p-e1",
+              "victimLocation": { "x": 600, "y": 800 },
+              "assistants": [],
+              "playerLocations": [
+                { "puuid": "p-me", "viewRadians": 0.5, "location": { "x": 0, "y": 0 } },
+                { "puuid": "p-e2", "viewRadians": 1.0, "location": { "x": 3000, "y": 4000 } }
+              ],
+              "finishingDamage": { "damageType": "Weapon", "damageItem": "vandal-uuid", "isSecondaryFireMode": false }
+            }
+          ],
+          "damage": [ { "receiver": "p-e1", "damage": 190, "legshots": 0, "bodyshots": 2, "headshots": 1 } ],
+          "score": 200,
+          "economy": { "loadoutValue": 3900, "weapon": "vandal-uuid", "armor": "heavy-uuid", "remaining": 100, "spent": 3900 },
+          "ability": { "grenadeEffects": null }
+        },
+        {
+          "puuid": "p-e2",
+          "kills": [
+            {
+              "timeSinceRoundStartMillis": 30000,
+              "killer": "p-e2", "victim": "p-me",
+              "victimLocation": { "x": 0, "y": 0 },
+              "assistants": [],
+              "playerLocations": [
+                { "puuid": "p-e2", "viewRadians": 4.0, "location": { "x": 3000, "y": 4000 } }
+              ],
+              "finishingDamage": { "damageType": "Weapon", "damageItem": "operator-uuid", "isSecondaryFireMode": true }
+            }
+          ],
+          "damage": [ { "receiver": "p-me", "damage": 150, "legshots": 1, "bodyshots": 6, "headshots": 0 } ],
+          "economy": null
+        }
+      ]
+    },
+    {
+      "roundNum": 1, "winningTeam": "Red",
+      "playerStats": [
+        {
+          "puuid": "p-e1",
+          "kills": [
+            {
+              "timeSinceRoundStartMillis": 8000,
+              "killer": "p-e1", "victim": "p-me",
+              "victimLocation": { "x": 0, "y": 0 },
+              "playerLocations": [
+                { "puuid": "p-e1", "viewRadians": 2.0, "location": { "x": 300, "y": 400 } }
+              ],
+              "finishingDamage": { "damageType": "Weapon", "damageItem": "phantom-uuid" }
+            }
+          ],
+          "damage": []
+        },
+        {
+          "puuid": "p-me",
+          "kills": [
+            {
+              "timeSinceRoundStartMillis": 20000,
+              "killer": "p-me", "victim": "p-e2",
+              "victimLocation": { "x": 1800, "y": 2400 },
+              "playerLocations": [
+                { "puuid": "p-me", "viewRadians": 0.9, "location": { "x": 0, "y": 0 } }
+              ],
+              "finishingDamage": { "damageType": "Weapon", "damageItem": "vandal-uuid" }
+            }
+          ],
+          "damage": [ { "receiver": "p-e2", "damage": 160, "legshots": 1, "bodyshots": 3, "headshots": 0 } ]
+        }
+      ]
+    },
+    {
+      "roundNum": 2, "winningTeam": "Blue",
+      "playerStats": [
+        {
+          "puuid": "p-mate",
+          "kills": [
+            {
+              "timeSinceRoundStartMillis": 5000,
+              "killer": "p-mate", "victim": "p-e1",
+              "victimLocation": { "x": 0, "y": 500 },
+              "assistants": ["p-me"],
+              "playerLocations": [
+                { "puuid": "p-mate", "viewRadians": 1.5, "location": { "x": 0, "y": 0 } }
+              ],
+              "finishingDamage": { "damageType": "Weapon", "damageItem": "spectre-uuid" }
+            }
+          ]
+        },
+        {
+          "puuid": "p-e2",
+          "kills": [
+            {
+              "timeSinceRoundStartMillis": 12000,
+              "killer": "p-e2", "victim": "p-me",
+              "victimLocation": { "x": 0, "y": 0 },
+              "playerLocations": [
+                { "puuid": "p-e2", "viewRadians": 3.0, "location": { "x": 1200, "y": 1600 } }
+              ],
+              "finishingDamage": { "damageType": "Weapon", "damageItem": "operator-uuid" }
+            }
+          ],
+          "damage": [ { "receiver": "p-me", "damage": 150, "legshots": 1, "bodyshots": 4, "headshots": 0 } ]
+        }
+      ]
+    },
+    {
+      "roundNum": 3, "winningTeam": "Blue",
+      "playerStats": [
+        {
+          "puuid": "p-me",
+          "kills": [
+            {
+              "timeSinceRoundStartMillis": 50000,
+              "killer": "p-me", "victim": "p-e3",
+              "victimLocation": { "x": 500, "y": 500 },
+              "playerLocations": [],
+              "finishingDamage": { "damageType": "Ability", "damageItem": "ultimate" }
+            },
+            {
+              "timeSinceRoundStartMillis": 11000,
+              "killer": "p-me", "victim": "p-e2",
+              "victimLocation": { "x": 1600, "y": 2100 },
+              "playerLocations": [
+                { "puuid": "p-me", "viewRadians": 0.1, "location": { "x": 100, "y": 100 } }
+              ],
+              "finishingDamage": { "damageType": "Weapon", "damageItem": "vandal-uuid" }
+            },
+            {
+              "timeSinceRoundStartMillis": 10000,
+              "killer": "p-me", "victim": "p-e1",
+              "victimLocation": { "x": 0, "y": 700 },
+              "playerLocations": [
+                { "puuid": "p-me", "viewRadians": 0.0, "location": { "x": 0, "y": 0 } }
+              ],
+              "finishingDamage": { "damageType": "Weapon", "damageItem": "sheriff-uuid" }
+            }
+          ],
+          "damage": [
+            { "receiver": "p-e1", "damage": 150, "legshots": 0, "bodyshots": 0, "headshots": 1 },
+            { "receiver": "p-e2", "damage": 180, "legshots": 0, "bodyshots": 1, "headshots": 1 },
+            { "receiver": "p-e3", "damage": 100, "legshots": 0, "bodyshots": 2, "headshots": 0 }
+          ]
+        }
+      ]
+    }
+  ]
+}
