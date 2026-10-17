@@ -87,7 +87,30 @@ pub struct SiteObjective {
     pub attackers: u32,
 }
 
+/// Suffix of the run key of a practice run (bots never shoot), so its scores never mix
+/// with normal runs of the same arena.
+pub const PRACTICE_SUFFIX: &str = "+practice";
+
+/// `key` without the practice suffix, and whether it had one.
+pub fn split_practice(key: &str) -> (&str, bool) {
+    match key.strip_suffix(PRACTICE_SUFFIX) {
+        Some(base) => (base, true),
+        None => (key, false),
+    }
+}
+
 impl ArenaMode {
+    pub(super) fn set_bots_shoot_back(&mut self, on: bool) {
+        match self {
+            Self::Deathmatch {
+                bots_shoot_back, ..
+            }
+            | Self::AngleClear {
+                bots_shoot_back, ..
+            } => *bots_shoot_back = on,
+        }
+    }
+
     pub fn bots_shoot_back(&self) -> bool {
         match self {
             Self::Deathmatch {

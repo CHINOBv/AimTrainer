@@ -764,3 +764,52 @@ fn spawn_protection_is_reported_on_entry_and_after_each_death() {
     assert!(died, "the open duel kills an idle player");
     assert_eq!(s.spawn_protection_secs(), RESPAWN_GRACE_SECS);
 }
+
+#[test]
+fn practice_bots_never_shoot_and_practice_scores_are_kept_apart() {
+    for def in builtin::all() {
+        let (def, map) = builtin(&def.id);
+        let mut s = ArenaSession::new(def.clone(), map, 4).unwrap().practice();
+        assert!(s.is_practice());
+        assert_eq!(s.def().id, format!("{}{PRACTICE_SUFFIX}", def.id));
+        let events = run(&mut s, 60.0, idle);
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, ArenaEvent::PlayerHit { .. } | ArenaEvent::PlayerDied)),
+            "{}: a practice bot shot the player",
+            def.id
+        );
+        assert_eq!(s.stats().deaths, 0, "{}", def.id);
+        assert_eq!(
+            s.result().scenario_id,
+            format!("{}{PRACTICE_SUFFIX}", def.id)
+        );
+    }
+}
+
+#[test]
+fn practice_keys_split_back_into_the_arena_id() {
+    assert_eq!(
+        split_practice("yard-deathmatch+practice"),
+        ("yard-deathmatch", true)
+    );
+    assert_eq!(
+        split_practice("yard-deathmatch~90s+practice"),
+        ("yard-deathmatch~90s", true)
+    );
+    assert_eq!(
+        split_practice("yard-deathmatch"),
+        ("yard-deathmatch", false)
+    );
+}
+
+#[test]
+fn practice_only_applies_before_the_run_starts() {
+    let (def, map) = builtin("yard-deathmatch");
+    let mut s = ArenaSession::new(def, map, 4).unwrap();
+    s.update(idle(&s));
+    let s = s.practice();
+    assert!(!s.is_practice());
+    assert_eq!(s.def().id, "yard-deathmatch");
+}

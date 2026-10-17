@@ -2,7 +2,7 @@
 
 use super::behavior::{Phase, Push};
 use super::bot::{Bot, Brain, Ctx, PEEK_DELAY_SECS, head_of, yaw_of};
-use super::def::{ArenaDef, ArenaError, ArenaMode, SiteObjective, bot_profile};
+use super::def::{ArenaDef, ArenaError, ArenaMode, PRACTICE_SUFFIX, SiteObjective, bot_profile};
 use crate::map::{DEFAULT_PLAYER_RADIUS, MapDef, SpawnKind};
 use aim_core::activity::{Activity, ActivityEvent};
 use aim_core::games::valorant::{HumanoidDims, Weapon, WeaponStats};
@@ -179,6 +179,8 @@ pub struct ArenaSession {
     angle_index: usize,
     /// Bots ignore the player until this time (spawn grace).
     grace_until: f32,
+    /// Practice run: bots never shoot (see [`ArenaSession::practice`]).
+    practice: bool,
     /// Deathmatch with a site objective.
     site: Option<Site>,
 }
@@ -231,6 +233,7 @@ impl ArenaSession {
             angle_index: 0,
             // Entering the arena is a spawn too.
             grace_until: RESPAWN_GRACE_SECS,
+            practice: false,
             site: None,
             def,
             map,
@@ -280,6 +283,23 @@ impl ArenaSession {
             self.def.duration_secs = secs;
         }
         self
+    }
+
+    /// Turn this run into practice before it starts: bots move, peek and push as usual
+    /// but never shoot, so the player can learn the map and the angles. The result's id
+    /// gains [`PRACTICE_SUFFIX`]. A run that has already started is left as is.
+    pub fn practice(mut self) -> Self {
+        if self.time == 0.0 && !self.practice {
+            self.practice = true;
+            self.def.mode.set_bots_shoot_back(false);
+            self.def.id = format!("{}{PRACTICE_SUFFIX}", self.def.id);
+        }
+        self
+    }
+
+    /// Whether this is a practice run (bots never shoot).
+    pub fn is_practice(&self) -> bool {
+        self.practice
     }
 
     pub fn def(&self) -> &ArenaDef {
