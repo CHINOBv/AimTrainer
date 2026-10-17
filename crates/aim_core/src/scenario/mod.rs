@@ -2,6 +2,7 @@
 
 pub mod builtin;
 pub mod def;
+pub mod difficulty;
 pub mod hit;
 mod motion;
 mod scoring;
@@ -13,5 +14,6 @@ mod weapon;
 const MIN_SPHERE_HEIGHT: f32 = 0.3;
 
 pub use def::{Category, FireMode, Motion, ScenarioDef, Shape, SpawnArea, ValidationError};
+pub use difficulty::{DifficultyDef, run_key};
 pub use hit::HitZone;
 pub use session::{FrameInput, RunResult, Session, SessionEvent, Stats, Target};

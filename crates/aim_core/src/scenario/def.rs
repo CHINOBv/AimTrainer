@@ -25,6 +25,9 @@ pub struct ScenarioDef {
     pub targets: TargetsDef,
     #[serde(default)]
     pub scoring: ScoringDef,
+    /// How difficulty levels scale this scenario (see `scenario::difficulty`).
+    #[serde(default)]
+    pub difficulty: super::difficulty::DifficultyDef,
 }
 
 fn default_duration() -> f32 {
@@ -349,6 +352,11 @@ impl ScenarioDef {
             self.duration_secs.is_finite() && self.duration_secs > 0.0,
             "duration_secs",
             "must be > 0",
+        );
+        check(
+            self.difficulty.is_valid(),
+            "difficulty",
+            "coefficients must be in [0, 0.95)",
         );
 
         let p = &self.player;
