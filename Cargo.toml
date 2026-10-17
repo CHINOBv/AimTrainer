@@ -20,6 +20,8 @@ bevy = { version = "0.20", default-features = false, features = ["3d"] }
 bevy_egui = "0.43"
 directories = "6.0"
 global-hotkey = "0.9"
+# Map loading only: JSON and GLB parsing, no image or buffer import.
+gltf = { version = "1.4.1", default-features = false, features = ["names"] }
 
 # Part of the coding standard (docs/coding-standards.md): enforced in every crate.
 [workspace.lints.rust]
