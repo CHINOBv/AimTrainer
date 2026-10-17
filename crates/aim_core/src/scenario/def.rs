@@ -282,6 +282,12 @@ pub enum SpawnArea {
         /// horizon, because every spawn is relative to the previous aim.
         #[serde(default = "default_pitch_limit")]
         pitch_limit_deg: Range,
+        /// Keep every spawn inside VALORANT's view as seen from the crosshair at spawn
+        /// time (minus a margin, see [`crate::fov::ON_SCREEN_MARGIN_DEG`]), so a flick
+        /// never starts with a search. `offset_deg.max` must then stay within
+        /// [`crate::fov::valorant_on_screen_half_h_deg`].
+        #[serde(default)]
+        on_screen: bool,
     },
     /// World-space box on the floor. Spheres are placed at `height` above the floor.
     Floor {
@@ -554,6 +560,7 @@ impl ScenarioDef {
                 offset_deg,
                 distance,
                 pitch_limit_deg,
+                on_screen,
             } => {
                 check(
                     pitch_limit_deg.is_valid()
@@ -566,6 +573,12 @@ impl ScenarioDef {
                     offset_deg.is_valid() && offset_deg.min >= 0.0 && offset_deg.max <= 180.0,
                     "targets.spawn.offset_deg",
                     "must be within [0, 180]",
+                );
+                let on_screen_limit = crate::fov::valorant_on_screen_half_h_deg() as f32;
+                check(
+                    !on_screen || offset_deg.max <= on_screen_limit,
+                    "targets.spawn.offset_deg",
+                    &format!("with on_screen, must stay within {on_screen_limit}°"),
                 );
                 check(
                     distance.is_valid() && distance.min >= 1.0,
@@ -661,6 +674,31 @@ mod tests {
     fn unknown_fields_are_rejected_to_catch_typos() {
         let src = MINIMAL.replace("name = \"Mini\"", "name = \"Mini\"\ndurration_secs = 3");
         assert!(ScenarioDef::from_toml(&src).is_err());
+    }
+
+    #[test]
+    fn on_screen_defaults_off_and_rejects_offsets_past_the_screen_edge() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        let SpawnArea::AroundCrosshair { on_screen, .. } = d.targets.spawn else {
+            panic!("wrong spawn kind")
+        };
+        assert!(!on_screen);
+
+        let src = MINIMAL.replace(
+            "distance = [10, 10] }",
+            "distance = [10, 10], on_screen = true }",
+        );
+        let ok = ScenarioDef::from_toml(&src).unwrap();
+        assert!(ok.validate().is_empty(), "{:?}", ok.validate());
+
+        let wide = src.replace("[10, 40]", "[20, 70]");
+        let fields: Vec<_> = ScenarioDef::from_toml(&wide)
+            .unwrap()
+            .validate()
+            .into_iter()
+            .map(|e| e.field)
+            .collect();
+        assert_eq!(fields, ["targets.spawn.offset_deg"]);
     }
 
     #[test]

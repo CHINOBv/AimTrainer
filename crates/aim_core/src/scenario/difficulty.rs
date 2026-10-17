@@ -228,14 +228,18 @@ impl ScenarioDef {
             SpawnArea::AroundCrosshair {
                 offset_deg,
                 distance,
+                on_screen,
                 ..
             } => {
                 *distance = scale(*distance, dist_k);
                 let k = 1.0 + c.offset.at(d);
-                *offset_deg = Range::new(
-                    (offset_deg.min * k).min(180.0),
-                    (offset_deg.max * k).min(180.0),
-                );
+                let cap = if *on_screen {
+                    crate::fov::valorant_on_screen_half_h_deg() as f32
+                } else {
+                    180.0
+                };
+                *offset_deg =
+                    Range::new((offset_deg.min * k).min(cap), (offset_deg.max * k).min(cap));
             }
             SpawnArea::Floor { z, .. } => {
                 // Floor boxes extend away from the player along -Z.
@@ -283,6 +287,32 @@ mod tests {
             d,
             "same duration keeps the id"
         );
+    }
+
+    #[test]
+    fn harder_on_screen_flicks_stay_inside_the_screen() {
+        let limit = crate::fov::valorant_on_screen_half_h_deg() as f32;
+        for id in ["flick-wide", "flick-headshot"] {
+            let d = find(id);
+            let h = d.at_difficulty(MAX_LEVEL);
+            let SpawnArea::AroundCrosshair {
+                offset_deg,
+                on_screen,
+                ..
+            } = h.targets.spawn
+            else {
+                panic!("{id} must spawn around the crosshair")
+            };
+            assert!(on_screen, "{id}");
+            assert!(offset_deg.max <= limit, "{id}: {offset_deg:?}");
+            // The run key (`id@+1.00`) is not a valid id; every other field must pass.
+            let errs: Vec<_> = h
+                .validate()
+                .into_iter()
+                .filter(|e| e.field != "id")
+                .collect();
+            assert!(errs.is_empty(), "{id}: {errs:?}");
+        }
     }
 
     #[test]
