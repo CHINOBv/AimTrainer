@@ -38,6 +38,9 @@ pub struct Block {
     /// a "hard" variant, `0` for the benchmark itself.
     #[serde(default)]
     pub difficulty: f32,
+    /// Shorter (or longer) runs than the scenario's own duration, e.g. 20 s micro drills.
+    #[serde(default)]
+    pub duration_secs: Option<f32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -47,6 +50,8 @@ pub struct PlannedRun {
     pub note: String,
     /// Offset relative to the routine's base level.
     pub difficulty: f32,
+    /// Duration override for this run.
+    pub duration_secs: Option<f32>,
 }
 
 impl PlannedRun {
@@ -99,10 +104,12 @@ impl RoutineDef {
         if let Some(r) = block.runs {
             return r;
         }
-        let duration = library
-            .iter()
-            .find(|d| d.id == block.scenario)
-            .map_or(60.0, |d| d.duration_secs);
+        let duration = block.duration_secs.unwrap_or_else(|| {
+            library
+                .iter()
+                .find(|d| d.id == block.scenario)
+                .map_or(60.0, |d| d.duration_secs)
+        });
         ((block.minutes.unwrap_or(1.0) * 60.0 / duration).round() as u32).max(1)
     }
 
@@ -119,6 +126,7 @@ impl RoutineDef {
                         block: i,
                         note: b.note.clone(),
                         difficulty: b.difficulty,
+                        duration_secs: b.duration_secs,
                     });
                 }
             }
@@ -158,8 +166,10 @@ impl RoutineDef {
     pub fn minutes(&self, library: &[ScenarioDef]) -> f32 {
         self.plan(library, 0)
             .iter()
-            .filter_map(|r| library.iter().find(|d| d.id == r.scenario_id))
-            .map(|d| d.duration_secs / 60.0)
+            .filter_map(|r| {
+                let d = library.iter().find(|d| d.id == r.scenario_id)?;
+                Some(r.duration_secs.unwrap_or(d.duration_secs) / 60.0)
+            })
             .sum()
     }
 }

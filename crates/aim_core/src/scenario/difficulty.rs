@@ -68,18 +68,43 @@ pub fn run_key(id: &str, level: f32) -> String {
     }
 }
 
-/// Inverse of [`run_key`]: base scenario id and level (`0` when the key has no level).
+/// Inverse of [`run_key`] (and of [`ScenarioDef::with_duration`]): base scenario id and
+/// level (`0` when the key has no level). A `~20s` duration suffix is dropped.
 pub fn parse_run_key(key: &str) -> (&str, f32) {
-    match key.rsplit_once('@') {
-        Some((id, level)) => match level.parse::<f32>() {
-            Ok(l) if l.is_finite() => (id, l),
-            _ => (key, 0.0),
+    let (base, level, _) = parse_run_key_full(key);
+    (base, level)
+}
+
+/// Base id, level and shortened duration (`~20s`) encoded in a run key.
+pub fn parse_run_key_full(key: &str) -> (&str, f32, Option<f32>) {
+    let (rest, secs) = match key.rsplit_once('~') {
+        Some((rest, d)) => match d.strip_suffix('s').and_then(|n| n.parse::<f32>().ok()) {
+            Some(secs) if secs.is_finite() && secs > 0.0 => (rest, Some(secs)),
+            _ => (key, None),
         },
-        None => (key, 0.0),
+        None => (key, None),
+    };
+    match rest.rsplit_once('@') {
+        Some((id, level)) => match level.parse::<f32>() {
+            Ok(l) if l.is_finite() => (id, l, secs),
+            _ => (rest, 0.0, secs),
+        },
+        None => (rest, 0.0, secs),
     }
 }
 
 impl ScenarioDef {
+    /// This scenario shortened (or lengthened) to `secs`. The id gains a `~20s` suffix so
+    /// short drills never mix with full-length scores.
+    pub fn with_duration(&self, secs: f32) -> ScenarioDef {
+        let mut out = self.clone();
+        if (secs - self.duration_secs).abs() >= 0.5 && secs > 0.0 {
+            out.duration_secs = secs;
+            out.id = format!("{}~{}s", self.id, secs.round() as u32);
+        }
+        out
+    }
+
     /// This scenario at difficulty `level` (clamped to [`MIN_LEVEL`], [`MAX_LEVEL`]).
     /// The id becomes [`run_key`] so history keeps difficulties apart.
     pub fn at_difficulty(&self, level: f32) -> ScenarioDef {
@@ -155,6 +180,22 @@ mod tests {
         assert_eq!(parse_run_key("micro-adjust@-0.25"), ("micro-adjust", -0.25));
         assert_eq!(parse_run_key("micro-adjust"), ("micro-adjust", 0.0));
         assert_eq!(parse_run_key("odd@name"), ("odd@name", 0.0));
+        let short = d.at_difficulty(0.25).with_duration(20.0);
+        assert_eq!(short.id, "micro-adjust@+0.25~20s");
+        assert_eq!(short.duration_secs, 20.0);
+        assert_eq!(
+            parse_run_key_full(&short.id),
+            ("micro-adjust", 0.25, Some(20.0))
+        );
+        assert_eq!(
+            parse_run_key_full("micro-adjust~20s"),
+            ("micro-adjust", 0.0, Some(20.0))
+        );
+        assert_eq!(
+            d.with_duration(d.duration_secs),
+            d,
+            "same duration keeps the id"
+        );
     }
 
     #[test]
