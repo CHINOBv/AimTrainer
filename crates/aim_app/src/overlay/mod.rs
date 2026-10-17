@@ -22,33 +22,57 @@ impl Overlay {
     pub fn apply(&mut self, cmd: Command) {
         self.visible = match cmd {
             Command::Toggle => !self.visible,
-            Command::Show => true,
+            Command::Show | Command::Warmup(_) | Command::Micro => true,
             Command::Hide => false,
         };
     }
 }
 
+/// A session requested from outside the window (IPC or hotkey) for the UI to start.
+#[derive(Resource, Debug, Default)]
+pub struct QuickLaunch {
+    pub pending: Option<Command>,
+    /// Micro drills played so far, to rotate between drills.
+    pub micro_count: usize,
+}
+
+impl QuickLaunch {
+    /// Record `cmd` if it starts a session.
+    pub fn request(&mut self, cmd: Command) {
+        if matches!(cmd, Command::Warmup(_) | Command::Micro) {
+            self.pending = Some(cmd);
+        }
+    }
+}
+
 pub struct OverlayPlugin {
-    pub hotkey: String,
+    /// Global hotkeys (Windows/X11) and the command each one sends.
+    pub hotkeys: Vec<(String, Command)>,
 }
 
 impl Plugin for OverlayPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Overlay { visible: true })
+            .init_resource::<QuickLaunch>()
             .add_systems(PreUpdate, poll_ipc)
             .add_systems(
                 PostUpdate,
                 apply_overlay.run_if(resource_changed::<Overlay>),
             );
-        platform::hotkey::install(app, &self.hotkey);
+        platform::hotkey::install(app, &self.hotkeys);
     }
 }
 
-fn poll_ipc(rx: Option<Res<IpcReceiver>>, mut overlay: ResMut<Overlay>) {
+fn poll_ipc(
+    rx: Option<Res<IpcReceiver>>,
+    mut overlay: ResMut<Overlay>,
+    mut quick: ResMut<QuickLaunch>,
+) {
     let Some(rx) = rx else { return };
     let Ok(rx) = rx.0.lock() else { return };
     while let Ok(cmd) = rx.try_recv() {
         overlay.apply(cmd);
+        quick.request(cmd);
     }
 }
 
@@ -97,6 +121,22 @@ mod tests {
     fn systems_have_no_conflicting_access() {
         bevy::ecs::system::assert_is_system(poll_ipc);
         bevy::ecs::system::assert_is_system(apply_overlay);
+    }
+
+    #[test]
+    fn session_commands_show_the_overlay_and_queue_a_launch() {
+        let mut o = Overlay { visible: false };
+        let mut q = QuickLaunch::default();
+        for cmd in [Command::Micro, Command::Warmup(3)] {
+            o.visible = false;
+            o.apply(cmd);
+            q.request(cmd);
+            assert!(o.visible);
+            assert_eq!(q.pending, Some(cmd));
+        }
+        q.pending = None;
+        q.request(Command::Toggle);
+        assert_eq!(q.pending, None, "toggles do not launch anything");
     }
 
     #[test]

@@ -3,7 +3,7 @@
 
 #[cfg(any(windows, target_os = "linux"))]
 mod imp {
-    use crate::overlay::Overlay;
+    use crate::overlay::{Overlay, QuickLaunch};
     use crate::platform::ipc::Command;
     use crate::platform::is_wayland;
     use bevy::prelude::*;
@@ -12,23 +12,17 @@ mod imp {
 
     struct Registered {
         _manager: GlobalHotKeyManager,
-        id: u32,
+        /// Hotkey id and the command it sends.
+        ids: Vec<(u32, Command)>,
     }
 
-    pub fn install(app: &mut App, spec: &str) {
+    pub fn install(app: &mut App, specs: &[(String, Command)]) {
         if is_wayland() {
             info!(
-                "Wayland session: bind `aimtrainer toggle` in your compositor to show/hide the overlay"
+                "Wayland session: bind `aimtrainer toggle`, `aimtrainer warmup` and `aimtrainer micro` in your compositor"
             );
             return;
         }
-        let hotkey: HotKey = match spec.parse() {
-            Ok(h) => h,
-            Err(e) => {
-                warn!("invalid overlay hotkey '{spec}': {e}");
-                return;
-            }
-        };
         let manager = match GlobalHotKeyManager::new() {
             Ok(m) => m,
             Err(e) => {
@@ -36,22 +30,41 @@ mod imp {
                 return;
             }
         };
-        if let Err(e) = manager.register(hotkey) {
-            warn!("could not register overlay hotkey '{spec}': {e}");
+        let mut ids = Vec::new();
+        for (spec, cmd) in specs.iter().filter(|(s, _)| !s.trim().is_empty()) {
+            match spec.parse::<HotKey>() {
+                Ok(hotkey) => match manager.register(hotkey) {
+                    Ok(()) => {
+                        info!("hotkey {spec} → {cmd:?}");
+                        ids.push((hotkey.id(), *cmd));
+                    }
+                    Err(e) => warn!("could not register hotkey '{spec}': {e}"),
+                },
+                Err(e) => warn!("invalid hotkey '{spec}': {e}"),
+            }
+        }
+        if ids.is_empty() {
             return;
         }
-        info!("overlay hotkey: {spec}");
         app.insert_non_send(Registered {
             _manager: manager,
-            id: hotkey.id(),
+            ids,
         })
         .add_systems(PreUpdate, poll);
     }
 
-    fn poll(registered: NonSend<Registered>, mut overlay: ResMut<Overlay>) {
+    fn poll(
+        registered: NonSend<Registered>,
+        mut overlay: ResMut<Overlay>,
+        mut quick: ResMut<QuickLaunch>,
+    ) {
         while let Ok(event) = GlobalHotKeyEvent::receiver().try_recv() {
-            if event.id == registered.id && event.state == HotKeyState::Pressed {
-                overlay.apply(Command::Toggle);
+            if event.state != HotKeyState::Pressed {
+                continue;
+            }
+            if let Some((_, cmd)) = registered.ids.iter().find(|(id, _)| *id == event.id) {
+                overlay.apply(*cmd);
+                quick.request(*cmd);
             }
         }
     }
@@ -59,7 +72,11 @@ mod imp {
 
 #[cfg(not(any(windows, target_os = "linux")))]
 mod imp {
-    pub fn install(_app: &mut bevy::prelude::App, _spec: &str) {}
+    pub fn install(
+        _app: &mut bevy::prelude::App,
+        _specs: &[(String, crate::platform::ipc::Command)],
+    ) {
+    }
 }
 
 pub use imp::install;

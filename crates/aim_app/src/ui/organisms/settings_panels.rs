@@ -147,7 +147,28 @@ pub fn display_panel(ui: &mut egui::Ui, settings: &mut Settings) {
         ui.label("Global hotkey (restart, Windows/X11)");
         ui.text_edit_singleline(&mut settings.overlay_hotkey);
     });
-    ui.label("Wayland/Hyprland: bind `aimtrainer toggle` in your compositor (see README).");
+    ui.horizontal(|ui| {
+        ui.label("Queue warm-up hotkey");
+        ui.text_edit_singleline(&mut settings.warmup_hotkey);
+        ui.add(
+            egui::DragValue::new(&mut settings.warmup_minutes)
+                .range(1..=30)
+                .suffix(" min"),
+        );
+    });
+    ui.horizontal(|ui| {
+        ui.label("Buy-phase micro drill hotkey");
+        ui.text_edit_singleline(&mut settings.micro_hotkey);
+    });
+    ui.horizontal(|ui| {
+        ui.label("Daily goal");
+        ui.add(
+            egui::DragValue::new(&mut settings.daily_goal_minutes)
+                .range(5.0..=120.0)
+                .suffix(" min"),
+        );
+    });
+    ui.label("Wayland/Hyprland: bind `aimtrainer toggle`, `aimtrainer warmup` and `aimtrainer micro` in your compositor (see README).");
 }
 
 /// Text and feedback of the "Import VALORANT code" field, kept in egui memory.

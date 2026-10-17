@@ -69,6 +69,13 @@ fn count_dpi_meter(motion: Res<AccumulatedMouseMotion>, mut state: ResMut<MenuSt
     }
 }
 
+/// Per-player training state shown in the menu.
+#[derive(SystemParam)]
+struct TrainingState<'w> {
+    progress: ResMut<'w, MethodProgress>,
+    adaptive: Res<'w, AdaptiveLevels>,
+}
+
 /// Settings plus what is needed to persist and preview them.
 #[derive(SystemParam)]
 struct SettingsAccess<'w> {
@@ -83,8 +90,7 @@ fn menu(
     mut cfg: SettingsAccess,
     history: Res<History>,
     overlay: Res<Overlay>,
-    mut progress: ResMut<MethodProgress>,
-    adaptive: Res<AdaptiveLevels>,
+    mut training: TrainingState,
     mut nav: Navigator,
 ) -> Result {
     if !overlay.visible {
@@ -139,7 +145,7 @@ fn menu(
     match state.tab {
         Tab::Today => {
             egui::CentralPanel::default().show(&mut root, |ui| {
-                match today_model(lib, &history, &progress, &today, weekday) {
+                match today_model(lib, &history, &training.progress, &today, weekday) {
                     Some(model) => today_action = today_panel::today_panel(ui, &model),
                     None => {
                         ui.label("No weekly training method is available.");
@@ -166,7 +172,7 @@ fn menu(
                             ui,
                             def,
                             &history,
-                            adaptive.level(&def.id),
+                            training.adaptive.level(&def.id),
                         ))
                     }
                     None => scenario_browser::empty_selection(ui),
@@ -228,7 +234,8 @@ fn menu(
         *cfg.clear = background(&cfg.settings, overlay.visible);
     }
     if let Some(t) = today_action {
-        action = apply_today(t, lib, &history, &mut progress, &cfg.paths, &today).or(action);
+        action =
+            apply_today(t, lib, &history, &mut training.progress, &cfg.paths, &today).or(action);
     }
     if let Some(action) = action {
         nav.apply(action);

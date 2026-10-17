@@ -4,7 +4,7 @@ use super::UiAction;
 use crate::game::{ActiveRoutine, AppState, RoutineProgress, Run, start_run, start_run_with};
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::library::Library;
-use aim_core::scenario::parse_run_key;
+use aim_core::scenario::{ScenarioDef, parse_run_key_full};
 use aim_core::training::routine::RoutineDef;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -39,9 +39,9 @@ impl Navigator<'_, '_> {
             UiAction::StartScenario(id) | UiAction::Retry(id) => {
                 self.routine.0 = None;
                 // Results carry run keys (`id@+0.50`); retry at the same difficulty.
-                let (base, level) = parse_run_key(&id);
+                let (base, level, secs) = parse_run_key_full(&id);
                 let base = base.to_owned();
-                self.start(&base, level);
+                self.start_with(&base, level, secs);
             }
             UiAction::StartRoutine(id) => self.start_routine(&id, 0.0, 0, routine_seed()),
             UiAction::StartAdaptive(id) => {
@@ -54,6 +54,18 @@ impl Navigator<'_, '_> {
                 }
             }
             UiAction::StartRoutineDef(def) => self.start_routine_def(&def, 0.0, 0, routine_seed()),
+            UiAction::StartTimed {
+                scenario,
+                secs,
+                auto_hide,
+            } => {
+                self.routine.0 = None;
+                if let Some(def) = self.library.scenario(&scenario) {
+                    let mut run = Run::new(def.with_duration(secs));
+                    run.auto_hide = auto_hide;
+                    start_run_with(&mut self.commands, &mut self.next, run);
+                }
+            }
             UiAction::StartRoutineAt {
                 routine,
                 level,
@@ -68,10 +80,11 @@ impl Navigator<'_, '_> {
                     return;
                 };
                 let level = next.level(p.base_level);
+                let secs = next.duration_secs;
                 let Some(def) = self.library.scenario(&next.scenario_id) else {
                     return;
                 };
-                let def = def.at_difficulty(level);
+                let def = shaped(def, level, secs);
                 p.index += 1;
                 start_run(&mut self.commands, &mut self.next, def);
             }
@@ -90,9 +103,9 @@ impl Navigator<'_, '_> {
         }
     }
 
-    fn start(&mut self, scenario_id: &str, level: f32) {
+    fn start_with(&mut self, scenario_id: &str, level: f32, secs: Option<f32>) {
         if let Some(def) = self.library.scenario(scenario_id) {
-            start_run(&mut self.commands, &mut self.next, def.at_difficulty(level));
+            start_run(&mut self.commands, &mut self.next, shaped(def, level, secs));
         }
     }
 
@@ -112,7 +125,8 @@ impl Navigator<'_, '_> {
     fn start_routine_def(&mut self, r: &RoutineDef, level: f32, index: usize, seed: u64) {
         let plan = r.plan(&self.library.scenarios, seed);
         let Some(run) = plan.get(index) else { return };
-        let (scenario, run_level) = (run.scenario_id.clone(), run.level(level));
+        let (scenario, run_level, secs) =
+            (run.scenario_id.clone(), run.level(level), run.duration_secs);
         self.routine.0 = Some(RoutineProgress {
             routine_id: r.id.clone(),
             name: r.name.clone(),
@@ -121,7 +135,16 @@ impl Navigator<'_, '_> {
             base_level: level,
             seed,
         });
-        self.start(&scenario, run_level);
+        self.start_with(&scenario, run_level, secs);
+    }
+}
+
+/// A scenario at a difficulty level and optional shortened duration.
+fn shaped(def: &ScenarioDef, level: f32, secs: Option<f32>) -> ScenarioDef {
+    let d = def.at_difficulty(level);
+    match secs {
+        Some(s) => d.with_duration(s),
+        None => d,
     }
 }
 
@@ -315,7 +338,33 @@ mod tests {
         let p = w.resource::<ActiveRoutine>().0.clone().unwrap();
         assert_eq!(p.index, 3);
         let expected = p.plan[3].level(0.5);
-        let (_, level) = aim_core::scenario::parse_run_key(&running(&w).unwrap()).to_owned();
+        let (_, level, _) = parse_run_key_full(&running(&w).unwrap());
         assert!((level - expected).abs() < 1e-3, "{level} vs {expected}");
+    }
+
+    #[test]
+    fn timed_runs_are_shortened_and_can_auto_hide() {
+        let mut w = world();
+        let action = UiAction::StartTimed {
+            scenario: "micro-adjust".into(),
+            secs: 20.0,
+            auto_hide: true,
+        };
+        apply(&mut w, action);
+        let run = w.resource::<Run>();
+        assert!(run.auto_hide);
+        assert_eq!(run.session.def().duration_secs, 20.0);
+        assert_eq!(run.session.def().id, "micro-adjust~20s");
+    }
+
+    #[test]
+    fn queue_warmups_play_short_runs_in_order() {
+        let mut w = world();
+        let r = aim_core::training::warmup::queue_warmup(3.0);
+        apply(&mut w, UiAction::StartRoutineDef(Box::new(r)));
+        let first = running(&w).unwrap();
+        assert!(first.starts_with("track-precise@-0.50~30s"), "{first}");
+        apply(&mut w, UiAction::Retry(first.clone()));
+        assert_eq!(running(&w), Some(first), "retry keeps level and duration");
     }
 }

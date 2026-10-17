@@ -11,24 +11,43 @@ pub enum Command {
     Toggle,
     Show,
     Hide,
+    /// Show the overlay and start a queue warm-up of this many minutes.
+    Warmup(u32),
+    /// Show the overlay, play one buy-phase micro drill, then hide again.
+    Micro,
 }
+
+/// Default queue warm-up length when `warmup` has no minutes argument.
+pub const DEFAULT_WARMUP_MINUTES: u32 = 5;
 
 impl Command {
     pub fn parse(s: &str) -> Option<Self> {
-        match s.trim() {
-            "toggle" => Some(Self::Toggle),
-            "show" => Some(Self::Show),
-            "hide" => Some(Self::Hide),
-            _ => None,
-        }
+        let mut words = s.split_whitespace();
+        let cmd = match words.next()? {
+            "toggle" => Self::Toggle,
+            "show" => Self::Show,
+            "hide" => Self::Hide,
+            "micro" => Self::Micro,
+            "warmup" => {
+                let minutes = match words.next() {
+                    Some(m) => m.parse::<u32>().ok().filter(|m| (1..=30).contains(m))?,
+                    None => DEFAULT_WARMUP_MINUTES,
+                };
+                Self::Warmup(minutes)
+            }
+            _ => return None,
+        };
+        words.next().is_none().then_some(cmd)
     }
 
     #[cfg(unix)]
-    fn as_str(self) -> &'static str {
+    fn encode(self) -> String {
         match self {
-            Self::Toggle => "toggle",
-            Self::Show => "show",
-            Self::Hide => "hide",
+            Self::Toggle => "toggle".into(),
+            Self::Show => "show".into(),
+            Self::Hide => "hide".into(),
+            Self::Micro => "micro".into(),
+            Self::Warmup(m) => format!("warmup {m}"),
         }
     }
 }
@@ -58,7 +77,7 @@ mod imp {
     pub fn send_to(path: &Path, cmd: Command) -> Result<(), String> {
         let mut stream = UnixStream::connect(path)
             .map_err(|e| format!("aimtrainer is not running ({}: {e})", path.display()))?;
-        writeln!(stream, "{}", cmd.as_str()).map_err(|e| e.to_string())
+        writeln!(stream, "{}", cmd.encode()).map_err(|e| e.to_string())
     }
 
     pub fn listen() -> Result<Option<Receiver<Command>>, String> {
@@ -120,6 +139,15 @@ mod tests {
         assert_eq!(Command::parse("toggle\n"), Some(Command::Toggle));
         assert_eq!(Command::parse("hide"), Some(Command::Hide));
         assert_eq!(Command::parse("explode"), None);
+        assert_eq!(
+            Command::parse("warmup"),
+            Some(Command::Warmup(DEFAULT_WARMUP_MINUTES))
+        );
+        assert_eq!(Command::parse("warmup 3"), Some(Command::Warmup(3)));
+        assert_eq!(Command::parse("warmup 0"), None);
+        assert_eq!(Command::parse("warmup x"), None);
+        assert_eq!(Command::parse("micro"), Some(Command::Micro));
+        assert_eq!(Command::parse("toggle now"), None);
     }
 
     #[cfg(unix)]

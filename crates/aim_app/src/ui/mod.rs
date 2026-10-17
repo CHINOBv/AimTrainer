@@ -5,6 +5,7 @@
 //! `pages` is presentational and never touches the ECS.
 
 mod atoms;
+mod launcher;
 mod molecules;
 mod navigation;
 mod organisms;
@@ -17,11 +18,12 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((
-            pages::menu::MenuPage,
-            pages::hud::HudPage,
-            pages::results::ResultsPage,
-        ));
+        app.add_systems(Update, launcher::launch_requested)
+            .add_plugins((
+                pages::menu::MenuPage,
+                pages::hud::HudPage,
+                pages::results::ResultsPage,
+            ));
     }
 }
 
@@ -34,6 +36,13 @@ pub enum UiAction {
     StartAdaptive(String),
     /// Play a routine that is not in the library (e.g. the personalized playlist).
     StartRoutineDef(Box<RoutineDef>),
+    /// Play a scenario shortened to `secs`; `auto_hide` hides the overlay when it ends
+    /// (buy-phase micro drills hand the mouse straight back to the game).
+    StartTimed {
+        scenario: String,
+        secs: f32,
+        auto_hide: bool,
+    },
     /// Start a routine at a difficulty level, from a given run of the plan made with `seed`
     /// (resuming a split method day).
     StartRoutineAt {
