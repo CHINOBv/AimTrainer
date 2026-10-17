@@ -2,9 +2,14 @@
 
 A VALORANT-focused aim trainer (Rust + Bevy 0.20 + bevy_egui 0.43) for Arch Linux (Hyprland/Wayland) and Windows. It runs as a hotkey-toggled transparent overlay.
 
-**Read first:**
+**Read first (binding):**
+- `docs/architecture.md` — layers, dependency rule, folder layout, extension points, conformance backlog.
+- `docs/coding-standards.md` — SOLID/YAGNI/DRY as applied here, naming and units, errors, testing, latency rules, game-integrity and IP policy.
+- `docs/roadmap.md` — the planned features and which module owns each one. Use it to decide placement; do not build ahead of a feature (YAGNI).
 - `docs/decisions.md` — what was decided and why.
-- `README.md` — usage.
+- `CONTRIBUTING.md` — the PR checklist.
+
+This file only lists what an agent needs on top of those documents.
 
 ## Commands
 
@@ -20,17 +25,21 @@ cargo run -p aim_core --release --example calibrate    # simulated-player scores
 
 The toolchain must be rustc ≥ 1.97.1, which Bevy 0.20 requires.
 
-## Architecture rules
+## Architecture essentials
+
+Full rules are in `docs/architecture.md`.
 
 | Crate | Contains | Must not |
 |---|---|---|
-| `crates/aim_core` | Every gameplay rule: `sensitivity`, `fov`, `movement`, `valorant`, `scenario/{def,session,hit,builtin}`, `routine`, `benchmark`, `sim`, `math`, `rng` | Depend on Bevy or any engine or windowing crate |
-| `crates/aim_app` | Bevy adapter: `game` (states, look, camera, target meshes), `ui` (egui HUD and menus), `overlay`, `ipc`, `settings`, `library`, `history` | Implement gameplay rules; it only builds a `FrameInput` and renders `Session::targets()` |
+| `crates/aim_core` | Every gameplay, training and analysis rule. Pure and deterministic. | Depend on Bevy, egui, winit, the filesystem, the clock or the network |
+| `crates/aim_app` | Bevy adapter: input, rendering, egui, overlay, IPC, persistence | Implement gameplay rules; it only builds a `FrameInput` and renders core state |
 
 - **New mechanic:** add a building block to `scenario/def.rs` (serde with `deny_unknown_fields`), handle it in `session.rs`, extend `validate()`, and add tests.
-- **New exercise, routine or benchmark:** a TOML file in `crates/aim_core/{scenarios,routines,benchmarks}/`, registered in the matching `builtin` `SOURCES`. The scenario's file name must equal its `id`.
+- **New exercise, routine or benchmark:** a TOML file in `crates/aim_core/{scenarios,routines,benchmarks}/`, registered in the matching `builtin` `SOURCES`. The file name must equal its `id`. Content moves to `content/` under backlog item C1.
 - **Coordinates:** right-handed, +Y up, −Z forward, meters. Core yaw is positive turning right; Bevy needs `-yaw` (see `update_camera`).
-- **Randomness:** `aim_core::rng::Rng`, seeded and deterministic. Do not add `rand`.
+- **Randomness:** `aim_core::rng::Rng`, seeded and deterministic. Do not add `rand`. `Session` must stay deterministic for a given definition, seed and input sequence.
+- **Conformance backlog:** when you touch an area listed in the architecture's conformance backlog (C1–C10), fix that gap in a separate refactor commit, never mixed into an unrelated feature.
+- **Integrity and IP:** never touch the game process, ship Riot assets or replicate VALORANT maps. See `docs/coding-standards.md`.
 
 ## Accuracy rules
 

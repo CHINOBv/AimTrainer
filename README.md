@@ -119,8 +119,22 @@ cargo run -p aim_core --release --example calibrate     # simulated-player score
 
 ## Roadmap
 
-- **Recalibrate the benchmark** from real player data. The thresholds are provisional.
-- **Adaptive difficulty:** a staircase that keeps success around 80% (challenge-point framework).
-- **Voltaic-style reload mechanic** for clicking scenarios: spending ammo on misses.
-- **Score history charts** and per-skill trends.
-- **Windows:** verify transparency across GPU drivers. It is untested so far.
+The plan, phase by phase, is in [`docs/roadmap.md`](docs/roadmap.md):
+
+- open-source readiness;
+- custom crosshairs and a sensitivity converter;
+- flick and correction analytics with recommendations;
+- adaptive difficulty;
+- deathmatch with bots;
+- original tactical maps;
+- match integration through official APIs.
+
+## Contributing
+
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md). The binding rules are in [`docs/architecture.md`](docs/architecture.md) and [`docs/coding-standards.md`](docs/coding-standards.md). Exercises can be contributed as TOML without writing Rust.
+
+## Legal
+
+CustomAimTrainer is an independent fan project. It is not endorsed or sponsored by Riot Games. VALORANT is a trademark of Riot Games, Inc., and it is named here only to describe compatibility.
+
+The project does not ship Riot assets and never interacts with the game process. Riot's fan-content policy: https://www.riotgames.com/en/legal.

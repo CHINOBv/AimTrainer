@@ -27,6 +27,8 @@ A VALORANT-focused aim trainer for **Arch Linux (Hyprland/Wayland, X11)** and **
 | D9 | Routines | Voltaic structure plus motor-learning research | done |
 | D10 | Benchmark | Voltaic-style energy and harmonic mean, with **provisional** thresholds | needs real data |
 | D11 | Play-area bounds | Bounds act like walls: the player slides along them | done (bug fix) |
+| D12 | Code standard | Binding architecture and coding standards for open-source growth | done |
+| D13 | Maps and IP | **Original** tactical maps, not VALORANT replicas; no Riot assets; never touch the game process | policy |
 
 ## Details
 
@@ -126,6 +128,24 @@ Full citations are in `docs/training-science.md`.
 - **Reported by the user:** in the strafe scenarios, movement in some directions was sometimes blocked.
 - **Cause:** touching a bound zeroed the **whole** velocity. The counter-strafe area is only 2 m deep, so this happened often.
 - **Fix:** only the velocity component pointing into the bound is removed, so the player slides along it. Covered by tests (commit `e6c9d8c`).
+
+### D12 Code standard
+
+- **Where it lives:** `docs/architecture.md` (structure, dependency rule, extension points, conformance backlog) and `docs/coding-standards.md` (principles, naming, errors, testing, latency, integrity), with the planned features in `docs/roadmap.md` and contributor entry points in `CONTRIBUTING.md`.
+- **Enforced by tools:**
+  - workspace lints (`unsafe_code` forbidden; `dbg!`, `todo!` and `unimplemented!` warned);
+  - clippy warning-free;
+  - `cargo fmt`.
+- **Why:** the project is meant to become open source and keep growing (analytics, bots, maps, integrations) without decaying.
+- **Existing gaps:** the code that predates the standard is tracked as conformance backlog C1–C10, to be fixed in separate refactor PRs.
+
+### D13 Maps, assets and the game process
+
+- **The request:** recreate VALORANT maps at real scale to practise clearing angles and peeks.
+- **The conflict:** Riot's fan policy (https://www.riotgames.com/en/legal) says "We prohibit the use of our IP in games and apps" and "Please do not take any part of our IP". Map layouts are Riot IP.
+- **Decision:** build **original** maps at real-world scale that train the same skills, using common situations such as doorways, long angles, off-angles and boxes. No replicas and no extracted assets.
+- **Reading rounds:** only official APIs with a valid key under their terms (Riot's policy names Riot API keys as the sanctioned route), or files the player exports. Never memory or screen reading.
+- **Caveat:** this is a conservative reading of the policy, not legal advice.
 
 ## Known limitations
 

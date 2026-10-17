@@ -1,0 +1,171 @@
+# Architecture
+
+**This document is binding.** Gameplay, training and analysis rules live in a pure, deterministic domain core. Engines, windows, files and the network are adapters that sit around it. Folders are named after what the product does (screaming architecture), never after technical layers. When code and this document disagree, fix the code, or change the document in the same PR.
+
+- Principles and day-to-day rules: [`coding-standards.md`](coding-standards.md).
+- Feature plan: [`roadmap.md`](roadmap.md).
+
+## Quick path
+
+1. **Gameplay rule** (a target behavior, scoring, movement, difficulty, an analysis): put it in `aim_core`, as a pure function or a type, with tests.
+2. **New exercise, routine or benchmark:** a TOML file under `content/`. No Rust needed.
+3. **Something the player sees or touches** (rendering, input, menus, overlay, files): put it in `aim_app`. It translates input into core calls and draws core state; it decides nothing.
+4. **Talking to the outside world** (disk, OS hotkeys, IPC, later the Riot API): an adapter in `aim_app`, or a dedicated integration crate, behind a port (trait) defined by the core.
+
+## Layers and the dependency rule
+
+```
+          ┌────────────────────────────── aim_app (Bevy) ─────────────────────────────┐
+          │ ui/        game/       overlay/      platform/      persistence/          │
+          │ (egui)     (render,    (show/hide)   (IPC, hotkey)  (settings, history)   │
+          │            input)                                                         │
+          └──────────────────┬────────────────────────────────────────────────────────┘
+                             │ depends on ↓ (never the reverse)
+          ┌──────────────────▼──────────── aim_core (pure, deterministic) ────────────┐
+          │ scenario/   training/   analytics/*   sensitivity/   games/   movement/   │
+          │ sim/        crosshair/*                          shared kernel: math, rng │
+          └───────────────────────────────────────────────────────────────────────────┘
+          * = planned (see roadmap)                   content/  ← data loaded by both
+```
+
+| Rule | Why |
+|---|---|
+| `aim_core` never depends on Bevy, egui, winit, the filesystem, the clock, threads or the network | Every rule stays testable without a GPU, and the engine can be replaced |
+| Dependencies point inward, from adapters to the core | Changing the UI never forces a change in the domain |
+| The core receives time as `dt` and randomness as a seed | Simulations are reproducible, which powers tests, replays and analytics |
+| Side effects cross a **port**: a trait defined in the core and implemented in the app | Dependency inversion; tests use in-memory fakes |
+| Content (`content/`) is data, validated by the core | Contributors add exercises without touching Rust |
+
+## Repository layout
+
+### Target layout
+
+New code follows this layout; existing code migrates as described in [Conformance backlog](#conformance-backlog).
+
+```
+.
+├── Cargo.toml                  workspace: members, shared dependency versions, lints
+├── content/                    data that contributors edit (TOML, later glTF maps)
+│   ├── scenarios/<id>.toml     file name == id
+│   ├── routines/<id>.toml
+│   ├── benchmarks/<id>.toml
+│   ├── games/<id>.toml         planned: sensitivity profiles for the converter
+│   └── crosshairs/<id>.toml    planned: crosshair presets
+├── crates/
+│   ├── aim_core/               domain library (pure)
+│   │   ├── src/
+│   │   │   ├── lib.rs          module list + crate docs only
+│   │   │   ├── math.rs rng.rs  shared kernel: tiny, stable, no domain knowledge
+│   │   │   ├── sensitivity/    cm/360, eDPI, conversions, zoom
+│   │   │   ├── games/          per-game constants (VALORANT today), FOV models
+│   │   │   ├── movement/       ground movement model, stop curves
+│   │   │   ├── scenario/       def (data), session (runtime), spawn, motion, weapon, scoring, hit
+│   │   │   ├── training/       routine, benchmark, difficulty*, recommend*
+│   │   │   ├── analytics/*     telemetry, flick segmentation, skill profile
+│   │   │   ├── crosshair/*     crosshair model, import/export codes
+│   │   │   └── sim/            simulated aimer (tests, calibration, bot aim later)
+│   │   ├── examples/           developer tools (calibrate)
+│   │   └── tests/              cross-module tests through the public API
+│   └── aim_app/                Bevy front-end (binary `aimtrainer`)
+│       └── src/
+│           ├── main.rs         CLI parsing + App assembly only
+│           ├── game/           states, run lifecycle, camera, target visuals, input
+│           ├── ui/             egui: pages/ organisms/ molecules/ atoms/ (see coding standards)
+│           ├── overlay/        visibility, click-through, hotkey wiring
+│           ├── platform/       OS specifics: ipc (Unix socket), hotkeys
+│           └── persistence/    settings, history: port implementations
+├── docs/                       architecture, standards, research with sources, decisions
+└── odd/tasks/                  feature work logs
+```
+
+### When to split a module into its own crate
+
+Keep a module inside `aim_core` until **one** of these is true:
+
+| Trigger | Example |
+|---|---|
+| It needs a dependency the rest of the core must not have | Maps need a glTF loader and collision: `aim_world` |
+| It is a separate product surface with its own release cadence | Riot API client: `aim_integrations` |
+| Compile times of the core become painful (measure first) | Analytics with heavy math crates |
+
+Splitting early is YAGNI. A crate boundary costs API design, versioning and compile coordination.
+
+## Extension points
+
+This is where the codebase is designed to grow. Prefer extending one of these over inventing a new mechanism.
+
+| To add | Do this | Touches |
+|---|---|---|
+| An exercise | A TOML file in `content/scenarios/` | Data only |
+| A routine or playlist | A TOML file in `content/routines/` | Data only |
+| A target shape, spawn area, motion or scoring rule | A new variant in `scenario/def.rs`, its logic in the matching `scenario/` module, `validate()`, and tests | `aim_core` |
+| A game to the sensitivity converter | A profile (yaw constant, FOV model) in `games/`; later a TOML file in `content/games/` | `aim_core` |
+| An analysis metric | A pure function `fn(&Telemetry) -> Metric` in `analytics/` | `aim_core` |
+| A recommendation rule | Data that maps weaknesses to scenarios or routines, evaluated in `training/recommend` | `aim_core` + content |
+| A new activity type (deathmatch round, map drill) | A new `Activity` implementation (see below) | `aim_core` + new app plugin |
+| A screen or panel | A page or organism in `aim_app/src/ui/` | `aim_app` |
+| A storage backend or external service | Implement the core's port trait in `aim_app/src/persistence/` or an integration crate | adapter |
+
+### Enum or trait?
+
+| Use | When | Today |
+|---|---|---|
+| `enum` + `match` | The set of variants is closed and owned by this repository, and the data comes from TOML | `Shape`, `SpawnArea`, `Motion`, `FireMode` |
+| `trait` | Implementations live in different modules or crates, or tests need fakes | Ports (storage, clock-free services), future `Activity`, analyzers |
+
+Adding an enum variant is a small, checked change, because the compiler lists every `match` to update. Do not replace enums with trait objects "for extensibility" until a real out-of-crate implementation exists.
+
+## Core runtime model
+
+```
+FrameInput { dt, view angles, buttons, move keys }  ──►  Session::update  ──►  Vec<SessionEvent>
+                                                             │
+                                          targets(), stats(), result()  ──►  rendering / HUD / history
+```
+
+- **`Session` is deterministic:** the same `ScenarioDef`, seed and `FrameInput` sequence produce identical results. Never break this. The planned analytics and replays depend on it: a run can be stored as its input log and re-simulated.
+- **No hidden inputs:** the session reads nothing that is not in `FrameInput`, such as globals, wall-clock time or the OS.
+- **Simulation runs at the render frame rate,** with the real `dt`. Mouse look is applied in the same frame it arrives; it is never smoothed or delayed (see the latency rules in the coding standards).
+
+### Planned generalization: activities
+
+Today a routine sequences **scenarios**. When the second kind of activity arrives (deathmatch with bots, a map drill, a game-mixed activity in the style of Aimstars), introduce the trait below, **not before**:
+
+```rust
+/// Anything the player can do for a while that produces a result and telemetry.
+pub trait Activity {
+    fn update(&mut self, input: &FrameInput) -> Vec<ActivityEvent>;
+    fn is_finished(&self) -> bool;
+    fn result(&self) -> ActivityResult;
+}
+```
+
+The scenario `Session` becomes its first implementation, and routine blocks reference activities instead of scenario IDs. Until then, keep `Session` concrete (YAGNI).
+
+## Bevy adapter rules
+
+| Rule | Detail |
+|---|---|
+| One `Plugin` per feature folder | `GamePlugin`, `UiPlugin`, `OverlayPlugin` and so on; `main.rs` only assembles plugins |
+| Systems are thin | Read ECS state, call the core, write ECS state; no gameplay math in systems |
+| Resources hold global state, components hold per-entity state | The active `Run` is a resource; target visuals are entities |
+| Group related parameters | When a system needs more than 7, use a `#[derive(SystemParam)]` struct, not `#[allow(clippy::too_many_arguments)]` |
+| Order with sets, not long `.chain()`s | Only when ordering grows beyond one plugin |
+| UI follows container/presentational | Container systems build plain view models; view functions draw them and return actions |
+
+## Conformance backlog
+
+These are known gaps between the current code and this document. Fix them **when you next touch the area**, or in a dedicated refactor PR. Never mix one into an unrelated feature PR.
+
+| # | Gap | Target |
+|---|---|---|
+| C1 | Content TOML lives in `crates/aim_core/{scenarios,routines,benchmarks}` | Move to `content/`; update `include_str!` paths and docs |
+| C2 | `aim_app/src/ui.rs` (≈735 lines) mixes ECS access and drawing | `ui/` folder: pages, organisms, molecules, atoms; containers build view models; views return actions |
+| C3 | Flat files `game.rs`, `overlay.rs`, `ipc.rs`, `settings.rs`, `history.rs` | Folders `game/`, `overlay/`, `platform/`, `persistence/` |
+| C4 | `scenario/session.rs` (≈880 lines with tests) does spawning, motion, weapons and scoring | Split into `scenario/{spawn,motion,weapon,scoring}.rs` before adding new building blocks |
+| C5 | `valorant.rs` and `sensitivity.rs` are flat modules | `games/` and `sensitivity/` folders, once the converter grows (data-driven game profiles) |
+| C6 | The crosshair model lives in `aim_app/settings.rs` | `aim_core::crosshair`, when custom crosshairs start |
+| C7 | History is written as CSV directly by the app; no port | Define a `RunStore` port in the core when analytics needs history |
+| C8 | Three `#[allow(clippy::too_many_arguments)]` on Bevy systems | `SystemParam` groups |
+| C9 | Public items in `aim_core` are not all documented | Enable `missing_docs` for `aim_core` after the docs pass |
+| C10 | Bevy and bevy_egui versions are declared in `aim_app`, not the workspace | Move to `[workspace.dependencies]` |
