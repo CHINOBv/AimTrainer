@@ -108,7 +108,7 @@ impl Plugin for GamePlugin {
                     .chain()
                     .run_if(in_state(AppState::Playing)),
             )
-            .add_systems(Update, (manage_cursor, refresh_target_color))
+            .add_systems(Update, (manage_cursor, refresh_target_color, fit_viewport))
             .add_systems(OnExit(AppState::Playing), clear_targets);
     }
 }
@@ -426,6 +426,35 @@ fn update_camera(
     }
 }
 
+/// Match VALORANT on ultrawide windows: render a centered 16:9 viewport (pillarbox).
+fn fit_viewport(
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut cameras: Query<&mut Camera, With<MainCamera>>,
+) {
+    let (Ok(window), Ok(mut camera)) = (windows.single(), cameras.single_mut()) else {
+        return;
+    };
+    let (w, h) = (window.physical_width(), window.physical_height());
+    let (vw, _) = fov::valorant_viewport(w as f64, h as f64);
+    let vw = vw.round() as u32;
+    let wanted = (vw < w).then(|| bevy::camera::Viewport {
+        physical_position: UVec2::new((w - vw) / 2, 0),
+        physical_size: UVec2::new(vw, h),
+        ..default()
+    });
+    let current = camera
+        .viewport
+        .as_ref()
+        .map(|v| (v.physical_position, v.physical_size));
+    if current
+        != wanted
+            .as_ref()
+            .map(|v| (v.physical_position, v.physical_size))
+    {
+        camera.viewport = wanted;
+    }
+}
+
 fn clear_targets(mut commands: Commands, visuals: Query<Entity, With<TargetVisual>>) {
     for e in &visuals {
         commands.entity(e).despawn();
@@ -471,6 +500,7 @@ mod tests {
         assert_is_system(manage_cursor);
         assert_is_system(refresh_target_color);
         assert_is_system(clear_targets);
+        assert_is_system(fit_viewport);
         assert_is_system(setup_world);
     }
 }
