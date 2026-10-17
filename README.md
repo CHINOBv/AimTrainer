@@ -15,12 +15,12 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - **23 exercises as TOML files**, with difficulty levels generated from one definition.
   - **Spray and burst drills** with a recoil model built on Riot's published parameters.
   - **Ammo-economy clicking.**
-  - **Arenas:** deathmatch and angle clearing against bots that move like VALORANT players, on original maps.
+  - **Arenas:** deathmatch, a site hold (stop bots from capturing a site), angle clearing, jiggle-peek and pre-aim drills against bots that peek, strafe and hold like VALORANT players, on original maps (TOML or glTF).
 - **How to train**
   - A **weekly method** in the style of VDIM: one skill per day, drills → variants → benchmark, with tiers.
   - Interleaved routines and a **personalized playlist**.
   - **Adaptive difficulty** that holds you near 80% success.
-  - A Voltaic-style **benchmark**.
+  - A Voltaic-style **benchmark** with novice, intermediate and advanced tiers.
 - **Ranked days**
   - A **queue warm-up** sized to your queue.
   - **20-second buy-phase drills** that hide themselves when done.
@@ -70,12 +70,13 @@ The menu tabs:
 | Tab | What it holds |
 |---|---|
 | Today | The day's method session, the daily challenge |
-| Progress | Goal, readiness, fatigue, trend, bests, replays |
+| Progress | Goal, readiness, fatigue, trend, per-skill strengths and trends, bests, replays |
 | Scenarios | Play, or play adaptively |
-| Routines | The routines and your personalized playlist |
-| Arenas | Deathmatch and angle clearing |
-| Benchmark | Your benchmark energy and ranks |
-| Settings | Sensitivity, converter, finder, crosshair, profile code, system check, hotkeys |
+| Routines | The routines (resume a split one), your personalized playlist |
+| Arenas | Deathmatch, site hold, angle clearing, jiggle-peek and pre-aim drills |
+| Benchmark | Your benchmark energy and ranks, at novice, intermediate or advanced tier |
+| Tools | Sensitivity converter (360°, monitor distance 0/75/100%), sensitivity finder, system check |
+| Settings | Sensitivity, DPI check, crosshair, profile code, hotkeys |
 
 ## Command line
 

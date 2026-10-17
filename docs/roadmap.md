@@ -20,13 +20,13 @@ Phases 1–8 are implemented on `feat/roadmap-completion`. The feature analysis 
 
 | Phase | What shipped | Deviations from the plan, and why |
 |---|---|---|
-| 1 | CI on Linux and Windows; issue and PR templates; MIT license; conformance backlog C1–C4, C8, C10, C11 | — |
-| 2 | Generic difficulty scaling (`scenario::difficulty`); six VDIM-style day routines; `training::method`; Today page with tiers chosen by benchmark energy and resumable split days | Difficulty variants are *generated* from one definition (`at_difficulty`) instead of hand-written files. This is DRY, and Phase 5 needed it anyway |
-| 3 | `aim_core::crosshair` with VALORANT code import/export; crosshair editor and renderer; data-driven sensitivity converter with monitor-distance matching | — |
-| 4 | Deterministic `Recording` + replay codec; flick/tracking analysis; explainable recommendations; history chart; replay viewer | — |
-| 5 | Adaptive staircase (~80% success); personalized playlist; ammo economy (reload mechanic) | — |
-| 6 | `aim_core::activity::Activity`, implemented by the scenario session and `aim_world`'s arena session; routine blocks name a scenario or an arena (`aim-and-duel` mixes both); `aim_world::arena` deathmatch with bots using VALORANT movement and a Fitts-law aim model | — |
-| 7 | `aim_world` maps (original geometry), line of sight, collision, navigation; angle-clearing arena with a crosshair-placement metric | — |
+| 1 | CI on Linux and Windows; issue and PR templates; MIT license; conformance backlog C1–C11 all done | Manual Windows verification (transparency, hotkey, Raw Input) still needs a Windows machine |
+| 2 | Generic difficulty scaling (`scenario::difficulty`); six VDIM-style day routines; `training::method`; Today page with tiers chosen by benchmark energy and resumable split days; benchmark tiers (novice, intermediate, advanced) with their own thresholds; any routine resumes where it stopped (`training::resume` port) | Difficulty variants are *generated* from one definition (`at_difficulty`) instead of hand-written files. This is DRY, and Phase 5 needed it anyway |
+| 3 | `aim_core::crosshair` with VALORANT code import/export; crosshair editor and renderer; data-driven sensitivity converter with monitor-distance matching (0%, 75%, 100%, custom) on a standalone Tools tab; presets in `content/crosshairs/` | — |
+| 4 | Deterministic `Recording` + replay codec; flick/tracking analysis; explainable recommendations with rules as data (`content/rules/`); per-subcategory skill profile with weekly trends and per-skill charts; history behind the `RunStore` port; replay viewer | — |
+| 5 | Adaptive staircase (~80% success); per-scenario easy/hard bounds for size, speed, lifetime, distance, offset and count; personalized playlist; ammo economy (reload mechanic) | Benchmark recalibration waits for real-player data (`calibrated = false`) |
+| 6 | `aim_core::activity::Activity`, implemented by the scenario session and `aim_world`'s arena session; routine blocks name a scenario or an arena (`aim-and-duel` mixes both); `aim_world::arena` deathmatch with bots using VALORANT movement and a Fitts-law aim model; site-hold objective (bots push a site: a game-like objective plus aim); bots peek, strafe (ADAD) and hold as tested state machines | Site hold is an objective option on deathmatch, not a separate mode |
+| 7 | `aim_world` maps (original geometry, TOML or glTF), line of sight, collision, navigation; angle-clearing, jiggle-peek and pre-aim drills with crosshair-placement and head-level error at first sight | glTF maps are not loadable from the app yet (the loader and its convention are in `aim_world`) |
 | 8 | `aim_integrations` offline analysis of official match JSON; `aimtrainer analyze-match`; the match's duels rebuilt as a `match-rebuild` drill at your real death distances | No online fetch: it needs a Riot production key and RSO, which a personal or open-source build cannot ship. The rebuild reproduces distance, not angle, because `viewRadians` has no published convention. See `match-analysis.md` |
 
 ## Phase 1: open-source readiness
