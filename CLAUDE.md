@@ -21,6 +21,8 @@ cargo clippy --workspace --all-targets                 # must stay warning-free
 cargo fmt --all
 cargo run -p aim_core --release --example calibrate    # simulated-player scores per scenario
 ./target/debug/aimtrainer toggle                       # show/hide a running instance (Linux IPC)
+# Windows check from Linux (blake3 needs PURE when cross-compiling); run before pushing:
+CARGO_FEATURE_PURE=1 cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings
 ```
 
 The toolchain must be rustc ≥ 1.97.1, which Bevy 0.20 requires.

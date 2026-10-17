@@ -16,7 +16,7 @@ This is where the project is going, and which part of the architecture owns each
 
 ## Phase 1: open-source readiness
 
-- [ ] **License.** `Cargo.toml` declares MIT, but no `LICENSE` file exists yet. The project owner decides between MIT and the Rust-ecosystem norm, MIT OR Apache-2.0.
+- [x] **License.** MIT (`LICENSE`), matching `Cargo.toml`. Switching to MIT OR Apache-2.0 remains possible while all contributions are from the owner.
 - [x] **CI on Linux and Windows:** `fmt --check`, `clippy`, `test` (`.github/workflows/ci.yml`). The Windows build was also cross-checked locally with `cargo check --target x86_64-pc-windows-msvc`.
 - [x] **Conformance backlog** C1–C4 from [`architecture.md`](architecture.md): content folder, UI split, app folders, session split. C8 and C10 are done too.
 - [ ] **Manual Windows verification:** transparency, hotkey, Raw Input. It compiles for Windows; running it needs a Windows machine.
