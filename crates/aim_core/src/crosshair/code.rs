@@ -12,19 +12,33 @@ use super::{
 };
 use thiserror::Error;
 
+/// Why a profile code could not be parsed.
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum CodeError {
+    /// The code contains nothing.
     #[error("the crosshair code is empty")]
     Empty,
+    /// The code does not start with the `0;` header.
     #[error("a VALORANT crosshair code starts with \"0;\"")]
     MissingHeader,
+    /// A key's value is not a number or flag it accepts.
     #[error("invalid value {value:?} for key {key:?}")]
-    InvalidValue { key: String, value: String },
+    InvalidValue {
+        /// The offending key.
+        key: String,
+        /// The rejected value text.
+        value: String,
+    },
+    /// A numeric value lies outside the range VALORANT allows.
     #[error("value {value} for key {key:?} is outside {min}–{max}")]
     OutOfRange {
+        /// The offending key.
         key: String,
+        /// The rejected value.
         value: f64,
+        /// Smallest allowed value.
         min: f64,
+        /// Largest allowed value.
         max: f64,
     },
 }

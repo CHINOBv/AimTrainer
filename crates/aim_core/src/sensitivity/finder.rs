@@ -12,8 +12,10 @@
 pub const START_RATIO: f64 = 1.5;
 /// Stop when the bracket is this tight (±3%).
 pub const STOP_RATIO: f64 = 1.03;
+/// Maximum number of rounds before the search stops.
 pub const MAX_ROUNDS: u32 = 6;
 
+/// Which of a round's two tests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Slot {
     /// Lower cm/360 (faster sensitivity).
@@ -22,10 +24,14 @@ pub enum Slot {
     Slow,
 }
 
+/// State of a sensitivity search.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SensFinder {
+    /// Center of the current bracket, cm/360.
     pub center_cm: f64,
+    /// Ratio between the center and each tested end; shrinks every round.
     pub ratio: f64,
+    /// Number of finished rounds.
     pub round: u32,
     fast_score: Option<f32>,
     slow_score: Option<f32>,
@@ -34,6 +40,7 @@ pub struct SensFinder {
 }
 
 impl SensFinder {
+    /// Start a search centered on `start_cm` cm/360.
     pub fn new(start_cm: f64) -> Self {
         Self {
             center_cm: start_cm,
@@ -45,10 +52,12 @@ impl SensFinder {
         }
     }
 
+    /// Whether the search has finished.
     pub fn is_done(&self) -> bool {
         self.round >= MAX_ROUNDS || self.ratio < STOP_RATIO
     }
 
+    /// The cm/360 to play in `slot`.
     pub fn cm_for(&self, slot: Slot) -> f64 {
         match slot {
             Slot::Fast => self.center_cm / self.ratio,

@@ -6,15 +6,19 @@ use super::def::ScenarioDef;
 use super::session::{FrameInput, Session};
 use serde::{Deserialize, Serialize};
 
+/// Everything needed to replay a run.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Recording {
+    /// Scenario that was played.
     pub def: ScenarioDef,
+    /// Seed of the session's random generator.
     pub seed: u64,
     /// One entry per `Session::update` call, in order.
     pub inputs: Vec<FrameInput>,
 }
 
 impl Recording {
+    /// Starts an empty recording.
     pub fn new(def: ScenarioDef, seed: u64) -> Self {
         Self {
             def,

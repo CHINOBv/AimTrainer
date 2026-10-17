@@ -8,11 +8,15 @@ use super::benchmark::{BenchmarkDef, BenchmarkResult};
 use super::routine::RoutineDef;
 use serde::{Deserialize, Serialize};
 
+/// A weekly training method: tiers plus one plan per weekday.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MethodDef {
+    /// Stable identifier; equals the content file name.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// Short description shown in the UI.
     #[serde(default)]
     pub description: String,
     /// Attribution for the method's structure, shown in the UI.
@@ -21,14 +25,19 @@ pub struct MethodDef {
     /// Benchmark used to suggest a tier and find the weakest day.
     #[serde(default)]
     pub benchmark: Option<String>,
+    /// Difficulty tiers, easiest first.
     pub tiers: Vec<Tier>,
+    /// The routine plan for each weekday.
     pub week: Week,
 }
 
+/// A difficulty tier of a training method.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Tier {
+    /// Stable identifier, unique within the method.
     pub id: String,
+    /// Display name.
     pub name: String,
     /// Base difficulty level of every run (see `scenario::difficulty`).
     pub level: f32,
@@ -37,18 +46,27 @@ pub struct Tier {
     pub up_to_energy: Option<f32>,
 }
 
+/// The seven day plans of a training method week.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Week {
+    /// Plan for Monday.
     pub monday: DayPlan,
+    /// Plan for Tuesday.
     pub tuesday: DayPlan,
+    /// Plan for Wednesday.
     pub wednesday: DayPlan,
+    /// Plan for Thursday.
     pub thursday: DayPlan,
+    /// Plan for Friday.
     pub friday: DayPlan,
+    /// Plan for Saturday.
     pub saturday: DayPlan,
+    /// Plan for Sunday.
     pub sunday: DayPlan,
 }
 
+/// What is trained on one weekday.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DayPlan {
@@ -63,18 +81,27 @@ pub struct DayPlan {
     pub flex: bool,
 }
 
+/// A day of the week, Monday first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Weekday {
+    /// Monday.
     Monday,
+    /// Tuesday.
     Tuesday,
+    /// Wednesday.
     Wednesday,
+    /// Thursday.
     Thursday,
+    /// Friday.
     Friday,
+    /// Saturday.
     Saturday,
+    /// Sunday.
     Sunday,
 }
 
 impl Weekday {
+    /// Every weekday in ISO order, Monday first.
     pub const ALL: [Weekday; 7] = [
         Weekday::Monday,
         Weekday::Tuesday,
@@ -90,6 +117,7 @@ impl Weekday {
         Self::ALL[(i % 7) as usize]
     }
 
+    /// English name of the weekday.
     pub fn label(self) -> &'static str {
         match self {
             Weekday::Monday => "Monday",
@@ -104,10 +132,12 @@ impl Weekday {
 }
 
 impl MethodDef {
+    /// Parses a method from TOML source.
     pub fn from_toml(src: &str) -> Result<Self, toml::de::Error> {
         toml::from_str(src)
     }
 
+    /// The plan for the given weekday.
     pub fn day(&self, day: Weekday) -> &DayPlan {
         let w = &self.week;
         match day {
@@ -121,6 +151,7 @@ impl MethodDef {
         }
     }
 
+    /// The tier with this id, if any.
     pub fn tier(&self, id: &str) -> Option<&Tier> {
         self.tiers.iter().find(|t| t.id == id)
     }
@@ -164,6 +195,7 @@ impl MethodDef {
             .find(|d| self.day(*d).focus.contains(&weakest.name))
     }
 
+    /// Problems with this method given the available routines and benchmarks; empty when valid.
     pub fn validate(&self, routines: &[RoutineDef], benchmarks: &[BenchmarkDef]) -> Vec<String> {
         let mut errs = Vec::new();
         if self.tiers.is_empty() {
@@ -216,14 +248,17 @@ impl MethodDef {
     }
 }
 
+/// Methods shipped with the application.
 pub mod builtin {
     use super::MethodDef;
 
+    /// Embedded `(file name, TOML source)` pairs of the built-in methods.
     pub const SOURCES: &[(&str, &str)] = &[(
         "weekly-skill-plan.toml",
         include_str!("../../../../content/methods/weekly-skill-plan.toml"),
     )];
 
+    /// Parses every built-in method; panics if a bundled file is invalid.
     pub fn all() -> Vec<MethodDef> {
         SOURCES
             .iter()

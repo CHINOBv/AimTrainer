@@ -25,21 +25,28 @@ pub use tracking::{TrackingAnalysis, TrackingSummary};
 
 use crate::scenario::{Category, FireMode, Recording};
 
+/// What was measured in a run: flicks for click scenarios, tracking for hold scenarios.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AnalysisKind {
+    /// Per-shot flick analysis of a click scenario.
     Flick(Vec<Flick>),
+    /// Tracking analysis of a hold scenario.
     Tracking(TrackingAnalysis),
 }
 
 /// The analysis of one run.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RunAnalysis {
+    /// Id of the analyzed scenario.
     pub scenario_id: String,
+    /// Category of the analyzed scenario.
     pub category: Category,
+    /// The analysis, by fire mode.
     pub kind: AnalysisKind,
 }
 
 impl RunAnalysis {
+    /// Flick aggregates, or `None` for a tracking run.
     pub fn flick_summary(&self) -> Option<FlickSummary> {
         match &self.kind {
             AnalysisKind::Flick(f) => Some(FlickSummary::from_flicks(f)),
@@ -47,6 +54,7 @@ impl RunAnalysis {
         }
     }
 
+    /// Tracking aggregates, or `None` for a flick run.
     pub fn tracking_summary(&self) -> Option<TrackingSummary> {
         match &self.kind {
             AnalysisKind::Tracking(t) => Some(t.summary()),

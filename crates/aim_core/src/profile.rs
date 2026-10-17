@@ -11,23 +11,38 @@ use thiserror::Error;
 
 const PREFIX: &str = "CAT1";
 
+/// A player's shareable setup: sensitivity, ADS multiplier and crosshair.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Profile {
+    /// Game, sensitivity value and mouse DPI.
     pub sensitivity: Sensitivity,
+    /// Sensitivity multiplier applied while aiming down sights.
     pub ads_multiplier: f64,
+    /// Crosshair configuration.
     pub crosshair: Crosshair,
 }
 
+/// Why a profile code could not be decoded.
 #[derive(Debug, Error, PartialEq)]
 pub enum ProfileError {
+    /// The text does not start with the profile prefix.
     #[error("not a profile code (it should start with {PREFIX}|)")]
     NotAProfile,
+    /// The code does not have the expected number of fields.
     #[error("profile code needs 6 fields separated by |")]
     FieldCount,
+    /// The game id is not recognized.
     #[error("unknown game '{0}'")]
     Game(String),
+    /// A numeric field could not be parsed.
     #[error("invalid {field}: '{value}'")]
-    Number { field: &'static str, value: String },
+    Number {
+        /// Name of the field that failed to parse.
+        field: &'static str,
+        /// The offending text.
+        value: String,
+    },
+    /// The crosshair code is invalid; carries its error message.
     #[error("crosshair: {0}")]
     Crosshair(String),
 }
@@ -45,6 +60,7 @@ fn parse_game(id: &str) -> Result<Game, ProfileError> {
 }
 
 impl Profile {
+    /// Serializes the profile to its one-line shareable code.
     pub fn encode(&self) -> String {
         let s = &self.sensitivity;
         format!(
@@ -57,6 +73,7 @@ impl Profile {
         )
     }
 
+    /// Parses a shareable profile code.
     pub fn decode(text: &str) -> Result<Self, ProfileError> {
         let text = text.trim();
         let fields: Vec<&str> = text.splitn(6, '|').collect();

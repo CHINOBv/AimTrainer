@@ -9,19 +9,25 @@ use crate::rng::Rng;
 use crate::scenario::ScenarioDef;
 use serde::{Deserialize, Serialize};
 
+/// A routine: an ordered list of blocks of scenario runs, loaded from TOML.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RoutineDef {
+    /// Stable identifier; equals the content file name.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// Short description shown in the UI.
     #[serde(default)]
     pub description: String,
     /// Blocks from this index on are shuffled run-by-run. `None` keeps the order.
     #[serde(default)]
     pub interleave_from: Option<usize>,
+    /// Blocks that make up the routine, in play order.
     pub blocks: Vec<Block>,
 }
 
+/// One block of a routine: a scenario or arena played for some runs or minutes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Block {
@@ -38,6 +44,7 @@ pub struct Block {
     /// Approximate time budget; converted to runs using the scenario's duration.
     #[serde(default)]
     pub minutes: Option<f32>,
+    /// Free-text hint shown to the player during the block.
     #[serde(default)]
     pub note: String,
     /// Difficulty offset relative to the level the routine is played at (see
@@ -50,12 +57,16 @@ pub struct Block {
     pub duration_secs: Option<f32>,
 }
 
+/// One run in an expanded routine plan.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlannedRun {
     /// Scenario id, or arena id when `kind` is [`ActivityKind::Arena`].
     pub scenario_id: String,
+    /// Whether the activity is a scenario or an arena.
     pub kind: ActivityKind,
+    /// Index of the routine block this run came from.
     pub block: usize,
+    /// Free-text hint copied from the block.
     pub note: String,
     /// Offset relative to the routine's base level.
     pub difficulty: f32,
@@ -84,6 +95,7 @@ impl PlannedRun {
 }
 
 impl RoutineDef {
+    /// Parses a routine from TOML source.
     pub fn from_toml(src: &str) -> Result<Self, toml::de::Error> {
         toml::from_str(src)
     }
@@ -219,9 +231,11 @@ impl RoutineDef {
     }
 }
 
+/// Routines shipped with the application.
 pub mod builtin {
     use super::RoutineDef;
 
+    /// Embedded `(file name, TOML source)` pairs of the built-in routines.
     pub const SOURCES: &[(&str, &str)] = &[
         (
             "aim-and-duel.toml",
@@ -265,6 +279,7 @@ pub mod builtin {
         ),
     ];
 
+    /// Parses every built-in routine; panics if a bundled file is invalid.
     pub fn all() -> Vec<RoutineDef> {
         SOURCES
             .iter()

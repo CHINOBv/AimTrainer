@@ -13,16 +13,22 @@ use serde::{Deserialize, Serialize};
 pub const TARGET_SUCCESS: f32 = 0.8;
 /// No change while success is within this distance of the target.
 pub const DEAD_BAND: f32 = 0.05;
+/// Initial level change per run.
 pub const INITIAL_STEP: f32 = 0.25;
+/// Smallest level change; halving stops here.
 pub const MIN_STEP: f32 = 0.05;
 
+/// Adaptive difficulty state for one scenario, persisted between sessions.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Staircase {
+    /// Current difficulty level (see `scenario::difficulty`).
     pub level: f32,
+    /// Size of the next level change, in difficulty levels.
     pub step: f32,
     /// -1 easier, +1 harder, 0 none yet.
     pub last_move: i8,
+    /// Number of runs the staircase has seen.
     pub runs: u32,
 }
 

@@ -10,11 +10,13 @@ use crate::scenario::{Recording, Session, Shape, Target};
 /// One visible target as seen from the eye in a given frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TargetSample {
+    /// Id of the target.
     pub id: u64,
     /// Angles that look at the target's aim point (sphere center, or humanoid head center).
     pub aim_point: ViewAngles,
     /// Angular radius of the aim zone (sphere, or half the head size), degrees.
     pub radius_deg: f32,
+    /// Session time when the target became visible, seconds.
     pub visible_at_secs: f32,
 }
 
@@ -23,7 +25,9 @@ pub struct TargetSample {
 pub struct Sample {
     /// Session time after this frame.
     pub time_secs: f32,
+    /// Duration of this frame, seconds.
     pub dt_secs: f32,
+    /// Crosshair orientation after this frame.
     pub view: ViewAngles,
     /// Crosshair angular velocity over this frame, in the tangent plane (degrees/s):
     /// `.0` is horizontal (positive right), `.1` vertical (positive up).
@@ -34,6 +38,7 @@ pub struct Sample {
     pub targets: Vec<TargetSample>,
     /// Index into `targets` of the one nearest to the crosshair, by angle.
     pub aimed: Option<usize>,
+    /// Fire was held during this frame.
     pub fire_held: bool,
     /// A shot was fired this frame (click mode).
     pub shot: bool,
@@ -44,10 +49,12 @@ pub struct Sample {
 }
 
 impl Sample {
+    /// The target nearest to the crosshair this frame, if any.
     pub fn aimed_target(&self) -> Option<&TargetSample> {
         self.aimed.and_then(|i| self.targets.get(i))
     }
 
+    /// The visible target with `id`, if present this frame.
     pub fn target(&self, id: u64) -> Option<&TargetSample> {
         self.targets.iter().find(|t| t.id == id)
     }

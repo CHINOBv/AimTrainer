@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub struct RoutinePosition {
     /// Local date, `YYYY-MM-DD`.
     pub date: String,
+    /// Routine id being played.
     pub routine: String,
     /// Base difficulty level the routine is played at.
     pub level: f32,
@@ -16,10 +17,12 @@ pub struct RoutinePosition {
     pub seed: u64,
     /// Index of the next run to play.
     pub next_index: usize,
+    /// Total number of runs in the routine plan.
     pub total_runs: usize,
 }
 
 impl RoutinePosition {
+    /// Whether every run of the routine has been played.
     pub fn is_done(&self) -> bool {
         self.next_index >= self.total_runs
     }
@@ -32,6 +35,7 @@ impl RoutinePosition {
 
 /// Port: where positions are kept between launches.
 pub trait PositionStore {
+    /// All stored positions.
     fn positions(&self) -> &[RoutinePosition];
     /// Replace the stored positions.
     fn save_positions(&mut self, positions: Vec<RoutinePosition>);

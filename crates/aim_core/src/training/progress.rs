@@ -16,8 +16,11 @@ const SECS_PER_DAY: u64 = 86_400;
 pub struct RunRecord {
     /// Unix seconds when the run finished.
     pub timestamp: u64,
+    /// Scenario id (run key) that was played.
     pub scenario: String,
+    /// Score achieved in the run.
     pub score: f32,
+    /// Run length in seconds.
     pub duration_secs: f32,
 }
 
@@ -30,21 +33,29 @@ pub const COLD_RATIO: f32 = 0.85;
 /// Days of history used for the baseline.
 pub const BASELINE_DAYS: u64 = 30;
 
+/// How ready the player is, relative to their recent baseline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Warmth {
+    /// Clearly below the baseline.
     Cold,
+    /// Approaching the baseline.
     Warming,
+    /// At or above the ready threshold of the baseline.
     Ready,
 }
 
+/// Warm-up readiness of one scenario: today's best against the recent baseline.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Readiness {
+    /// Scenario id the readiness refers to.
     pub scenario: String,
     /// Median of the daily best scores over the baseline window, excluding today.
     pub baseline: f32,
     /// Best score today.
     pub today_best: f32,
+    /// `today_best / baseline`.
     pub ratio: f32,
+    /// Warmth level derived from `ratio`.
     pub warmth: Warmth,
 }
 
@@ -121,15 +132,23 @@ pub const LONG_SESSION_MINUTES: f32 = 60.0;
 /// A drop of this share from the session's best scores on a scenario signals fatigue.
 pub const FATIGUE_DROP: f32 = 0.10;
 
+/// A sign that the current session has passed the point of diminishing returns.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FatigueSignal {
     /// Session time is past the point of diminishing returns.
-    LongSession { minutes: f32 },
+    LongSession {
+        /// Session length in minutes.
+        minutes: f32,
+    },
     /// The last runs of a scenario fell clearly below its earlier peak this session.
     ScoreDrop {
+        /// Scenario id whose scores dropped.
         scenario: String,
+        /// Best score of the scenario earlier this session.
         peak: f32,
+        /// Mean of the most recent scores of the scenario.
         recent: f32,
+        /// Relative drop from `peak` to `recent` (0.10 = 10%).
         drop: f32,
     },
 }
@@ -193,9 +212,12 @@ pub fn fatigue(session: &[RunRecord]) -> Vec<FatigueSignal> {
 
 // ---------------------------------------------------------------- goals
 
+/// Progress towards the daily training-time goal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DailyGoal {
+    /// Minutes trained today.
     pub minutes_today: f32,
+    /// Target minutes per day.
     pub goal_minutes: f32,
     /// Consecutive days (ending today, or yesterday if today has no training yet) that met
     /// the goal.
@@ -203,6 +225,7 @@ pub struct DailyGoal {
 }
 
 impl DailyGoal {
+    /// Whether today's training time reached the goal.
     pub fn met_today(&self) -> bool {
         self.minutes_today >= self.goal_minutes
     }
@@ -284,7 +307,9 @@ pub fn benchmark_trend(
 /// One benchmark subcategory's energy over time.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SubcategoryTrend {
+    /// Display name of the subcategory.
     pub name: String,
+    /// Skill key of the subcategory.
     pub skill: String,
     /// Energy at the end of each week (oldest first); `None` until it was played.
     pub energies: Vec<Option<f32>>,

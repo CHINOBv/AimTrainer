@@ -17,12 +17,16 @@ const CM_PER_INCH: f64 = 2.54;
 /// The player's mouse setup expressed in a given game's terms.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Sensitivity {
+    /// Game whose sensitivity scale `value` uses.
     pub game: Game,
+    /// In-game sensitivity value.
     pub value: f64,
+    /// Mouse DPI.
     pub dpi: u32,
 }
 
 impl Sensitivity {
+    /// A VALORANT sensitivity with the given mouse DPI.
     pub fn valorant(value: f64, dpi: u32) -> Self {
         Self {
             game: Game::Valorant,
@@ -31,6 +35,7 @@ impl Sensitivity {
         }
     }
 
+    /// Whether the value and DPI can describe a real setup (finite and positive).
     pub fn is_valid(&self) -> bool {
         self.value.is_finite() && self.value > 0.0 && self.dpi > 0
     }
@@ -50,6 +55,7 @@ impl Sensitivity {
         360.0 / (self.deg_per_count() * self.dpi as f64) * CM_PER_INCH
     }
 
+    /// Physical mouse travel for a full 360° turn, inches.
     pub fn inches_per_360(&self) -> f64 {
         self.cm_per_360() / CM_PER_INCH
     }

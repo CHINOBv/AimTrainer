@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 pub struct StopCurve(pub Vec<(f32, f32)>);
 
 impl StopCurve {
+    /// Whether the curve starts at `(0, 1)`, ends at fraction 0 and is strictly increasing in time and non-increasing in speed.
     pub fn is_valid(&self) -> bool {
         let p = &self.0;
         p.len() >= 2
@@ -47,6 +48,7 @@ impl StopCurve {
         0.0
     }
 
+    /// Total time in seconds the curve takes to reach a full stop.
     pub fn duration(&self) -> f32 {
         self.0.last().map_or(0.0, |l| l.0)
     }
@@ -57,6 +59,7 @@ impl StopCurve {
     }
 }
 
+/// Ground movement parameters of one weapon loadout.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MovementProfile {
     /// Max running speed in m/s (depends on the equipped weapon).
@@ -84,6 +87,7 @@ impl MovementProfile {
         Self::valorant_with_speed(6.75)
     }
 
+    /// Movement profile with VALORANT acceleration and stopping curves at the given run speed in m/s.
     pub fn valorant_with_speed(run_speed: f32) -> Self {
         Self {
             run_speed,
@@ -100,10 +104,12 @@ impl MovementProfile {
         }
     }
 
+    /// Speed in m/s at or below which shots are fully accurate.
     pub fn accuracy_speed_limit(&self) -> f32 {
         self.run_speed * self.accuracy_threshold
     }
 
+    /// Whether every field is within its allowed range.
     pub fn is_valid(&self) -> bool {
         self.run_speed > 0.0
             && self.acceleration > 0.0
@@ -121,17 +127,21 @@ pub struct MoveInput {
     pub right: f32,
     /// -1 (S) .. 1 (W).
     pub forward: f32,
+    /// Walk (shift) held: moves at the walk fraction of run speed.
     pub walk: bool,
 }
 
 /// Horizontal velocity in the player's local frame (x = right, y = forward), in m/s.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct LocalVelocity {
+    /// Velocity along the player's right axis, in m/s.
     pub right: f32,
+    /// Velocity along the player's forward axis, in m/s.
     pub forward: f32,
 }
 
 impl LocalVelocity {
+    /// Magnitude of the horizontal velocity in m/s.
     pub fn speed(&self) -> f32 {
         (self.right * self.right + self.forward * self.forward).sqrt()
     }

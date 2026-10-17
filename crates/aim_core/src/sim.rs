@@ -12,9 +12,12 @@ use crate::math::{Vec3, ViewAngles, angle_between_deg, wrap_degrees};
 use crate::rng::Rng;
 use crate::scenario::{FireMode, FrameInput, ScenarioDef, Session, Shape, Target};
 
+/// Skill parameters of a simulated aimer.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AimerProfile {
+    /// Preset name.
     pub name: &'static str,
+    /// Delay in seconds before starting a movement towards a new target.
     pub reaction_secs: f32,
     /// Fitts' law intercept, seconds.
     pub fitts_a: f32,
@@ -27,6 +30,7 @@ pub struct AimerProfile {
 }
 
 impl AimerProfile {
+    /// Built-in skill levels, from weakest to strongest.
     pub const PRESETS: [AimerProfile; 4] = [
         AimerProfile {
             name: "recruit",
@@ -72,6 +76,7 @@ struct Plan {
     shot: bool,
 }
 
+/// A simulated player that produces `FrameInput`s for a `Session`.
 pub struct SimAimer {
     profile: AimerProfile,
     rng: Rng,
@@ -80,6 +85,7 @@ pub struct SimAimer {
 }
 
 impl SimAimer {
+    /// Creates an aimer with the given skill and RNG seed.
     pub fn new(profile: AimerProfile, seed: u64) -> Self {
         Self {
             profile,

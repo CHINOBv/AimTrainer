@@ -15,10 +15,16 @@ pub enum Matching {
     /// Same cm/360 in both games.
     Distance360,
     /// Same mouse travel to a point `percent` % of the way to the screen edge on `axis`.
-    Monitor { axis: FovAxis, percent: f64 },
+    Monitor {
+        /// Screen axis the percentage refers to.
+        axis: FovAxis,
+        /// Distance from the screen center to the edge, in percent.
+        percent: f64,
+    },
 }
 
 impl Matching {
+    /// Monitor-distance match at 0 % on the horizontal axis (focal-length limit).
     pub const MDH_0: Matching = Matching::Monitor {
         axis: FovAxis::Horizontal,
         percent: 0.0,
@@ -28,26 +34,34 @@ impl Matching {
         axis: FovAxis::Horizontal,
         percent: 75.0,
     };
+    /// Monitor-distance match at 100 % on the horizontal axis.
     pub const MDH_100: Matching = Matching::Monitor {
         axis: FovAxis::Horizontal,
         percent: 100.0,
     };
+    /// Monitor-distance match at 0 % on the vertical axis.
     pub const MDV_0: Matching = Matching::Monitor {
         axis: FovAxis::Vertical,
         percent: 0.0,
     };
 }
 
+/// Why a conversion could not be computed.
 #[derive(Debug, Clone, Copy, PartialEq, Error)]
 pub enum MatchError {
+    /// The game has no FOV model; carries the game.
     #[error("{} has no documented FOV model; only 360° matching is available", .0.display_name())]
     NoFovModel(Game),
+    /// The monitor-distance percentage is negative or not finite; carries it.
     #[error("monitor-distance percentage must be finite and ≥ 0, got {0}")]
     InvalidPercent(f64),
+    /// The FOV is outside 0-180 degrees; carries it.
     #[error("FOV must be between 0° and 180°, got {0}")]
     InvalidFov(f64),
+    /// The aspect ratio is not positive; carries it.
     #[error("aspect ratio must be positive, got {0}")]
     InvalidAspect(f64),
+    /// The sensitivity or DPI is not positive.
     #[error("sensitivity must be positive with a positive DPI")]
     InvalidSensitivity,
 }
@@ -108,11 +122,14 @@ pub fn valorant_ads_multiplier(zoom: f64, percent: f64) -> f64 {
 /// One side of a conversion: the game and its in-game FOV value (`None` = the default).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Side {
+    /// The game.
     pub game: Game,
+    /// In-game FOV in degrees; `None` uses the game's default.
     pub fov_deg: Option<f64>,
 }
 
 impl Side {
+    /// A side for `game` with an optional in-game FOV in degrees.
     pub fn new(game: Game, fov_deg: Option<f64>) -> Self {
         Self { game, fov_deg }
     }
