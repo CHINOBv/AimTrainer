@@ -16,7 +16,7 @@ pub const MAX_RECOMMENDATIONS: usize = 2;
 pub struct Advice {
     /// Metric, value and threshold that triggered it, in plain English.
     pub explanation: String,
-    pub tip: &'static str,
+    pub tip: String,
     /// `(scenario id, display name)` to practice, best first.
     pub practice: Vec<(String, String)>,
 }
@@ -107,15 +107,15 @@ impl RunReport {
         let advice = profile
             .recommendations()
             .into_iter()
-            .filter_map(|f| f.recommendation.map(|r| (f, r)))
+            .filter_map(|f| f.recommendation.as_ref().map(|r| (f, r)))
             .take(MAX_RECOMMENDATIONS)
             .map(|(f, r)| Advice {
                 explanation: f.explanation.clone(),
-                tip: r.tip,
+                tip: r.tip.clone(),
                 practice: r
                     .scenario_ids
                     .iter()
-                    .filter_map(|id| name_of(id).map(|n| ((*id).to_owned(), n)))
+                    .filter_map(|id| name_of(id).map(|n| (id.clone(), n)))
                     .collect(),
             })
             .collect();
@@ -147,7 +147,7 @@ pub fn analysis_panel(ui: &mut egui::Ui, report: &RunReport) -> Option<UiAction>
             for a in &report.advice {
                 ui.add_space(4.0);
                 ui.colored_label(WARN, &a.explanation);
-                ui.label(a.tip);
+                ui.label(a.tip.as_str());
                 ui.horizontal_wrapped(|ui| {
                     for (id, name) in &a.practice {
                         if ui.small_button(format!("Practice: {name}")).clicked() {

@@ -5,7 +5,9 @@
 //! decrement after rest; daily gains peaking around 30–60 min, Listman et al. 2021). Their
 //! thresholds are documented constants, shown to the player with the numbers behind them.
 
+use super::benchmark::{BenchmarkDef, BenchmarkResult};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 const SECS_PER_DAY: u64 = 86_400;
 
@@ -237,24 +239,75 @@ pub fn daily_goal(
 
 // ---------------------------------------------------------------- trend
 
-/// Overall benchmark energy at the end of each of the last `weeks` weeks (oldest first),
-/// using every run up to that point. `None` while not every subcategory was played.
-pub fn benchmark_trend(
-    benchmark: &super::benchmark::BenchmarkDef,
+/// Personal best per scenario (`scenario id -> best score`) over runs finished at or before
+/// `cutoff` (Unix seconds).
+pub fn bests_until(records: &[RunRecord], cutoff: u64) -> HashMap<String, f32> {
+    let mut bests = HashMap::<String, f32>::new();
+    for r in records.iter().filter(|r| r.timestamp <= cutoff) {
+        let e = bests.entry(r.scenario.clone()).or_insert(r.score);
+        *e = e.max(r.score);
+    }
+    bests
+}
+
+/// The benchmark evaluated at the end of each of the last `weeks` weeks (oldest first),
+/// using every run up to that point.
+fn weekly_results(
+    benchmark: &BenchmarkDef,
     records: &[RunRecord],
     now: u64,
     weeks: u32,
-) -> Vec<Option<f32>> {
+) -> Vec<BenchmarkResult> {
     (0..weeks)
         .rev()
         .map(|w| {
             let cutoff = now.saturating_sub(w as u64 * 7 * SECS_PER_DAY);
-            let mut bests = std::collections::HashMap::<String, f32>::new();
-            for r in records.iter().filter(|r| r.timestamp <= cutoff) {
-                let e = bests.entry(r.scenario.clone()).or_insert(r.score);
-                *e = e.max(r.score);
-            }
-            benchmark.evaluate(&bests).overall
+            benchmark.evaluate(&bests_until(records, cutoff))
+        })
+        .collect()
+}
+
+/// Overall benchmark energy at the end of each of the last `weeks` weeks (oldest first),
+/// using every run up to that point. `None` while not every subcategory was played.
+pub fn benchmark_trend(
+    benchmark: &BenchmarkDef,
+    records: &[RunRecord],
+    now: u64,
+    weeks: u32,
+) -> Vec<Option<f32>> {
+    weekly_results(benchmark, records, now, weeks)
+        .into_iter()
+        .map(|r| r.overall)
+        .collect()
+}
+
+/// One benchmark subcategory's energy over time.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SubcategoryTrend {
+    pub name: String,
+    pub skill: String,
+    /// Energy at the end of each week (oldest first); `None` until it was played.
+    pub energies: Vec<Option<f32>>,
+}
+
+/// Per-subcategory (per-skill) energy at the end of each of the last `weeks` weeks, with
+/// the same weekly cutoffs as [`benchmark_trend`]. One entry per subcategory, in the
+/// benchmark's order.
+pub fn subcategory_trend(
+    benchmark: &BenchmarkDef,
+    records: &[RunRecord],
+    now: u64,
+    weeks: u32,
+) -> Vec<SubcategoryTrend> {
+    let weekly = weekly_results(benchmark, records, now, weeks);
+    benchmark
+        .subcategories
+        .iter()
+        .enumerate()
+        .map(|(i, sub)| SubcategoryTrend {
+            name: sub.name.clone(),
+            skill: sub.skill.clone(),
+            energies: weekly.iter().map(|r| r.subcategories[i].energy).collect(),
         })
         .collect()
 }
@@ -384,6 +437,41 @@ mod tests {
         assert_eq!(trend[0], None, "nothing was played by the oldest cutoff");
         let (early, late) = (trend[1].unwrap(), trend[3].unwrap());
         assert!(late > early, "{early} → {late}");
+    }
+
+    #[test]
+    fn subcategory_trend_follows_each_subcategory_with_the_overall_cutoffs() {
+        let b = crate::training::benchmark::builtin::all().remove(0);
+        let first = &b.subcategories[0].scenarios[0];
+        let second = &b.subcategories[1].scenarios[0];
+        let r = vec![
+            rec(NOW - 2 * 7 * DAY + 3600, &first.id, first.thresholds[0]),
+            rec(NOW - 7 * DAY + 3600, &first.id, first.thresholds[1]),
+            rec(NOW - 3600, &second.id, second.thresholds[2]),
+        ];
+        let trend = subcategory_trend(&b, &r, NOW, 3);
+        assert_eq!(trend.len(), b.subcategories.len());
+        assert_eq!(trend[0].name, b.subcategories[0].name);
+        assert_eq!(trend[0].skill, b.subcategories[0].skill);
+        assert_eq!(trend[0].energies, vec![None, Some(100.0), Some(200.0)]);
+        assert_eq!(trend[1].energies, vec![None, None, Some(300.0)]);
+        assert!(trend[2..].iter().all(|t| t.energies == vec![None; 3]));
+        // The same cutoffs as the overall trend: it exists exactly when every subcategory does.
+        let overall = benchmark_trend(&b, &r, NOW, 3);
+        for (w, point) in overall.iter().enumerate() {
+            assert_eq!(
+                point.is_some(),
+                trend.iter().all(|t| t.energies[w].is_some())
+            );
+        }
+    }
+
+    #[test]
+    fn bests_until_keeps_the_best_score_up_to_the_cutoff() {
+        let r = vec![rec(10, "a", 5.0), rec(20, "a", 9.0), rec(30, "a", 12.0)];
+        let b = bests_until(&r, 20);
+        assert_eq!(b.get("a"), Some(&9.0));
+        assert!(bests_until(&r, 5).is_empty());
     }
 
     #[test]

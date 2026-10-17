@@ -1,244 +1,25 @@
 //! Skill profile and explainable recommendations.
 //!
-//! Recent run analyses are grouped by scenario category; each group is summarized and the
-//! [`RULES`] table is applied to it. A rule names one metric, a threshold and a direction,
-//! so every strength, weakness and recommendation can say exactly which number triggered
-//! it. All thresholds are provisional (see "Analytics metrics" in
-//! `docs/training-science.md`) until they are calibrated on real player data.
+//! Recent run analyses are grouped by scenario category; each group is summarized and a
+//! [`RuleSet`] (by default the built-in `content/rules/recommendations.toml`, see
+//! [`super::rules`]) is applied to it. A rule names one metric, a threshold and a
+//! direction, so every strength, weakness and recommendation can say exactly which number
+//! triggered it. All thresholds are provisional (see "Analytics metrics" in
+//! `docs/training-science.md`) until they are calibrated on real player data. The
+//! per-benchmark-subcategory profile is in [`super::skills`].
 
 use super::flick::{Flick, FlickSummary};
+use super::rules::{self, RuleSet};
 use super::tracking::{TrackingAnalysis, TrackingSummary};
 use super::{AnalysisKind, RunAnalysis};
 use crate::scenario::Category;
+
+pub use super::rules::{Direction, Metric, Recommendation, Rule, Verdict};
 
 /// Fewer flicks than this in a category give no flick findings.
 pub const MIN_FLICKS: usize = 5;
 /// Less firing time than this in a category gives no tracking findings.
 pub const MIN_TRACKING_SECS: f32 = 3.0;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Metric {
-    ReactionTime,
-    OvershootRate,
-    UndershootRate,
-    Corrections,
-    PathEfficiency,
-    OnTargetRatio,
-    LagRatio,
-    ReversalResponse,
-}
-
-impl Metric {
-    pub fn label(self) -> &'static str {
-        match self {
-            Metric::ReactionTime => "Median reaction time",
-            Metric::OvershootRate => "Overshoot rate",
-            Metric::UndershootRate => "Undershoot rate",
-            Metric::Corrections => "Corrections per flick",
-            Metric::PathEfficiency => "Path efficiency",
-            Metric::OnTargetRatio => "Time on target",
-            Metric::LagRatio => "Time behind the target",
-            Metric::ReversalResponse => "Reaction to direction changes",
-        }
-    }
-
-    /// Value formatted with its unit.
-    pub fn format(self, value: f32) -> String {
-        match self {
-            Metric::ReactionTime | Metric::ReversalResponse => {
-                format!("{:.0} ms", value * 1000.0)
-            }
-            Metric::Corrections => format!("{value:.2}"),
-            _ => format!("{:.0}%", value * 100.0),
-        }
-    }
-
-    fn value(
-        self,
-        flick: Option<&FlickSummary>,
-        tracking: Option<&TrackingSummary>,
-    ) -> Option<f32> {
-        match self {
-            Metric::ReactionTime => flick?.median_reaction_secs,
-            Metric::OvershootRate => Some(flick?.overshoot_rate),
-            Metric::UndershootRate => Some(flick?.undershoot_rate),
-            Metric::Corrections => Some(flick?.mean_corrections),
-            Metric::PathEfficiency => flick?.median_path_efficiency,
-            Metric::OnTargetRatio => Some(tracking?.on_target_ratio),
-            Metric::LagRatio => tracking?.lag_ratio,
-            Metric::ReversalResponse => tracking?.median_reversal_response_secs,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Verdict {
-    Strength,
-    Weakness,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Direction {
-    Above,
-    Below,
-}
-
-/// What to practice when a weakness fires.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Recommendation {
-    /// Built-in scenario ids, best first.
-    pub scenario_ids: &'static [&'static str],
-    pub routine_id: Option<&'static str>,
-    pub tip: &'static str,
-}
-
-/// One row of the rules table.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Rule {
-    pub metric: Metric,
-    pub direction: Direction,
-    pub threshold: f32,
-    pub verdict: Verdict,
-    /// What the number means for the player.
-    pub meaning: &'static str,
-    pub recommendation: Option<Recommendation>,
-}
-
-/// Provisional rules (documented in `docs/training-science.md`, "Analytics metrics").
-pub const RULES: &[Rule] = &[
-    Rule {
-        metric: Metric::ReactionTime,
-        direction: Direction::Above,
-        threshold: 0.30,
-        verdict: Verdict::Weakness,
-        meaning: "you start moving late after a target appears",
-        recommendation: Some(Recommendation {
-            scenario_ids: &["peek-reaction"],
-            routine_id: Some("quick-warmup"),
-            tip: "Keep the crosshair where targets appear and react to the first pixel, not the whole target.",
-        }),
-    },
-    Rule {
-        metric: Metric::ReactionTime,
-        direction: Direction::Below,
-        threshold: 0.22,
-        verdict: Verdict::Strength,
-        meaning: "you start moving quickly after a target appears",
-        recommendation: None,
-    },
-    Rule {
-        metric: Metric::OvershootRate,
-        direction: Direction::Above,
-        threshold: 0.35,
-        verdict: Verdict::Weakness,
-        meaning: "your first movement often ends past the target's far edge",
-        recommendation: Some(Recommendation {
-            scenario_ids: &["micro-adjust", "static-headline"],
-            routine_id: None,
-            tip: "Slow your flicks slightly and aim to land on the target in one motion; if it persists, check that your sensitivity matches VALORANT.",
-        }),
-    },
-    Rule {
-        metric: Metric::UndershootRate,
-        direction: Direction::Above,
-        threshold: 0.35,
-        verdict: Verdict::Weakness,
-        meaning: "your first movement often stops short of the target",
-        recommendation: Some(Recommendation {
-            scenario_ids: &["flick-wide"],
-            routine_id: None,
-            tip: "Commit to the full distance with your arm instead of finishing the flick with small wrist corrections.",
-        }),
-    },
-    Rule {
-        metric: Metric::Corrections,
-        direction: Direction::Above,
-        threshold: 1.0,
-        verdict: Verdict::Weakness,
-        meaning: "you usually need more than one correction after the first movement",
-        recommendation: Some(Recommendation {
-            scenario_ids: &["micro-adjust", "flick-headshot"],
-            routine_id: None,
-            tip: "Make the first movement more accurate rather than faster; corrections cost more time than a slightly slower flick.",
-        }),
-    },
-    Rule {
-        metric: Metric::PathEfficiency,
-        direction: Direction::Below,
-        threshold: 0.85,
-        verdict: Verdict::Weakness,
-        meaning: "your crosshair travels a curved or back-and-forth path to the target",
-        recommendation: Some(Recommendation {
-            scenario_ids: &["flick-headshot"],
-            routine_id: None,
-            tip: "Move in a straight line to the target; keep head height so flicks stay horizontal.",
-        }),
-    },
-    Rule {
-        metric: Metric::OvershootRate,
-        direction: Direction::Below,
-        threshold: 0.10,
-        verdict: Verdict::Strength,
-        meaning: "your first movement rarely ends past the target",
-        recommendation: None,
-    },
-    Rule {
-        metric: Metric::OnTargetRatio,
-        direction: Direction::Below,
-        threshold: 0.50,
-        verdict: Verdict::Weakness,
-        meaning: "you are off the target for more than half the time you fire",
-        recommendation: Some(Recommendation {
-            scenario_ids: &["track-precise"],
-            routine_id: None,
-            tip: "Prioritize smooth, steady mouse movement over chasing the target; speed up only once you stay on it.",
-        }),
-    },
-    Rule {
-        metric: Metric::OnTargetRatio,
-        direction: Direction::Above,
-        threshold: 0.75,
-        verdict: Verdict::Strength,
-        meaning: "you stay on the target most of the time you fire",
-        recommendation: None,
-    },
-    Rule {
-        metric: Metric::LagRatio,
-        direction: Direction::Above,
-        threshold: 0.65,
-        verdict: Verdict::Weakness,
-        meaning: "you trail behind moving targets most of the time",
-        recommendation: Some(Recommendation {
-            scenario_ids: &["track-precise", "track-reactive-micro"],
-            routine_id: None,
-            tip: "Match the target's speed first, then close the gap; watch the target, not the crosshair.",
-        }),
-    },
-    Rule {
-        metric: Metric::LagRatio,
-        direction: Direction::Below,
-        threshold: 0.35,
-        verdict: Verdict::Weakness,
-        meaning: "you run ahead of moving targets most of the time",
-        recommendation: Some(Recommendation {
-            scenario_ids: &["track-reactive-micro"],
-            routine_id: None,
-            tip: "Stop predicting; follow the target and let it lead you.",
-        }),
-    },
-    Rule {
-        metric: Metric::ReversalResponse,
-        direction: Direction::Above,
-        threshold: 0.25,
-        verdict: Verdict::Weakness,
-        meaning: "you take long to follow a target that changes direction",
-        recommendation: Some(Recommendation {
-            scenario_ids: &["track-reactive-strafe", "track-reactive-micro"],
-            routine_id: None,
-            tip: "React to strafes instead of anticipating them; relax your grip so reversals are quicker.",
-        }),
-    },
-];
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Finding {
@@ -280,19 +61,17 @@ pub struct SkillProfile {
 }
 
 fn evaluate(
+    rules: &RuleSet,
     category: Category,
     flick: Option<&FlickSummary>,
     tracking: Option<&TrackingSummary>,
 ) -> Vec<Finding> {
-    RULES
+    rules
+        .rules
         .iter()
         .filter_map(|rule| {
             let value = rule.metric.value(flick, tracking)?;
-            let fires = match rule.direction {
-                Direction::Above => value > rule.threshold,
-                Direction::Below => value < rule.threshold,
-            };
-            fires.then(|| Finding {
+            rule.fires(value).then(|| Finding {
                 category,
                 verdict: rule.verdict,
                 metric: rule.metric,
@@ -303,21 +82,24 @@ fn evaluate(
                     "{} {} is {} the {} threshold: {}.",
                     rule.metric.label(),
                     rule.metric.format(value),
-                    match rule.direction {
-                        Direction::Above => "above",
-                        Direction::Below => "below",
-                    },
+                    rule.direction.word(),
                     rule.metric.format(rule.threshold),
                     rule.meaning,
                 ),
-                recommendation: rule.recommendation,
+                recommendation: rule.recommendation.clone(),
             })
         })
         .collect()
 }
 
 impl SkillProfile {
+    /// Profile with the built-in recommendation rules.
     pub fn build(analyses: &[RunAnalysis]) -> Self {
+        Self::build_with(analyses, rules::builtin::rules())
+    }
+
+    /// Profile with any rules table.
+    pub fn build_with(analyses: &[RunAnalysis], rules: &RuleSet) -> Self {
         let mut categories = Vec::new();
         for category in Category::ALL {
             let runs: Vec<&RunAnalysis> =
@@ -342,7 +124,7 @@ impl SkillProfile {
             categories.push(CategoryProfile {
                 category,
                 runs: runs.len(),
-                findings: evaluate(category, flick.as_ref(), tracking.as_ref()),
+                findings: evaluate(rules, category, flick.as_ref(), tracking.as_ref()),
                 flick,
                 tracking,
             });
@@ -374,28 +156,7 @@ mod tests {
     use super::*;
     use crate::analytics::analyze;
     use crate::analytics::test_support::record;
-    use crate::scenario::builtin;
     use crate::sim::AimerProfile;
-
-    #[test]
-    fn every_recommended_scenario_and_routine_is_built_in() {
-        let scenarios: Vec<String> = builtin::all().into_iter().map(|d| d.id).collect();
-        let routines: Vec<String> = crate::training::routine::builtin::all()
-            .into_iter()
-            .map(|r| r.id)
-            .collect();
-        for rule in RULES {
-            if let Some(r) = rule.recommendation {
-                assert!(!r.scenario_ids.is_empty());
-                for id in r.scenario_ids {
-                    assert!(scenarios.iter().any(|s| s == id), "unknown scenario {id}");
-                }
-                if let Some(id) = r.routine_id {
-                    assert!(routines.iter().any(|s| s == id), "unknown routine {id}");
-                }
-            }
-        }
-    }
 
     #[test]
     fn findings_state_the_metric_value_and_threshold() {
@@ -434,7 +195,7 @@ mod tests {
             "Overshoot rate 100% is above the 35% threshold: your first movement often ends past the target's far edge."
         );
         assert_eq!(
-            overshoot.recommendation.unwrap().scenario_ids[0],
+            overshoot.recommendation.as_ref().unwrap().scenario_ids[0],
             "micro-adjust"
         );
         assert!(recs.iter().any(|f| f.metric == Metric::ReactionTime));
@@ -451,9 +212,11 @@ mod tests {
                 .iter()
                 .any(|f| f.metric == Metric::ReactionTime
                     && f.recommendation
+                        .as_ref()
                         .unwrap()
                         .scenario_ids
-                        .contains(&"peek-reaction")),
+                        .iter()
+                        .any(|s| s == "peek-reaction")),
             "{p:?}"
         );
         let elite = analyze(&record("flick-wide", AimerProfile::PRESETS[3], 2));
@@ -469,6 +232,123 @@ mod tests {
                 .iter()
                 .all(|f| f.metric != Metric::ReactionTime)
         );
+    }
+
+    /// Findings of simulated runs, captured before the rules moved from Rust to TOML: the
+    /// data table must reproduce them exactly.
+    #[test]
+    fn simulated_findings_are_unchanged_by_the_rules_file() {
+        let peek = (vec!["peek-reaction"], Some("quick-warmup"));
+        let undershoot = (vec!["flick-wide"], None);
+        let corrections = (vec!["micro-adjust", "flick-headshot"], None);
+        let lag = (vec!["track-precise", "track-reactive-micro"], None);
+        type Practice<'a> = Option<(Vec<&'a str>, Option<&'a str>)>;
+        type Owned = Vec<(String, Option<(Vec<String>, Option<String>)>)>;
+        type Case<'a> = (&'a str, usize, Vec<(&'a str, Practice<'a>)>);
+        let expected: Vec<Case> = vec![
+            (
+                "flick-wide",
+                0,
+                vec![
+                    (
+                        "Median reaction time 419 ms is above the 300 ms threshold: you start moving late after a target appears.",
+                        Some(peek.clone()),
+                    ),
+                    (
+                        "Undershoot rate 52% is above the 35% threshold: your first movement often stops short of the target.",
+                        Some(undershoot.clone()),
+                    ),
+                    (
+                        "Corrections per flick 1.51 is above the 1.00 threshold: you usually need more than one correction after the first movement.",
+                        Some(corrections.clone()),
+                    ),
+                    (
+                        "Overshoot rate 2% is below the 10% threshold: your first movement rarely ends past the target.",
+                        None,
+                    ),
+                ],
+            ),
+            (
+                "flick-wide",
+                3,
+                vec![(
+                    "Overshoot rate 0% is below the 10% threshold: your first movement rarely ends past the target.",
+                    None,
+                )],
+            ),
+            (
+                "track-precise",
+                1,
+                vec![(
+                    "Time behind the target 96% is above the 65% threshold: you trail behind moving targets most of the time.",
+                    Some(lag.clone()),
+                )],
+            ),
+            (
+                "track-reactive-strafe",
+                0,
+                vec![
+                    (
+                        "Time on target 37% is below the 50% threshold: you are off the target for more than half the time you fire.",
+                        Some((vec!["track-precise"], None)),
+                    ),
+                    (
+                        "Time behind the target 82% is above the 65% threshold: you trail behind moving targets most of the time.",
+                        Some(lag),
+                    ),
+                ],
+            ),
+            (
+                "micro-adjust",
+                1,
+                vec![
+                    (
+                        "Median reaction time 358 ms is above the 300 ms threshold: you start moving late after a target appears.",
+                        Some(peek),
+                    ),
+                    (
+                        "Undershoot rate 65% is above the 35% threshold: your first movement often stops short of the target.",
+                        Some(undershoot),
+                    ),
+                    (
+                        "Corrections per flick 2.12 is above the 1.00 threshold: you usually need more than one correction after the first movement.",
+                        Some(corrections),
+                    ),
+                    (
+                        "Overshoot rate 1% is below the 10% threshold: your first movement rarely ends past the target.",
+                        None,
+                    ),
+                ],
+            ),
+        ];
+        for (id, preset, want) in expected {
+            let p = SkillProfile::build(&[analyze(&record(id, AimerProfile::PRESETS[preset], 2))]);
+            let got: Owned = p
+                .findings()
+                .map(|f| {
+                    let rec = f.recommendation.as_ref().map(|r| {
+                        (
+                            r.scenario_ids.iter().map(|s| s.to_string()).collect(),
+                            r.routine_id.as_ref().map(|s| s.to_string()),
+                        )
+                    });
+                    (f.explanation.clone(), rec)
+                })
+                .collect();
+            let want: Owned = want
+                .into_iter()
+                .map(|(e, r)| {
+                    let r = r.map(|(ids, routine)| {
+                        (
+                            ids.into_iter().map(str::to_owned).collect(),
+                            routine.map(str::to_owned),
+                        )
+                    });
+                    (e.to_owned(), r)
+                })
+                .collect();
+            assert_eq!(got, want, "{id} preset {preset}");
+        }
     }
 
     #[test]

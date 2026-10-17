@@ -3,13 +3,16 @@
 //! Everything here is a pure function of a [`Recording`]: the run is re-simulated
 //! ([`trace`]), click runs are split into flicks ([`flick`]), hold runs are measured as
 //! tracking ([`tracking`]), and analyses are aggregated into an explainable
-//! [`profile::SkillProfile`]. [`codec`] stores recordings as replay files, and [`path`]
+//! [`profile::SkillProfile`] using the data-driven [`rules`]. [`skills`] profiles the
+//! benchmark subcategories from run history, with weekly trends. [`codec`] stores recordings as replay files, and [`path`]
 //! turns one into per-target crosshair paths for the replay viewer.
 
 pub mod codec;
 pub mod flick;
 pub mod path;
 pub mod profile;
+pub mod rules;
+pub mod skills;
 mod stats;
 pub mod trace;
 pub mod tracking;
@@ -17,6 +20,7 @@ pub mod tracking;
 pub use flick::{Flick, FlickSummary};
 pub use path::{Engagement, ReplayPath, ShotPoint};
 pub use profile::{Finding, SkillProfile};
+pub use skills::BenchmarkProfile;
 pub use tracking::{TrackingAnalysis, TrackingSummary};
 
 use crate::scenario::{Category, FireMode, Recording};
