@@ -74,7 +74,7 @@ The menu tabs:
 | Progress | Goal, readiness, fatigue, trend, per-skill strengths and trends, bests, replays |
 | Scenarios | Play, or play adaptively |
 | Routines | The routines (resume a split one), your personalized playlist |
-| Arenas | Deathmatch, site hold, angle clearing, jiggle-peek and pre-aim drills |
+| Arenas | Deathmatch, site hold, angle clearing, jiggle-peek and pre-aim drills; a Practice button plays any arena with bots that never shoot |
 | Benchmark | Your benchmark energy and ranks, at novice, intermediate or advanced tier |
 | Tools | Sensitivity converter (360°, monitor distance 0/75/100%), sensitivity finder, system check |
 | Settings | Sensitivity, DPI check, crosshair, profile code, hotkeys |

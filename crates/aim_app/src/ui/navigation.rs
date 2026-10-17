@@ -68,7 +68,11 @@ impl Navigator<'_, '_> {
             UiAction::StartRoutineDef(def) => self.start_routine_def(&def, 0.0, 0, routine_seed()),
             UiAction::StartArena(id) => {
                 self.routine.0 = None;
-                self.launch_arena(&id, None);
+                self.launch_arena(&id, None, false);
+            }
+            UiAction::StartArenaPractice(id) => {
+                self.routine.0 = None;
+                self.launch_arena(&id, None, true);
             }
             UiAction::StartFinderTest { slot, sens } => {
                 self.routine.0 = None;
@@ -205,18 +209,23 @@ impl Navigator<'_, '_> {
     fn start_planned(&mut self, run: &PlannedRun, level: f32) {
         match run.kind {
             ActivityKind::Scenario => self.start_with(&run.scenario_id, level, run.duration_secs),
-            ActivityKind::Arena => self.launch_arena(&run.scenario_id, run.duration_secs),
+            ActivityKind::Arena => self.launch_arena(&run.scenario_id, run.duration_secs, false),
         }
     }
 
     /// Start an arena, keeping any routine in progress. `secs` overrides its length.
-    fn launch_arena(&mut self, id: &str, secs: Option<f32>) {
+    fn launch_arena(&mut self, id: &str, secs: Option<f32>, practice: bool) {
         match aim_world::arena::builtin::load(id) {
             Some(Ok((def, map))) => match ArenaSession::new(def, map, routine_seed()) {
                 Ok(session) => {
                     let session = match secs {
                         Some(s) => session.with_duration(s),
                         None => session,
+                    };
+                    let session = if practice {
+                        session.practice()
+                    } else {
+                        session
                     };
                     start_arena(&mut self.commands, &mut self.next, ArenaRun::new(session))
                 }
@@ -601,5 +610,23 @@ mod tests {
             !w.contains_resource::<Run>(),
             "the scenario run was replaced"
         );
+    }
+
+    #[test]
+    fn practice_arenas_start_with_bots_that_never_shoot() {
+        let mut w = world();
+        apply(
+            &mut w,
+            UiAction::StartArenaPractice("yard-deathmatch".into()),
+        );
+        let run = w.resource::<ArenaRun>();
+        assert!(run.session.is_practice());
+        assert!(!run.session.def().mode.bots_shoot_back());
+        assert_eq!(run.session.def().id, "yard-deathmatch+practice");
+
+        apply(&mut w, UiAction::StartArena("yard-deathmatch".into()));
+        let run = w.resource::<ArenaRun>();
+        assert!(!run.session.is_practice(), "a normal start is not practice");
+        assert!(run.session.def().mode.bots_shoot_back());
     }
 }

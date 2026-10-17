@@ -204,6 +204,9 @@ pub fn arena_status(ctx: &egui::Context, s: &aim_world::arena::ArenaSession, dam
                     stats.kills,
                     stats.deaths
                 ));
+                if s.is_practice() {
+                    ui.colored_label(GOOD, "PRACTICE · bots don't shoot");
+                }
                 if let Some(o) = s.objective() {
                     let site = if o.capture_progress > 0.0 {
                         RichText::new(format!("SITE CONTESTED {:.0}%", o.capture_progress * 100.0))
