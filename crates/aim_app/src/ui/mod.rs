@@ -14,6 +14,10 @@ mod pages;
 use aim_core::training::routine::RoutineDef;
 use bevy::prelude::*;
 
+pub use organisms::progress_panel::{
+    fatigue_text as progress_fatigue_text, goal_text as progress_goal_text,
+};
+
 pub struct UiPlugin;
 
 /// Scenario or arena to open as soon as the trainer starts (`aimtrainer play <id>`).

@@ -5,6 +5,7 @@ pub mod arena_list;
 pub mod benchmark_panel;
 pub mod history_chart;
 pub mod hud_panels;
+pub mod progress_panel;
 pub mod results_card;
 pub mod routine_list;
 pub mod scenario_browser;
