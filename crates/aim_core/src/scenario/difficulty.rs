@@ -153,8 +153,13 @@ pub fn parse_run_key(key: &str) -> (&str, f32) {
     (base, level)
 }
 
-/// Base id, level and shortened duration (`~20s`) encoded in a run key.
+/// Base id, level and shortened duration (`~20s`) encoded in a run key. A floor-height
+/// suffix (`^+1.50m`) is dropped; [`RunKey::parse`] reads it.
 pub fn parse_run_key_full(key: &str) -> (&str, f32, Option<f32>) {
+    parse_level_and_secs(split_elevation(key).0)
+}
+
+fn parse_level_and_secs(key: &str) -> (&str, f32, Option<f32>) {
     let (rest, secs) = match key.rsplit_once('~') {
         Some((rest, d)) => match d.strip_suffix('s').and_then(|n| n.parse::<f32>().ok()) {
             Some(secs) if secs.is_finite() && secs > 0.0 => (rest, Some(secs)),
@@ -171,7 +176,59 @@ pub fn parse_run_key_full(key: &str) -> (&str, f32, Option<f32>) {
     }
 }
 
+/// Every part of a run key: `id@+0.50~20s^+1.50m` is the base id, the difficulty level,
+/// the shortened duration and the player's floor height, each optional and in that order.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RunKey<'a> {
+    /// Base scenario id.
+    pub base: &'a str,
+    /// Difficulty level (`0` when the key has none).
+    pub level: f32,
+    /// Shortened duration in seconds (`~20s`), if any.
+    pub secs: Option<f32>,
+    /// Player floor height in meters (`^+1.50m`), when it differs from the scenario file.
+    pub elevation: Option<f32>,
+}
+
+impl<'a> RunKey<'a> {
+    /// Splits a run key made by [`run_key`], [`ScenarioDef::with_duration`] and
+    /// [`ScenarioDef::with_elevation`].
+    pub fn parse(key: &'a str) -> Self {
+        let (rest, elevation) = split_elevation(key);
+        let (base, level, secs) = parse_level_and_secs(rest);
+        RunKey {
+            base,
+            level,
+            secs,
+            elevation,
+        }
+    }
+}
+
+/// Splits a trailing `^+1.50m` floor-height suffix off a run key.
+fn split_elevation(key: &str) -> (&str, Option<f32>) {
+    match key.rsplit_once('^') {
+        Some((rest, e)) => match e.strip_suffix('m').and_then(|n| n.parse::<f32>().ok()) {
+            Some(m) if m.is_finite() => (rest, Some(m)),
+            _ => (key, None),
+        },
+        None => (key, None),
+    }
+}
+
 impl ScenarioDef {
+    /// This scenario with the player's floor `m` meters above the targets' floor. Apply it
+    /// last: the id gains a `^+1.50m` suffix (replacing an earlier one) so scores at
+    /// different heights never mix. The height the definition already has keeps the id.
+    pub fn with_elevation(&self, m: f32) -> ScenarioDef {
+        let mut out = self.clone();
+        if (m - self.player.elevation).abs() >= 5e-3 {
+            out.player.elevation = m;
+            out.id = format!("{}^{m:+.2}m", split_elevation(&self.id).0);
+        }
+        out
+    }
+
     /// This scenario shortened (or lengthened) to `secs`. The id gains a `~20s` suffix so
     /// short drills never mix with full-length scores.
     pub fn with_duration(&self, secs: f32) -> ScenarioDef {
@@ -313,6 +370,37 @@ mod tests {
                 .collect();
             assert!(errs.is_empty(), "{id}: {errs:?}");
         }
+    }
+
+    #[test]
+    fn elevation_keys_keep_heights_apart_and_parse_back() {
+        let d = find("counter-strafe");
+        assert_eq!(d.with_elevation(0.0), d, "the authored height keeps the id");
+        let up = d.at_difficulty(0.5).with_duration(20.0).with_elevation(1.5);
+        assert_eq!(up.id, "counter-strafe@+0.50~20s^+1.50m");
+        assert_eq!(up.player.elevation, 1.5);
+        assert_eq!(up.duration_secs, 20.0);
+        assert_eq!(
+            parse_run_key_full(&up.id),
+            ("counter-strafe", 0.5, Some(20.0)),
+            "existing parsers ignore the height"
+        );
+        assert_eq!(parse_run_key(&up.id), ("counter-strafe", 0.5));
+        let key = RunKey::parse(&up.id);
+        assert_eq!(key.base, "counter-strafe");
+        assert_eq!(key.level, 0.5);
+        assert_eq!(key.secs, Some(20.0));
+        assert_eq!(key.elevation, Some(1.5));
+        let down = d.with_elevation(-2.0);
+        assert_eq!(down.id, "counter-strafe^-2.00m");
+        assert_eq!(RunKey::parse(&down.id).elevation, Some(-2.0));
+        assert_eq!(RunKey::parse("counter-strafe").elevation, None);
+        assert_eq!(
+            up.with_elevation(3.0).id,
+            "counter-strafe@+0.50~20s^+3.00m",
+            "a new height replaces the old suffix"
+        );
+        assert_eq!(RunKey::parse("odd^name").base, "odd^name");
     }
 
     #[test]
