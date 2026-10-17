@@ -20,3 +20,6 @@ directories = "6.0"
 
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
 global-hotkey = "0.9"
+
+[lints]
+workspace = true

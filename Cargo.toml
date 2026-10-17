@@ -14,6 +14,15 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "1.1"
 thiserror = "2.0"
 
+# Part of the coding standard (docs/coding-standards.md): enforced in every crate.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+
 # Bevy compiles slowly in debug; optimize dependencies but keep our code fast to rebuild.
 [profile.dev.package."*"]
 opt-level = 3
