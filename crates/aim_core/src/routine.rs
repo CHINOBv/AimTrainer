@@ -141,15 +141,15 @@ pub mod builtin {
     pub const SOURCES: &[(&str, &str)] = &[
         (
             "valorant-daily.toml",
-            include_str!("../routines/valorant-daily.toml"),
+            include_str!("../../../content/routines/valorant-daily.toml"),
         ),
         (
             "fundamentals-hour.toml",
-            include_str!("../routines/fundamentals-hour.toml"),
+            include_str!("../../../content/routines/fundamentals-hour.toml"),
         ),
         (
             "quick-warmup.toml",
-            include_str!("../routines/quick-warmup.toml"),
+            include_str!("../../../content/routines/quick-warmup.toml"),
         ),
     ];
 

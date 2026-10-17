@@ -98,7 +98,7 @@ User files live in the folders below. A file with the same `id` as a built-in re
 | Linux | `~/.config/aimtrainer/{scenarios,routines,benchmarks}/` |
 | Windows | `%APPDATA%\CustomAimTrainer\aimtrainer\config\…` |
 
-See [`docs/scenarios.md`](docs/scenarios.md) for the format; the built-ins in `crates/aim_core/scenarios/` are working examples. Run history is saved as CSV in the data directory (`~/.local/share/aimtrainer/history.csv` on Linux).
+See [`docs/scenarios.md`](docs/scenarios.md) for the format; the built-ins in `content/scenarios/` are working examples. Run history is saved as CSV in the data directory (`~/.local/share/aimtrainer/history.csv` on Linux).
 
 ## Architecture
 

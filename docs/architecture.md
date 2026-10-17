@@ -161,7 +161,7 @@ These are known gaps between the current code and this document. Fix them **when
 
 | # | Gap | Target |
 |---|---|---|
-| C1 | Content TOML lives in `crates/aim_core/{scenarios,routines,benchmarks}` | Move to `content/`; update `include_str!` paths and docs |
+| C1 ✅ | ~~Content TOML lives in `crates/aim_core/{scenarios,routines,benchmarks}`~~ | Done: moved to `content/` |
 | C2 | `aim_app/src/ui.rs` (≈735 lines) mixes ECS access and drawing | `ui/` folder: pages, organisms, molecules, atoms; containers build view models; views return actions |
 | C3 | Flat files `game.rs`, `overlay.rs`, `ipc.rs`, `settings.rs`, `history.rs` | Folders `game/`, `overlay/`, `platform/`, `persistence/` |
 | C4 | `scenario/session.rs` (≈880 lines with tests) does spawning, motion, weapons and scoring | Split into `scenario/{spawn,motion,weapon,scoring}.rs` before adding new building blocks |

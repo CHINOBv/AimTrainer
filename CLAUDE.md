@@ -35,7 +35,7 @@ Full rules are in `docs/architecture.md`.
 | `crates/aim_app` | Bevy adapter: input, rendering, egui, overlay, IPC, persistence | Implement gameplay rules; it only builds a `FrameInput` and renders core state |
 
 - **New mechanic:** add a building block to `scenario/def.rs` (serde with `deny_unknown_fields`), handle it in `session.rs`, extend `validate()`, and add tests.
-- **New exercise, routine or benchmark:** a TOML file in `crates/aim_core/{scenarios,routines,benchmarks}/`, registered in the matching `builtin` `SOURCES`. The file name must equal its `id`. Content moves to `content/` under backlog item C1.
+- **New exercise, routine or benchmark:** a TOML file in `content/{scenarios,routines,benchmarks}/`, registered in the matching `builtin` `SOURCES` (`scenario/builtin.rs`, `routine.rs`, `benchmark.rs`). The file name must equal its `id`.
 - **Coordinates:** right-handed, +Y up, −Z forward, meters. Core yaw is positive turning right; Bevy needs `-yaw` (see `update_camera`).
 - **Randomness:** `aim_core::rng::Rng`, seeded and deterministic. Do not add `rand`. `Session` must stay deterministic for a given definition, seed and input sequence.
 - **Conformance backlog:** when you touch an area listed in the architecture's conformance backlog (C1–C10), fix that gap in a separate refactor commit, never mixed into an unrelated feature.

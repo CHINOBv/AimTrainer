@@ -24,7 +24,7 @@ Thanks for helping. This page gets you from zero to a mergeable PR. The rules be
 
 ## Contributing an exercise (no Rust needed)
 
-1. Copy a similar file from the built-in content and give it a new kebab-case `id`; the file name must equal the `id`.
+1. Copy a similar file from `content/scenarios/`, give it a new kebab-case `id` (the file name must equal the `id`), and add it to `SOURCES` in `crates/aim_core/src/scenario/builtin.rs`.
 2. Describe what it trains in the `description`.
 3. Use real-world target sizes and distances, and follow the sources rule in the coding standards.
 4. Run `cargo test -p aim_core` and `cargo run -p aim_core --release --example calibrate`. Check that the scores keep the order recruit < contender < veteran < elite, and that contender accuracy lands at about 45–85%.

@@ -9,7 +9,7 @@ Scenarios, routines and benchmarks are plain TOML files. To add one, drop the fi
 
 **Overrides:** a user file with the same `id` as a built-in replaces it, which is the way to tweak a built-in.
 
-**Examples:** the built-in files are in `crates/aim_core/scenarios/` and `crates/aim_core/routines/`; copy one and edit it.
+**Examples:** the built-in files are in `content/scenarios/` and `content/routines/`; copy one and edit it.
 
 **Typos fail loudly:** unknown keys are rejected. The menu lists files that failed to load, with the field that is wrong.
 
@@ -100,7 +100,7 @@ runs = 3                     # an exact run count wins over minutes
 
 ## Checking your files
 
-Run `cargo test -p aim_core` to validate every built-in file. To check the balance of a new scenario before you share it, copy it into `crates/aim_core/scenarios/` and run the calibrate example, which reports how the simulated aimer profiles score on it:
+Run `cargo test -p aim_core` to validate every built-in file. To check the balance of a new scenario before you share it, copy it into `content/scenarios/`, add it to `SOURCES` in `crates/aim_core/src/scenario/builtin.rs`, and run the calibrate example, which reports how the simulated aimer profiles score on it:
 
 ```sh
 cargo run -p aim_core --release --example calibrate

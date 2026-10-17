@@ -6,59 +6,59 @@ use super::def::ScenarioDef;
 pub const SOURCES: &[(&str, &str)] = &[
     (
         "counter-strafe.toml",
-        include_str!("../../scenarios/counter-strafe.toml"),
+        include_str!("../../../../content/scenarios/counter-strafe.toml"),
     ),
     (
         "dynamic-strafe-heads.toml",
-        include_str!("../../scenarios/dynamic-strafe-heads.toml"),
+        include_str!("../../../../content/scenarios/dynamic-strafe-heads.toml"),
     ),
     (
         "flick-headshot.toml",
-        include_str!("../../scenarios/flick-headshot.toml"),
+        include_str!("../../../../content/scenarios/flick-headshot.toml"),
     ),
     (
         "flick-wide.toml",
-        include_str!("../../scenarios/flick-wide.toml"),
+        include_str!("../../../../content/scenarios/flick-wide.toml"),
     ),
     (
         "long-range-heads.toml",
-        include_str!("../../scenarios/long-range-heads.toml"),
+        include_str!("../../../../content/scenarios/long-range-heads.toml"),
     ),
     (
         "micro-adjust.toml",
-        include_str!("../../scenarios/micro-adjust.toml"),
+        include_str!("../../../../content/scenarios/micro-adjust.toml"),
     ),
     (
         "peek-reaction.toml",
-        include_str!("../../scenarios/peek-reaction.toml"),
+        include_str!("../../../../content/scenarios/peek-reaction.toml"),
     ),
     (
         "static-headline.toml",
-        include_str!("../../scenarios/static-headline.toml"),
+        include_str!("../../../../content/scenarios/static-headline.toml"),
     ),
     (
         "strafe-shot.toml",
-        include_str!("../../scenarios/strafe-shot.toml"),
+        include_str!("../../../../content/scenarios/strafe-shot.toml"),
     ),
     (
         "switch-evasive.toml",
-        include_str!("../../scenarios/switch-evasive.toml"),
+        include_str!("../../../../content/scenarios/switch-evasive.toml"),
     ),
     (
         "switch-speed.toml",
-        include_str!("../../scenarios/switch-speed.toml"),
+        include_str!("../../../../content/scenarios/switch-speed.toml"),
     ),
     (
         "track-precise.toml",
-        include_str!("../../scenarios/track-precise.toml"),
+        include_str!("../../../../content/scenarios/track-precise.toml"),
     ),
     (
         "track-reactive-micro.toml",
-        include_str!("../../scenarios/track-reactive-micro.toml"),
+        include_str!("../../../../content/scenarios/track-reactive-micro.toml"),
     ),
     (
         "track-reactive-strafe.toml",
-        include_str!("../../scenarios/track-reactive-strafe.toml"),
+        include_str!("../../../../content/scenarios/track-reactive-strafe.toml"),
     ),
 ];
 
