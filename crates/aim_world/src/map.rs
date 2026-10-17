@@ -1,8 +1,8 @@
 //! Map definition: the TOML format, loading and semantic validation.
 
+use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::{Range, Vec3};
 use aim_core::scenario::ValidationError;
-use aim_core::valorant::HumanoidDims;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 

@@ -5,10 +5,10 @@ use super::def::Shape;
 use super::hit::{HitZone, Ray, ray_humanoid, ray_sphere};
 use super::recoil::Kick;
 use super::session::Target;
+use crate::games::valorant::{HumanoidDims, WeaponStats};
 use crate::math::{Vec3, ViewAngles};
 use crate::movement::MovementProfile;
 use crate::rng::Rng;
-use crate::valorant::{HumanoidDims, WeaponStats};
 
 /// Whether enough time has passed since `last_shot_at` to fire again at time `now`.
 pub(super) fn can_fire(weapon: &WeaponStats, now: f32, last_shot_at: f32) -> bool {

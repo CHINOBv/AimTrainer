@@ -4,11 +4,11 @@
 use super::aim::{BotAim, Sight, angular_radius_deg};
 use super::behavior::{PeekSense, Phase, Push, Strafe};
 use crate::map::{AngleMarker, DEFAULT_PLAYER_RADIUS, MapDef};
+use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::{Range, Vec3, ViewAngles, angle_between_deg};
 use aim_core::movement::{self, LocalVelocity, MoveInput, MovementProfile};
 use aim_core::rng::Rng;
 use aim_core::sim::AimerProfile;
-use aim_core::valorant::HumanoidDims;
 
 /// Bot health: 100 health plus 50 armor, counted as one pool (a simplification: armor
 /// damage reduction is not modeled).

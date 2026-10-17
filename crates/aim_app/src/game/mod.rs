@@ -9,6 +9,7 @@ use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::history::History;
 use crate::persistence::settings::{Paths, Settings};
 use aim_core::fov;
+use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::ViewAngles;
 use aim_core::movement::MoveInput;
 use aim_core::scenario::{
@@ -18,7 +19,6 @@ use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::finder::{SensFinder, Slot};
 use aim_core::training::routine::PlannedRun;
 use aim_core::training::store::RunStore;
-use aim_core::valorant::HumanoidDims;
 use bevy::camera::{PerspectiveProjection, Projection};
 use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::AccumulatedMouseMotion;

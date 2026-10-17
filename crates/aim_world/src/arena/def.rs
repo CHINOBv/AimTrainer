@@ -1,10 +1,10 @@
 //! Arena definition: the TOML format, loading and semantic validation.
 
 use crate::map::{MapDef, SpawnKind};
+use aim_core::games::valorant::Weapon;
 use aim_core::math::Range;
 use aim_core::scenario::ValidationError;
 use aim_core::sim::AimerProfile;
-use aim_core::valorant::Weapon;
 use serde::{Deserialize, Serialize};
 
 /// Most bots a deathmatch arena may ask for.

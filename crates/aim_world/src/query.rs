@@ -2,9 +2,9 @@
 //! collision.
 
 use crate::map::MapDef;
+use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::Vec3;
 use aim_core::scenario::hit::{Ray, ray_aabb};
-use aim_core::valorant::HumanoidDims;
 
 /// Tolerance for "already touching this face" in collision sweeps, in meters.
 const CONTACT_EPS: f32 = 1e-4;

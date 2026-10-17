@@ -1,7 +1,7 @@
 //! Ray casts against target shapes.
 
+use crate::games::valorant::HumanoidDims;
 use crate::math::Vec3;
-use crate::valorant::HumanoidDims;
 use serde::{Deserialize, Serialize};
 
 /// Part of a target that was hit.

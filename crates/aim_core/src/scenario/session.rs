@@ -10,10 +10,10 @@ use super::hit::{HitZone, Ray};
 use super::motion::MotionState;
 use super::recoil::RecoilState;
 use super::{scoring, spawn, weapon};
+use crate::games::valorant::{HumanoidDims, RecoilProfile, WeaponStats};
 use crate::math::{Vec3, ViewAngles};
 use crate::movement::{self, LocalVelocity, MoveInput, MovementProfile};
 use crate::rng::Rng;
-use crate::valorant::{HumanoidDims, RecoilProfile, WeaponStats};
 use serde::{Deserialize, Serialize};
 
 /// Player input for one frame.
@@ -837,7 +837,7 @@ mod tests {
         let mut def = sphere_def(FireMode::Click, 1.0);
         def.targets.max_alive = 1;
         def.targets.motion = Motion::Strafe {
-            weapon: crate::valorant::Weapon::Vandal,
+            weapon: crate::games::valorant::Weapon::Vandal,
             change_secs: Range::new(0.5, 0.8),
             stop_chance: 0.0,
             max_offset: 2.0,

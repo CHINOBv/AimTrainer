@@ -171,7 +171,7 @@ These are known gaps between the current code and this document. Fix them **when
 | C2 ✅ | ~~`aim_app/src/ui.rs` mixes ECS access and drawing~~ | Done: `ui/{atoms,molecules,organisms,pages}`; pages are containers, views return `UiAction`, applied by `ui::navigation::Navigator` |
 | C3 ✅ | ~~Flat files `game.rs`, `overlay.rs`, `ipc.rs`, `settings.rs`, `history.rs`~~ | Done: `game/`, `overlay/`, `platform/` (ipc, hotkey), `persistence/` (settings, history, library) |
 | C4 ✅ | ~~`scenario/session.rs` does spawning, motion, weapons and scoring~~ | Done: `scenario/{spawn,motion,weapon,scoring}.rs`; `Session` orchestrates |
-| C5 | `valorant.rs` and `sensitivity.rs` are flat modules | `games/` and `sensitivity/` folders, once the converter grows (data-driven game profiles) |
+| C5 ✅ | ~~`valorant.rs` and `sensitivity.rs` are flat modules~~ | Done: `games/` (VALORANT mechanics and every converter game profile) and `sensitivity/` (conversion, matching, finder) |
 | C6 ✅ | ~~The crosshair model lives in `aim_app/settings.rs`~~ | Done: `aim_core::crosshair` (model, VALORANT codes, presets in `content/crosshairs/`) |
 | C7 ✅ | ~~History is written as CSV directly by the app; no port~~ | Done: `aim_core::training::store::RunStore` (queries live in the core); `aim_app::persistence::history::History` is the CSV adapter. Routine positions use the same pattern: `training::resume::PositionStore` |
 | C8 ✅ | ~~`#[allow(clippy::too_many_arguments)]` on Bevy systems~~ | Done: `SystemParam` groups (`Navigator`, `RunFinisher`, `PlayerInput`, `SettingsAccess`) |
