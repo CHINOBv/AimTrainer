@@ -1,0 +1,126 @@
+# Recommendation rules for the post-run skill profile (`aim_core::analytics::rules`).
+#
+# Each rule compares one metric with a threshold. When `value` is strictly `above` or
+# `below` the threshold, the rule fires as a `strength` or a `weakness`, and a weakness
+# can recommend scenarios (best first), a routine and a tip.
+#
+# metric: reaction_time | overshoot_rate | undershoot_rate | corrections | path_efficiency
+#         | on_target_ratio | lag_ratio | reversal_response
+# Times are in seconds, rates and ratios are shares (0.35 = 35%), corrections per flick.
+#
+# PROVISIONAL: every threshold is an estimate against the simulated aimer, not calibrated
+# on player data (see "Analytics metrics" in docs/training-science.md).
+
+id = "recommendations"
+
+[[rules]]
+metric = "reaction_time"
+direction = "above"
+threshold = 0.30
+verdict = "weakness"
+meaning = "you start moving late after a target appears"
+[rules.recommendation]
+scenario_ids = ["peek-reaction"]
+routine_id = "quick-warmup"
+tip = "Keep the crosshair where targets appear and react to the first pixel, not the whole target."
+
+[[rules]]
+metric = "reaction_time"
+direction = "below"
+threshold = 0.22
+verdict = "strength"
+meaning = "you start moving quickly after a target appears"
+
+[[rules]]
+metric = "overshoot_rate"
+direction = "above"
+threshold = 0.35
+verdict = "weakness"
+meaning = "your first movement often ends past the target's far edge"
+[rules.recommendation]
+scenario_ids = ["micro-adjust", "static-headline"]
+tip = "Slow your flicks slightly and aim to land on the target in one motion; if it persists, check that your sensitivity matches VALORANT."
+
+[[rules]]
+metric = "undershoot_rate"
+direction = "above"
+threshold = 0.35
+verdict = "weakness"
+meaning = "your first movement often stops short of the target"
+[rules.recommendation]
+scenario_ids = ["flick-wide"]
+tip = "Commit to the full distance with your arm instead of finishing the flick with small wrist corrections."
+
+[[rules]]
+metric = "corrections"
+direction = "above"
+threshold = 1.0
+verdict = "weakness"
+meaning = "you usually need more than one correction after the first movement"
+[rules.recommendation]
+scenario_ids = ["micro-adjust", "flick-headshot"]
+tip = "Make the first movement more accurate rather than faster; corrections cost more time than a slightly slower flick."
+
+[[rules]]
+metric = "path_efficiency"
+direction = "below"
+threshold = 0.85
+verdict = "weakness"
+meaning = "your crosshair travels a curved or back-and-forth path to the target"
+[rules.recommendation]
+scenario_ids = ["flick-headshot"]
+tip = "Move in a straight line to the target; keep head height so flicks stay horizontal."
+
+[[rules]]
+metric = "overshoot_rate"
+direction = "below"
+threshold = 0.10
+verdict = "strength"
+meaning = "your first movement rarely ends past the target"
+
+[[rules]]
+metric = "on_target_ratio"
+direction = "below"
+threshold = 0.50
+verdict = "weakness"
+meaning = "you are off the target for more than half the time you fire"
+[rules.recommendation]
+scenario_ids = ["track-precise"]
+tip = "Prioritize smooth, steady mouse movement over chasing the target; speed up only once you stay on it."
+
+[[rules]]
+metric = "on_target_ratio"
+direction = "above"
+threshold = 0.75
+verdict = "strength"
+meaning = "you stay on the target most of the time you fire"
+
+[[rules]]
+metric = "lag_ratio"
+direction = "above"
+threshold = 0.65
+verdict = "weakness"
+meaning = "you trail behind moving targets most of the time"
+[rules.recommendation]
+scenario_ids = ["track-precise", "track-reactive-micro"]
+tip = "Match the target's speed first, then close the gap; watch the target, not the crosshair."
+
+[[rules]]
+metric = "lag_ratio"
+direction = "below"
+threshold = 0.35
+verdict = "weakness"
+meaning = "you run ahead of moving targets most of the time"
+[rules.recommendation]
+scenario_ids = ["track-reactive-micro"]
+tip = "Stop predicting; follow the target and let it lead you."
+
+[[rules]]
+metric = "reversal_response"
+direction = "above"
+threshold = 0.25
+verdict = "weakness"
+meaning = "you take long to follow a target that changes direction"
+[rules.recommendation]
+scenario_ids = ["track-reactive-strafe", "track-reactive-micro"]
+tip = "React to strafes instead of anticipating them; relax your grip so reversals are quicker."

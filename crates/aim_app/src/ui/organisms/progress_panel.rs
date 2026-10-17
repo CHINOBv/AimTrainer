@@ -1,9 +1,13 @@
-//! Progress page: daily goal and streak, readiness before ranked, fatigue, benchmark trend
-//! and personal bests. Every verdict shows the numbers behind it.
+//! Progress page: daily goal and streak, readiness before ranked, fatigue, benchmark trend,
+//! personal bests and per-skill standings with their trends. Every verdict shows the
+//! numbers behind it.
 
 use crate::ui::UiAction;
 use crate::ui::atoms::{BAD, GOOD, WARN, big};
 use crate::ui::organisms::history_chart::history_chart;
+use aim_core::analytics::BenchmarkProfile;
+use aim_core::analytics::profile::Verdict;
+use aim_core::analytics::skills::SubcategoryStanding;
 use aim_core::training::progress::{DailyGoal, FatigueSignal, Readiness, Warmth};
 use bevy_egui::egui;
 
@@ -129,9 +133,98 @@ pub fn progress_panel(ui: &mut egui::Ui, m: &ProgressModel) -> Option<UiAction> 
     action
 }
 
+/// Played weekly energies of a subcategory, oldest first (weeks before its first run are
+/// skipped).
+pub fn trend_points(s: &SubcategoryStanding) -> Vec<f32> {
+    s.weekly.iter().flatten().copied().collect()
+}
+
+/// "+120 energy over the last 8 weeks", or `None` with fewer than two played weeks.
+pub fn trend_text(s: &SubcategoryStanding) -> Option<String> {
+    let points = trend_points(s);
+    let (first, last) = (points.first()?, points.last()?);
+    (points.len() >= 2).then(|| {
+        format!(
+            "{:+.0} energy over the last {} weeks",
+            last - first,
+            points.len()
+        )
+    })
+}
+
+/// Skills section: each benchmark subcategory's strength or weakness, its weekly energy
+/// trend, and a button to practice a weak one. `name_of` maps a scenario id to its name.
+pub fn skills_section(
+    ui: &mut egui::Ui,
+    profile: &BenchmarkProfile,
+    name_of: impl Fn(&str) -> String,
+) -> Option<UiAction> {
+    let mut action = None;
+    ui.add_space(10.0);
+    ui.label(big("Skills", 20.0));
+    ui.small(
+        "Each benchmark subcategory compared with your average over the ones you played (provisional 15% margin).",
+    );
+    for s in &profile.subcategories {
+        ui.horizontal(|ui| {
+            match s.verdict {
+                Some(Verdict::Strength) => {
+                    ui.colored_label(GOOD, "STRENGTH");
+                }
+                Some(Verdict::Weakness) => {
+                    ui.colored_label(BAD, "WEAKNESS");
+                }
+                None => {}
+            }
+            ui.label(&s.explanation);
+            if s.verdict == Some(Verdict::Weakness)
+                && let Some(id) = s.scenario_ids.first()
+                && ui
+                    .small_button("▶")
+                    .on_hover_text(format!("Practice {}", name_of(id)))
+                    .clicked()
+            {
+                action = Some(UiAction::StartScenario(id.clone()));
+            }
+        });
+        if let Some(text) = trend_text(s) {
+            ui.small(format!("{} ({}) · {text}", s.name, s.skill));
+            history_chart(ui, &trend_points(s));
+        }
+    }
+    action
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn standing(weekly: Vec<Option<f32>>) -> SubcategoryStanding {
+        SubcategoryStanding {
+            name: "Static clicking".into(),
+            skill: "clicking".into(),
+            energy: weekly.last().copied().flatten(),
+            verdict: None,
+            explanation: String::new(),
+            weekly,
+            scenario_ids: vec!["micro-adjust".into()],
+        }
+    }
+
+    #[test]
+    fn skill_trend_skips_unplayed_weeks_and_needs_two_points() {
+        let s = standing(vec![None, Some(100.0), None, Some(220.0)]);
+        assert_eq!(trend_points(&s), vec![100.0, 220.0]);
+        assert_eq!(
+            trend_text(&s).as_deref(),
+            Some("+120 energy over the last 2 weeks")
+        );
+        assert_eq!(trend_text(&standing(vec![None, Some(100.0)])), None);
+        assert_eq!(
+            trend_text(&standing(vec![Some(300.0), Some(250.0)])).as_deref(),
+            Some("-50 energy over the last 2 weeks")
+        );
+    }
 
     #[test]
     fn goal_and_fatigue_texts_carry_their_numbers() {
