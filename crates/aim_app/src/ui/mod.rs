@@ -11,6 +11,8 @@ mod navigation;
 mod organisms;
 mod pages;
 
+use aim_core::sensitivity::Sensitivity;
+use aim_core::sensitivity::finder::Slot;
 use aim_core::training::routine::RoutineDef;
 use bevy::prelude::*;
 
@@ -27,6 +29,8 @@ pub struct StartupPlay(pub Option<String>);
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<StartupPlay>()
+            .init_resource::<crate::platform::frame_stats::FrameStats>()
+            .add_systems(Update, crate::platform::frame_stats::track_frames)
             .add_systems(
                 Update,
                 (launcher::launch_requested, launcher::launch_startup),
@@ -50,6 +54,17 @@ pub enum UiAction {
     StartRoutineDef(Box<RoutineDef>),
     /// Play a built-in arena (deathmatch or angle clearing on an original map).
     StartArena(String),
+    /// One sensitivity-finder test at `sens` (computed by the page from the finder).
+    StartFinderTest {
+        slot: Slot,
+        sens: Sensitivity,
+    },
+    /// Today's daily challenge: fixed seed and a history key of its own.
+    StartChallenge {
+        scenario: String,
+        seed: u64,
+        key: String,
+    },
     /// Play a scenario shortened to `secs`; `auto_hide` hides the overlay when it ends
     /// (buy-phase micro drills hand the mouse straight back to the game).
     StartTimed {

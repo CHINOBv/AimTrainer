@@ -2,7 +2,10 @@
 
 use super::UiAction;
 use crate::game::arena::{ArenaRun, start_arena};
-use crate::game::{ActiveRoutine, AppState, RoutineProgress, Run, start_run, start_run_with};
+use crate::game::{
+    ActiveRoutine, AppState, FINDER_SCENARIO, FINDER_SECS, RoutineProgress, Run, start_run,
+    start_run_with,
+};
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::library::Library;
 use aim_core::scenario::{ScenarioDef, parse_run_key_full};
@@ -67,6 +70,31 @@ impl Navigator<'_, '_> {
                     },
                     Some(Err(e)) => bevy::log::error!("arena {id}: {e}"),
                     None => {}
+                }
+            }
+            UiAction::StartFinderTest { slot, sens } => {
+                self.routine.0 = None;
+                if let Some(def) = self.library.scenario(FINDER_SCENARIO) {
+                    let mut run = Run::new(def.with_duration(FINDER_SECS));
+                    run.sens_override = Some(sens);
+                    run.finder_slot = Some(slot);
+                    start_run_with(&mut self.commands, &mut self.next, run);
+                }
+            }
+            UiAction::StartChallenge {
+                scenario,
+                seed,
+                key,
+            } => {
+                self.routine.0 = None;
+                if let Some(def) = self.library.scenario(&scenario) {
+                    let mut def = def.clone();
+                    def.id = key;
+                    start_run_with(
+                        &mut self.commands,
+                        &mut self.next,
+                        Run::with_seed(def, seed),
+                    );
                 }
             }
             UiAction::StartTimed {
@@ -173,6 +201,7 @@ fn routine_seed() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aim_core::sensitivity::finder::Slot;
     use bevy::ecs::system::RunSystemOnce;
 
     fn world() -> World {
@@ -402,5 +431,46 @@ mod tests {
         );
         apply(&mut w, UiAction::StartArena("no-such-arena".into()));
         assert!(!w.contains_resource::<ArenaRun>());
+    }
+
+    #[test]
+    fn finder_tests_override_sensitivity_and_skip_nothing_else() {
+        let mut w = world();
+        let sens = aim_core::sensitivity::Sensitivity::valorant(0.8, 800);
+        apply(
+            &mut w,
+            UiAction::StartFinderTest {
+                slot: Slot::Fast,
+                sens,
+            },
+        );
+        let run = w.resource::<Run>();
+        assert_eq!(run.sens_override, Some(sens));
+        assert_eq!(run.finder_slot, Some(Slot::Fast));
+        assert_eq!(run.session.def().duration_secs, FINDER_SECS);
+    }
+
+    #[test]
+    fn challenges_use_the_fixed_seed_and_their_own_key() {
+        let mut w = world();
+        let action = |seed| UiAction::StartChallenge {
+            scenario: "micro-adjust".into(),
+            seed,
+            key: "micro-adjust#daily-1".into(),
+        };
+        apply(&mut w, action(42));
+        let first = w.resource::<Run>().recording.clone();
+        assert_eq!(first.seed, 42);
+        assert_eq!(first.def.id, "micro-adjust#daily-1");
+        apply(&mut w, action(42));
+        let second = w.resource::<Run>();
+        let a: Vec<_> = first.start().targets().map(|t| t.position).collect();
+        let b: Vec<_> = second
+            .recording
+            .start()
+            .targets()
+            .map(|t| t.position)
+            .collect();
+        assert_eq!(a, b, "same seed, same targets for everyone");
     }
 }

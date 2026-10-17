@@ -15,6 +15,13 @@ pub struct TodayModel {
     pub suggested_tier: String,
     pub benchmark_energy: Option<f32>,
     pub day: DayModel,
+    pub challenge: Option<ChallengeModel>,
+}
+
+/// Today's daily challenge: same scenario and targets for every player.
+pub struct ChallengeModel {
+    pub scenario_name: String,
+    pub best_today: Option<f32>,
 }
 
 pub enum DayModel {
@@ -36,6 +43,7 @@ pub struct RoutineModel {
 }
 
 pub enum TodayAction {
+    Challenge,
     SelectTier(String),
     Start(String),
     Resume(String),
@@ -144,6 +152,21 @@ pub fn today_panel(ui: &mut egui::Ui, m: &TodayModel) -> Option<TodayAction> {
                     action = Some(TodayAction::WarmUp);
                 }
             }
+        }
+        if let Some(c) = &m.challenge {
+            ui.separator();
+            ui.heading("Daily challenge");
+            ui.label(format!(
+                "{} with today's fixed seed: everyone gets the same targets, so you can compare scores with friends.",
+                c.scenario_name
+            ));
+            let best = c.best_today.map_or("not played yet".to_owned(), |b| format!("your best today {b:.0}"));
+            ui.horizontal(|ui| {
+                if ui.button("▶  Play the daily challenge").clicked() {
+                    action = Some(TodayAction::Challenge);
+                }
+                ui.small(best);
+            });
         }
         ui.add_space(10.0);
         ui.small(&m.credit);

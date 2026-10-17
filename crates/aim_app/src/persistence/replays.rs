@@ -2,8 +2,8 @@
 //! `aim_core::analytics::codec` format. Only the newest [`KEEP_REPLAYS`] are kept.
 //!
 //! File name: `<unix millis, 20 digits>-<scenario id>.aimreplay`, so sorting the names
-//! sorts the replays by time. Reading them back is `codec::decode` on the file bytes; a
-//! listing/loading API is added with the first feature that opens replays (YAGNI).
+//! sorts the replays by time. [`list`] reads the names back (newest first) and [`load`]
+//! decodes one file.
 
 use crate::persistence::settings::Paths;
 use aim_core::analytics::codec;
@@ -16,10 +16,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub const KEEP_REPLAYS: usize = 50;
 const EXTENSION: &str = "aimreplay";
 
+/// A replay file found on disk, described by its name alone (the file is not read).
 #[derive(Debug, Clone, PartialEq)]
-struct ReplayFile {
-    path: PathBuf,
-    timestamp_millis: u64,
+pub struct ReplayEntry {
+    pub path: PathBuf,
+    /// When the run was saved, Unix milliseconds.
+    pub timestamp_millis: u64,
+    pub scenario_id: String,
 }
 
 /// `<data dir>/replays`, next to the history file.
@@ -61,7 +64,7 @@ fn save_in(
     Ok(path)
 }
 
-fn parse_name(path: &Path) -> Option<ReplayFile> {
+fn parse_name(path: &Path) -> Option<ReplayEntry> {
     if path.extension()? != EXTENSION {
         return None;
     }
@@ -70,17 +73,32 @@ fn parse_name(path: &Path) -> Option<ReplayFile> {
     if id.is_empty() {
         return None;
     }
-    Some(ReplayFile {
+    Some(ReplayEntry {
         path: path.to_path_buf(),
         timestamp_millis: ts.parse().ok()?,
+        scenario_id: id.to_owned(),
     })
 }
 
-fn list_in(dir: &Path) -> Vec<ReplayFile> {
+/// Every replay in the replays directory, newest first. A missing directory lists nothing.
+pub fn list(paths: &Paths) -> Vec<ReplayEntry> {
+    let mut v = list_in(&replays_dir(paths));
+    v.reverse();
+    v
+}
+
+/// Read and decode one replay.
+pub fn load(path: &Path) -> io::Result<Recording> {
+    let bytes = fs::read(path)?;
+    codec::decode(&bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
+/// Oldest first.
+fn list_in(dir: &Path) -> Vec<ReplayEntry> {
     let Ok(entries) = fs::read_dir(dir) else {
         return Vec::new();
     };
-    let mut v: Vec<ReplayFile> = entries
+    let mut v: Vec<ReplayEntry> = entries
         .filter_map(|e| parse_name(&e.ok()?.path()))
         .collect();
     v.sort_by_key(|f| f.timestamp_millis);
@@ -156,6 +174,52 @@ mod tests {
         fs::write(s.0.join("notes.txt"), "x").unwrap();
         fs::write(s.0.join("abc-x.aimreplay"), "x").unwrap();
         assert!(list_in(&s.0).is_empty());
+    }
+
+    fn paths_in(dir: &Path) -> Paths {
+        Paths {
+            settings_file: dir.join("settings.toml"),
+            scenarios_dir: dir.join("scenarios"),
+            routines_dir: dir.join("routines"),
+            benchmarks_dir: dir.join("benchmarks"),
+            history_file: dir.join("history.csv"),
+        }
+    }
+
+    #[test]
+    fn list_is_newest_first_with_the_scenario_id_and_load_decodes_each_replay() {
+        let s = scratch("list");
+        let paths = paths_in(&s.0);
+        assert!(list(&paths).is_empty());
+        let rec = recording();
+        let mut other = recording();
+        other.def.id = "my-custom-scenario".into();
+        save_in(&replays_dir(&paths), &rec, 10, 5).unwrap();
+        save_in(&replays_dir(&paths), &other, 20, 5).unwrap();
+        let entries = list(&paths);
+        let summary: Vec<(u64, &str)> = entries
+            .iter()
+            .map(|e| (e.timestamp_millis, e.scenario_id.as_str()))
+            .collect();
+        assert_eq!(
+            summary,
+            vec![(20, "my-custom-scenario"), (10, rec.def.id.as_str())]
+        );
+        assert_eq!(load(&entries[0].path).unwrap(), other);
+        assert_eq!(load(&entries[1].path).unwrap(), rec);
+    }
+
+    #[test]
+    fn loading_a_missing_or_corrupt_replay_is_an_error() {
+        let s = scratch("corrupt");
+        fs::create_dir_all(&s.0).unwrap();
+        assert_eq!(
+            load(&s.0.join("absent.aimreplay")).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
+        let bad = s.0.join("00000000000000000001-x.aimreplay");
+        fs::write(&bad, b"not a replay").unwrap();
+        assert_eq!(load(&bad).unwrap_err().kind(), io::ErrorKind::InvalidData);
     }
 
     #[test]

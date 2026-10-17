@@ -1,16 +1,18 @@
 //! Results screen shown after a run finishes. When a new result appears, the page saves
 //! its replay and analyzes it once; both are cached until the next result.
 
-use crate::game::{AppState, LastResult};
+use crate::game::{AppState, FinderState, LastResult};
 use crate::overlay::Overlay;
 use crate::persistence::library::Library;
 use crate::persistence::replays;
-use crate::persistence::settings::Paths;
+use crate::persistence::settings::{Paths, Settings};
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::analysis_panel::RunReport;
 use crate::ui::organisms::results_card::{ResultsContext, results_card};
 use aim_core::analytics::analyze;
 use aim_core::scenario::Recording;
+use aim_core::sensitivity::Sensitivity;
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
 
@@ -58,19 +60,27 @@ fn refresh(cache: &mut ReportCache, last: &LastResult, paths: &Paths, lib: &Libr
     cache.0 = Some((key, report));
 }
 
+/// Inputs, paths and what deciding the Retry action needs beyond the navigator.
+#[derive(SystemParam)]
+struct RetryContext<'w> {
+    finder: Res<'w, FinderState>,
+    settings: Res<'w, Settings>,
+    keys: Res<'w, ButtonInput<KeyCode>>,
+    paths: Res<'w, Paths>,
+}
+
 fn results(
     mut contexts: EguiContexts,
     last: Option<Res<LastResult>>,
     overlay: Res<Overlay>,
-    keys: Res<ButtonInput<KeyCode>>,
-    paths: Res<Paths>,
     mut cache: Local<ReportCache>,
+    retry_ctx: RetryContext,
     mut nav: Navigator,
 ) -> Result {
     // Before the visibility check, so a run finished while the overlay is hidden is still
     // saved as soon as its result exists.
     if let Some(last) = &last {
-        refresh(&mut cache, last, &paths, nav.library());
+        refresh(&mut cache, last, &retry_ctx.paths, nav.library());
     }
     if !overlay.visible {
         return Ok(());
@@ -88,7 +98,30 @@ fn results(
         .map(|d| d.name.clone());
     // Arena results retry the arena; scenario results retry the scenario (with its level).
     let id = &last.result.scenario_id;
-    let retry = if last.recording.is_none() && aim_world::arena::builtin::get(id).is_some() {
+    let challenge =
+        crate::ui::pages::menu::todays_challenge(nav.library()).filter(|c| c.run_key() == *id);
+    let finder_next = retry_ctx
+        .finder
+        .0
+        .as_ref()
+        .filter(|_| last.finder_test)
+        .and_then(|f| {
+            let slot = f.next_slot()?;
+            let s = retry_ctx.settings.sensitivity;
+            Some((
+                slot,
+                Sensitivity::from_cm_per_360(s.game, f.cm_for(slot), s.dpi),
+            ))
+        });
+    let retry = if let Some(c) = challenge {
+        crate::ui::UiAction::StartChallenge {
+            key: c.run_key(),
+            scenario: c.scenario_id,
+            seed: c.seed,
+        }
+    } else if let Some((slot, sens)) = finder_next {
+        crate::ui::UiAction::StartFinderTest { slot, sens }
+    } else if last.recording.is_none() && aim_world::arena::builtin::get(id).is_some() {
         crate::ui::UiAction::StartArena(id.clone())
     } else {
         crate::ui::UiAction::Retry(id.clone())
@@ -97,7 +130,7 @@ fn results(
         retry,
         routine: nav.routine(),
         next_run: next_run.as_deref(),
-        space: keys.just_pressed(KeyCode::Space),
+        space: retry_ctx.keys.just_pressed(KeyCode::Space),
         report,
     };
     if let Some(action) = results_card(ctx, &last, &rc) {
