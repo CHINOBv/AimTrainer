@@ -10,7 +10,7 @@ pub fn routine_list(ui: &mut egui::Ui, lib: &Library) -> Option<UiAction> {
         for r in &lib.routines {
             ui.heading(&r.name);
             ui.label(&r.description);
-            let runs = r.plan(&lib.scenarios, 0).len();
+            let runs = r.run_count(&lib.scenarios);
             ui.label(format!(
                 "{runs} runs · ≈{:.0} min",
                 r.minutes(&lib.scenarios)

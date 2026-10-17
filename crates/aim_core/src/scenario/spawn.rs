@@ -1,8 +1,8 @@
 //! Target spawning: samples where a new target appears, keeps it apart from the live
 //! ones, and orients it towards the player.
 
+use super::MIN_SPHERE_HEIGHT;
 use super::def::{Shape, SpawnArea, TargetsDef};
-use super::motion::MIN_SPHERE_HEIGHT;
 use super::session::Target;
 use crate::math::{Range, Vec3, ViewAngles, angle_between_deg};
 use crate::rng::Rng;

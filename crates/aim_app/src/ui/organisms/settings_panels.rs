@@ -92,9 +92,10 @@ pub fn sensitivity_panel(
 
     ui.add_space(8.0);
     ui.collapsing("DPI check (verify raw input)", |ui| {
-        ui.label(
-            "Press Start, move the mouse exactly 10 cm to the right along a ruler, then Stop.",
-        );
+        ui.label(format!(
+            "Press Start, move the mouse exactly {} cm to the right along a ruler, then Stop.",
+            DpiMeter::DISTANCE_CM
+        ));
         ui.horizontal(|ui| {
             if ui
                 .button(if meter.active { "Stop" } else { "Start" })

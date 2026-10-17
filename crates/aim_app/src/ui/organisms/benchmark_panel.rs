@@ -23,7 +23,7 @@ pub fn benchmark_panel(
             let rank = |e: f32| b.rank_for(e).map(str::to_owned);
             let res = b.evaluate(bests);
             let overall = match res.overall {
-                Some(e) => energy_text(Some(e), rank).replacen(" · ", " energy · ", 1),
+                Some(e) => energy_text(Some(e), "energy", rank),
                 None => "— (score every subcategory)".to_owned(),
             };
             ui.strong(format!("Overall: {overall}"));
@@ -33,7 +33,7 @@ pub fn benchmark_panel(
                 .show(ui, |ui| {
                     for (sub, r) in b.subcategories.iter().zip(&res.subcategories) {
                         ui.label(format!("{} / {}", sub.skill, sub.name));
-                        ui.label(energy_text(r.energy, rank));
+                        ui.label(energy_text(r.energy, "", rank));
                         for s in &sub.scenarios {
                             let best = bests
                                 .get(&s.id)

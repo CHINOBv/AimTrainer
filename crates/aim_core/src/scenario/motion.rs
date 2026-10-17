@@ -1,13 +1,12 @@
 //! Target motion: advances one target's position each frame according to the scenario's
 //! [`Motion`] (static, VALORANT-style strafing, or free drift).
 
+use super::MIN_SPHERE_HEIGHT;
 use super::def::Motion;
 use crate::math::Vec3;
 use crate::movement::{self, LocalVelocity, MoveInput};
 use crate::rng::Rng;
 
-/// Lowest height a sphere target's center may reach.
-pub(super) const MIN_SPHERE_HEIGHT: f32 = 0.3;
 /// Area under VALORANT's counter-strafe curve: braking distance ≈ speed × this.
 const STRAFE_BRAKE_SECS: f32 = 0.075;
 

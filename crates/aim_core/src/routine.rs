@@ -125,6 +125,14 @@ impl RoutineDef {
         plan
     }
 
+    /// Number of runs the routine plans. Shuffling never changes it, so no seed is needed.
+    pub fn run_count(&self, library: &[ScenarioDef]) -> usize {
+        self.blocks
+            .iter()
+            .map(|b| Self::runs_for(b, library) as usize)
+            .sum()
+    }
+
     /// Total planned minutes.
     pub fn minutes(&self, library: &[ScenarioDef]) -> f32 {
         self.plan(library, 0)
@@ -207,6 +215,8 @@ mod tests {
             rest.iter().map(|p| &p.scenario_id).collect::<Vec<_>>()
         );
         assert_ne!(plan, r.plan(&lib, 4), "different seeds shuffle differently");
+        assert_eq!(r.run_count(&lib), plan.len());
+        assert_eq!(r.run_count(&lib), r.plan(&lib, 99).len());
     }
 
     #[test]
