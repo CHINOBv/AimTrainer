@@ -1,0 +1,158 @@
+# Original geometry: a start room, a 1.8 m doorway, a 6 m wide corridor with a wall stub,
+# and a long hall with a tall box and a far block. Each drill angle has a marker.
+# Not modeled on any game map. Coordinates in meters, +Y up, -Z forward.
+id = "angles-lab"
+name = "Angles Lab"
+description = "A path from a start room through a doorway and corridor into a long hall. Five marked angles: doorway, close corner, off-angle, box and a 37 m long angle."
+floor_x = [-10.0, 10.0]
+floor_z = [-62.0, 4.0]
+
+# Start-room wall with a 1.8 m doorway at x in [-0.9, 0.9].
+[[boxes]]
+kind = "wall"
+min = [-10.0, 0.0, -6.4]
+max = [-0.9, 3.5, -6.0]
+
+[[boxes]]
+kind = "wall"
+min = [0.9, 0.0, -6.4]
+max = [10.0, 3.5, -6.0]
+
+# Corridor walls, 6 m apart, z in [-24.4, -6.4].
+[[boxes]]
+kind = "wall"
+min = [-3.4, 0.0, -24.4]
+max = [-3.0, 3.5, -6.4]
+
+[[boxes]]
+kind = "wall"
+min = [3.0, 0.0, -24.4]
+max = [3.4, 3.5, -6.4]
+
+# Wall stub on the right side of the corridor that hides the off-angle.
+[[boxes]]
+kind = "wall"
+min = [1.8, 0.0, -11.0]
+max = [3.0, 3.5, -10.4]
+
+# Hall entrance walls at z = -24.
+[[boxes]]
+kind = "wall"
+min = [-10.0, 0.0, -24.4]
+max = [-3.4, 3.5, -24.0]
+
+[[boxes]]
+kind = "wall"
+min = [3.4, 0.0, -24.4]
+max = [10.0, 3.5, -24.0]
+
+# Tall box in the hall (two stacked crates, 2 x 2 m footprint).
+[[boxes]]
+kind = "cover"
+min = [-6.0, 0.0, -36.0]
+max = [-4.0, 2.2, -34.0]
+
+# Single crate in the hall.
+[[boxes]]
+kind = "low_cover"
+min = [2.0, 0.0, -30.0]
+max = [3.0, 1.0, -29.0]
+
+# Far block that hides the long angle.
+[[boxes]]
+kind = "wall"
+min = [1.5, 0.0, -58.0]
+max = [10.0, 3.5, -56.0]
+
+[[spawns]]
+id = "start"
+kind = "player"
+position = [0.0, 0.0, 2.0]
+yaw_deg = 0.0
+
+[[spawns]]
+id = "door"
+kind = "player"
+position = [0.0, 0.0, -5.0]
+yaw_deg = 0.0
+
+[[spawns]]
+id = "hall"
+kind = "player"
+position = [0.0, 0.0, -22.0]
+yaw_deg = 0.0
+
+[[spawns]]
+id = "bot-hall"
+kind = "bot"
+position = [0.0, 0.0, -45.0]
+yaw_deg = 180.0
+
+# Seen from "start": the enemy crosses the doorway from the right.
+[[angles]]
+id = "doorway"
+label = "Doorway"
+position = [0.6, 0.0, -9.0]
+peek_dir = [-1.0, 0.0]
+peek_distance = 1.5
+
+# Seen from "door": the enemy waits tight behind the left door frame.
+[[angles]]
+id = "close-corner"
+label = "Close corner"
+position = [-1.3, 0.0, -7.2]
+peek_dir = [1.0, 0.0]
+peek_distance = 1.0
+
+# Seen from "door": the enemy steps out from behind the corridor wall stub.
+[[angles]]
+id = "off-angle"
+label = "Off-angle"
+position = [1.3, 0.0, -11.8]
+peek_dir = [-1.0, 0.0]
+peek_distance = 1.2
+
+# Seen from "hall": the enemy steps out from behind the tall box.
+[[angles]]
+id = "box"
+label = "Box"
+position = [-3.5, 0.0, -37.0]
+peek_dir = [1.0, 0.0]
+peek_distance = 2.0
+
+# Seen from "hall", about 37 m away: the enemy steps out from behind the far block.
+[[angles]]
+id = "long-angle"
+label = "Long angle"
+position = [0.8, 0.0, -59.0]
+peek_dir = [-1.0, 0.0]
+peek_distance = 1.7
+
+[[waypoints]]
+id = "room"
+position = [0.0, 0.0, 2.0]
+links = ["door-in"]
+
+[[waypoints]]
+id = "door-in"
+position = [0.0, 0.0, -5.0]
+links = ["door-out"]
+
+[[waypoints]]
+id = "door-out"
+position = [0.0, 0.0, -8.0]
+links = ["corridor-end"]
+
+[[waypoints]]
+id = "corridor-end"
+position = [0.0, 0.0, -22.0]
+links = ["hall-mid"]
+
+[[waypoints]]
+id = "hall-mid"
+position = [0.0, 0.0, -40.0]
+links = ["hall-far"]
+
+[[waypoints]]
+id = "hall-far"
+position = [-2.0, 0.0, -59.0]
