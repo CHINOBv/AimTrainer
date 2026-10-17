@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/aim_core", "crates/aim_app"]
+members = ["crates/aim_core", "crates/aim_app", "crates/aim_world", "crates/aim_integrations"]
 
 [workspace.package]
 edition = "2024"
@@ -10,6 +10,8 @@ rust-version = "1.97.1"
 
 [workspace.dependencies]
 aim_core = { path = "crates/aim_core" }
+aim_world = { path = "crates/aim_world" }
+aim_integrations = { path = "crates/aim_integrations" }
 serde = { version = "1.0", features = ["derive"] }
 toml = "1.1"
 thiserror = "2.0"
