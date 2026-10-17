@@ -1,0 +1,18 @@
+id = "peek-reaction"
+name = "Angle Hold"
+category = "reaction"
+description = """
+Hold an angle. After a random 0.6–2.5 s wait, an agent peeks at head height near your crosshair and strafes back after 1.5 s.
+Pre-aim the head line and react. Average time-to-kill is your reaction-plus-adjust time."""
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "angular", yaw_deg = [-12.0, 12.0], pitch_deg = [0.0, 0.0], distance = [15.0, 25.0] }
+motion = { kind = "strafe", weapon = "vandal", change_secs = [0.3, 0.6], max_offset = 1.5 }
+max_alive = 1
+appear_delay_secs = [0.6, 2.5]
+lifetime_secs = 1.5
+
+[scoring]
+miss_penalty = 25
+expire_penalty = 50

@@ -1,0 +1,13 @@
+id = "flick-wide"
+name = "Wide Flicks"
+category = "flicking"
+description = """
+Static clicking with large flicks: one target appears 20–70° away from your crosshair.
+Trains arm-driven flicks and stopping cleanly on target."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.22 }
+spawn = { kind = "around_crosshair", offset_deg = [20.0, 70.0], distance = [12.0, 12.0] }
+
+[scoring]
+miss_penalty = 20

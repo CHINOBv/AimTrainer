@@ -1,0 +1,25 @@
+id = "quick-warmup"
+name = "Pre-Match Warm-up (10 min)"
+description = """
+Ten minutes before you queue. Covers every skill once and ends on movement so your counter-strafe is ready.
+It is for warming up, not training: stop before you get tired."""
+
+[[blocks]]
+scenario = "track-precise"
+minutes = 2
+
+[[blocks]]
+scenario = "flick-wide"
+minutes = 2
+
+[[blocks]]
+scenario = "micro-adjust"
+minutes = 2
+
+[[blocks]]
+scenario = "switch-speed"
+minutes = 2
+
+[[blocks]]
+scenario = "counter-strafe"
+minutes = 2

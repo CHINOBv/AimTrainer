@@ -1,0 +1,15 @@
+id = "static-headline"
+name = "Headline Static"
+category = "microcorrection"
+description = """
+Static clicking at head height. Three heads float in a horizontal band at agent head height and mixed depth.
+Keep the crosshair on the head line and only make small horizontal corrections."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.125 }   # VALORANT head ≈ 0.25 m
+spawn = { kind = "floor", x = [-9.0, 9.0], z = [-26.0, -9.0], height = [1.8, 1.95] }
+max_alive = 3
+min_separation_deg = 4
+
+[scoring]
+miss_penalty = 25

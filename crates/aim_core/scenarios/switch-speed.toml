@@ -1,0 +1,15 @@
+id = "switch-speed"
+name = "Speed Switch"
+category = "switching"
+description = """
+Speed switching. Four targets sit in a ±30° cone. Kill them one at a time as fast as possible.
+Each kill respawns a new target. Trains short, decisive switches with no hesitation."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.25 }
+spawn = { kind = "angular", yaw_deg = [-30.0, 30.0], pitch_deg = [-3.0, 12.0], distance = [12.0, 18.0] }
+max_alive = 4
+min_separation_deg = 12
+
+[scoring]
+miss_penalty = 15

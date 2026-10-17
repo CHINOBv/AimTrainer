@@ -1,0 +1,20 @@
+id = "switch-evasive"
+name = "Evasive Switch"
+category = "switching"
+description = """
+Evasive switching (tracking-based kills). Three drifting targets each need 0.35 s of tracking to die.
+Lock on, finish, and switch to the next one without overshooting."""
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.22 }
+spawn = { kind = "angular", yaw_deg = [-35.0, 35.0], pitch_deg = [0.0, 12.0], distance = [12.0, 16.0] }
+motion = { kind = "drift", speed = [1.2, 2.2], change_secs = [0.4, 0.9], max_offset = 2.0 }
+max_alive = 3
+health = 0.35
+min_separation_deg = 12
+
+[scoring]
+sphere = 400   # points per second on target; a kill is worth ≈140

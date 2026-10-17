@@ -1,0 +1,35 @@
+id = "fundamentals-hour"
+name = "Fundamentals Hour (≈52 min)"
+description = """
+Balanced fundamentals in the order Voltaic's skill routines use: tracking, then clicking, then switching.
+Blocks run in order (no interleaving), with long blocks to drill each skill.
+Use it on days you want depth over variety. Lower the block lengths if you get tired, since quality beats quantity."""
+
+[[blocks]]
+scenario = "track-precise"
+runs = 2
+note = "Opener."
+
+[[blocks]]
+scenario = "track-reactive-strafe"
+minutes = 5
+
+[[blocks]]
+scenario = "track-reactive-micro"
+minutes = 5
+
+[[blocks]]
+scenario = "dynamic-strafe-heads"
+minutes = 10
+
+[[blocks]]
+scenario = "static-headline"
+minutes = 10
+
+[[blocks]]
+scenario = "switch-speed"
+minutes = 10
+
+[[blocks]]
+scenario = "switch-evasive"
+minutes = 10

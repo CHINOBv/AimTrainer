@@ -1,0 +1,49 @@
+id = "valorant-daily"
+name = "VALORANT Daily (≈37 min)"
+description = """
+Daily routine for VALORANT. A short warm-up in order, then interleaved blocks:
+head-height clicking, strafing heads, counter-strafing, reactive micro-tracking and speed switching.
+Interleaving makes runs feel harder but improves retention (Shea & Morgan 1979).
+≈37 min stays inside the 30–50 min window where Listman et al. (2021) saw ~90% of daily gains.
+Play it 5–6 days a week, and run the benchmark once a week instead of daily."""
+interleave_from = 2
+
+[[blocks]]
+scenario = "track-precise"
+minutes = 2
+note = "Warm-up: slow and smooth, don't chase score."
+
+[[blocks]]
+scenario = "flick-wide"
+minutes = 2
+note = "Warm-up: large targets, full arm."
+
+[[blocks]]
+scenario = "static-headline"
+minutes = 4
+note = "Keep the crosshair on the head line."
+
+[[blocks]]
+scenario = "micro-adjust"
+minutes = 4
+note = "Small, calm corrections."
+
+[[blocks]]
+scenario = "dynamic-strafe-heads"
+minutes = 8
+note = "Read the strafe, tap the head."
+
+[[blocks]]
+scenario = "counter-strafe"
+minutes = 5
+note = "Stop first (counter-strafe), then shoot."
+
+[[blocks]]
+scenario = "track-reactive-micro"
+minutes = 6
+note = "React, don't predict."
+
+[[blocks]]
+scenario = "switch-speed"
+minutes = 6
+note = "Decisive switches, no hesitation."

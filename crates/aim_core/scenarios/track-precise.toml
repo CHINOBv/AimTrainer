@@ -1,0 +1,19 @@
+id = "track-precise"
+name = "Smooth Track"
+category = "tracking"
+description = """
+Precise tracking. A large target glides on long, predictable paths. Hold fire and stay glued with smooth, steady mouse movement.
+Good as a warm-up (start slow, then speed up)."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.3 }
+spawn = { kind = "angular", yaw_deg = [-10.0, 10.0], pitch_deg = [0.0, 6.0], distance = [10.0, 10.0] }
+motion = { kind = "drift", speed = [2.5, 3.5], change_secs = [1.0, 2.0], max_offset = 4.0 }
+health = inf
+
+[scoring]
+sphere = 100   # points per second on target

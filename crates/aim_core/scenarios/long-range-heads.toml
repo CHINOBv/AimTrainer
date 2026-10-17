@@ -1,0 +1,17 @@
+id = "long-range-heads"
+name = "Long Range Heads"
+category = "precision"
+description = """
+Precision. Static agents stand at 35–50 m, where a head is only ≈0.3°. Small flicks, full stop, one clean tap.
+Misses cost a lot, so take the time you need."""
+
+[weapon]
+kind = "guardian"
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-12.0, 12.0], z = [-50.0, -35.0] }
+max_alive = 1
+
+[scoring]
+miss_penalty = 40

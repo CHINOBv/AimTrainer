@@ -1,0 +1,70 @@
+id = "valorant-benchmark"
+name = "VALORANT Benchmark"
+description = """
+Measures every aim skill VALORANT asks of you. It uses Voltaic's structure: skill → subcategory → scenarios.
+Your best scenario sets each subcategory's energy, and the overall energy is the harmonic mean, so your weakest skill counts most.
+PROVISIONAL: thresholds come from the simulated aimer profiles (Fitts' law model), not from real players.
+Run it once a week, not daily."""
+calibrated = false
+ranks = ["Recruit", "Contender", "Veteran", "Elite"]
+energy_per_rank = 100
+
+[[subcategories]]
+skill = "clicking"
+name = "Static clicking"
+scenarios = [
+  { id = "micro-adjust", thresholds = [3300, 6000, 9400, 12650] },
+  { id = "static-headline", thresholds = [2600, 4700, 7050, 9500] },
+]
+
+[[subcategories]]
+skill = "clicking"
+name = "Dynamic clicking"
+scenarios = [
+  { id = "dynamic-strafe-heads", thresholds = [1750, 4100, 6000, 8100] },
+  { id = "flick-headshot", thresholds = [2350, 3900, 5550, 7150] },
+]
+
+[[subcategories]]
+skill = "tracking"
+name = "Precise tracking"
+scenarios = [
+  { id = "track-precise", thresholds = [1300, 2850, 5000, 5900] },
+]
+
+[[subcategories]]
+skill = "tracking"
+name = "Reactive tracking"
+scenarios = [
+  { id = "track-reactive-strafe", thresholds = [1450, 1850, 2250, 2650] },
+  { id = "track-reactive-micro", thresholds = [1250, 2150, 4200, 4500] },
+]
+
+[[subcategories]]
+skill = "switching"
+name = "Speed switching"
+scenarios = [
+  { id = "switch-speed", thresholds = [3350, 5800, 8500, 11200] },
+]
+
+[[subcategories]]
+skill = "switching"
+name = "Evasive switching"
+scenarios = [
+  { id = "switch-evasive", thresholds = [6250, 11400, 15050, 17100] },
+]
+
+[[subcategories]]
+skill = "movement"
+name = "Movement accuracy"
+scenarios = [
+  { id = "counter-strafe", thresholds = [2900, 4600, 6250, 8300] },
+  { id = "strafe-shot", thresholds = [3500, 5400, 7650, 10450] },
+]
+
+[[subcategories]]
+skill = "movement"
+name = "Angle holding"
+scenarios = [
+  { id = "peek-reaction", thresholds = [775, 1650, 2400, 2700] },
+]

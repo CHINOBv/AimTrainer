@@ -1,0 +1,16 @@
+id = "track-reactive-micro"
+name = "Micro Reactive Track"
+category = "tracking"
+description = """
+Reactive micro-tracking. A small, head-sized target changes direction quickly in a tight area.
+Trains tiny, fast corrections, the same ones you need to stay on a jiggling head."""
+duration_secs = 45
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.18 }
+spawn = { kind = "angular", yaw_deg = [-5.0, 5.0], pitch_deg = [0.0, 4.0], distance = [10.0, 10.0] }
+motion = { kind = "drift", speed = [1.5, 2.5], change_secs = [0.25, 0.6], max_offset = 1.5 }
+health = inf

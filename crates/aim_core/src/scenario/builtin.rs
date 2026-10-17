@@ -3,7 +3,64 @@
 
 use super::def::ScenarioDef;
 
-pub const SOURCES: &[(&str, &str)] = &[];
+pub const SOURCES: &[(&str, &str)] = &[
+    (
+        "counter-strafe.toml",
+        include_str!("../../scenarios/counter-strafe.toml"),
+    ),
+    (
+        "dynamic-strafe-heads.toml",
+        include_str!("../../scenarios/dynamic-strafe-heads.toml"),
+    ),
+    (
+        "flick-headshot.toml",
+        include_str!("../../scenarios/flick-headshot.toml"),
+    ),
+    (
+        "flick-wide.toml",
+        include_str!("../../scenarios/flick-wide.toml"),
+    ),
+    (
+        "long-range-heads.toml",
+        include_str!("../../scenarios/long-range-heads.toml"),
+    ),
+    (
+        "micro-adjust.toml",
+        include_str!("../../scenarios/micro-adjust.toml"),
+    ),
+    (
+        "peek-reaction.toml",
+        include_str!("../../scenarios/peek-reaction.toml"),
+    ),
+    (
+        "static-headline.toml",
+        include_str!("../../scenarios/static-headline.toml"),
+    ),
+    (
+        "strafe-shot.toml",
+        include_str!("../../scenarios/strafe-shot.toml"),
+    ),
+    (
+        "switch-evasive.toml",
+        include_str!("../../scenarios/switch-evasive.toml"),
+    ),
+    (
+        "switch-speed.toml",
+        include_str!("../../scenarios/switch-speed.toml"),
+    ),
+    (
+        "track-precise.toml",
+        include_str!("../../scenarios/track-precise.toml"),
+    ),
+    (
+        "track-reactive-micro.toml",
+        include_str!("../../scenarios/track-reactive-micro.toml"),
+    ),
+    (
+        "track-reactive-strafe.toml",
+        include_str!("../../scenarios/track-reactive-strafe.toml"),
+    ),
+];
 
 /// Parse every built-in scenario. Panics only if a shipped file is broken, which the
 /// test suite guards against.
@@ -14,4 +71,22 @@ pub fn all() -> Vec<ScenarioDef> {
             ScenarioDef::from_toml(src).unwrap_or_else(|e| panic!("built-in {file}: {e}"))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn every_builtin_parses_validates_and_has_a_unique_id() {
+        let all = all();
+        assert_eq!(all.len(), SOURCES.len());
+        let mut ids = HashSet::new();
+        for (def, (file, _)) in all.iter().zip(SOURCES) {
+            assert!(def.validate().is_empty(), "{file}: {:?}", def.validate());
+            assert_eq!(format!("{}.toml", def.id), *file, "file name must match id");
+            assert!(ids.insert(def.id.clone()), "duplicate id {}", def.id);
+        }
+    }
 }

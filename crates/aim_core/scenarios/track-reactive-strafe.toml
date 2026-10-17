@@ -1,0 +1,21 @@
+id = "track-reactive-strafe"
+name = "Reactive Strafe Track"
+category = "tracking"
+description = """
+Reactive tracking against a VALORANT agent doing short, unpredictable A/D strafes, stops included.
+React instead of predicting. Head time scores more than body time."""
+duration_secs = 45
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "humanoid" }
+spawn = { kind = "floor", x = [-2.0, 2.0], z = [-14.0, -10.0] }
+motion = { kind = "strafe", weapon = "knife", change_secs = [0.15, 0.6], stop_chance = 0.15, max_offset = 3.5 }
+health = inf
+
+[scoring]
+head = 100
+body = 40
+legs = 25

@@ -1,0 +1,26 @@
+id = "counter-strafe"
+name = "Counter-Strafe Duel"
+category = "movement"
+description = """
+Movement accuracy. Strafe with A/D (VALORANT rifle movement), counter-strafe, and tap the head before the agent leaves (3 s).
+Shots fired above 27.5% of run speed get running inaccuracy and lose points. Stop, then shoot."""
+
+[weapon]
+kind = "vandal"
+simulate_spread = true
+
+[player]
+movement = true
+bounds_x = [-6.0, 6.0]
+bounds_z = [-1.0, 1.0]
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-9.0, 9.0], z = [-22.0, -12.0] }
+max_alive = 1
+lifetime_secs = 3.0
+
+[scoring]
+miss_penalty = 10
+moving_shot_penalty = 50
+expire_penalty = 50
