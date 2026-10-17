@@ -242,6 +242,7 @@ impl Session {
             .then(|| def.weapon.kind.recoil())
             .flatten()
             .map(|r| RecoilState::new(r, weapon.first_shot_spread_deg));
+        let start = Vec3::new(0.0, def.player.elevation, 0.0);
         let mut s = Self {
             def,
             rng: Rng::new(seed),
@@ -250,7 +251,7 @@ impl Session {
             targets: Vec::new(),
             next_id: 1,
             stats: Stats::default(),
-            player_pos: Vec3::ZERO,
+            player_pos: start,
             player_vel: LocalVelocity::default(),
             view: ViewAngles::default(),
             profile,
@@ -362,7 +363,7 @@ impl Session {
         let (bx, bz) = (self.def.player.bounds_x, self.def.player.bounds_z);
         let clamped = Vec3::new(
             next.x.clamp(bx.min, bx.max),
-            0.0,
+            self.def.player.elevation,
             next.z.clamp(bz.min, bz.max),
         );
         // Hitting an edge of the play area behaves like a wall: only the velocity pushing
@@ -807,6 +808,7 @@ mod tests {
             movement: true,
             bounds_x: Range::new(-50.0, 50.0),
             bounds_z: Range::new(-1.0, 1.0),
+            ..PlayerDef::default()
         };
         def.weapon.simulate_spread = true;
         def.scoring.moving_shot_penalty = 5.0;
@@ -862,6 +864,7 @@ mod tests {
             movement: true,
             bounds_x: Range::new(-6.0, 6.0),
             bounds_z: Range::new(-1.0, 1.0),
+            ..PlayerDef::default()
         };
         def
     }
@@ -891,6 +894,56 @@ mod tests {
             p.x > 3.0,
             "strafing right must not be blocked by the front edge: {p:?}"
         );
+    }
+
+    #[test]
+    fn elevation_raises_the_player_floor_and_movement_stays_on_it() {
+        let flat = Session::new(movement_def(), 2);
+        assert_eq!(
+            flat.player_position().y,
+            0.0,
+            "default floor is the targets' floor"
+        );
+        let mut def = movement_def();
+        def.player.elevation = 2.5;
+        let mut s = Session::new(def, 2);
+        assert_eq!(s.player_position().y, 2.5);
+        assert!((s.eye_position().y - (2.5 + s.dims().eye_height)).abs() < 1e-6);
+        let input = MoveInput {
+            right: 1.0,
+            forward: -1.0,
+            walk: false,
+        };
+        for _ in 0..150 {
+            s.update(FrameInput {
+                dt: 0.01,
+                movement: input,
+                ..Default::default()
+            });
+            assert_eq!(
+                s.player_position().y,
+                2.5,
+                "moving keeps the feet on the floor"
+            );
+        }
+        assert!(s.player_position().x > 1.0, "the player still moves");
+    }
+
+    #[test]
+    fn elevation_leaves_target_floors_in_place() {
+        let mut def = sphere_def(FireMode::Click, 1.0);
+        def.targets.shape = Shape::Humanoid { head_only: true };
+        def.targets.spawn = SpawnArea::Floor {
+            x: Range::new(-3.0, 3.0),
+            z: Range::new(-15.0, -12.0),
+            height: Range::fixed(0.0),
+        };
+        def.player.elevation = -2.0;
+        let s = Session::new(def, 5);
+        assert!(s.targets().count() > 0);
+        for t in s.targets() {
+            assert_eq!(t.position.y, 0.0, "humanoids stand on the targets' floor");
+        }
     }
 
     #[test]

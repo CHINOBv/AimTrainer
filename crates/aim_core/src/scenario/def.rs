@@ -185,7 +185,18 @@ pub struct PlayerDef {
     /// Allowed range of the player's feet along world z, meters.
     #[serde(default = "default_bounds")]
     pub bounds_z: Range,
+    /// Height of the player's floor above the targets' floor, meters (default 0). Within
+    /// [`ELEVATION_RANGE`]. Targets keep their floor at 0, so a positive value looks down
+    /// on them and a negative one looks up.
+    #[serde(default)]
+    pub elevation: f32,
 }
+
+/// Allowed `player.elevation`, meters.
+pub const ELEVATION_RANGE: Range = Range {
+    min: -3.0,
+    max: 6.0,
+};
 
 fn default_bounds() -> Range {
     Range::fixed(0.0)
@@ -197,6 +208,7 @@ impl Default for PlayerDef {
             movement: false,
             bounds_x: default_bounds(),
             bounds_z: default_bounds(),
+            elevation: 0.0,
         }
     }
 }
@@ -487,6 +499,12 @@ impl ScenarioDef {
             "player.bounds",
             "must contain the origin (player start)",
         );
+        check(
+            p.elevation.is_finite()
+                && (ELEVATION_RANGE.min..=ELEVATION_RANGE.max).contains(&p.elevation),
+            "player.elevation",
+            "must be within [-3, 6] m",
+        );
 
         let t = &self.targets;
         check(
@@ -671,6 +689,27 @@ mod tests {
         d.targets.health = f32::INFINITY;
         let fields: Vec<_> = d.validate().into_iter().map(|e| e.field).collect();
         assert_eq!(fields, ["id", "duration_secs", "targets.health"]);
+    }
+
+    #[test]
+    fn player_elevation_defaults_to_zero_parses_and_is_range_checked() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!(d.player.elevation, 0.0);
+        let src = format!("{MINIMAL}\n[player]\nelevation = 1.5\n");
+        let raised = ScenarioDef::from_toml(&src).unwrap();
+        assert_eq!(raised.player.elevation, 1.5);
+        assert!(raised.validate().is_empty(), "{:?}", raised.validate());
+        for bad in [-3.5, 6.5, f32::NAN] {
+            let mut b = d.clone();
+            b.player.elevation = bad;
+            let fields: Vec<_> = b.validate().into_iter().map(|e| e.field).collect();
+            assert_eq!(fields, ["player.elevation"], "{bad}");
+        }
+        for ok in [ELEVATION_RANGE.min, ELEVATION_RANGE.max] {
+            let mut b = d.clone();
+            b.player.elevation = ok;
+            assert!(b.validate().is_empty(), "{ok}");
+        }
     }
 
     #[test]
