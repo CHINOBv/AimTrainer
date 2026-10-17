@@ -16,9 +16,17 @@ use bevy::prelude::*;
 
 pub struct UiPlugin;
 
+/// Scenario or arena to open as soon as the trainer starts (`aimtrainer play <id>`).
+#[derive(Resource, Default)]
+pub struct StartupPlay(pub Option<String>);
+
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, launcher::launch_requested)
+        app.init_resource::<StartupPlay>()
+            .add_systems(
+                Update,
+                (launcher::launch_requested, launcher::launch_startup),
+            )
             .add_plugins((
                 pages::menu::MenuPage,
                 pages::hud::HudPage,
@@ -36,6 +44,8 @@ pub enum UiAction {
     StartAdaptive(String),
     /// Play a routine that is not in the library (e.g. the personalized playlist).
     StartRoutineDef(Box<RoutineDef>),
+    /// Play a built-in arena (deathmatch or angle clearing on an original map).
+    StartArena(String),
     /// Play a scenario shortened to `secs`; `auto_hide` hides the overlay when it ends
     /// (buy-phase micro drills hand the mouse straight back to the game).
     StartTimed {

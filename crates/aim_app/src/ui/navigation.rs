@@ -1,11 +1,13 @@
 //! Applies [`UiAction`]s: the single place where UI intent turns into state changes.
 
 use super::UiAction;
+use crate::game::arena::{ArenaRun, start_arena};
 use crate::game::{ActiveRoutine, AppState, RoutineProgress, Run, start_run, start_run_with};
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::library::Library;
 use aim_core::scenario::{ScenarioDef, parse_run_key_full};
 use aim_core::training::routine::RoutineDef;
+use aim_world::arena::ArenaSession;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
@@ -54,6 +56,19 @@ impl Navigator<'_, '_> {
                 }
             }
             UiAction::StartRoutineDef(def) => self.start_routine_def(&def, 0.0, 0, routine_seed()),
+            UiAction::StartArena(id) => {
+                self.routine.0 = None;
+                match aim_world::arena::builtin::load(&id) {
+                    Some(Ok((def, map))) => match ArenaSession::new(def, map, routine_seed()) {
+                        Ok(session) => {
+                            start_arena(&mut self.commands, &mut self.next, ArenaRun::new(session))
+                        }
+                        Err(e) => bevy::log::error!("arena {id}: {e}"),
+                    },
+                    Some(Err(e)) => bevy::log::error!("arena {id}: {e}"),
+                    None => {}
+                }
+            }
             UiAction::StartTimed {
                 scenario,
                 secs,
@@ -366,5 +381,26 @@ mod tests {
         assert!(first.starts_with("track-precise@-0.50~30s"), "{first}");
         apply(&mut w, UiAction::Retry(first.clone()));
         assert_eq!(running(&w), Some(first), "retry keeps level and duration");
+    }
+
+    #[test]
+    fn arenas_and_scenario_runs_replace_each_other() {
+        let mut w = world();
+        apply(&mut w, UiAction::StartScenario("micro-adjust".into()));
+        assert!(w.contains_resource::<Run>());
+        apply(&mut w, UiAction::StartArena("yard-deathmatch".into()));
+        assert!(w.contains_resource::<ArenaRun>());
+        assert!(
+            !w.contains_resource::<Run>(),
+            "starting an arena drops the scenario run"
+        );
+        assert_eq!(pending(&w), Some(AppState::Playing));
+        apply(&mut w, UiAction::StartScenario("micro-adjust".into()));
+        assert!(
+            !w.contains_resource::<ArenaRun>(),
+            "starting a scenario drops the arena"
+        );
+        apply(&mut w, UiAction::StartArena("no-such-arena".into()));
+        assert!(!w.contains_resource::<ArenaRun>());
     }
 }

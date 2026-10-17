@@ -1,6 +1,7 @@
 //! Panels composed from atoms and molecules. Plain data in, [`UiAction`](super::UiAction) out.
 
 pub mod analysis_panel;
+pub mod arena_list;
 pub mod benchmark_panel;
 pub mod history_chart;
 pub mod hud_panels;

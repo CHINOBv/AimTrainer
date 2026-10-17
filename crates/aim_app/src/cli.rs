@@ -9,13 +9,19 @@ usage:
   aimtrainer toggle|show|hide                  control a running trainer (Linux)
   aimtrainer warmup [minutes]                  show the trainer and start a queue warm-up
   aimtrainer micro                             one 20 s buy-phase drill, then hide again
+  aimtrainer play <scenario|arena>             start the trainer directly in a scenario or arena
   aimtrainer analyze-match <match.json> --player <Name#TAG|puuid>
                                                post-match analysis of an official match file";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CliCommand {
     Overlay(ipc::Command),
-    AnalyzeMatch { file: String, player: String },
+    AnalyzeMatch {
+        file: String,
+        player: String,
+    },
+    /// Start the trainer directly in a scenario or arena.
+    Play(String),
     Help,
 }
 
@@ -30,6 +36,10 @@ pub fn parse(args: &[String]) -> Result<Option<CliCommand>, String> {
     match first.as_str() {
         "-h" | "--help" | "help" => Ok(Some(CliCommand::Help)),
         "warmup" => Err("warmup takes an optional length in minutes, 1–30".to_owned()),
+        "play" => match args.get(1) {
+            Some(id) if args.len() == 2 => Ok(Some(CliCommand::Play(id.clone()))),
+            _ => Err("play needs one scenario or arena id".to_owned()),
+        },
         "analyze-match" => {
             let file = args
                 .get(1)
@@ -49,17 +59,26 @@ pub fn parse(args: &[String]) -> Result<Option<CliCommand>, String> {
     }
 }
 
-/// Run a CLI command; returns `None` when the trainer should start instead.
-pub fn run(args: &[String]) -> Option<AppExit> {
+/// What `main` should do after the command line was handled.
+pub enum Outcome {
+    /// The command ran without the window; exit with this code.
+    Exit(AppExit),
+    /// Start the trainer, optionally straight into a scenario or arena.
+    StartTrainer { play: Option<String> },
+}
+
+/// Run a CLI command.
+pub fn run(args: &[String]) -> Outcome {
     let command = match parse(args) {
+        Ok(Some(CliCommand::Play(id))) => return Outcome::StartTrainer { play: Some(id) },
         Ok(Some(c)) => c,
-        Ok(None) => return None,
+        Ok(None) => return Outcome::StartTrainer { play: None },
         Err(e) => {
             eprintln!("{e}\n{USAGE}");
-            return Some(AppExit::error());
+            return Outcome::Exit(AppExit::error());
         }
     };
-    Some(match command {
+    Outcome::Exit(match command {
         CliCommand::Help => {
             println!("{USAGE}");
             AppExit::Success
@@ -72,6 +91,7 @@ pub fn run(args: &[String]) -> Option<AppExit> {
             }
         },
         CliCommand::AnalyzeMatch { file, player } => analyze_match(&file, &player),
+        CliCommand::Play(_) => unreachable!("handled above"),
     })
 }
 
@@ -153,5 +173,10 @@ mod tests {
         );
         assert!(parse(&args(&["analyze-match", "--player", "x"])).is_err());
         assert!(parse(&args(&["analyze-match", "m.json"])).is_err());
+        assert_eq!(
+            parse(&args(&["play", "yard-deathmatch"])),
+            Ok(Some(CliCommand::Play("yard-deathmatch".into())))
+        );
+        assert!(parse(&args(&["play"])).is_err());
     }
 }

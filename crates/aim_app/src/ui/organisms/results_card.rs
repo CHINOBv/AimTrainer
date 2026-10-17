@@ -10,6 +10,8 @@ use bevy_egui::egui::{self, Align2};
 
 /// What the card needs beyond the result itself.
 pub struct ResultsContext<'a> {
+    /// What "Retry" does (scenario at the same level, or the same arena).
+    pub retry: UiAction,
     pub routine: Option<&'a RoutineProgress>,
     /// Display name of the next routine run, if there is one.
     pub next_run: Option<&'a str>,
@@ -78,6 +80,9 @@ pub fn results_card(
                         }
                     });
             }
+            for note in &last.notes {
+                ui.label(note);
+            }
             ui.separator();
             if let Some(p) = rc.routine {
                 ui.label(format!("{} · run {}/{}", p.name, p.index + 1, p.plan.len()));
@@ -104,7 +109,7 @@ pub fn results_card(
                         action = Some(UiAction::StartAdaptive(base));
                     }
                 } else if ui.button("↻ Retry (Space)").clicked() || rc.space {
-                    action = Some(UiAction::Retry(r.scenario_id.clone()));
+                    action = Some(rc.retry.clone());
                 }
                 if ui.button("Menu").clicked() {
                     action = Some(UiAction::BackToMenu);

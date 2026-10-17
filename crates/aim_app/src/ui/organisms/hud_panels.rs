@@ -86,3 +86,53 @@ pub fn pause_window(ctx: &egui::Context, description: &str) -> Option<UiAction> 
         });
     action
 }
+
+/// Arena status: time, health, kills/deaths, and a red vignette for `damage_flash` seconds.
+pub fn arena_status(ctx: &egui::Context, s: &aim_world::arena::ArenaSession, damage_flash: f32) {
+    let stats = s.stats();
+    egui::Area::new(egui::Id::new("arena-hud"))
+        .anchor(Align2::CENTER_TOP, [0.0, 16.0])
+        .show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.label(big(format!("{:.1}", s.remaining()), 28.0));
+                ui.label(format!(
+                    "{}  ·  {} kills  ·  {} deaths",
+                    s.def().name,
+                    stats.kills,
+                    stats.deaths
+                ));
+            });
+        });
+    let health = s.player_health();
+    let color = if health > 50.0 { GOOD } else { BAD };
+    egui::Area::new(egui::Id::new("arena-health"))
+        .anchor(Align2::LEFT_BOTTOM, [24.0, -24.0])
+        .show(ctx, |ui| {
+            ui.label(
+                RichText::new(format!("{health:.0} HP"))
+                    .color(color)
+                    .strong()
+                    .font(FontId::proportional(26.0)),
+            );
+            if !s.is_accurate() {
+                ui.colored_label(BAD, "MOVING");
+            }
+        });
+    if damage_flash > 0.0 {
+        let alpha = (damage_flash / 0.25).clamp(0.0, 1.0) * 0.35;
+        let painter = ctx.layer_painter(egui::LayerId::new(
+            egui::Order::Background,
+            egui::Id::new("damage"),
+        ));
+        let rect = ctx.content_rect();
+        painter.rect_stroke(
+            rect.shrink(20.0),
+            0.0,
+            egui::Stroke::new(
+                40.0,
+                egui::Color32::from_rgba_unmultiplied(220, 30, 30, (alpha * 255.0) as u8),
+            ),
+            egui::StrokeKind::Inside,
+        );
+    }
+}
