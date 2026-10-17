@@ -411,7 +411,12 @@ fn a_shortened_arena_ends_early_under_its_own_key() {
 /// Results recorded from the arenas before bot strafing, jiggle peeks, pre-aim checks and
 /// site objectives existed. Arenas that do not opt in to those features must keep exactly
 /// these results for the same seed and inputs.
+///
+/// The numbers were recorded on Linux x86_64 (glibc). Other math libraries round
+/// `sin`/`cos` differently and the run drifts, so this is a local regression check, not a CI
+/// test: run it with `cargo test -p aim_world -- --ignored` after changing arena behavior.
 #[test]
+#[ignore = "pins simulated numbers from one platform; run locally with --ignored"]
 fn existing_arenas_keep_their_results_for_a_fixed_seed_and_input() {
     struct Golden {
         id: &'static str,
