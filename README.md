@@ -63,6 +63,7 @@ On Windows, install Rust with rustup and run `cargo build --release`. The binary
 | ADS zoom (weapons that have a scope) | Right mouse button |
 | Move (movement scenarios) | WASD, Shift to walk |
 | Pause / resume | Esc |
+| Change your floor height (scenario pause menu) | Floor height −/+ (0.5 m steps), then Apply and restart |
 | Retry or next routine run (on the results screen) | Space |
 
 The menu tabs:

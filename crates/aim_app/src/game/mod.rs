@@ -127,6 +127,38 @@ pub(crate) struct TargetVisual;
 #[derive(Component)]
 pub struct MainCamera;
 
+/// The player's play area as drawn: the floor slab at the player's height and, for movement
+/// scenarios, low strips along the edges the feet are held inside.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+struct PlayArea {
+    bounds_x: aim_core::math::Range,
+    bounds_z: aim_core::math::Range,
+    elevation: f32,
+    edges: bool,
+}
+
+impl PlayArea {
+    /// What the run's scenario needs drawn, if anything.
+    fn of(def: &ScenarioDef) -> Option<Self> {
+        let p = &def.player;
+        let raised = p.elevation.abs() >= 0.01;
+        (p.movement || raised).then_some(PlayArea {
+            bounds_x: p.bounds_x,
+            bounds_z: p.bounds_z,
+            elevation: p.elevation,
+            edges: p.movement,
+        })
+    }
+}
+
+/// Height of the edge strips: low enough to stay out of the line of sight.
+const EDGE_HEIGHT: f32 = 0.04;
+/// Width of the edge strips.
+const EDGE_WIDTH: f32 = 0.08;
+/// How far the slab reaches past the bounds, so the player never stands on its rim.
+const SLAB_MARGIN: f32 = 0.6;
+const SLAB_THICKNESS: f32 = 0.04;
+
 #[derive(Resource)]
 pub(crate) struct WorldAssets {
     target: Handle<StandardMaterial>,
@@ -136,6 +168,10 @@ pub(crate) struct WorldAssets {
     head_box: Handle<Mesh>,
     body_box: Handle<Mesh>,
     legs_box: Handle<Mesh>,
+    /// Unit cube, scaled per play-area piece.
+    unit_box: Handle<Mesh>,
+    edge: Handle<StandardMaterial>,
+    slab: Handle<StandardMaterial>,
 }
 
 pub struct GamePlugin;
@@ -152,6 +188,7 @@ impl Plugin for GamePlugin {
                     .chain()
                     .run_if(in_state(AppState::Playing).and_then(resource_exists::<Run>)),
             )
+            .add_systems(Update, sync_play_area)
             .add_plugins(arena::ArenaPlugin)
             .add_systems(Update, (manage_cursor, refresh_target_color, fit_viewport))
             .add_systems(OnExit(AppState::Playing), clear_targets);
@@ -173,6 +210,16 @@ pub fn start_run_with(commands: &mut Commands, next: &mut NextState<AppState>, r
 
 pub(crate) fn color(rgb: [f32; 3]) -> Color {
     Color::srgb(rgb[0], rgb[1], rgb[2])
+}
+
+/// Unlit and alpha-blended, for see-through world markers.
+fn translucent(materials: &mut Assets<StandardMaterial>, c: Color) -> Handle<StandardMaterial> {
+    materials.add(StandardMaterial {
+        base_color: c,
+        unlit: true,
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    })
 }
 
 pub(crate) fn unlit(
@@ -238,7 +285,72 @@ fn setup_world(
             d.waist_height,
             d.body_depth,
         )),
+        unit_box: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
+        edge: translucent(&mut materials, Color::srgba(0.35, 0.85, 1.0, 0.7)),
+        slab: translucent(&mut materials, Color::srgba(0.35, 0.6, 0.85, 0.12)),
     });
+}
+
+/// Keep the drawn play area in step with the scenario run. A restart or a new run replaces
+/// the `Run` resource without leaving `Playing`, so this compares what is drawn with what
+/// the current run needs instead of reacting to the resource being added.
+fn sync_play_area(
+    mut commands: Commands,
+    state: Res<State<AppState>>,
+    run: Option<Res<Run>>,
+    assets: Option<Res<WorldAssets>>,
+    drawn: Query<(Entity, &PlayArea)>,
+) {
+    let Some(assets) = assets else { return };
+    let wanted = run
+        .filter(|_| *state.get() == AppState::Playing)
+        .and_then(|r| PlayArea::of(r.session.def()));
+    let mut current = None;
+    for (e, area) in &drawn {
+        if Some(*area) == wanted && current.is_none() {
+            current = Some(e);
+        } else {
+            commands.entity(e).despawn();
+        }
+    }
+    if let (Some(area), None) = (wanted, current) {
+        spawn_play_area(&mut commands, &assets, area);
+    }
+}
+
+fn spawn_play_area(commands: &mut Commands, assets: &WorldAssets, area: PlayArea) {
+    let (bx, bz, y) = (area.bounds_x, area.bounds_z, area.elevation);
+    let piece = |material: &Handle<StandardMaterial>, center: Vec3, size: Vec3| {
+        (
+            Mesh3d(assets.unit_box.clone()),
+            MeshMaterial3d(material.clone()),
+            Transform::from_translation(center).with_scale(size),
+        )
+    };
+    let (cx, cz) = ((bx.min + bx.max) / 2.0, (bz.min + bz.max) / 2.0);
+    let (w, d) = (bx.max - bx.min, bz.max - bz.min);
+    commands
+        .spawn((area, Transform::default(), Visibility::default()))
+        .with_children(|p| {
+            if y.abs() >= 0.01 {
+                p.spawn(piece(
+                    &assets.slab,
+                    Vec3::new(cx, y - SLAB_THICKNESS / 2.0, cz),
+                    Vec3::new(w + 2.0 * SLAB_MARGIN, SLAB_THICKNESS, d + 2.0 * SLAB_MARGIN),
+                ));
+            }
+            if area.edges {
+                let h = Vec3::new(0.0, y + EDGE_HEIGHT / 2.0, 0.0);
+                let along_x = Vec3::new(w + EDGE_WIDTH, EDGE_HEIGHT, EDGE_WIDTH);
+                let along_z = Vec3::new(EDGE_WIDTH, EDGE_HEIGHT, d + EDGE_WIDTH);
+                for z in [bz.min, bz.max] {
+                    p.spawn(piece(&assets.edge, h + Vec3::new(cx, 0.0, z), along_x));
+                }
+                for x in [bx.min, bx.max] {
+                    p.spawn(piece(&assets.edge, h + Vec3::new(x, 0.0, cz), along_z));
+                }
+            }
+        });
 }
 
 fn refresh_target_color(
@@ -671,5 +783,33 @@ mod tests {
         assert_is_system(clear_targets);
         assert_is_system(fit_viewport);
         assert_is_system(setup_world);
+        assert_is_system(sync_play_area);
+    }
+
+    fn movement_def() -> ScenarioDef {
+        aim_core::scenario::builtin::all()
+            .into_iter()
+            .find(|d| d.id == "counter-strafe")
+            .unwrap()
+    }
+
+    #[test]
+    fn play_areas_are_drawn_for_movement_or_raised_floors_only() {
+        let flat = aim_core::scenario::builtin::all()
+            .into_iter()
+            .find(|d| !d.player.movement)
+            .unwrap();
+        assert_eq!(PlayArea::of(&flat), None);
+        let mut raised = flat.clone();
+        raised.player.elevation = 1.5;
+        let area = PlayArea::of(&raised).unwrap();
+        assert!(!area.edges, "no edges without movement");
+        let moving = PlayArea::of(&movement_def()).unwrap();
+        assert!(moving.edges);
+        assert_ne!(
+            moving,
+            PlayArea::of(&movement_def().with_elevation(2.0)).unwrap(),
+            "a new height rebuilds the area"
+        );
     }
 }

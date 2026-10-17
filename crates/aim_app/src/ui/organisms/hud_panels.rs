@@ -113,7 +113,23 @@ pub fn countdown(ctx: &egui::Context, secs: f32) {
         });
 }
 
-pub fn pause_window(ctx: &egui::Context, description: &str) -> Option<UiAction> {
+/// Floor-height picker of a scenario run's pause window.
+pub struct FloorPick<'a> {
+    /// Height the run is played at, meters.
+    pub current: f32,
+    /// Height being chosen, meters; edited by the picker.
+    pub chosen: &'a mut f32,
+}
+
+/// Step of the floor-height picker, meters.
+const FLOOR_STEP: f32 = 0.5;
+
+/// Pause window. With `floor`, it also offers a floor-height picker and "Apply and restart".
+pub fn pause_window(
+    ctx: &egui::Context,
+    description: &str,
+    floor: Option<FloorPick>,
+) -> Option<UiAction> {
     let mut action = None;
     egui::Window::new("Paused")
         .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
@@ -122,6 +138,28 @@ pub fn pause_window(ctx: &egui::Context, description: &str) -> Option<UiAction> 
         .show(ctx, |ui| {
             ui.label(description);
             ui.separator();
+            if let Some(FloorPick { current, chosen }) = floor {
+                let range = aim_core::scenario::def::ELEVATION_RANGE;
+                ui.horizontal(|ui| {
+                    ui.label("Floor height");
+                    if ui.small_button("−").clicked() {
+                        *chosen = (*chosen - FLOOR_STEP).max(range.min);
+                    }
+                    ui.monospace(format!("{:+.1} m", *chosen));
+                    if ui.small_button("+").clicked() {
+                        *chosen = (*chosen + FLOOR_STEP).min(range.max);
+                    }
+                });
+                ui.small("Your floor relative to the targets' floor.");
+                let changed = (*chosen - current).abs() > 1e-3;
+                if ui
+                    .add_enabled(changed, egui::Button::new("Apply and restart"))
+                    .clicked()
+                {
+                    action = Some(UiAction::RestartAtElevation(*chosen));
+                }
+                ui.separator();
+            }
             if ui.button("Resume (Esc)").clicked() {
                 action = Some(UiAction::Resume);
             }

@@ -81,6 +81,9 @@ pub enum UiAction {
         seed: u64,
     },
     NextRoutineRun,
+    /// Restart the current scenario run with the player's floor at this height (meters),
+    /// keeping its difficulty level, duration and routine position.
+    RestartAtElevation(f32),
     Retry(String),
     Resume,
     BackToMenu,
