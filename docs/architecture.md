@@ -172,8 +172,8 @@ These are known gaps between the current code and this document. Fix them **when
 | C3 ✅ | ~~Flat files `game.rs`, `overlay.rs`, `ipc.rs`, `settings.rs`, `history.rs`~~ | Done: `game/`, `overlay/`, `platform/` (ipc, hotkey), `persistence/` (settings, history, library) |
 | C4 ✅ | ~~`scenario/session.rs` does spawning, motion, weapons and scoring~~ | Done: `scenario/{spawn,motion,weapon,scoring}.rs`; `Session` orchestrates |
 | C5 | `valorant.rs` and `sensitivity.rs` are flat modules | `games/` and `sensitivity/` folders, once the converter grows (data-driven game profiles) |
-| C6 | The crosshair model lives in `aim_app/settings.rs` | `aim_core::crosshair`, when custom crosshairs start |
-| C7 | History is written as CSV directly by the app; no port | Define a `RunStore` port in the core when analytics needs history |
+| C6 ✅ | ~~The crosshair model lives in `aim_app/settings.rs`~~ | Done: `aim_core::crosshair` (model, VALORANT codes, presets in `content/crosshairs/`) |
+| C7 ✅ | ~~History is written as CSV directly by the app; no port~~ | Done: `aim_core::training::store::RunStore` (queries live in the core); `aim_app::persistence::history::History` is the CSV adapter. Routine positions use the same pattern: `training::resume::PositionStore` |
 | C8 ✅ | ~~`#[allow(clippy::too_many_arguments)]` on Bevy systems~~ | Done: `SystemParam` groups (`Navigator`, `RunFinisher`, `PlayerInput`, `SettingsAccess`) |
 | C11 ✅ | ~~`routine.rs`, `benchmark.rs` at the crate root~~ | Done: `training/{routine,benchmark}` |
 | C9 | Public items in `aim_core` are not all documented | Enable `missing_docs` for `aim_core` after the docs pass |

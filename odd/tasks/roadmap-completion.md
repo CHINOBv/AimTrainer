@@ -16,6 +16,16 @@ Branch: `feat/roadmap-completion` (worktree `../CustomAimTrainer-worktrees/roadm
 - S10 Phase 8: `aim_integrations` crate, offline import of official match data, mapping to drills; online fetch only with a user key.
 - S11 ≥10 new features after the analysis, each with a rationale and tests.
 
+- S12 Roadmap gaps found by audit (2026-10-17), quoted from `docs/roadmap.md`:
+  - S12a Phase 2: "**Benchmark tiers:** the same scenario families at three difficulties (novice, intermediate, advanced), each tier with its own thresholds."
+  - S12b Phase 2: "**Routine progress persistence:** "today's" plan, its position in it, and resuming a split session. A small port in the core, stored by the app."
+  - S12c Phase 3: "presets in `content/crosshairs/`"; "monitor-distance matching (0%, 75%, 100%)"; "A standalone converter page that does not require a run."
+  - S12d Phase 4: "Per-subcategory strengths and weaknesses from the benchmark and trends over time"; "Rules (data) that map weaknesses to scenarios, routines or tips"; "Per-scenario history, per-skill trends"; "a `RunStore` port moves history behind a trait (backlog C7)".
+  - S12e Phase 5: "scenarios declare which parameters scale (target size, speed, lifetime, count) and their easy/hard bounds."
+  - S12f Phase 6: "**Hybrid activities:** game-like objectives combined with aim drills"; "Behavior (peek, strafe, hold) as a separate, testable state machine."
+  - S12g Phase 7: "map loading (glTF)"; "Drills: angle clearing, jiggle-peeks, crosshair placement at head level, pre-aim".
+  - S12h Architecture backlog C5, C6, C9.
+
 ## Tasks
 
 | ID | Specs | Route | Status | Commit |
@@ -29,6 +39,12 @@ Branch: `feat/roadmap-completion` (worktree `../CustomAimTrainer-worktrees/roadm
 | T7 | S9 | inline | done | c0a8d9c, 48d668e |
 | T8 | S10 | inline | done (offline only) | 59f6fff, 424f185 |
 | T9 | S11 | inline + 2 delegated (F7, F9) | done: F1–F12 in docs/feature-analysis.md | e483507, b7f0457, 24ba88f, e5f2239, cef2223, 803fcd6, 53dc3bd, a83c32a, 65c65ad |
+| T10 | S12a | delegated (parallel, benchmark unit) | in progress | |
+| T11 | S12f, S12g | delegated (parallel, world unit) | in progress | |
+| T12 | S12d (profile, rules, trends, charts) | delegated (parallel, analytics unit) | in progress | |
+| T13 | S12b, S12d (RunStore) | inline | pending | |
+| T14 | S12c, S12e | inline | pending | |
+| T15 | S12h | inline | pending | |
 
 ## Log
 
@@ -38,3 +54,4 @@ Branch: `feat/roadmap-completion` (worktree `../CustomAimTrainer-worktrees/roadm
 - L4 Feature analysis written (`docs/feature-analysis.md`): 12 gaps → F1–F12. F7 (agent) and F9 (agent) integrated; sim made recoil-aware so burst drills calibrate (contender 0.62–0.80). Verification: `cargo test --workspace` green, `cargo clippy --workspace --all-targets -D warnings` clean on Linux and the Windows target. App-side mouse/camera/HUD changes need a playtest.
 - L5 Stop-hook review: S8's `Activity` abstraction had been skipped unilaterally. Implemented it (`aim_core::activity`, `ArenaSession` impl, arena routine blocks, `aim-and-duel` routine, results/next-run naming). Verification: 280 tests, clippy clean.
 - L6 Roadmap Phase 8 also asks to rebuild match situations as drills: added `aim_integrations::rebuild` (distance band of deaths → `match-rebuild` scenario saved by `analyze-match`). Angles omitted: `viewRadians` has no documented convention. Online fetch stays out (production key + RSO; see docs/research/riot-match-api.md). Verification: 283 tests with all features, clippy clean, CLI smoke run in scratch XDG.
+- L7 Audit (explorer) found S12a–h partial or missing. Route: three parallel writers (disjoint surfaces: benchmark, world, analytics; writer trigger (a)), the rest inline. Parent owns git and `menu.rs`.
