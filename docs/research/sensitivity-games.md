@@ -49,3 +49,12 @@ Source: https://www.mouse-sensitivity.com/forums/topic/5592-does-0-mm-have-its-o
 | 360° distance | 0.3143 |
 | MDH 0 % | 0.2963 |
 | MDH 100 % | 0.3046 |
+
+## Implementation notes
+
+Implemented in `aim_core::sensitivity` (`Game::profile()` and `matching`). Where the table above leaves a gap, the code makes these assumptions:
+
+- **Rainbow Six Siege:** the default FOV is taken as 60 (the low end of the 60–90 range). The yaw assumes the default `MouseSensitivityMultiplierUnit` of 0.02.
+- **Fortnite:** the ~80° FOV is treated as horizontal at 16:9 and fixed. Monitor-distance results for Fortnite are therefore estimates.
+- **Deadlock:** no FOV model. The converter offers only 360° matching for it.
+- **All games** are modelled as Hor+ (vertical FOV locked). Only VALORANT is pillarboxed above 16:9.

@@ -1,42 +1,17 @@
 //! Mouse sensitivity math. Everything is expressed as degrees of rotation per mouse count,
 //! which is the only quantity that transfers exactly between games.
+//!
+//! [`Game`] profiles hold the per-game data; [`matching`] converts between games with
+//! 360° or monitor-distance matching.
 
 use serde::{Deserialize, Serialize};
 
+mod games;
+pub mod matching;
+
+pub use games::{FovAxis, FovModel, Game, GameProfile};
+
 const CM_PER_INCH: f64 = 2.54;
-
-/// Games whose yaw constant (degrees per count at sensitivity 1.0) is known.
-/// Sources are listed in `docs/valorant-mechanics.md`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Game {
-    Valorant,
-    Cs2,
-    Apex,
-    Overwatch2,
-}
-
-impl Game {
-    pub const ALL: [Game; 4] = [Game::Valorant, Game::Cs2, Game::Apex, Game::Overwatch2];
-
-    /// Degrees per count at sensitivity 1.0.
-    pub fn yaw_deg_per_count(self) -> f64 {
-        match self {
-            Game::Valorant => 0.07,
-            Game::Cs2 | Game::Apex => 0.022,
-            Game::Overwatch2 => 0.0066,
-        }
-    }
-
-    pub fn display_name(self) -> &'static str {
-        match self {
-            Game::Valorant => "VALORANT",
-            Game::Cs2 => "Counter-Strike 2",
-            Game::Apex => "Apex Legends",
-            Game::Overwatch2 => "Overwatch 2",
-        }
-    }
-}
 
 /// The player's mouse setup expressed in a given game's terms.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

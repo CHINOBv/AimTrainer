@@ -16,7 +16,19 @@ Research date: 2026-10-16.
 | Pitch equals yaw | the same factor applies to both axes | approximate | converters and Aimlabs' VALORANT profile treat them as equal |
 | cm/360 = 360 × 2.54 / (0.07 × sens × DPI) | `Sensitivity::cm_per_360` | verified | https://mousesensitivityconverters.com/how-it-works.php |
 | CS2 / Apex yaw: 0.022 (VAL→CS2 factor ×3.1818) | `Game::Cs2`, `Game::Apex` | verified | https://www.mouse-sensitivity.com/forums/topic/6875-csgo-to-valorant-sensitivity-conversion-is-wrong/ |
-| Overwatch 2 yaw: 0.0066 | `Game::Overwatch2` | approximate | common converter value |
+| Overwatch 2 yaw: 0.0066; FOV horizontal at 16:9, default 103 | `Game::Overwatch2` | verified | https://github.com/KovaaK/SensitivityMatcher , https://github.com/sillynov/autosens/blob/HEAD/autosens/games.json |
+| CS2 FOV: 90 horizontal at 4:3 with the vertical locked (106.26° at 16:9), fixed | `Game::Cs2.fov_model()` | verified | https://github.com/KovaaK/SensitivityMatcher , autosens `games.json` |
+| Apex FOV: the in-game slider is horizontal at 4:3 (`cl_fovScale` × 70), default 90 | `Game::Apex.fov_model()` | verified | https://github.com/KovaaK/SensitivityMatcher , autosens `games.json` |
+| Fortnite yaw: 0.005555 per 1 % of the X/Y slider | `Game::Fortnite` | verified | https://github.com/KovaaK/SensitivityMatcher , autosens `games.json` |
+| Fortnite FOV: ≈80° horizontal at 16:9, fixed | `Game::Fortnite.fov_model()` | estimate (sources conflict) | autosens `games.json`; see `docs/research/sensitivity-games.md` |
+| Call of Duty (MW2019–BO6) yaw: 0.0066 | `Game::CallOfDuty` | verified | https://github.com/KovaaK/SensitivityMatcher , autosens `games.json` |
+| Call of Duty FOV: horizontal at 16:9, default 80 | `Game::CallOfDuty.fov_model()` | approximate | autosens `games.json` |
+| Destiny 2 yaw: 0.0066; FOV horizontal at 16:9, default 85 | `Game::Destiny2` | approximate | autosens `games.json`, mouse-sensitivity.com forum |
+| Rainbow Six Siege yaw: 0.00572958 per slider unit with the default `MouseSensitivityMultiplierUnit` 0.02 (general: slider × multiplier / 0.02 × 0.00572958) | `Game::RainbowSixSiege` | verified (hip-fire) | https://github.com/KovaaK/SensitivityMatcher |
+| Rainbow Six Siege FOV: vertical; default 60 (range 60–90) | `Game::RainbowSixSiege.fov_model()` | approximate | autosens `games.json` |
+| Deadlock yaw: 0.044; no FOV model (360° matching only) | `Game::Deadlock` | approximate | autosens `games.json` |
+| Monitor distance p %: °/count scales by atan(p·tan(FOV_to/2)) / atan(p·tan(FOV_from/2)); at 0 % by tan(FOV_to/2) / tan(FOV_from/2); both FOVs on the same axis | `sensitivity::matching::convert`, `monitor_distance_ratio` | verified | https://www.mouse-sensitivity.com/forums/topic/5592-does-0-mm-have-its-own-formula/ , https://tomhepz.com/post/monitor-match-math/ |
+| VALORANT ADS multiplier for p % = ratio(103°, 103°/zoom, p) × zoom (0 % at zoom 1.25 = 0.870439; 100 % = 1.0) | `sensitivity::matching::valorant_ads_multiplier` | approximate (zoomed FOV = 103°/zoom is a converter model) | same as above |
 | A scoped/ADS multiplier of 1.0 is a 100% horizontal monitor match, so zoomed °/count = base × mult / zoom | `Sensitivity::zoomed_deg_per_count` | approximate | https://game-sens.jor.dev/ , https://edpi-calculator.org/tools/valorant-scoped-sensitivity |
 
 ## Field of view
