@@ -19,3 +19,4 @@ pub use difficulty::{DifficultyDef, parse_run_key, parse_run_key_full, run_key};
 pub use hit::HitZone;
 pub use recording::Recording;
 pub use session::{FrameInput, RunResult, Session, SessionEvent, Stats, Target};
+pub use weapon::shot_direction;

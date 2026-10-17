@@ -8,6 +8,7 @@
 //!
 //! Maps must be original geometry. See `docs/maps.md` for the format and the integrity rule.
 
+pub mod arena;
 pub mod builtin;
 pub mod map;
 mod nav;
