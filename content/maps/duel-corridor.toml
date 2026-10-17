@@ -1,0 +1,102 @@
+# Original geometry: a 4 m wide, 32 m long corridor with a side pocket at each end. Each
+# pocket corner is a peek spot. Not modeled on any game map.
+# Coordinates in meters, +Y up, -Z forward.
+id = "duel-corridor"
+name = "Duel Corridor"
+description = "A 4 m wide corridor with a side pocket at each end. Peek duels from the pocket corners at about 20 m."
+floor_x = [-8.0, 8.0]
+floor_z = [-16.0, 16.0]
+
+# Solid blocks around the corridor (x in [-2, 2]). The open pockets are
+# x in [-8, -2], z in [8, 12] (south-west) and x in [2, 8], z in [-12, -8] (north-east).
+[[boxes]]
+kind = "wall"
+min = [-8.0, 0.0, -16.0]
+max = [-2.0, 3.5, 8.0]
+
+[[boxes]]
+kind = "wall"
+min = [-8.0, 0.0, 12.0]
+max = [-2.0, 3.5, 16.0]
+
+[[boxes]]
+kind = "wall"
+min = [2.0, 0.0, -8.0]
+max = [8.0, 3.5, 16.0]
+
+[[boxes]]
+kind = "wall"
+min = [2.0, 0.0, -16.0]
+max = [8.0, 3.5, -12.0]
+
+[[spawns]]
+id = "south-lane"
+kind = "player"
+position = [0.0, 0.0, 13.0]
+yaw_deg = 0.0
+
+[[spawns]]
+id = "north-lane"
+kind = "player"
+position = [0.0, 0.0, -13.0]
+yaw_deg = 180.0
+
+[[spawns]]
+id = "bot-north-pocket"
+kind = "bot"
+position = [4.0, 0.0, -10.0]
+yaw_deg = -90.0
+
+[[spawns]]
+id = "bot-south-pocket"
+kind = "bot"
+position = [-4.0, 0.0, 10.0]
+yaw_deg = 90.0
+
+# Seen from "south-lane": the enemy steps out of the north-east pocket.
+[[angles]]
+id = "north-corner"
+label = "North corner"
+position = [1.4, 0.0, -10.0]
+peek_dir = [-1.0, 0.0]
+peek_distance = 2.6
+
+# Seen from "north-lane": the enemy steps out of the south-west pocket.
+[[angles]]
+id = "south-corner"
+label = "South corner"
+position = [-1.4, 0.0, 10.0]
+peek_dir = [1.0, 0.0]
+peek_distance = 2.6
+
+[[waypoints]]
+id = "north-end"
+position = [0.0, 0.0, -14.0]
+links = ["north-mouth"]
+
+[[waypoints]]
+id = "north-mouth"
+position = [0.0, 0.0, -10.0]
+links = ["north-pocket", "mid"]
+
+[[waypoints]]
+id = "north-pocket"
+position = [4.0, 0.0, -10.0]
+
+[[waypoints]]
+id = "mid"
+position = [0.0, 0.0, 0.0]
+links = ["south-mouth"]
+
+[[waypoints]]
+id = "south-mouth"
+position = [0.0, 0.0, 10.0]
+links = ["south-pocket", "south-end"]
+
+[[waypoints]]
+id = "south-pocket"
+position = [-4.0, 0.0, 10.0]
+
+[[waypoints]]
+id = "south-end"
+position = [0.0, 0.0, 14.0]

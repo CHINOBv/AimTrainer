@@ -1,0 +1,175 @@
+# Original geometry: an open 40 x 40 m yard with scattered cover, for deathmatch.
+# Not modeled on any game map. Coordinates in meters, +Y up, -Z forward.
+id = "training-yard"
+name = "Training Yard"
+description = "Open 40 x 40 m yard with a center wall, four pillars, side walls and single crates. For deathmatch against bots."
+floor_x = [-20.0, 20.0]
+floor_z = [-20.0, 20.0]
+
+# Center wall, 4 m long.
+[[boxes]]
+kind = "wall"
+min = [-2.0, 0.0, -0.3]
+max = [2.0, 3.0, 0.3]
+
+# Side walls, 4 m long.
+[[boxes]]
+kind = "wall"
+min = [-15.0, 0.0, -2.0]
+max = [-14.6, 3.0, 2.0]
+
+[[boxes]]
+kind = "wall"
+min = [14.6, 0.0, -2.0]
+max = [15.0, 3.0, 2.0]
+
+# Pillars, 1.2 m square and 2.5 m tall: hide a standing player.
+[[boxes]]
+kind = "cover"
+min = [-10.0, 0.0, -10.0]
+max = [-8.8, 2.5, -8.8]
+
+[[boxes]]
+kind = "cover"
+min = [8.8, 0.0, -10.0]
+max = [10.0, 2.5, -8.8]
+
+[[boxes]]
+kind = "cover"
+min = [8.8, 0.0, 8.8]
+max = [10.0, 2.5, 10.0]
+
+[[boxes]]
+kind = "cover"
+min = [-10.0, 0.0, 8.8]
+max = [-8.8, 2.5, 10.0]
+
+# Single 1 m crates: the head stays visible over them.
+[[boxes]]
+kind = "low_cover"
+min = [-6.0, 0.0, 4.0]
+max = [-5.0, 1.0, 5.0]
+
+[[boxes]]
+kind = "low_cover"
+min = [5.0, 0.0, -5.0]
+max = [6.0, 1.0, -4.0]
+
+[[boxes]]
+kind = "low_cover"
+min = [-0.5, 0.0, -8.5]
+max = [0.5, 1.0, -7.5]
+
+[[boxes]]
+kind = "low_cover"
+min = [-0.5, 0.0, 7.5]
+max = [0.5, 1.0, 8.5]
+
+[[spawns]]
+id = "player-south"
+kind = "player"
+position = [0.0, 0.0, 15.0]
+yaw_deg = 0.0
+
+[[spawns]]
+id = "player-north"
+kind = "player"
+position = [0.0, 0.0, -15.0]
+yaw_deg = 180.0
+
+[[spawns]]
+id = "bot-nw"
+kind = "bot"
+position = [-17.0, 0.0, -17.0]
+yaw_deg = 135.0
+
+[[spawns]]
+id = "bot-ne"
+kind = "bot"
+position = [17.0, 0.0, -17.0]
+yaw_deg = -135.0
+
+[[spawns]]
+id = "bot-se"
+kind = "bot"
+position = [17.0, 0.0, 17.0]
+yaw_deg = -45.0
+
+[[spawns]]
+id = "bot-sw"
+kind = "bot"
+position = [-17.0, 0.0, 17.0]
+yaw_deg = 45.0
+
+[[spawns]]
+id = "bot-west"
+kind = "bot"
+position = [-12.0, 0.0, 0.0]
+yaw_deg = 90.0
+
+[[spawns]]
+id = "bot-east"
+kind = "bot"
+position = [12.0, 0.0, 0.0]
+yaw_deg = -90.0
+
+# Navigation: an outer ring through the corners and edge midpoints, and an inner ring
+# around the center wall.
+[[waypoints]]
+id = "nw"
+position = [-16.0, 0.0, -16.0]
+links = ["n", "w"]
+
+[[waypoints]]
+id = "n"
+position = [0.0, 0.0, -12.0]
+links = ["ne", "in-nw", "in-ne"]
+
+[[waypoints]]
+id = "ne"
+position = [16.0, 0.0, -16.0]
+links = ["e"]
+
+[[waypoints]]
+id = "e"
+position = [12.0, 0.0, 0.0]
+links = ["se", "in-ne", "in-se"]
+
+[[waypoints]]
+id = "se"
+position = [16.0, 0.0, 16.0]
+links = ["s"]
+
+[[waypoints]]
+id = "s"
+position = [0.0, 0.0, 12.0]
+links = ["sw", "in-se", "in-sw"]
+
+[[waypoints]]
+id = "sw"
+position = [-16.0, 0.0, 16.0]
+links = ["w"]
+
+[[waypoints]]
+id = "w"
+position = [-12.0, 0.0, 0.0]
+links = ["in-nw", "in-sw"]
+
+[[waypoints]]
+id = "in-nw"
+position = [-7.0, 0.0, -7.0]
+links = ["in-ne", "in-sw"]
+
+[[waypoints]]
+id = "in-ne"
+position = [7.0, 0.0, -7.0]
+links = ["in-se"]
+
+[[waypoints]]
+id = "in-se"
+position = [7.0, 0.0, 7.0]
+links = ["in-sw"]
+
+[[waypoints]]
+id = "in-sw"
+position = [-7.0, 0.0, 7.0]
