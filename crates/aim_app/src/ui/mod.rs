@@ -10,6 +10,7 @@ mod navigation;
 mod organisms;
 mod pages;
 
+use aim_core::training::routine::RoutineDef;
 use bevy::prelude::*;
 
 pub struct UiPlugin;
@@ -29,6 +30,10 @@ impl Plugin for UiPlugin {
 pub enum UiAction {
     StartScenario(String),
     StartRoutine(String),
+    /// Play a scenario at its adaptive difficulty level; the result moves the level.
+    StartAdaptive(String),
+    /// Play a routine that is not in the library (e.g. the personalized playlist).
+    StartRoutineDef(Box<RoutineDef>),
     /// Start a routine at a difficulty level, from a given run of the plan made with `seed`
     /// (resuming a split method day).
     StartRoutineAt {

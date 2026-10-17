@@ -1,5 +1,6 @@
 //! Files the app reads and writes: settings, run history, replays and the content library.
 
+pub mod adaptive;
 pub mod history;
 pub mod library;
 pub mod method_progress;

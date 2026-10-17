@@ -41,6 +41,7 @@ pub fn scenario_details(
     ui: &mut egui::Ui,
     def: &ScenarioDef,
     history: &History,
+    adaptive_level: f32,
 ) -> Option<UiAction> {
     ui.heading(&def.name);
     let fire = if def.weapon.fire == FireMode::Hold {
@@ -68,9 +69,26 @@ pub fn scenario_details(
         ui.label(format!("Last runs: {}", list.join(", ")));
     }
     ui.add_space(10.0);
-    ui.add_sized([160.0, 36.0], egui::Button::new("▶  Play"))
-        .clicked()
-        .then(|| UiAction::StartScenario(def.id.clone()))
+    let mut action = None;
+    ui.horizontal(|ui| {
+        if ui
+            .add_sized([160.0, 36.0], egui::Button::new("▶  Play"))
+            .clicked()
+        {
+            action = Some(UiAction::StartScenario(def.id.clone()));
+        }
+        let adaptive = egui::Button::new(format!("▶  Adaptive ({adaptive_level:+.2})"));
+        if ui
+            .add_sized([200.0, 36.0], adaptive)
+            .on_hover_text(
+                "Difficulty follows you to keep success near 80%, where learning is fastest.",
+            )
+            .clicked()
+        {
+            action = Some(UiAction::StartAdaptive(def.id.clone()));
+        }
+    });
+    action
 }
 
 pub fn empty_selection(ui: &mut egui::Ui) {

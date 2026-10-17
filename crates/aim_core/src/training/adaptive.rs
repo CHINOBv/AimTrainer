@@ -17,6 +17,7 @@ pub const INITIAL_STEP: f32 = 0.25;
 pub const MIN_STEP: f32 = 0.05;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Staircase {
     pub level: f32,
     pub step: f32,

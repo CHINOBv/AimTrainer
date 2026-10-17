@@ -95,6 +95,14 @@ pub fn results_card(
                     if ui.button(format!("▶ Next: {name} (Space)")).clicked() || rc.space {
                         action = Some(UiAction::NextRoutineRun);
                     }
+                } else if let Some(level) = last.adaptive_next {
+                    let base = aim_core::scenario::parse_run_key(&r.scenario_id)
+                        .0
+                        .to_owned();
+                    ui.label(format!("Adaptive level → {level:+.2}"));
+                    if ui.button("▶ Next adaptive run (Space)").clicked() || rc.space {
+                        action = Some(UiAction::StartAdaptive(base));
+                    }
                 } else if ui.button("↻ Retry (Space)").clicked() || rc.space {
                     action = Some(UiAction::Retry(r.scenario_id.clone()));
                 }

@@ -5,6 +5,10 @@ use super::def::ScenarioDef;
 
 pub const SOURCES: &[(&str, &str)] = &[
     (
+        "ammo-discipline.toml",
+        include_str!("../../../../content/scenarios/ammo-discipline.toml"),
+    ),
+    (
         "counter-strafe.toml",
         include_str!("../../../../content/scenarios/counter-strafe.toml"),
     ),
