@@ -1,10 +1,8 @@
 //! CustomAimTrainer: VALORANT-focused aim trainer with a toggleable overlay.
 //!
-//! Usage:
-//!   aimtrainer            start the trainer
-//!   aimtrainer toggle     show/hide a running trainer (Linux; bind it in your compositor)
-//!   aimtrainer show|hide
+//! Usage: see `cli::USAGE` (`aimtrainer --help`).
 
+mod cli;
 mod game;
 mod overlay;
 mod persistence;
@@ -22,27 +20,10 @@ use bevy::window::{
 use bevy_egui::EguiPlugin;
 use std::sync::Mutex;
 
-const USAGE: &str = "usage: aimtrainer [toggle|show|hide]";
-
 fn main() -> AppExit {
-    if let Some(arg) = std::env::args().nth(1) {
-        return match ipc::Command::parse(&arg) {
-            Some(cmd) => match ipc::send(cmd) {
-                Ok(()) => AppExit::Success,
-                Err(e) => {
-                    eprintln!("{e}");
-                    AppExit::error()
-                }
-            },
-            None if arg == "-h" || arg == "--help" => {
-                println!("{USAGE}");
-                AppExit::Success
-            }
-            None => {
-                eprintln!("unknown command '{arg}'\n{USAGE}");
-                AppExit::error()
-            }
-        };
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(exit) = cli::run(&args) {
+        return exit;
     }
 
     let paths = settings::Paths::resolve();

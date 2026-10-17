@@ -10,8 +10,14 @@ rust-version.workspace = true
 name = "aimtrainer"
 path = "src/main.rs"
 
+[features]
+default = ["match-analysis"]
+# Offline post-match analysis of official match JSON (`aimtrainer analyze-match`).
+match-analysis = ["dep:aim_integrations"]
+
 [dependencies]
 aim_core.workspace = true
+aim_integrations = { workspace = true, optional = true }
 serde.workspace = true
 toml.workspace = true
 bevy.workspace = true
