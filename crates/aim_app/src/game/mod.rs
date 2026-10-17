@@ -2,13 +2,14 @@
 //! and mirroring its targets as meshes. All gameplay rules live in `aim_core`.
 
 use crate::overlay::Overlay;
+use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::history::History;
 use crate::persistence::settings::{Paths, Settings};
 use aim_core::fov;
 use aim_core::math::ViewAngles;
 use aim_core::movement::MoveInput;
 use aim_core::scenario::{
-    FrameInput, Recording, RunResult, ScenarioDef, Session, SessionEvent, Shape,
+    FrameInput, Recording, RunResult, ScenarioDef, Session, SessionEvent, Shape, parse_run_key,
 };
 use aim_core::training::routine::PlannedRun;
 use aim_core::valorant::HumanoidDims;
@@ -54,6 +55,8 @@ pub struct Run {
     pub kill_flash: f32,
     /// Definition, seed and every input fed to the session, for analysis and replays.
     pub recording: Recording,
+    /// Played in adaptive mode: the result moves the scenario's difficulty staircase.
+    pub adaptive: bool,
     entities: HashMap<u64, Entity>,
 }
 
@@ -65,6 +68,7 @@ impl Run {
         let recording = Recording::new(def.clone(), seed);
         Self {
             recording,
+            adaptive: false,
             session: Session::new(def, seed),
             view: ViewAngles::default(),
             countdown: COUNTDOWN_SECS,
@@ -89,6 +93,8 @@ pub struct LastResult {
     pub previous_best: Option<f32>,
     /// The run's input log, for post-run analysis.
     pub recording: Recording,
+    /// Next adaptive level, when the run was played in adaptive mode.
+    pub adaptive_next: Option<f32>,
 }
 
 #[derive(Component)]
@@ -128,7 +134,12 @@ impl Plugin for GamePlugin {
 
 /// Start a run of `def` (used by the menu and the results screen).
 pub fn start_run(commands: &mut Commands, next: &mut NextState<AppState>, def: ScenarioDef) {
-    commands.insert_resource(Run::new(def));
+    start_run_with(commands, next, Run::new(def));
+}
+
+/// Start a prepared run (e.g. one flagged as adaptive).
+pub fn start_run_with(commands: &mut Commands, next: &mut NextState<AppState>, run: Run) {
+    commands.insert_resource(run);
     next.set(AppState::Playing);
 }
 
@@ -266,6 +277,7 @@ struct RunFinisher<'w, 's> {
     commands: Commands<'w, 's>,
     next: ResMut<'w, NextState<AppState>>,
     history: ResMut<'w, History>,
+    adaptive: ResMut<'w, AdaptiveLevels>,
     paths: Res<'w, Paths>,
 }
 
@@ -275,11 +287,18 @@ impl RunFinisher<'_, '_> {
         let result = session.result();
         let previous_best = self.history.best(&result.scenario_id);
         self.history.append(&self.paths, &result);
+        let adaptive_next = run.adaptive.then(|| {
+            let (base, _) = parse_run_key(&session.def().id);
+            let next = self.adaptive.record(base, session.success_rate());
+            self.adaptive.save(&self.paths);
+            next
+        });
         self.commands.insert_resource(LastResult {
             name: session.def().name.clone(),
             result,
             previous_best,
             recording: run.recording.clone(),
+            adaptive_next,
         });
         self.next.set(AppState::Results);
     }

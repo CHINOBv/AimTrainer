@@ -1,9 +1,11 @@
 //! Applies [`UiAction`]s: the single place where UI intent turns into state changes.
 
 use super::UiAction;
-use crate::game::{ActiveRoutine, AppState, RoutineProgress, Run, start_run};
+use crate::game::{ActiveRoutine, AppState, RoutineProgress, Run, start_run, start_run_with};
+use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::library::Library;
 use aim_core::scenario::parse_run_key;
+use aim_core::training::routine::RoutineDef;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
@@ -14,6 +16,7 @@ pub struct Navigator<'w, 's> {
     routine: ResMut<'w, ActiveRoutine>,
     library: Res<'w, Library>,
     run: Option<ResMut<'w, Run>>,
+    adaptive: Res<'w, AdaptiveLevels>,
 }
 
 impl Navigator<'_, '_> {
@@ -41,6 +44,16 @@ impl Navigator<'_, '_> {
                 self.start(&base, level);
             }
             UiAction::StartRoutine(id) => self.start_routine(&id, 0.0, 0, routine_seed()),
+            UiAction::StartAdaptive(id) => {
+                self.routine.0 = None;
+                let level = self.adaptive.level(&id);
+                if let Some(def) = self.library.scenario(&id) {
+                    let mut run = Run::new(def.at_difficulty(level));
+                    run.adaptive = true;
+                    start_run_with(&mut self.commands, &mut self.next, run);
+                }
+            }
+            UiAction::StartRoutineDef(def) => self.start_routine_def(&def, 0.0, 0, routine_seed()),
             UiAction::StartRoutineAt {
                 routine,
                 level,
@@ -85,9 +98,18 @@ impl Navigator<'_, '_> {
 
     /// Start `routine` at `level`, from run `index` of the plan shuffled with `seed`.
     fn start_routine(&mut self, routine: &str, level: f32, index: usize, seed: u64) {
-        let Some(r) = self.library.routines.iter().find(|r| r.id == routine) else {
-            return;
-        };
+        if let Some(r) = self
+            .library
+            .routines
+            .iter()
+            .find(|r| r.id == routine)
+            .cloned()
+        {
+            self.start_routine_def(&r, level, index, seed);
+        }
+    }
+
+    fn start_routine_def(&mut self, r: &RoutineDef, level: f32, index: usize, seed: u64) {
         let plan = r.plan(&self.library.scenarios, seed);
         let Some(run) = plan.get(index) else { return };
         let (scenario, run_level) = (run.scenario_id.clone(), run.level(level));
@@ -119,6 +141,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(NextState::<AppState>::default());
         world.insert_resource(ActiveRoutine::default());
+        world.insert_resource(AdaptiveLevels::default());
         world.insert_resource(Library {
             scenarios: aim_core::scenario::builtin::all(),
             routines: aim_core::training::routine::builtin::all(),
@@ -243,5 +266,56 @@ mod tests {
         apply(&mut w, UiAction::BackToMenu);
         assert_eq!(routine_index(&w), None);
         assert_eq!(pending(&w), Some(AppState::Menu));
+    }
+
+    #[test]
+    fn adaptive_runs_use_the_stored_level_and_are_flagged() {
+        let mut w = world();
+        w.resource_mut::<AdaptiveLevels>()
+            .record("micro-adjust", 1.0);
+        apply(&mut w, UiAction::StartAdaptive("micro-adjust".into()));
+        let run = w.resource::<Run>();
+        assert!(run.adaptive);
+        assert_eq!(run.session.def().id, "micro-adjust@+0.25");
+    }
+
+    #[test]
+    fn retry_keeps_the_difficulty_of_a_keyed_result() {
+        let mut w = world();
+        apply(&mut w, UiAction::Retry("flick-wide@+0.50".into()));
+        assert_eq!(running(&w).as_deref(), Some("flick-wide@+0.50"));
+    }
+
+    #[test]
+    fn generated_routines_start_without_being_in_the_library() {
+        let mut w = world();
+        let mut r = aim_core::training::routine::builtin::all().remove(0);
+        r.id = "personalized".into();
+        apply(&mut w, UiAction::StartRoutineDef(Box::new(r)));
+        assert_eq!(
+            w.resource::<ActiveRoutine>()
+                .0
+                .as_ref()
+                .map(|p| p.routine_id.as_str()),
+            Some("personalized")
+        );
+        assert!(running(&w).is_some());
+    }
+
+    #[test]
+    fn method_days_start_at_the_tier_level_and_resume_mid_plan() {
+        let mut w = world();
+        let action = UiAction::StartRoutineAt {
+            routine: "skill-clicking-static".into(),
+            level: 0.5,
+            index: 3,
+            seed: 9,
+        };
+        apply(&mut w, action);
+        let p = w.resource::<ActiveRoutine>().0.clone().unwrap();
+        assert_eq!(p.index, 3);
+        let expected = p.plan[3].level(0.5);
+        let (_, level) = aim_core::scenario::parse_run_key(&running(&w).unwrap()).to_owned();
+        assert!((level - expected).abs() < 1e-3, "{level} vs {expected}");
     }
 }

@@ -2,6 +2,7 @@
 
 use crate::game::AppState;
 use crate::overlay::{Overlay, background};
+use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::history::History;
 use crate::persistence::library::Library;
 use crate::persistence::method_progress::{DayProgress, MethodProgress};
@@ -15,6 +16,7 @@ use crate::ui::organisms::today_panel::{self, DayModel, RoutineModel, TodayActio
 use crate::ui::organisms::{benchmark_panel, routine_list, scenario_browser};
 use aim_core::fov;
 use aim_core::training::method::{MethodDef, Weekday};
+use aim_core::training::playlist;
 use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
@@ -82,6 +84,7 @@ fn menu(
     history: Res<History>,
     overlay: Res<Overlay>,
     mut progress: ResMut<MethodProgress>,
+    adaptive: Res<AdaptiveLevels>,
     mut nav: Navigator,
 ) -> Result {
     if !overlay.visible {
@@ -159,9 +162,12 @@ fn menu(
             egui::CentralPanel::default().show(&mut root, |ui| {
                 match state.selected.as_deref().and_then(|id| lib.scenario(id)) {
                     Some(def) => {
-                        action = action
-                            .take()
-                            .or(scenario_browser::scenario_details(ui, def, &history))
+                        action = action.take().or(scenario_browser::scenario_details(
+                            ui,
+                            def,
+                            &history,
+                            adaptive.level(&def.id),
+                        ))
                     }
                     None => scenario_browser::empty_selection(ui),
                 }
@@ -169,7 +175,13 @@ fn menu(
         }
         Tab::Routines => {
             egui::CentralPanel::default().show(&mut root, |ui| {
-                action = action.take().or(routine_list::routine_list(ui, lib));
+                let personalized = lib.benchmarks.first().map(|b| {
+                    playlist::personalized(b, &b.evaluate(&history.bests()), &lib.scenarios, 30.0)
+                });
+                action =
+                    action
+                        .take()
+                        .or(routine_list::routine_list(ui, lib, personalized.as_ref()));
                 ui.small(format!(
                     "Custom routines: {}",
                     cfg.paths.routines_dir.display()

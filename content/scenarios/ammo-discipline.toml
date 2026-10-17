@@ -1,0 +1,15 @@
+id = "ammo-discipline"
+name = "Ammo Discipline"
+category = "precision"
+description = """
+Static clicking with an ammo economy (Voltaic S5 style): each shot costs 30 of a 100 clip and each
+hit refunds 37. Two misses in a row force a 1.5 s reload. Trains confirming the shot before you click."""
+
+[weapon]
+ammo = { clip = 100, cost = 30, refund = 37, reload_secs = 1.5 }
+
+[targets]
+shape = { kind = "sphere", radius = 0.125 }
+spawn = { kind = "floor", x = [-9.0, 9.0], z = [-24.0, -10.0], height = [1.8, 1.95] }
+max_alive = 3
+min_separation_deg = 5
