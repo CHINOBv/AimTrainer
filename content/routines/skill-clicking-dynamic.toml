@@ -1,0 +1,79 @@
+id = "skill-clicking-dynamic"
+name = "Clicking II: Dynamic"
+description = """
+Dynamic clicking day: moving heads, flicks to agents, and counter-strafe duels (VALORANT addition).
+VDIM-style day (structure from VDIM by Lowgravity56, 4rK and Voltaic): each block runs a related drill,
+two harder variants of a benchmark scenario, then the benchmark itself 4 times, played in order.
+Levels are relative to your tier; split the day into 2–3 sessions if it gets long."""
+
+[[blocks]]
+scenario = "flick-headshot"
+runs = 2
+difficulty = -0.25
+note = "Drill for dynamic-strafe-heads: build the technique, don't chase score."
+
+[[blocks]]
+scenario = "dynamic-strafe-heads"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "dynamic-strafe-heads"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "dynamic-strafe-heads"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."
+
+[[blocks]]
+scenario = "flick-wide"
+runs = 2
+difficulty = -0.25
+note = "Drill for flick-headshot: build the technique, don't chase score."
+
+[[blocks]]
+scenario = "flick-headshot"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "flick-headshot"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "flick-headshot"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."
+
+[[blocks]]
+scenario = "strafe-shot"
+runs = 2
+difficulty = -0.25
+note = "Drill for counter-strafe: build the technique, don't chase score."
+
+[[blocks]]
+scenario = "counter-strafe"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "counter-strafe"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "counter-strafe"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."

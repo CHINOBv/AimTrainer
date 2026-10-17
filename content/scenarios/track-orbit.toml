@@ -1,0 +1,16 @@
+id = "track-orbit"
+name = "Orbit Track"
+category = "tracking"
+description = """
+Precise tracking. A medium target drifts on long, smooth arcs around the horizon.
+Match its speed instead of chasing it, and keep your crosshair centered."""
+duration_secs = 45
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.26 }
+spawn = { kind = "angular", yaw_deg = [-15.0, 15.0], pitch_deg = [0.0, 8.0], distance = [12.0, 12.0] }
+motion = { kind = "drift", speed = [1.8, 2.8], change_secs = [1.2, 2.2], max_offset = 5.0 }
+health = inf

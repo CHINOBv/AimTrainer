@@ -1,0 +1,79 @@
+id = "skill-tracking-reactive"
+name = "Tracking II: Reactive"
+description = """
+Reactive tracking day: sudden direction changes and close strafes.
+VDIM-style day (structure from VDIM by Lowgravity56, 4rK and Voltaic): each block runs a related drill,
+two harder variants of a benchmark scenario, then the benchmark itself 4 times, played in order.
+Levels are relative to your tier; split the day into 2–3 sessions if it gets long."""
+
+[[blocks]]
+scenario = "track-close-strafe"
+runs = 2
+difficulty = -0.25
+note = "Drill for track-reactive-strafe: build the technique, don't chase score."
+
+[[blocks]]
+scenario = "track-reactive-strafe"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "track-reactive-strafe"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "track-reactive-strafe"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."
+
+[[blocks]]
+scenario = "track-orbit"
+runs = 2
+difficulty = -0.25
+note = "Drill for track-reactive-micro: build the technique, don't chase score."
+
+[[blocks]]
+scenario = "track-reactive-micro"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "track-reactive-micro"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "track-reactive-micro"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."
+
+[[blocks]]
+scenario = "track-reactive-strafe"
+runs = 2
+difficulty = -0.25
+note = "Drill for track-close-strafe: build the technique, don't chase score."
+
+[[blocks]]
+scenario = "track-close-strafe"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "track-close-strafe"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "track-close-strafe"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."

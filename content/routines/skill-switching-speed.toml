@@ -1,0 +1,79 @@
+id = "skill-switching-speed"
+name = "Switching I: Speed"
+description = """
+Speed switching day: fast, decisive switches between static targets and heads.
+VDIM-style day (structure from VDIM by Lowgravity56, 4rK and Voltaic): each block runs a related drill,
+two harder variants of a benchmark scenario, then the benchmark itself 4 times, played in order.
+Levels are relative to your tier; split the day into 2–3 sessions if it gets long."""
+
+[[blocks]]
+scenario = "switch-wide"
+runs = 2
+difficulty = -0.25
+note = "Drill for switch-speed: build the technique, don't chase score."
+
+[[blocks]]
+scenario = "switch-speed"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "switch-speed"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "switch-speed"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."
+
+[[blocks]]
+scenario = "static-headline"
+runs = 2
+difficulty = -0.25
+note = "Drill for switch-heads: build the technique, don't chase score."
+
+[[blocks]]
+scenario = "switch-heads"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "switch-heads"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "switch-heads"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."
+
+[[blocks]]
+scenario = "switch-speed"
+runs = 2
+difficulty = -0.25
+note = "Drill for switch-wide: build the technique, don't chase score."
+
+[[blocks]]
+scenario = "switch-wide"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "switch-wide"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "switch-wide"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."

@@ -33,6 +33,11 @@ pub struct Block {
     pub minutes: Option<f32>,
     #[serde(default)]
     pub note: String,
+    /// Difficulty offset relative to the level the routine is played at (see
+    /// `scenario::difficulty`): e.g. `-0.25` for a drill, `0.25` for a variant, `0.5` for
+    /// a "hard" variant, `0` for the benchmark itself.
+    #[serde(default)]
+    pub difficulty: f32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -40,6 +45,18 @@ pub struct PlannedRun {
     pub scenario_id: String,
     pub block: usize,
     pub note: String,
+    /// Offset relative to the routine's base level.
+    pub difficulty: f32,
+}
+
+impl PlannedRun {
+    /// Absolute difficulty level when the routine is played at `base`.
+    pub fn level(&self, base: f32) -> f32 {
+        (base + self.difficulty).clamp(
+            crate::scenario::difficulty::MIN_LEVEL,
+            crate::scenario::difficulty::MAX_LEVEL,
+        )
+    }
 }
 
 impl RoutineDef {
@@ -57,6 +74,9 @@ impl RoutineDef {
             errs.push("interleave_from: must point at an existing block".to_owned());
         }
         for (i, b) in self.blocks.iter().enumerate() {
+            if !(b.difficulty.is_finite() && (-2.0..=2.0).contains(&b.difficulty)) {
+                errs.push(format!("blocks[{i}].difficulty: must be within [-2, 2]"));
+            }
             if !library.iter().any(|d| d.id == b.scenario) {
                 errs.push(format!(
                     "blocks[{i}].scenario: unknown scenario '{}'",
@@ -98,6 +118,7 @@ impl RoutineDef {
                         scenario_id: b.scenario.clone(),
                         block: i,
                         note: b.note.clone(),
+                        difficulty: b.difficulty,
                     });
                 }
             }
@@ -148,16 +169,40 @@ pub mod builtin {
 
     pub const SOURCES: &[(&str, &str)] = &[
         (
-            "valorant-daily.toml",
-            include_str!("../../../../content/routines/valorant-daily.toml"),
-        ),
-        (
             "fundamentals-hour.toml",
             include_str!("../../../../content/routines/fundamentals-hour.toml"),
         ),
         (
             "quick-warmup.toml",
             include_str!("../../../../content/routines/quick-warmup.toml"),
+        ),
+        (
+            "skill-clicking-dynamic.toml",
+            include_str!("../../../../content/routines/skill-clicking-dynamic.toml"),
+        ),
+        (
+            "skill-clicking-static.toml",
+            include_str!("../../../../content/routines/skill-clicking-static.toml"),
+        ),
+        (
+            "skill-switching-evasive.toml",
+            include_str!("../../../../content/routines/skill-switching-evasive.toml"),
+        ),
+        (
+            "skill-switching-speed.toml",
+            include_str!("../../../../content/routines/skill-switching-speed.toml"),
+        ),
+        (
+            "skill-tracking-precise.toml",
+            include_str!("../../../../content/routines/skill-tracking-precise.toml"),
+        ),
+        (
+            "skill-tracking-reactive.toml",
+            include_str!("../../../../content/routines/skill-tracking-reactive.toml"),
+        ),
+        (
+            "valorant-daily.toml",
+            include_str!("../../../../content/routines/valorant-daily.toml"),
         ),
     ];
 
@@ -217,6 +262,30 @@ mod tests {
         assert_ne!(plan, r.plan(&lib, 4), "different seeds shuffle differently");
         assert_eq!(r.run_count(&lib), plan.len());
         assert_eq!(r.run_count(&lib), r.plan(&lib, 99).len());
+    }
+
+    #[test]
+    fn block_difficulty_reaches_planned_runs_and_levels_clamp() {
+        let lib = scenario::builtin::all();
+        let r = RoutineDef::from_toml(
+            r#"
+            id = "x"
+            name = "x"
+            [[blocks]]
+            scenario = "micro-adjust"
+            runs = 1
+            difficulty = 0.5
+            [[blocks]]
+            scenario = "micro-adjust"
+            runs = 1
+            "#,
+        )
+        .unwrap();
+        let plan = r.plan(&lib, 1);
+        assert_eq!(plan[0].difficulty, 0.5);
+        assert_eq!(plan[1].difficulty, 0.0);
+        assert_eq!(plan[0].level(0.75), 1.0);
+        assert_eq!(plan[1].level(-0.5), -0.5);
     }
 
     #[test]

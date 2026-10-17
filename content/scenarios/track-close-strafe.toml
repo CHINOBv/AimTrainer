@@ -1,0 +1,21 @@
+id = "track-close-strafe"
+name = "Close Strafe Track"
+category = "tracking"
+description = """
+Reactive tracking at close range, where strafes cover the most screen. An agent ADAD-strafes
+at knife speed 6–8 m away. Track the upper body and head, and react to every direction change."""
+duration_secs = 45
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "humanoid" }
+spawn = { kind = "floor", x = [-1.5, 1.5], z = [-8.0, -6.0] }
+motion = { kind = "strafe", weapon = "knife", change_secs = [0.2, 0.55], stop_chance = 0.1, max_offset = 2.5 }
+health = inf
+
+[scoring]
+head = 100
+body = 40
+legs = 15
