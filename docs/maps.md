@@ -110,7 +110,7 @@ Naming convention for the nodes of the default scene (or the first scene):
 | Empty | without `:` (groups, cameras, lights) | Ignored. |
 | Empty | `<unknown>:<id>` | An error. |
 
-Marker heights are ignored: feet stand on the floor (`y = 0`). glTF maps have no waypoint graph yet, so roaming bots walk straight lines between spawns. Loading a glTF map in the app is not wired yet; the test asset `crates/aim_world/tests/data/box-room.gltf` is an example. The integrity rule applies to glTF maps too: never export or rebuild a game's map.
+Marker heights are ignored: feet stand on the floor (`y = 0`). Nodes nested deeper than `MAX_NODE_DEPTH` (64) levels are a `Convention` error, so a malformed file cannot overflow the stack. glTF maps have no waypoint graph yet, so roaming bots walk straight lines between spawns. Loading a glTF map in the app is not wired yet; the test asset `crates/aim_world/tests/data/box-room.gltf` is an example. The integrity rule applies to glTF maps too: never export or rebuild a game's map.
 
 ## Adding a map
 

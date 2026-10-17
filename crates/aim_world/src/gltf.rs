@@ -123,8 +123,19 @@ fn on_floor(p: Vec3) -> Vec3 {
     Vec3::new(p.x, 0.0, p.z)
 }
 
+/// Deepest node nesting accepted. Real maps are a few levels deep; the limit keeps a
+/// malformed or hostile file from overflowing the stack.
+pub const MAX_NODE_DEPTH: usize = 64;
+
 impl Collected {
-    fn visit(&mut self, node: gltf::Node, parent: &Mat4) {
+    fn visit(&mut self, node: gltf::Node, parent: &Mat4, depth: usize) {
+        if depth > MAX_NODE_DEPTH {
+            self.problems.push(format!(
+                "node '{}' is nested deeper than {MAX_NODE_DEPTH} levels",
+                node.name().unwrap_or("")
+            ));
+            return;
+        }
         let world = mul(parent, &node.transform().matrix());
         let name = node.name().unwrap_or("");
         match node.mesh() {
@@ -132,7 +143,7 @@ impl Collected {
             None => self.marker(name, &world),
         }
         for child in node.children() {
-            self.visit(child, &world);
+            self.visit(child, &world, depth + 1);
         }
     }
 
@@ -217,7 +228,7 @@ impl MapDef {
         match doc.default_scene().or_else(|| doc.scenes().next()) {
             Some(scene) => {
                 for node in scene.nodes() {
-                    c.visit(node, &IDENTITY);
+                    c.visit(node, &IDENTITY, 0);
                 }
             }
             None => c.problems.push("the file has no scene".into()),
