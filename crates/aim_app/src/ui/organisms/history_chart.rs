@@ -1,0 +1,1 @@
+//! Score history chart.

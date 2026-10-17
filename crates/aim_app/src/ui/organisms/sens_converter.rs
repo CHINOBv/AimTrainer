@@ -1,0 +1,1 @@
+//! Sensitivity converter between games.
