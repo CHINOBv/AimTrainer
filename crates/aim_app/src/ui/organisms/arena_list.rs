@@ -37,9 +37,18 @@ pub fn arena_list(
                 a.duration_secs,
                 a.weapon.stats().display_name
             ));
-            if ui.button("▶  Play").clicked() {
-                action = Some(UiAction::StartArena(a.id.clone()));
-            }
+            ui.horizontal(|ui| {
+                if ui.button("▶  Play").clicked() {
+                    action = Some(UiAction::StartArena(a.id.clone()));
+                }
+                if ui
+                    .button("Practice")
+                    .on_hover_text("Bots move and peek as usual but never shoot: learn the map and the angles.")
+                    .clicked()
+                {
+                    action = Some(UiAction::StartArenaPractice(a.id.clone()));
+                }
+            });
             ui.separator();
         }
     });

@@ -71,10 +71,24 @@ fn planned_name(run: &PlannedRun, library: &Library) -> Option<String> {
 }
 
 /// The arena an arena result came from (a routine may have shortened it to `id~90s`).
-fn arena_base(last: &LastResult, id: &str) -> Option<String> {
-    let (base, _, _) = aim_core::scenario::parse_run_key_full(id);
-    (last.recording.is_none() && aim_world::arena::builtin::get(base).is_some())
-        .then(|| base.to_owned())
+fn arena_retry(last: &LastResult, id: &str) -> Option<crate::ui::UiAction> {
+    last.recording
+        .is_none()
+        .then(|| arena_retry_for(id))
+        .flatten()
+}
+
+/// The action that replays the arena behind run key `id` (possibly shortened to
+/// `id~90s` by a routine, possibly practice), or `None` when it is not an arena.
+fn arena_retry_for(id: &str) -> Option<crate::ui::UiAction> {
+    let (key, practice) = aim_world::arena::split_practice(id);
+    let (base, _, _) = aim_core::scenario::parse_run_key_full(key);
+    aim_world::arena::builtin::get(base)?;
+    Some(if practice {
+        crate::ui::UiAction::StartArenaPractice(base.to_owned())
+    } else {
+        crate::ui::UiAction::StartArena(base.to_owned())
+    })
 }
 
 /// Inputs, paths and what deciding the Retry action needs beyond the navigator.
@@ -137,8 +151,8 @@ fn results(
         }
     } else if let Some((slot, sens)) = finder_next {
         crate::ui::UiAction::StartFinderTest { slot, sens }
-    } else if let Some(arena) = arena_base(&last, id) {
-        crate::ui::UiAction::StartArena(arena)
+    } else if let Some(arena) = arena_retry(&last, id) {
+        arena
     } else {
         crate::ui::UiAction::Retry(id.clone())
     };
@@ -157,7 +171,21 @@ fn results(
 
 #[cfg(test)]
 mod tests {
-    use super::planned_name;
+    use super::{arena_retry_for, planned_name};
+    use crate::ui::UiAction;
+
+    #[test]
+    fn arena_results_retry_the_same_arena_in_the_same_mode() {
+        assert_eq!(
+            arena_retry_for("yard-deathmatch+practice"),
+            Some(UiAction::StartArenaPractice("yard-deathmatch".into()))
+        );
+        assert_eq!(
+            arena_retry_for("yard-deathmatch~90s"),
+            Some(UiAction::StartArena("yard-deathmatch".into()))
+        );
+        assert_eq!(arena_retry_for("micro-adjust"), None);
+    }
 
     #[test]
     fn planned_runs_are_named_from_their_scenario_or_arena() {

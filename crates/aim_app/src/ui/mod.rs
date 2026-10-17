@@ -54,6 +54,8 @@ pub enum UiAction {
     StartRoutineDef(Box<RoutineDef>),
     /// Play a built-in arena (deathmatch or angle clearing on an original map).
     StartArena(String),
+    /// Play a built-in arena as practice: bots move as usual but never shoot.
+    StartArenaPractice(String),
     /// One sensitivity-finder test at `sens` (computed by the page from the finder).
     StartFinderTest {
         slot: Slot,

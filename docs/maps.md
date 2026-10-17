@@ -123,6 +123,10 @@ Marker heights are ignored: feet stand on the floor (`y = 0`). Nodes nested deep
 
 An arena is an activity played on a map against bots. It lives in `aim_world::arena`, is pure and deterministic (seeded with `aim_core::rng::Rng`), and is driven by the same `aim_core::scenario::FrameInput` the scenario session uses: view angles, `fire_pressed`, WASD movement and walk.
 
+### Practice mode
+
+Every arena has a **Practice** button next to **Play**. In practice the bots move, peek, strafe and push exactly as in the real run but never shoot (`ArenaSession::practice`, which turns off `bots_shoot_back`), so you can walk the map, learn its angles and pre-aim spots, and train first-shot placement without dying. Practice results are stored under `<arena id>+practice`, so they never mix with normal scores, and Retry stays in practice. The HUD shows "PRACTICE · bots don't shoot".
+
 ### Format
 
 Arenas are TOML files in `content/arenas/<id>.toml`, registered in `SOURCES` in `crates/aim_world/src/arena/builtin.rs`. Unknown fields are rejected, also inside `[mode]`.
