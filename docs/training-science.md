@@ -44,7 +44,15 @@ Two details are approximate (Season 4 data):
 - Gaussian endpoint error.
 - First-order lag for tracking.
 
-The profile parameters are assumptions, which is why the benchmark is marked `calibrated = false`. To recalibrate from real runs, place the thresholds at percentiles of real player scores, spaced about 8–15% apart, which matches the step between Voltaic ranks (approximate).
+The intermediate thresholds are those scores rounded to 50, with a few hand-rounded values. The profile parameters are assumptions, which is why the benchmark is marked `calibrated = false`.
+
+**Tiers (estimate):** like Voltaic, the benchmark has novice, intermediate and advanced tiers that reuse the same scenario families with other parameters (inference: we change parameters through the difficulty level, not by authoring new scenarios). Each tier plays every scenario at the level of the matching weekly-plan tier (novice −0.5, intermediate 0, advanced +0.5, see `ScenarioDef::at_difficulty`) and stores scores under the run key (`micro-adjust@-0.50`), so tier scores never mix. A training tier is measured on the benchmark tier at its level (`MethodDef::benchmark_for`); the tier suggestion still reads the intermediate tier. The novice and advanced thresholds are estimates, derived the same way as the intermediate ones:
+
+1. Average the score of each simulated profile over seeds 1–5 at the tier's level.
+2. Round each score to 50; that is the threshold of the profile's rank.
+3. Saturation: when two or more top profiles score within 1% of the elite score (the scenario's ceiling), space those ranks evenly between the last unsaturated threshold and 50 below the rounded elite score, so thresholds stay strictly ascending. This applies to novice `track-precise` and `track-reactive-micro`.
+
+Thresholds are **not** ordered novice < intermediate < advanced for a rank, and should not be. An easier level usually raises every profile's score (novice thresholds are mostly higher), but not always: on `track-reactive-strafe`, `track-close-strafe` and parts of `peek-reaction` the simulated scores rise with the level, and saturated tracking scenarios cap out. The ranks of different tiers are therefore not comparable by score; each tier only ranks players against the profiles at its own level. The enforced invariants are: tiers are listed easiest first (levels strictly increase), one tier has level 0, and every tier's thresholds are positive and strictly ascending, one per rank. To recalibrate from real runs, place the thresholds at percentiles of real player scores, spaced about 8–15% apart, which matches the step between Voltaic ranks (approximate).
 
 ## Routine design
 
@@ -158,7 +166,7 @@ Post-run analysis (`aim_core::analytics`) re-simulates the recorded run and meas
 | Lag vs lead | Sign of the crosshair error projected on the target's angular velocity (target moving ≥ 5°/s). Lag ratio = time behind ÷ time moving |
 | Reaction to direction changes | After the target's direction of motion reverses (dot product < 0), the time until the crosshair moves the new way. Responses over 1 s are dropped as lapses |
 
-**Rules (provisional).** A category needs ≥ 5 flicks or ≥ 3 s of firing before it is judged.
+**Rules (provisional).** A category needs ≥ 5 flicks or ≥ 3 s of firing before it is judged. The rules are data: `content/rules/recommendations.toml` (`aim_core::analytics::rules`), one `[[rules]]` entry per row with `metric`, `direction` (`above`/`below`, strict), `threshold`, `verdict` (`strength`/`weakness`), `meaning` and an optional `[rules.recommendation]` (`scenario_ids` best first, optional `routine_id`, `tip`). Validation rejects unknown fields, non-finite thresholds and scenario or routine ids that do not exist. The table below mirrors that file.
 
 | Metric | Weakness | Strength | Recommended practice |
 |---|---|---|---|
@@ -172,6 +180,10 @@ Post-run analysis (`aim_core::analytics`) re-simulates the recorded run and meas
 | Reaction to direction changes | > 250 ms | — | `track-reactive-strafe`, `track-reactive-micro` |
 
 The 300 ms and 220 ms reaction thresholds bracket the simulated recruit (0.32 s + onset) and elite (0.20 s + onset); the rest are estimates.
+
+**Skill profile per benchmark subcategory.** `aim_core::analytics::skills::BenchmarkProfile` takes the benchmark definition and the run history. Each subcategory's energy comes from personal bests with the benchmark's own energy rules (above). It is compared with the arithmetic mean over the subcategories played (at least 2): more than 15% below the mean is a weakness, and the profile offers that subcategory's scenarios to practice; more than 15% above is a strength. The 15% margin is an estimate and is not calibrated. The weakest subcategory matters most because overall energy is a harmonic mean.
+
+**Trends.** `training::progress::subcategory_trend` gives each subcategory's energy at the end of each of the last weeks, using the same weekly cutoffs as the overall `benchmark_trend` (personal bests up to each cutoff). The Progress page charts one trend per subcategory once it has two played weeks.
 
 ## Caveat
 

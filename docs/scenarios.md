@@ -83,6 +83,22 @@ Recoil moves the bullets, not the camera. `simulate_spread` still adds running i
 | `strafe` | `weapon`, `change_secs`, `stop_chance`, `max_offset` | A/D strafing with real VALORANT acceleration and stopping. |
 | `drift` | `speed`, `change_secs`, `max_offset` | Smooth wandering, for tracking and evasive switching. |
 
+### Difficulty
+
+Training methods and adaptive mode play a scenario at a level from −1 (easiest) to +1 (hardest); 0 is the file as written. Each knob is the fraction a parameter changes at the ends of that range. A plain number applies both ways; `{ easy, hard }` sets each end separately. Fractions must be in `[0, 0.95)`, and `0` turns a knob off.
+
+```toml
+[difficulty]
+size = { easy = 0.5, hard = 0.1 }   # spheres: 50% bigger at −1, 10% smaller at +1
+speed = 0.3                         # drift speed and how soon targets change direction (default)
+lifetime = 0.25                     # target lifetime (default)
+distance = 0.25                     # humanoid spawn distance (default)
+offset = 0.2                        # crosshair-relative flick offset (default)
+count = 0.0                         # targets alive at once; off by default
+```
+
+Results at a level other than 0 are stored as `id@+0.50`, so difficulties never mix in your history.
+
 ### Sizing targets realistically
 
 A VALORANT head is about 0.25 m (see `valorant-mechanics.md`). Its angular size depends on distance:
@@ -119,6 +135,39 @@ duration_secs = 90           # optional: shorter arena runs, stored as `yard-dea
 ```
 
 A block names a `scenario` or an `arena`, never both. Routines are sequences of *activities*: the scenario session and the arena session both implement `aim_core::activity::Activity`. `content/routines/aim-and-duel.toml` mixes drills with deathmatch.
+
+## Benchmark
+
+Custom benchmarks go in the `benchmarks` folder next to `scenarios` and `routines`.
+
+```toml
+id = "my-benchmark"
+name = "My Benchmark"
+calibrated = false           # true only once thresholds come from real player data
+ranks = ["Recruit", "Contender", "Veteran", "Elite"]
+energy_per_rank = 100        # optional, default 100
+
+# Optional tiers, easiest first. Exactly one tier has level 0 and uses `thresholds`.
+[[tiers]]
+id = "novice"
+name = "Novice"
+level = -0.5                 # every scenario of the tier is played at this difficulty level
+
+[[tiers]]
+id = "intermediate"
+name = "Intermediate"
+level = 0.0
+
+[[subcategories]]
+skill = "clicking"
+name = "Static clicking"
+scenarios = [
+  # one ascending threshold per rank; `tiers.<id>` for every tier whose level is not 0
+  { id = "micro-adjust", thresholds = [3300, 6000, 9400, 12600], tiers = { novice = [3400, 6200, 9950, 13300] } },
+]
+```
+
+A tier's scores are stored under the run key (`micro-adjust@-0.50`), so they never mix with scores at other levels. Without `[[tiers]]` the benchmark has one tier: the scenarios as authored. The built-in benchmark is `content/benchmarks/valorant-benchmark.toml`.
 
 ## Checking your files
 

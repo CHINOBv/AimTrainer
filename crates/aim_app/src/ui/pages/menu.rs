@@ -17,6 +17,7 @@ use crate::ui::navigation::Navigator;
 use crate::ui::organisms::profile_code::{self, ProfileImport};
 use crate::ui::organisms::progress_panel::{self, ProgressModel};
 use crate::ui::organisms::replay_viewer::{self, ReplayViewerState};
+use crate::ui::organisms::sens_converter::{ConverterState, sens_converter};
 use crate::ui::organisms::sens_finder;
 use crate::ui::organisms::settings_panels::{self, DpiMeter};
 use crate::ui::organisms::system_check::{self, SystemModel};
@@ -27,6 +28,8 @@ use crate::ui::organisms::{arena_list, benchmark_panel, routine_list, scenario_b
 use aim_core::fov;
 use aim_core::training::method::{MethodDef, Weekday};
 use aim_core::training::playlist;
+use aim_core::training::resume::PositionStore;
+use aim_core::training::store::RunStore;
 use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
@@ -55,16 +58,18 @@ enum Tab {
     Routines,
     Arenas,
     Benchmark,
+    Tools,
     Settings,
 }
 
-const TABS: [(Tab, &str); 7] = [
+const TABS: [(Tab, &str); 8] = [
     (Tab::Today, "Today"),
     (Tab::Progress, "Progress"),
     (Tab::Scenarios, "Scenarios"),
     (Tab::Routines, "Routines"),
     (Tab::Arenas, "Arenas"),
     (Tab::Benchmark, "Benchmark"),
+    (Tab::Tools, "Tools"),
     (Tab::Settings, "Settings"),
 ];
 
@@ -76,6 +81,7 @@ struct MenuState {
     meter: DpiMeter,
     profile_import: ProfileImport,
     replays: ReplayViewerState,
+    converter: Option<ConverterState>,
 }
 
 fn count_dpi_meter(motion: Res<AccumulatedMouseMotion>, mut state: ResMut<MenuState>) {
@@ -176,6 +182,19 @@ fn menu(
                 egui::ScrollArea::vertical().id_salt("progress").show(ui, |ui| {
                     let model = progress_model(lib, &history, cfg.settings.daily_goal_minutes);
                     action = action.take().or(progress_panel::progress_panel(ui, &model));
+                    if let Some(bench) = lib.benchmarks.first() {
+                        let skills = aim_core::analytics::BenchmarkProfile::build(
+                            bench,
+                            history.runs(),
+                            now_secs(),
+                            TREND_WEEKS,
+                        );
+                        let name =
+                            |id: &str| lib.scenario(id).map_or(id.to_owned(), |d| d.name.clone());
+                        action = action
+                            .take()
+                            .or(progress_panel::skills_section(ui, &skills, name));
+                    }
                     ui.separator();
                     ui.heading("Replays");
                     ui.small("Your crosshair path around each target: overshoot, corrections and misses at a glance.");
@@ -217,10 +236,17 @@ fn menu(
                 let personalized = lib.benchmarks.first().map(|b| {
                     playlist::personalized(b, &b.evaluate(&history.bests()), &lib.scenarios, 30.0)
                 });
-                action =
-                    action
-                        .take()
-                        .or(routine_list::routine_list(ui, lib, personalized.as_ref()));
+                action = action.take().or(routine_list::routine_list(
+                    ui,
+                    lib,
+                    personalized.as_ref(),
+                    |id| {
+                        training
+                            .progress
+                            .resumable(&crate::persistence::method_progress::local_date(), id)
+                            .cloned()
+                    },
+                ));
                 ui.small(format!(
                     "Custom routines: {}",
                     cfg.paths.routines_dir.display()
@@ -245,6 +271,32 @@ fn menu(
                 ));
             });
         }
+        Tab::Tools => {
+            egui::CentralPanel::default().show(&mut root, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.heading("Sensitivity converter");
+                    let converter = state.converter.get_or_insert_with(|| {
+                        ConverterState::from_sensitivity(cfg.settings.sensitivity)
+                    });
+                    sens_converter(ui, &mut cfg.settings, converter);
+                    ui.separator();
+                    action = action.take().or(sens_finder::sens_finder(
+                        ui,
+                        &mut training.finder.0,
+                        &mut cfg.settings,
+                    ));
+                    ui.separator();
+                    let system = SystemModel {
+                        frames: training.frames.summary(),
+                        vsync_off: true,
+                        fullscreen: cfg.settings.fullscreen,
+                        wayland: crate::platform::is_wayland(),
+                        windows: cfg!(windows),
+                    };
+                    system_check::system_check(ui, &system);
+                });
+            });
+        }
         Tab::Settings => {
             egui::CentralPanel::default().show(&mut root, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
@@ -257,22 +309,7 @@ fn menu(
                     ui.separator();
                     settings_panels::display_panel(ui, &mut cfg.settings);
                     ui.separator();
-                    action = action.take().or(sens_finder::sens_finder(
-                        ui,
-                        &mut training.finder.0,
-                        &mut cfg.settings,
-                    ));
-                    ui.separator();
                     profile_code::profile_code(ui, &mut cfg.settings, &mut state.profile_import);
-                    ui.separator();
-                    let system = SystemModel {
-                        frames: training.frames.summary(),
-                        vsync_off: true,
-                        fullscreen: cfg.settings.fullscreen,
-                        wayland: crate::platform::is_wayland(),
-                        windows: cfg!(windows),
-                    };
-                    system_check::system_check(ui, &system);
                     ui.add_space(8.0);
                     ui.small(format!(
                         "Settings file: {}",
@@ -318,13 +355,13 @@ fn now_secs() -> u64 {
 
 fn progress_model(lib: &Library, history: &History, goal_minutes: f32) -> ProgressModel {
     use aim_core::training::progress;
-    let records = history.run_records();
+    let records = history.runs();
     let (now, offset) = (now_secs(), local_utc_offset_secs());
     let name = |id: &str| lib.scenario(id).map_or(id.to_owned(), |d| d.name.clone());
     let mut readiness = Vec::new();
     let mut readiness_missing = Vec::new();
     for id in READINESS_SCENARIOS {
-        match progress::readiness(&records, id, now, offset) {
+        match progress::readiness(records, id, now, offset) {
             Some(r) => readiness.push((name(id), r)),
             None => readiness_missing.push((id.to_owned(), name(id))),
         }
@@ -332,12 +369,12 @@ fn progress_model(lib: &Library, history: &History, goal_minutes: f32) -> Progre
     let bench = lib.benchmarks.first();
     let bests = history.bests();
     ProgressModel {
-        goal: progress::daily_goal(&records, goal_minutes, now, offset),
+        goal: progress::daily_goal(records, goal_minutes, now, offset),
         readiness,
         readiness_missing,
-        fatigue: progress::fatigue(progress::current_session(&records)),
+        fatigue: progress::fatigue(progress::current_session(records)),
         trend: bench.map_or_else(Vec::new, |b| {
-            progress::benchmark_trend(b, &records, now, TREND_WEEKS)
+            progress::benchmark_trend(b, records, now, TREND_WEEKS)
         }),
         bests: bench
             .map(|b| {
@@ -359,7 +396,7 @@ fn progress_model(lib: &Library, history: &History, goal_minutes: f32) -> Progre
 fn local_today() -> (String, Weekday) {
     let now = chrono::Local::now();
     (
-        now.format("%Y-%m-%d").to_string(),
+        crate::persistence::method_progress::local_date(),
         Weekday::from_monday_index(now.weekday().num_days_from_monday()),
     )
 }
@@ -405,7 +442,7 @@ fn routine_model(
         runs: r.run_count(&lib.scenarios),
         minutes: r.minutes(&lib.scenarios),
         progress: progress
-            .resumable(date, id)
+            .method_day(date, id)
             .map(|d| (d.next_index, d.total_runs)),
     })
 }
@@ -422,10 +459,12 @@ fn today_model(
     let day = match &plan.routine {
         Some(id) => DayModel::Routine(routine_model(lib, progress, date, id)?),
         None => {
+            // The flex day's weakest skill comes from the benchmark tier the player trains at.
+            let tier = method
+                .tier(&selected)
+                .unwrap_or_else(|| method.suggested_tier(energy));
             let result = method
-                .benchmark
-                .as_ref()
-                .and_then(|id| lib.benchmarks.iter().find(|b| &b.id == id))
+                .benchmark_for(tier, &lib.benchmarks)
                 .map(|b| b.evaluate(&history.bests()));
             let weakest = result
                 .as_ref()
@@ -502,7 +541,7 @@ fn apply_today(
         }
         TodayAction::Resume(routine) => {
             let d = progress
-                .resumable(date, &routine)
+                .method_day(date, &routine)
                 .filter(|d| !d.is_done())?;
             Some(UiAction::StartRoutineAt {
                 routine,
