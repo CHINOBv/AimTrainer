@@ -1,5 +1,6 @@
-//! Files the app reads and writes: settings, run history and the content library.
+//! Files the app reads and writes: settings, run history, replays and the content library.
 
 pub mod history;
 pub mod library;
+pub mod replays;
 pub mod settings;
