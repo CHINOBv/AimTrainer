@@ -459,15 +459,20 @@ fn menu(
             });
         }
         Tab::Routines => {
+            // Pinned below the list, which scrolls and would otherwise push it off-screen.
+            egui::Panel::bottom("custom_routines").show(&mut root, |ui| {
+                ui.small(format!(
+                    "Custom routines: {}",
+                    cfg.paths.routines_dir.display()
+                ));
+            });
             egui::CentralPanel::default().show(&mut root, |ui| {
                 let personalized = lib.benchmarks.first().map(|b| {
                     playlist::personalized(b, &b.evaluate(&history.bests()), &lib.scenarios, 30.0)
                 });
-                action = action.take().or(routine_list::routine_list(
-                    ui,
-                    lib,
-                    personalized.as_ref(),
-                    |id| {
+                // The list's scroll area has no salt of its own; this scope gives it one.
+                let list = ui.push_id("routines", |ui| {
+                    routine_list::routine_list(ui, lib, personalized.as_ref(), |id| {
                         // A routine edited since it was split may have another run count.
                         let runs = lib
                             .routines
@@ -479,12 +484,9 @@ fn menu(
                             .resumable(&crate::persistence::method_progress::local_date(), id)
                             .filter(|p| p.total_runs == runs)
                             .cloned()
-                    },
-                ));
-                ui.small(format!(
-                    "Custom routines: {}",
-                    cfg.paths.routines_dir.display()
-                ));
+                    })
+                });
+                action = action.take().or(list.inner);
             });
         }
         Tab::Arenas => {
@@ -511,28 +513,30 @@ fn menu(
         }
         Tab::Tools => {
             egui::CentralPanel::default().show(&mut root, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.heading("Sensitivity converter");
-                    let converter = state.converter.get_or_insert_with(|| {
-                        ConverterState::from_sensitivity(cfg.settings.sensitivity)
+                egui::ScrollArea::vertical()
+                    .id_salt("tools")
+                    .show(ui, |ui| {
+                        ui.heading("Sensitivity converter");
+                        let converter = state.converter.get_or_insert_with(|| {
+                            ConverterState::from_sensitivity(cfg.settings.sensitivity)
+                        });
+                        sens_converter(ui, &mut cfg.settings, converter);
+                        ui.separator();
+                        action = action.take().or(sens_finder::sens_finder(
+                            ui,
+                            &mut training.finder.0,
+                            &mut cfg.settings,
+                        ));
+                        ui.separator();
+                        let system = SystemModel {
+                            frames: training.frames.summary(),
+                            vsync_off: true,
+                            fullscreen: cfg.settings.fullscreen,
+                            wayland: crate::platform::is_wayland(),
+                            windows: cfg!(windows),
+                        };
+                        system_check::system_check(ui, &system);
                     });
-                    sens_converter(ui, &mut cfg.settings, converter);
-                    ui.separator();
-                    action = action.take().or(sens_finder::sens_finder(
-                        ui,
-                        &mut training.finder.0,
-                        &mut cfg.settings,
-                    ));
-                    ui.separator();
-                    let system = SystemModel {
-                        frames: training.frames.summary(),
-                        vsync_off: true,
-                        fullscreen: cfg.settings.fullscreen,
-                        wayland: crate::platform::is_wayland(),
-                        windows: cfg!(windows),
-                    };
-                    system_check::system_check(ui, &system);
-                });
             });
         }
         Tab::Settings => settings_page(&mut root, state, &mut cfg),
