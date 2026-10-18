@@ -58,6 +58,11 @@ pub enum SessionEvent {
         /// Id of the expired target.
         id: u64,
     },
+    /// A go/no-go decoy ran out of lifetime unshot: a correct wait, not a missed target.
+    DecoyAvoided {
+        /// Id of the decoy.
+        id: u64,
+    },
     /// Ran out of ammo; firing is blocked for `secs`.
     Reload {
         /// Reload duration in seconds.
@@ -631,7 +636,7 @@ impl Session {
             let alive = t.expires_at.is_none_or(|e| now < e);
             if !alive && t.decoy {
                 scoring::record_decoy_wait(stats);
-                events.push(SessionEvent::Expired { id: t.id });
+                events.push(SessionEvent::DecoyAvoided { id: t.id });
             } else if !alive {
                 scoring::record_expired(stats, scoring_def);
                 events.push(SessionEvent::Expired { id: t.id });
@@ -1694,7 +1699,11 @@ mod tests {
                 ..Default::default()
             }));
         }
-        assert!(events.contains(&SessionEvent::Expired { id: decoy }));
+        assert!(events.contains(&SessionEvent::DecoyAvoided { id: decoy }));
+        assert!(
+            !events.contains(&SessionEvent::Expired { id: decoy }),
+            "a correct wait is not a missed target"
+        );
         let st = s.stats();
         assert_eq!((st.decoy_waits, st.decoy_hits, st.expired), (1, 0, 0));
         assert_eq!(st.score, 0.0, "no expire penalty for a decoy");
