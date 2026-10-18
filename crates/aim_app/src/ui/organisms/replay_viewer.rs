@@ -4,11 +4,21 @@
 //! entry into a core [`ReplayPath`]; [`ReplayViewerState`] remembers the selection and caches
 //! the loaded path so a replay is only re-simulated when the selection changes. The plot is
 //! painted with egui's painter (no plotting dependency), centered on the target's aim point.
+//!
+//! Two views: the crosshair path of one engagement, coloured by crosshair speed, and a
+//! heatmap of the whole run's shots around a normalized target. Either view can be shown
+//! side by side with an earlier run of the same scenario ([`super::replay_compare`]).
 
-use crate::persistence::replays::ReplayEntry;
+use super::replay_compare::{self, ReplayCompareState};
+use crate::persistence::replays::{self, ReplayEntry};
+use crate::ui::atoms::speed_ramp::ramp_color;
 use crate::ui::atoms::{BAD, GOOD, WARN};
-use aim_core::analytics::{Engagement, ReplayPath};
-use bevy_egui::egui::{self, Align2, Color32, FontId, Pos2, Sense, Stroke, StrokeKind, vec2};
+use aim_core::analytics::path::{
+    FAST_SPEED_DEG_PER_SEC, HEATMAP_BINS, HEATMAP_EXTENT_RADII, SLOW_SPEED_DEG_PER_SEC,
+    shot_heatmap, speed_scale,
+};
+use aim_core::analytics::{Engagement, ReplayPath, ShotHeatmap};
+use bevy_egui::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, vec2};
 use chrono::{Datelike, Local, TimeZone, Timelike};
 use std::path::PathBuf;
 
@@ -26,10 +36,57 @@ const ZOOM_EXTENT_RADII: f32 = 4.0;
 const MIN_EXTENT_DEG: f32 = 0.25;
 /// Target grid line count per half axis.
 const TICKS_PER_HALF_AXIS: f32 = 4.0;
-/// Opacity of the oldest path point; the newest is opaque.
-const OLDEST_ALPHA: f32 = 0.15;
+/// Half-size of the "×" marking a missed shot, pixels.
+const MISS_MARK_PX: f32 = 3.5;
 
-/// Selection and the cached path of the selected replay.
+/// What the plot shows.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum ViewMode {
+    /// The crosshair path of one engagement.
+    #[default]
+    Path,
+    /// Every shot of the run around a normalized target.
+    Heatmap,
+}
+
+/// Which shots the heatmap counts.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum ShotFilter {
+    #[default]
+    All,
+    Hits,
+    Misses,
+}
+
+impl ShotFilter {
+    /// Shots of cell `i` this filter counts.
+    fn cell_count(self, h: &ShotHeatmap, i: usize) -> u32 {
+        match self {
+            Self::All => h.hits[i] + h.misses[i],
+            Self::Hits => h.hits[i],
+            Self::Misses => h.misses[i],
+        }
+    }
+
+    /// Largest counted cell.
+    fn max_count(self, h: &ShotHeatmap) -> u32 {
+        (0..h.hits.len())
+            .map(|i| self.cell_count(h, i))
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Counted shots beyond the grid.
+    fn outside(self, h: &ShotHeatmap) -> u32 {
+        match self {
+            Self::All => h.outside_hits + h.outside_misses,
+            Self::Hits => h.outside_hits,
+            Self::Misses => h.outside_misses,
+        }
+    }
+}
+
+/// Selection, view options and the cached path of the selected replay.
 #[derive(Debug, Default)]
 pub struct ReplayViewerState {
     selected: Option<PathBuf>,
@@ -38,6 +95,9 @@ pub struct ReplayViewerState {
     /// Index into the path's engagements.
     engagement: usize,
     zoom: bool,
+    mode: ViewMode,
+    filter: ShotFilter,
+    compare: ReplayCompareState,
 }
 
 impl ReplayViewerState {
@@ -45,6 +105,7 @@ impl ReplayViewerState {
         self.selected = Some(entry.path.clone());
         self.path = load(entry);
         self.engagement = 0;
+        self.compare.clear();
     }
 }
 
@@ -81,7 +142,7 @@ fn to_screen(offset: (f32, f32), center: Pos2, px_per_deg: f32) -> Pos2 {
 }
 
 /// Local date and time of a replay, `YYYY-MM-DD HH:MM`.
-fn timestamp_label(millis: u64) -> String {
+pub(crate) fn timestamp_label(millis: u64) -> String {
     match Local.timestamp_millis_opt(millis as i64).single() {
         Some(t) => format!(
             "{:04}-{:02}-{:02} {:02}:{:02}",
@@ -121,38 +182,37 @@ fn summary(e: &Engagement) -> String {
     parts.join(" · ")
 }
 
-fn plot(ui: &mut egui::Ui, e: &Engagement, zoom: bool) {
+/// A framed square plot sized to the available width. Returns the hover response, a
+/// painter clipped to the frame, and the inner drawing area.
+fn plot_frame(ui: &mut egui::Ui) -> (egui::Response, egui::Painter, Rect) {
     let side = ui.available_width().clamp(PLOT_MIN_PX, PLOT_MAX_PX);
     let (response, painter) = ui.allocate_painter(vec2(side, side), Sense::hover());
     let frame = response.rect;
-    let visuals = ui.visuals();
     painter.rect_stroke(
         frame,
         2.0,
-        visuals.widgets.noninteractive.bg_stroke,
+        ui.visuals().widgets.noninteractive.bg_stroke,
         StrokeKind::Inside,
     );
-    let area = frame.shrink(PADDING_PX);
     let painter = painter.with_clip_rect(frame.shrink(1.0));
-    let extent = if zoom {
-        (e.radius_deg * ZOOM_EXTENT_RADII).max(MIN_EXTENT_DEG)
-    } else {
-        plot_extent_deg(e)
-    };
+    (response, painter, frame.shrink(PADDING_PX))
+}
+
+/// Grid lines and axis labels over `area`, spanning `±extent` around its center, each
+/// label suffixed with `unit`. Returns pixels per unit.
+fn paint_grid(painter: &egui::Painter, area: Rect, extent: f32, unit: &str) -> f32 {
     let center = area.center();
-    let px_per_deg = area.width() / 2.0 / extent;
+    let px_per_unit = area.width() / 2.0 / extent;
     let weak = Color32::from_gray(150);
     let font = FontId::proportional(10.0);
-
-    // Grid and axes, in degrees.
     let step = grid_step_deg(extent);
     let grid = Stroke::new(1.0, Color32::from_gray(60));
     let ticks = (extent / step).floor() as i32;
     let decimals = (-step.log10().floor()).max(0.0) as usize;
     for k in -ticks..=ticks {
         let d = k as f32 * step;
-        let x = center.x + d * px_per_deg;
-        let y = center.y - d * px_per_deg;
+        let x = center.x + d * px_per_unit;
+        let y = center.y - d * px_per_unit;
         let stroke = if k == 0 {
             Stroke::new(1.0, Color32::from_gray(100))
         } else {
@@ -170,19 +230,44 @@ fn plot(ui: &mut egui::Ui, e: &Engagement, zoom: bool) {
             painter.text(
                 Pos2::new(x, area.bottom() + 2.0),
                 Align2::CENTER_TOP,
-                format!("{d:+.decimals$}°"),
+                format!("{d:+.decimals$}{unit}"),
                 font.clone(),
                 weak,
             );
             painter.text(
                 Pos2::new(area.left() - 2.0, y),
                 Align2::RIGHT_CENTER,
-                format!("{d:+.decimals$}°"),
+                format!("{d:+.decimals$}{unit}"),
                 font.clone(),
                 weak,
             );
         }
     }
+    px_per_unit
+}
+
+/// A shot marker: a filled, outlined dot for a hit and a cross for a miss, so the two
+/// differ by shape as well as colour.
+fn paint_shot(painter: &egui::Painter, p: Pos2, hit: bool) {
+    if hit {
+        painter.circle(p, 3.5, GOOD, Stroke::new(1.0, Color32::BLACK));
+    } else {
+        let stroke = Stroke::new(2.0, BAD);
+        let d = MISS_MARK_PX;
+        painter.line_segment([p + vec2(-d, -d), p + vec2(d, d)], stroke);
+        painter.line_segment([p + vec2(-d, d), p + vec2(d, -d)], stroke);
+    }
+}
+
+fn plot(ui: &mut egui::Ui, e: &Engagement, zoom: bool) {
+    let (response, painter, area) = plot_frame(ui);
+    let extent = if zoom {
+        (e.radius_deg * ZOOM_EXTENT_RADII).max(MIN_EXTENT_DEG)
+    } else {
+        plot_extent_deg(e)
+    };
+    let center = area.center();
+    let px_per_deg = paint_grid(&painter, area, extent, "°");
 
     // Target aim zone.
     painter.circle_stroke(
@@ -191,37 +276,206 @@ fn plot(ui: &mut egui::Ui, e: &Engagement, zoom: bool) {
         Stroke::new(1.5, WARN),
     );
 
-    // Crosshair path, older points fading out.
-    let line = visuals.widgets.active.fg_stroke.color;
+    // Crosshair path; each segment takes the speed of the frame it ends on.
     let points: Vec<Pos2> = e
         .path_deg
         .iter()
         .map(|&o| to_screen(o, center, px_per_deg))
         .collect();
-    let last = points.len().saturating_sub(1).max(1) as f32;
     for (i, pair) in points.windows(2).enumerate() {
-        let alpha = OLDEST_ALPHA + (1.0 - OLDEST_ALPHA) * (i + 1) as f32 / last;
+        let speed = e.speed_deg_per_sec.get(i + 1).copied().unwrap_or(0.0);
         painter.line_segment(
             [pair[0], pair[1]],
-            Stroke::new(1.5, line.gamma_multiply(alpha)),
+            Stroke::new(1.5, ramp_color(speed_scale(speed))),
         );
     }
     if let Some(start) = points.first() {
-        painter.circle_stroke(*start, 3.0, Stroke::new(1.0, weak));
+        painter.circle_stroke(*start, 3.0, Stroke::new(1.0, Color32::from_gray(150)));
     }
 
     for s in &e.shots {
-        let p = to_screen(s.offset_deg, center, px_per_deg);
-        painter.circle_filled(p, 3.5, if s.hit { GOOD } else { BAD });
+        paint_shot(&painter, to_screen(s.offset_deg, center, px_per_deg), s.hit);
     }
 
     response.on_hover_text(
-        "Crosshair offset from the target center, in degrees. Yellow: the target. \
-         Faded to bright: older to newer. Hollow dot: start. Green: hit. Red: miss.",
+        "Crosshair offset from the target center, in degrees. Yellow circle: the target. \
+         Trail colour: crosshair speed (see the legend). Hollow dot: start. \
+         Green dot: hit. Red cross: miss.",
     );
 }
 
-/// Draw the replay list, the selected replay's engagement plot and its summary.
+/// Legend of the speed-coloured trail: one swatch per speed band.
+fn speed_legend(ui: &mut egui::Ui) {
+    ui.horizontal_wrapped(|ui| {
+        ui.small("Trail speed:");
+        let bands = [
+            (
+                1.0 / 6.0,
+                format!("slow (< {SLOW_SPEED_DEG_PER_SEC:.0}°/s)"),
+            ),
+            (0.5, "medium".to_owned()),
+            (
+                5.0 / 6.0,
+                format!("fast (≥ {FAST_SPEED_DEG_PER_SEC:.0}°/s)"),
+            ),
+        ];
+        for (t, label) in bands {
+            ui.colored_label(ramp_color(t), "■");
+            ui.small(label);
+        }
+    });
+}
+
+/// The run's shots on a grid of target radii, cells coloured by how many shots `filter`
+/// counts, relative to `max` (shared between side-by-side heatmaps).
+fn heatmap_plot(ui: &mut egui::Ui, h: &ShotHeatmap, filter: ShotFilter, max: u32) {
+    let (response, painter, area) = plot_frame(ui);
+    let cell_px = area.width() / h.bins as f32;
+    if max > 0 {
+        for row in 0..h.bins {
+            for column in 0..h.bins {
+                let n = filter.cell_count(h, h.index(column, row));
+                if n == 0 {
+                    continue;
+                }
+                let min = Pos2::new(
+                    area.left() + column as f32 * cell_px,
+                    area.top() + row as f32 * cell_px,
+                );
+                painter.rect_filled(
+                    Rect::from_min_size(min, vec2(cell_px, cell_px)),
+                    0.0,
+                    ramp_color(n as f32 / max as f32),
+                );
+            }
+        }
+    }
+    let px_per_radius = paint_grid(&painter, area, h.extent_radii, "r");
+    painter.circle_stroke(area.center(), px_per_radius, Stroke::new(1.5, WARN));
+    response.on_hover_text(
+        "Where your shots landed, in target radii (1r is the target's edge), so targets of \
+         every size share one grid. Yellow circle: the target. Brighter cells: more shots.",
+    );
+}
+
+/// Shot totals under a heatmap.
+fn heatmap_counts(ui: &mut egui::Ui, h: &ShotHeatmap, filter: ShotFilter) {
+    let (hits, misses) = h.total();
+    if hits + misses == 0 {
+        ui.small("No shots in this run (hold scenarios record none).");
+        return;
+    }
+    ui.small(format!(
+        "{hits} hit(s), {misses} miss(es); {} outside ±{:.0} radii, not drawn",
+        filter.outside(h),
+        h.extent_radii
+    ));
+}
+
+/// Legend of the heatmap colours.
+fn heatmap_legend(ui: &mut egui::Ui, max: u32) {
+    if max == 0 {
+        return;
+    }
+    ui.horizontal_wrapped(|ui| {
+        ui.small("Shots per cell:");
+        ui.colored_label(ramp_color(1.0 / max as f32), "■");
+        ui.small("1");
+        ui.colored_label(ramp_color(1.0), "■");
+        ui.small(max.to_string());
+    });
+}
+
+/// The path view: one engagement, side by side with the same engagement of `earlier`.
+fn path_view(
+    ui: &mut egui::Ui,
+    path: &ReplayPath,
+    earlier: Option<&ReplayPath>,
+    engagement: &mut usize,
+    zoom: &mut bool,
+) {
+    let count = path.engagements.len();
+    if count == 0 {
+        ui.small("No engagements in this run.");
+        return;
+    }
+    *engagement = (*engagement).min(count - 1);
+    let mut shown = *engagement + 1;
+    ui.horizontal(|ui| {
+        ui.add_enabled(
+            count > 1,
+            egui::Slider::new(&mut shown, 1..=count).text(format!("of {count} engagements")),
+        );
+        ui.checkbox(zoom, "Zoom on target");
+    });
+    *engagement = shown - 1;
+    let e = &path.engagements[*engagement];
+    let Some(other) = earlier else {
+        plot(ui, e, *zoom);
+        speed_legend(ui);
+        ui.label(summary(e));
+        return;
+    };
+    ui.columns(2, |cols| {
+        cols[0].strong("This run");
+        plot(&mut cols[0], e, *zoom);
+        cols[0].label(summary(e));
+        cols[1].strong(format!("Earlier run, engagement {shown}"));
+        match other.engagements.get(*engagement) {
+            Some(o) => {
+                plot(&mut cols[1], o, *zoom);
+                cols[1].label(summary(o));
+            }
+            None => {
+                cols[1].small(format!(
+                    "The earlier run has only {} engagement(s).",
+                    other.engagements.len()
+                ));
+            }
+        }
+    });
+    speed_legend(ui);
+}
+
+/// The heatmap view: every shot of the run, side by side with `earlier`'s on one colour
+/// scale.
+fn heatmap_view(
+    ui: &mut egui::Ui,
+    path: &ReplayPath,
+    earlier: Option<&ReplayPath>,
+    filter: &mut ShotFilter,
+) {
+    ui.horizontal(|ui| {
+        ui.label("Shots:");
+        ui.radio_value(filter, ShotFilter::All, "All");
+        ui.radio_value(filter, ShotFilter::Hits, "Hits");
+        ui.radio_value(filter, ShotFilter::Misses, "Misses");
+    });
+    let f = *filter;
+    let heatmap = |p: &ReplayPath| shot_heatmap(&p.engagements, HEATMAP_BINS, HEATMAP_EXTENT_RADII);
+    let h = heatmap(path);
+    let Some(other) = earlier else {
+        let max = f.max_count(&h);
+        heatmap_plot(ui, &h, f, max);
+        heatmap_counts(ui, &h, f);
+        heatmap_legend(ui, max);
+        return;
+    };
+    let ho = heatmap(other);
+    let max = f.max_count(&h).max(f.max_count(&ho));
+    ui.columns(2, |cols| {
+        cols[0].strong("This run");
+        heatmap_plot(&mut cols[0], &h, f, max);
+        heatmap_counts(&mut cols[0], &h, f);
+        cols[1].strong("Earlier run");
+        heatmap_plot(&mut cols[1], &ho, f, max);
+        heatmap_counts(&mut cols[1], &ho, f);
+    });
+    heatmap_legend(ui, max);
+}
+
+/// Draw the replay list, the selected replay's path or heatmap view, and the optional
+/// comparison with an earlier run of the same scenario.
 pub fn replay_viewer(
     ui: &mut egui::Ui,
     state: &mut ReplayViewerState,
@@ -258,28 +512,42 @@ pub fn replay_viewer(
         });
     ui.separator();
 
-    let Some(path) = &state.path else {
+    let Some(current) = state
+        .selected
+        .as_ref()
+        .and_then(|p| entries.iter().find(|e| &e.path == p))
+    else {
+        return;
+    };
+    let ReplayViewerState {
+        path,
+        engagement,
+        zoom,
+        mode,
+        filter,
+        compare,
+        ..
+    } = state;
+    let Some(path) = path.as_ref() else {
         ui.colored_label(BAD, "This replay could not be read.");
         return;
     };
-    let count = path.engagements.len();
-    if count == 0 {
-        ui.small("No engagements in this run.");
-        return;
-    }
-    state.engagement = state.engagement.min(count - 1);
-    let mut shown = state.engagement + 1;
     ui.horizontal(|ui| {
-        ui.add_enabled(
-            count > 1,
-            egui::Slider::new(&mut shown, 1..=count).text(format!("of {count} engagements")),
-        );
-        ui.checkbox(&mut state.zoom, "Zoom on target");
+        ui.label("View:");
+        ui.selectable_value(mode, ViewMode::Path, "Crosshair path");
+        ui.selectable_value(mode, ViewMode::Heatmap, "Shot heatmap");
     });
-    state.engagement = shown - 1;
-    let e = &path.engagements[state.engagement];
-    plot(ui, e, state.zoom);
-    ui.label(summary(e));
+    let candidates = replays::earlier_runs_of_same_scenario(entries, current);
+    replay_compare::compare_picker(ui, compare, &candidates, &load);
+    let earlier = compare.path();
+    match mode {
+        ViewMode::Path => path_view(ui, path, earlier, engagement, zoom),
+        ViewMode::Heatmap => heatmap_view(ui, path, earlier, filter),
+    }
+    if let Some(other) = earlier {
+        ui.separator();
+        replay_compare::differences_table(ui, &path.summary(), &other.summary());
+    }
 }
 
 #[cfg(test)]
@@ -379,5 +647,59 @@ mod tests {
         assert_eq!(state.selected, Some(entry.path));
         assert_eq!(state.engagement, 0);
         assert!(state.path.is_none());
+    }
+
+    #[test]
+    fn selecting_another_replay_drops_the_comparison_but_keeps_the_view_mode() {
+        let path = ReplayPath {
+            scenario_id: "x".into(),
+            engagements: vec![],
+        };
+        let earlier = ReplayEntry {
+            path: PathBuf::from("/r/1-x.aimreplay"),
+            timestamp_millis: 1,
+            scenario_id: "x".into(),
+        };
+        let mut state = ReplayViewerState {
+            mode: ViewMode::Heatmap,
+            filter: ShotFilter::Misses,
+            ..Default::default()
+        };
+        assert_eq!(ReplayViewerState::default().mode, ViewMode::Path);
+        state.compare.select(&earlier, &|_| Some(path.clone()));
+        assert_eq!(state.compare.path(), Some(&path));
+        let next = ReplayEntry {
+            path: PathBuf::from("/r/2-x.aimreplay"),
+            timestamp_millis: 2,
+            scenario_id: "x".into(),
+        };
+        state.select(&next, &|_| Some(path.clone()));
+        assert!(state.compare.path().is_none());
+        assert_eq!(
+            (state.mode, state.filter),
+            (ViewMode::Heatmap, ShotFilter::Misses)
+        );
+    }
+
+    #[test]
+    fn the_heatmap_filter_counts_hits_misses_or_both() {
+        let h = ShotHeatmap {
+            bins: 2,
+            extent_radii: 1.0,
+            hits: vec![3, 0, 1, 0],
+            misses: vec![1, 2, 0, 0],
+            outside_hits: 4,
+            outside_misses: 5,
+        };
+        let counts = |f: ShotFilter| -> Vec<u32> { (0..4).map(|i| f.cell_count(&h, i)).collect() };
+        assert_eq!(counts(ShotFilter::All), vec![4, 2, 1, 0]);
+        assert_eq!(counts(ShotFilter::Hits), vec![3, 0, 1, 0]);
+        assert_eq!(counts(ShotFilter::Misses), vec![1, 2, 0, 0]);
+        assert_eq!(ShotFilter::All.max_count(&h), 4);
+        assert_eq!(ShotFilter::Hits.max_count(&h), 3);
+        assert_eq!(ShotFilter::Misses.max_count(&h), 2);
+        assert_eq!(ShotFilter::All.outside(&h), 9);
+        assert_eq!(ShotFilter::Hits.outside(&h), 4);
+        assert_eq!(ShotFilter::Misses.outside(&h), 5);
     }
 }

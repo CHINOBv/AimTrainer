@@ -100,6 +100,32 @@ pub struct PathSummary {
     pub median_reaction_secs: Option<f32>,
 }
 
+impl PathSummary {
+    /// Hits per shot, `0..=1`; `None` without shots.
+    pub fn hit_rate(&self) -> Option<f32> {
+        ratio(self.hits as f32, self.shots)
+    }
+
+    /// Share of engagements with an overshoot, `0..=1`; `None` without engagements.
+    pub fn overshoot_share(&self) -> Option<f32> {
+        ratio(self.overshoots as f32, self.engagements)
+    }
+
+    /// Share of engagements with an undershoot, `0..=1`; `None` without engagements.
+    pub fn undershoot_share(&self) -> Option<f32> {
+        ratio(self.undershoots as f32, self.engagements)
+    }
+
+    /// Corrective sub-movements per engagement; `None` without engagements.
+    pub fn corrections_per_engagement(&self) -> Option<f32> {
+        ratio(self.corrections as f32, self.engagements)
+    }
+}
+
+fn ratio(part: f32, whole: usize) -> Option<f32> {
+    (whole > 0).then(|| part / whole as f32)
+}
+
 impl ReplayPath {
     /// The run's key counts.
     pub fn summary(&self) -> PathSummary {
@@ -661,5 +687,32 @@ mod tests {
         };
         assert_eq!(empty.summary().engagements, 0);
         assert_eq!(empty.summary().median_reaction_secs, None);
+    }
+
+    #[test]
+    fn summary_rates_are_per_shot_or_per_engagement_and_absent_without_data() {
+        let s = PathSummary {
+            engagements: 4,
+            kills: 1,
+            shots: 8,
+            hits: 6,
+            overshoots: 1,
+            undershoots: 2,
+            corrections: 6,
+            median_reaction_secs: None,
+        };
+        assert_eq!(s.hit_rate(), Some(0.75));
+        assert_eq!(s.overshoot_share(), Some(0.25));
+        assert_eq!(s.undershoot_share(), Some(0.5));
+        assert_eq!(s.corrections_per_engagement(), Some(1.5));
+        let none = PathSummary {
+            engagements: 0,
+            shots: 0,
+            ..s
+        };
+        assert_eq!(none.hit_rate(), None);
+        assert_eq!(none.overshoot_share(), None);
+        assert_eq!(none.undershoot_share(), None);
+        assert_eq!(none.corrections_per_engagement(), None);
     }
 }
