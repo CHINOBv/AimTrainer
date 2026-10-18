@@ -11,6 +11,7 @@ pub mod codec;
 pub mod flick;
 pub mod pace;
 pub mod path;
+pub mod priority;
 pub mod profile;
 pub mod rules;
 pub mod skills;
@@ -46,6 +47,8 @@ pub struct RunAnalysis {
     pub kind: AnalysisKind,
     /// Kill or score rate per time window, if the run was long and busy enough.
     pub pace: Option<pace::PaceAnalysis>,
+    /// Target prioritization, if more than one target was visible at once.
+    pub priority: Option<priority::PriorityAnalysis>,
 }
 
 impl RunAnalysis {
@@ -78,6 +81,7 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         category: recording.def.category,
         kind,
         pace: pace::analyze(&samples, pace_unit(recording.def.weapon.fire)),
+        priority: priority::analyze(&samples),
     }
 }
 
@@ -136,5 +140,16 @@ mod tests {
         let rec = test_support::record("track-precise", AimerProfile::PRESETS[2], 4);
         let pace = analyze(&rec).pace.expect("hold run has pace");
         assert_eq!(pace.unit, pace::PaceUnit::Score);
+    }
+
+    #[test]
+    fn prioritization_is_measured_only_with_several_targets_visible() {
+        let rec = test_support::record("switch-wide", AimerProfile::PRESETS[2], 4);
+        let p = analyze(&rec)
+            .priority
+            .expect("switch-wide shows three targets");
+        assert_eq!(p.kills, rec.replay(|_, _| {}).stats().kills);
+        let rec = test_support::record("flick-wide", AimerProfile::PRESETS[2], 4);
+        assert_eq!(analyze(&rec).priority, None);
     }
 }

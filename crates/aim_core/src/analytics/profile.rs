@@ -15,6 +15,7 @@ use super::{AnalysisKind, RunAnalysis};
 use crate::scenario::Category;
 
 use super::pace::{PaceAnalysis, PaceSummary};
+use super::priority::PriorityAnalysis;
 
 pub use super::rules::{Direction, Metric, Recommendation, Rule, Verdict};
 
@@ -136,6 +137,15 @@ impl SkillProfile {
             // Each run's pace analysis already enforces its own minimum kills and duration.
             let paces: Vec<&PaceAnalysis> = runs.iter().filter_map(|r| r.pace.as_ref()).collect();
             let pace = PaceSummary::from_runs(&paces);
+            // Counts add up across runs; the share methods apply the minimum-sample guards.
+            let priority = runs.iter().filter_map(|r| r.priority.as_ref()).fold(
+                None,
+                |acc: Option<PriorityAnalysis>, p| {
+                    let mut sum = acc.unwrap_or_default();
+                    sum.merge(p);
+                    Some(sum)
+                },
+            );
             categories.push(CategoryProfile {
                 category,
                 runs: runs.len(),
@@ -146,6 +156,7 @@ impl SkillProfile {
                         flick: flick.as_ref(),
                         tracking: tracking.as_ref(),
                         pace: pace.as_ref(),
+                        priority: priority.as_ref(),
                     },
                 ),
                 flick,
@@ -209,6 +220,7 @@ mod tests {
             category: Category::Flicking,
             kind: AnalysisKind::Flick(flicks),
             pace: None,
+            priority: None,
         };
         let p = SkillProfile::build(&[run]);
         let recs = p.recommendations();
@@ -368,10 +380,17 @@ mod tests {
         original
             .rules
             .retain(|r| !matches!(r.metric, Metric::StartRatio | Metric::StaminaRatio));
+        original.rules.retain(|r| {
+            !matches!(
+                r.metric,
+                Metric::NearestFirstShare | Metric::MissedOpportunityRate
+            )
+        });
         for (id, preset) in [("flick-wide", 0), ("track-precise", 1), ("switch-wide", 2)] {
             let run = analyze(&record(id, AimerProfile::PRESETS[preset], 2));
             let mut bare = run.clone();
             bare.pace = None;
+            bare.priority = None;
             assert_eq!(
                 SkillProfile::build_with(&[run], &original),
                 SkillProfile::build_with(&[bare], &original),
@@ -392,5 +411,87 @@ mod tests {
         };
         assert_eq!(threshold(Metric::StartRatio), Some(SLOW_START_RATIO));
         assert_eq!(threshold(Metric::StaminaRatio), Some(STAMINA_DROP_RATIO));
+    }
+
+    /// A switching run whose only measured section is prioritization.
+    fn priority_run(priority: PriorityAnalysis) -> RunAnalysis {
+        let mut run = analyze(&record("switch-wide", AimerProfile::PRESETS[1], 1));
+        run.kind = AnalysisKind::Flick(Vec::new());
+        run.pace = None;
+        run.priority = Some(priority);
+        run
+    }
+
+    #[test]
+    fn going_for_far_targets_and_missing_chances_are_explained_weaknesses() {
+        let p = SkillProfile::build(&[priority_run(PriorityAnalysis {
+            kills: 8,
+            contested_kills: 8,
+            nearest_kills: 2,
+            missed_opportunities: 2,
+        })]);
+        let recs = p.recommendations();
+        let nearest = recs
+            .iter()
+            .find(|f| f.metric == Metric::NearestFirstShare)
+            .expect("25% nearest-first fires");
+        assert_eq!(
+            nearest.explanation,
+            "Nearest target first 25% is below the 50% threshold: you often go for a farther target while a nearer one is available."
+        );
+        let missed = recs
+            .iter()
+            .find(|f| f.metric == Metric::MissedOpportunityRate)
+            .expect("20% missed fires");
+        assert_eq!(
+            missed.explanation,
+            "Missed opportunities 20% is above the 15% threshold: your crosshair rests on targets that you then leave without firing."
+        );
+        assert!(p.strengths().all(|f| f.metric != Metric::NearestFirstShare));
+    }
+
+    #[test]
+    fn clearing_the_nearest_target_first_is_a_strength() {
+        let p = SkillProfile::build(&[priority_run(PriorityAnalysis {
+            kills: 10,
+            contested_kills: 10,
+            nearest_kills: 10,
+            missed_opportunities: 0,
+        })]);
+        let f = p
+            .strengths()
+            .find(|f| f.metric == Metric::NearestFirstShare)
+            .expect("100% nearest-first is a strength");
+        assert_eq!(
+            f.explanation,
+            "Nearest target first 100% is above the 85% threshold: you clear the nearest target first."
+        );
+        assert!(
+            p.findings()
+                .all(|f| f.metric != Metric::MissedOpportunityRate)
+        );
+    }
+
+    #[test]
+    fn prioritization_is_summed_across_a_categorys_runs() {
+        // Each run alone has too few contested kills; together they are judged.
+        let run = priority_run(PriorityAnalysis {
+            kills: 3,
+            contested_kills: 3,
+            nearest_kills: 0,
+            missed_opportunities: 0,
+        });
+        let alone = SkillProfile::build(std::slice::from_ref(&run));
+        assert!(
+            alone
+                .findings()
+                .all(|f| f.metric != Metric::NearestFirstShare)
+        );
+        let both = SkillProfile::build(&[run.clone(), run]);
+        let f = both
+            .findings()
+            .find(|f| f.metric == Metric::NearestFirstShare)
+            .expect("6 contested kills are judged");
+        assert_eq!(f.value, 0.0);
     }
 }

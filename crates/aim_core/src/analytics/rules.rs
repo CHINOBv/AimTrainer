@@ -10,6 +10,7 @@ use super::tracking::TrackingSummary;
 use serde::Deserialize;
 
 use super::pace::PaceSummary;
+use super::priority::PriorityAnalysis;
 
 /// A measurable quantity a rule can threshold.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -35,6 +36,10 @@ pub enum Metric {
     StartRatio,
     /// Late-window rate ÷ early-window rate (pace).
     StaminaRatio,
+    /// Share of contested kills that went to the nearest target (prioritization).
+    NearestFirstShare,
+    /// Missed opportunities ÷ (kills + missed opportunities) (prioritization).
+    MissedOpportunityRate,
 }
 
 impl Metric {
@@ -51,6 +56,8 @@ impl Metric {
             Metric::ReversalResponse => "Reaction to direction changes",
             Metric::StartRatio => "Opening pace (vs rest of run)",
             Metric::StaminaRatio => "Late pace (vs early run)",
+            Metric::NearestFirstShare => "Nearest target first",
+            Metric::MissedOpportunityRate => "Missed opportunities",
         }
     }
 
@@ -79,6 +86,8 @@ impl Metric {
             Metric::ReversalResponse => tracking?.median_reversal_response_secs,
             Metric::StartRatio => sources.pace?.start_ratio,
             Metric::StaminaRatio => sources.pace?.stamina_ratio,
+            Metric::NearestFirstShare => sources.priority?.nearest_share(),
+            Metric::MissedOpportunityRate => sources.priority?.missed_rate(),
         }
     }
 }
@@ -89,6 +98,7 @@ pub(super) struct MetricSources<'a> {
     pub flick: Option<&'a FlickSummary>,
     pub tracking: Option<&'a TrackingSummary>,
     pub pace: Option<&'a PaceSummary>,
+    pub priority: Option<&'a PriorityAnalysis>,
 }
 
 /// Whether a fired rule marks a strength or a weakness.
@@ -406,6 +416,38 @@ pub(crate) mod tests {
                 &["static-headline", "track-precise"],
                 Some("fundamentals-hour"),
                 "Keep a relaxed grip and steady breathing to the end; build endurance with longer sessions and short breaks between runs.",
+            )),
+        ),
+        (
+            Metric::NearestFirstShare,
+            Direction::Below,
+            0.50,
+            Verdict::Weakness,
+            "you often go for a farther target while a nearer one is available",
+            Some((
+                &["switch-wide", "switch-speed"],
+                None,
+                "Clear the target closest to your crosshair first: the shorter flick is faster and keeps the others in view.",
+            )),
+        ),
+        (
+            Metric::NearestFirstShare,
+            Direction::Above,
+            0.85,
+            Verdict::Strength,
+            "you clear the nearest target first",
+            None,
+        ),
+        (
+            Metric::MissedOpportunityRate,
+            Direction::Above,
+            0.15,
+            Verdict::Weakness,
+            "your crosshair rests on targets that you then leave without firing",
+            Some((
+                &["static-headline", "switch-heads"],
+                None,
+                "Fire as soon as the crosshair is on the target; trust it instead of waiting for a perfect picture.",
             )),
         ),
     ];
