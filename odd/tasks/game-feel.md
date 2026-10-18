@@ -49,12 +49,12 @@ Rules: game rules stay in `aim_core`/`aim_world`; the app draws and plays only. 
 
 | ID | Specs | Route | Status | Commit |
 |---|---|---|---|---|
-| T1 | plan | inline | done | this commit |
-| T2 | S1, S6 foundation (`FeelSettings`, sound category volumes, arena events, `ArenaFeedback` message) | delegated (worktree `feel-0`) | pending | |
-| T3 | S2 | delegated, after T2 (worktree `feel-audio`) | pending | |
-| T4 | S3 | delegated, after T2 (worktree `feel-hud`) | pending | |
-| T5 | S4 | delegated, after T2 (worktree `feel-markers`) | pending | |
-| T6 | S5 (+ settings UI for S6 keys) | delegated, after T2 (worktree `feel-menus`) | pending | |
+| T1 | plan | inline | done | cda749a |
+| T2 | S1, S6 foundation (`FeelSettings`, sound category volumes, arena events, `ArenaFeedback` message) | delegated (worktree `feel-0`) | done | 8cb71d7, 5c5c98f, eae9d00, 29349a1, merge a44d49c |
+| T3 | S2 | delegated, after T2 (worktree `feel-audio`) | done (playtest pending) | 0cb7014, merge 651e28d |
+| T4 | S3 | delegated, after T2 (worktree `feel-hud`) | done (playtest pending) | cf8e366, merge f4f6bf0 |
+| T5 | S4 | delegated, after T2 (worktree `feel-markers`) | done (playtest pending) | 1299a2b, 41c6451, aaa853f, 21ae1c7, merge fee13e4 |
+| T6 | S5 (+ settings UI for S6 keys) | delegated, after T2 (worktree `feel-menus`) | done (playtest pending) | e533aef..f6a7795, merge, 2206cce |
 | T7 | seam: merge, full suite, verifier, review, merge to `main`, build and launch | inline | pending | |
 
 ## Log
@@ -63,3 +63,13 @@ Rules: game rules stay in `aim_core`/`aim_world`; the app draws and plays only. 
 - L2 (2026-10-18) Map: the arena session already emits damage taken, death, kills, bot spawns and end of round, but the app only plays the player's own hit/kill sounds. `PlayerHit` has no direction and bot fire emits no event. Settings are written synchronously every changed frame (`menu.rs` → `fs::write`).
 
   The split follows the map's suggestion: a unit 0 foundation, then four disjoint units (audio / HUD / markers / menus).
+- L3 (2026-10-18) All units merged.
+  - Seams: hud.rs/arena.rs between HUD and markers. The HUD unit removed `damage_flash` in favour of its scaled vignette; the markers unit's arrows, `hit_frame` and kill flash were kept; the stale `arena_status(damage_flash)` call was dropped.
+  - The parent wrapped the play buttons with `ui_click::clicked` and documented per-play positional rendering in `docs/decisions.md`.
+  - Checks: tests all pass (app 286, core 411, world 102 + 1 ignored); clippy clean; arena golden passes.
+  - Decisions left as the writers chose them:
+    - damage/death sounds sit in the cues category (as the settings docs say);
+    - the scenario kill flash stays undrawn, as before;
+    - the animated countdown also plays before scenarios;
+    - the end-of-round hold is 0.8 s in the app run state;
+    - arena bloom is movement-only.
