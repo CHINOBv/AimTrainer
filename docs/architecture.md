@@ -63,6 +63,8 @@ New code follows this layout; existing code migrates as described in [Conformanc
 │   │   │   ├── scenario/       def (data), session (runtime), spawn, motion, weapon, scoring, hit
 │   │   │   ├── training/       routine, benchmark, method* (weekly plans), progress*, difficulty*, recommend*
 │   │   │   ├── analytics/*     telemetry, flick segmentation, skill profile
+│   │   │   ├── coach/          AI coach: player context, knowledge base, drills, tools, tool loop;
+│   │   │   │                   ports ChatModel and CoachMemory (providers and stores are adapters)
 │   │   │   ├── crosshair/*     crosshair model, import/export codes
 │   │   │   └── sim/            simulated aimer (tests, calibration, bot aim later)
 │   │   ├── examples/           developer tools (calibrate)
