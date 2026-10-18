@@ -2,7 +2,7 @@
 //! look and input as scenarios, feeding `aim_world::arena::ArenaSession`, with the map's
 //! boxes and the bots mirrored as meshes. All rules live in `aim_world`.
 
-use super::feedback::{HitFrame, MarkerKind, ShotFeedback, ShotOutcome};
+use super::feedback::{HitFrame, KILL_FLASH_SECS, MarkerKind, ShotFeedback, ShotOutcome};
 use super::hit_effect::{self, EffectAssets, Struck};
 use super::{
     AppState, LastResult, MainCamera, PlayerInput, TargetVisual, WorldAssets, apply_look,
@@ -128,6 +128,8 @@ pub struct ArenaRun {
     pub damage_flash: f32,
     /// The kind of hit the marker shows.
     pub marker: MarkerKind,
+    /// Seconds left on the kill flash (`feel.kill_flash_arena`).
+    pub kill_flash: f32,
     bots: HashMap<u64, Entity>,
     /// Bots hit this frame, for their visual effect.
     struck: Vec<Struck>,
@@ -146,6 +148,7 @@ impl ArenaRun {
             hit_flash: 0.0,
             damage_flash: 0.0,
             marker: MarkerKind::Body,
+            kill_flash: 0.0,
             bots: HashMap::new(),
             struck: Vec::new(),
             translator: FeedbackTranslator::default(),
@@ -157,6 +160,7 @@ impl ArenaRun {
         HitFrame {
             marker_secs_left: self.hit_flash,
             marker: self.marker,
+            kill_flash_secs: self.kill_flash,
         }
     }
 
@@ -369,6 +373,7 @@ fn tick(
     let dt = input.time.delta_secs();
     run.hit_flash = (run.hit_flash - dt).max(0.0);
     run.damage_flash = (run.damage_flash - dt).max(0.0);
+    run.kill_flash = (run.kill_flash - dt).max(0.0);
     if run.countdown > 0.0 {
         let before = run.countdown;
         run.countdown -= dt;
@@ -396,6 +401,9 @@ fn tick(
             }
             ArenaEvent::BotKilled { id, .. } => {
                 hit_effect::record(&mut run.struck, id, None, true);
+                if finisher.settings.feel.kill_flash_arena {
+                    run.kill_flash = KILL_FLASH_SECS;
+                }
             }
             ArenaEvent::PlayerHit { .. } if finisher.settings.feel.damage_vignette.enabled => {
                 run.damage_flash = 0.25;

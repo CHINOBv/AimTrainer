@@ -229,6 +229,8 @@ pub struct HitFrame {
     /// Seconds before the hit marker ends (0 = none showing).
     pub marker_secs_left: f32,
     pub marker: MarkerKind,
+    /// Seconds left on the kill flash (0 = none).
+    pub kill_flash_secs: f32,
 }
 
 /// What a hit target does for a moment. A killed target plays it before disappearing.
@@ -283,6 +285,16 @@ const RING_GROWTH: f32 = 0.8;
 /// Opacity of a ring burst at the start.
 const RING_PEAK_ALPHA: f32 = 0.6;
 
+/// Length of the kill flash, the same as the scenario runs' `kill_flash`, seconds.
+pub const KILL_FLASH_SECS: f32 = 0.12;
+/// Opacity of the kill flash's screen-edge glow at the start: subtle, it never hides the view.
+pub const KILL_FLASH_PEAK_ALPHA: f32 = 0.3;
+
+/// Opacity of the kill flash with `secs_left` of its [`KILL_FLASH_SECS`] to go: a linear fade.
+pub fn kill_flash_alpha(secs_left: f32) -> f32 {
+    KILL_FLASH_PEAK_ALPHA * (secs_left / KILL_FLASH_SECS).clamp(0.0, 1.0)
+}
+
 /// Hit-marker opacity at `t`, the elapsed fraction (0–1) of its duration: an ease-out.
 pub fn marker_alpha(t: f32) -> f32 {
     MARKER_PEAK_ALPHA * (1.0 - t.clamp(0.0, 1.0)).powi(2)
@@ -330,6 +342,22 @@ mod tests {
         assert_eq!(marker_alpha(2.0), 0.0, "clamped past the end");
         let samples: Vec<f32> = (0..=10).map(|i| marker_alpha(i as f32 / 10.0)).collect();
         assert!(samples.windows(2).all(|w| w[1] < w[0]), "{samples:?}");
+    }
+
+    #[test]
+    fn kill_flash_fades_out_from_a_subtle_peak() {
+        assert_eq!(kill_flash_alpha(KILL_FLASH_SECS), KILL_FLASH_PEAK_ALPHA);
+        const {
+            assert!(
+                KILL_FLASH_PEAK_ALPHA <= 0.35,
+                "subtle: never hides the view"
+            )
+        };
+        assert_eq!(kill_flash_alpha(10.0), KILL_FLASH_PEAK_ALPHA, "clamped");
+        let half = kill_flash_alpha(KILL_FLASH_SECS / 2.0);
+        assert!(half > 0.0 && half < KILL_FLASH_PEAK_ALPHA, "{half}");
+        assert_eq!(kill_flash_alpha(0.0), 0.0);
+        assert_eq!(kill_flash_alpha(-1.0), 0.0);
     }
 
     #[test]

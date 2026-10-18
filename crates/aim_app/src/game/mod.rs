@@ -122,6 +122,8 @@ impl Run {
         HitFrame {
             marker_secs_left: self.hit_flash,
             marker: self.marker,
+            // Scenario runs keep their look: their kill flash times out but draws nothing.
+            kill_flash_secs: 0.0,
         }
     }
 }
@@ -751,7 +753,7 @@ fn tick(
                 hit_effect::record(&mut run.struck, id, Some(zone), false);
             }
             SessionEvent::Killed { id, .. } => {
-                run.kill_flash = 0.12;
+                run.kill_flash = feedback::KILL_FLASH_SECS;
                 hit_effect::record(&mut run.struck, id, None, true);
             }
             SessionEvent::Finished => finisher.finish(&run),

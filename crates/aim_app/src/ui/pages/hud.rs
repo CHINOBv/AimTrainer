@@ -5,7 +5,7 @@ use crate::game::AppState;
 use crate::game::MainCamera;
 use crate::game::SensDrill;
 use crate::game::arena::ArenaRun;
-use crate::game::feedback::{HitFrame, HitMarkerStyle, marker_look};
+use crate::game::feedback::{HitFrame, HitMarkerStyle, kill_flash_alpha, marker_look};
 use crate::overlay::Overlay;
 use crate::persistence::settings::Settings;
 use crate::platform::game_key;
@@ -161,7 +161,7 @@ fn sens_drill_hud(
 }
 
 /// The crosshair and the hit marker of `frame` (head, body and kill markers differ with
-/// `feel.distinct_markers`).
+/// `feel.distinct_markers`), and the arena kill flash.
 fn hit_feedback(ctx: &bevy_egui::egui::Context, settings: &Settings, frame: HitFrame) {
     let fb = &settings.hit_feedback;
     let showing = frame.marker_secs_left > 0.0;
@@ -179,6 +179,9 @@ fn hit_feedback(ctx: &bevy_egui::egui::Context, settings: &Settings, frame: HitF
     if showing {
         let t = 1.0 - frame.marker_secs_left / fb.marker_secs();
         hit_marker::draw(ctx, &look, settings.crosshair.color(), t);
+    }
+    if frame.kill_flash_secs > 0.0 {
+        hit_marker::draw_kill_flash(ctx, kill_flash_alpha(frame.kill_flash_secs));
     }
 }
 

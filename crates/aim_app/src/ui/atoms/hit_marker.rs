@@ -125,6 +125,31 @@ pub fn paint_look(
     }
 }
 
+/// Width of the kill flash's glow along the screen edges, points.
+const KILL_FLASH_EDGE: f32 = 40.0;
+
+/// The kill flash: a soft white glow along the screen edges at `alpha` (0–1), behind the
+/// HUD so it never covers the crosshair or a target in the middle of the view.
+pub fn draw_kill_flash(ctx: &egui::Context, alpha: f32) {
+    let a = (alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
+    if a == 0 {
+        return;
+    }
+    let painter = ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Background,
+        egui::Id::new("kill_flash"),
+    ));
+    painter.rect_stroke(
+        ctx.content_rect().shrink(KILL_FLASH_EDGE / 2.0),
+        0.0,
+        Stroke::new(
+            KILL_FLASH_EDGE,
+            Color32::from_rgba_unmultiplied(255, 255, 255, a),
+        ),
+        egui::StrokeKind::Inside,
+    );
+}
+
 /// Draw the hit marker at the screen center, above everything else.
 pub fn draw(ctx: &egui::Context, look: &MarkerLook, crosshair: Rgba, t: f32) {
     let painter = ctx.layer_painter(egui::LayerId::new(
