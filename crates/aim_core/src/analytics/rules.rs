@@ -9,6 +9,8 @@ use super::flick::FlickSummary;
 use super::tracking::TrackingSummary;
 use serde::Deserialize;
 
+use super::pace::PaceSummary;
+
 /// A measurable quantity a rule can threshold.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -29,6 +31,10 @@ pub enum Metric {
     LagRatio,
     /// Median seconds to follow a target that reversed direction (tracking).
     ReversalResponse,
+    /// Opening-window rate ÷ mean rate of the rest of the run (pace).
+    StartRatio,
+    /// Late-window rate ÷ early-window rate (pace).
+    StaminaRatio,
 }
 
 impl Metric {
@@ -43,6 +49,8 @@ impl Metric {
             Metric::OnTargetRatio => "Time on target",
             Metric::LagRatio => "Time behind the target",
             Metric::ReversalResponse => "Reaction to direction changes",
+            Metric::StartRatio => "Opening pace (vs rest of run)",
+            Metric::StaminaRatio => "Late pace (vs early run)",
         }
     }
 
@@ -69,6 +77,8 @@ impl Metric {
             Metric::OnTargetRatio => Some(tracking?.on_target_ratio),
             Metric::LagRatio => tracking?.lag_ratio,
             Metric::ReversalResponse => tracking?.median_reversal_response_secs,
+            Metric::StartRatio => sources.pace?.start_ratio,
+            Metric::StaminaRatio => sources.pace?.stamina_ratio,
         }
     }
 }
@@ -78,6 +88,7 @@ impl Metric {
 pub(super) struct MetricSources<'a> {
     pub flick: Option<&'a FlickSummary>,
     pub tracking: Option<&'a TrackingSummary>,
+    pub pace: Option<&'a PaceSummary>,
 }
 
 /// Whether a fired rule marks a strength or a weakness.
@@ -371,6 +382,30 @@ pub(crate) mod tests {
                 &["track-reactive-strafe", "track-reactive-micro"],
                 None,
                 "React to strafes instead of anticipating them; relax your grip so reversals are quicker.",
+            )),
+        ),
+        (
+            Metric::StartRatio,
+            Direction::Below,
+            0.70,
+            Verdict::Weakness,
+            "you score much slower at the start of a run than in the rest of it",
+            Some((
+                &["flick-wide", "track-precise"],
+                Some("quick-warmup"),
+                "Warm up before scored runs so the first seconds count; the quick warm-up routine gets you to full speed.",
+            )),
+        ),
+        (
+            Metric::StaminaRatio,
+            Direction::Below,
+            0.80,
+            Verdict::Weakness,
+            "your scoring rate drops in the last third of the run",
+            Some((
+                &["static-headline", "track-precise"],
+                Some("fundamentals-hour"),
+                "Keep a relaxed grip and steady breathing to the end; build endurance with longer sessions and short breaks between runs.",
             )),
         ),
     ];

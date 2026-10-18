@@ -14,6 +14,8 @@ use super::tracking::{TrackingAnalysis, TrackingSummary};
 use super::{AnalysisKind, RunAnalysis};
 use crate::scenario::Category;
 
+use super::pace::{PaceAnalysis, PaceSummary};
+
 pub use super::rules::{Direction, Metric, Recommendation, Rule, Verdict};
 
 /// Fewer flicks than this in a category give no flick findings.
@@ -131,6 +133,9 @@ impl SkillProfile {
             let tracking = tracking
                 .map(|t| t.summary())
                 .filter(|t| t.hold_secs >= MIN_TRACKING_SECS);
+            // Each run's pace analysis already enforces its own minimum kills and duration.
+            let paces: Vec<&PaceAnalysis> = runs.iter().filter_map(|r| r.pace.as_ref()).collect();
+            let pace = PaceSummary::from_runs(&paces);
             categories.push(CategoryProfile {
                 category,
                 runs: runs.len(),
@@ -140,6 +145,7 @@ impl SkillProfile {
                     &MetricSources {
                         flick: flick.as_ref(),
                         tracking: tracking.as_ref(),
+                        pace: pace.as_ref(),
                     },
                 ),
                 flick,
@@ -202,6 +208,7 @@ mod tests {
             scenario_id: "flick-wide".into(),
             category: Category::Flicking,
             kind: AnalysisKind::Flick(flicks),
+            pace: None,
         };
         let p = SkillProfile::build(&[run]);
         let recs = p.recommendations();
@@ -292,5 +299,98 @@ mod tests {
         assert_eq!(cats, vec![Category::Flicking, Category::Tracking]);
         assert!(p.categories[0].flick.is_some() && p.categories[0].tracking.is_none());
         assert!(p.categories[1].tracking.is_some() && p.categories[1].flick.is_none());
+    }
+
+    /// A flicking run whose only measured section is pace, with `amounts` kills per 10 s
+    /// window.
+    fn pace_run(amounts: [f32; crate::analytics::pace::WINDOWS]) -> RunAnalysis {
+        use crate::analytics::pace::{PaceAnalysis, PaceUnit, PaceWindow};
+        let mut run = analyze(&record("flick-wide", AimerProfile::PRESETS[1], 1));
+        run.kind = AnalysisKind::Flick(Vec::new());
+        run.pace = Some(PaceAnalysis {
+            unit: PaceUnit::Kills,
+            windows: amounts
+                .iter()
+                .enumerate()
+                .map(|(i, &amount)| PaceWindow {
+                    start_secs: i as f32 * 10.0,
+                    end_secs: (i + 1) as f32 * 10.0,
+                    amount,
+                    rate_per_sec: amount / 10.0,
+                })
+                .collect(),
+        });
+        run
+    }
+
+    #[test]
+    fn a_slow_start_is_an_explained_weakness_with_a_warmup() {
+        let p = SkillProfile::build(&[pace_run([1.0, 4.0, 4.0, 4.0, 4.0, 4.0])]);
+        let f = p
+            .recommendations()
+            .into_iter()
+            .find(|f| f.metric == Metric::StartRatio)
+            .expect("25% opening pace fires");
+        assert_eq!(
+            f.explanation,
+            "Opening pace (vs rest of run) 25% is below the 70% threshold: you score much slower at the start of a run than in the rest of it."
+        );
+        let rec = f.recommendation.as_ref().unwrap();
+        assert_eq!(rec.routine_id.as_deref(), Some("quick-warmup"));
+        assert!(p.findings().all(|f| f.metric != Metric::StaminaRatio));
+    }
+
+    #[test]
+    fn a_stamina_drop_is_an_explained_weakness() {
+        let p = SkillProfile::build(&[pace_run([4.0, 4.0, 4.0, 4.0, 2.0, 1.0])]);
+        let f = p
+            .recommendations()
+            .into_iter()
+            .find(|f| f.metric == Metric::StaminaRatio)
+            .expect("38% late pace fires");
+        assert_eq!(
+            f.explanation,
+            "Late pace (vs early run) 38% is below the 80% threshold: your scoring rate drops in the last third of the run."
+        );
+        assert!(p.findings().all(|f| f.metric != Metric::StartRatio));
+        let even = SkillProfile::build(&[pace_run([3.0; 6])]);
+        assert!(
+            even.findings()
+                .all(|f| f.metric != Metric::StartRatio && f.metric != Metric::StaminaRatio)
+        );
+    }
+
+    /// The per-run sections added after flicks and tracking never change the findings of
+    /// the original flick and tracking metrics.
+    #[test]
+    fn flick_and_tracking_findings_ignore_the_added_sections() {
+        let mut original = rules::builtin::rules().clone();
+        original
+            .rules
+            .retain(|r| !matches!(r.metric, Metric::StartRatio | Metric::StaminaRatio));
+        for (id, preset) in [("flick-wide", 0), ("track-precise", 1), ("switch-wide", 2)] {
+            let run = analyze(&record(id, AimerProfile::PRESETS[preset], 2));
+            let mut bare = run.clone();
+            bare.pace = None;
+            assert_eq!(
+                SkillProfile::build_with(&[run], &original),
+                SkillProfile::build_with(&[bare], &original),
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
+    fn pace_rules_use_the_pace_flag_thresholds() {
+        use crate::analytics::pace::{SLOW_START_RATIO, STAMINA_DROP_RATIO};
+        let threshold = |metric| {
+            rules::builtin::rules()
+                .rules
+                .iter()
+                .find(|r| r.metric == metric && r.direction == Direction::Below)
+                .map(|r| r.threshold)
+        };
+        assert_eq!(threshold(Metric::StartRatio), Some(SLOW_START_RATIO));
+        assert_eq!(threshold(Metric::StaminaRatio), Some(STAMINA_DROP_RATIO));
     }
 }

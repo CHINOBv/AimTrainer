@@ -9,6 +9,8 @@ use crate::ui::molecules::stat_row;
 use aim_core::analytics::{RunAnalysis, SkillProfile};
 use bevy_egui::egui;
 
+use crate::ui::organisms::pace_panel::{PaceReport, pace_panel};
+
 /// Recommendations shown on the results card.
 pub const MAX_RECOMMENDATIONS: usize = 2;
 
@@ -27,6 +29,7 @@ pub struct RunReport {
     pub metrics: Vec<(&'static str, String)>,
     pub strengths: Vec<String>,
     pub advice: Vec<Advice>,
+    pub pace: Option<PaceReport>,
 }
 
 fn ms(secs: f32) -> String {
@@ -124,6 +127,7 @@ impl RunReport {
             metrics,
             strengths,
             advice,
+            pace: analysis.pace.as_ref().map(PaceReport::new),
         }
     }
 }
@@ -161,6 +165,9 @@ pub fn analysis_panel(ui: &mut egui::Ui, report: &RunReport) -> Option<UiAction>
             }
             ui.small("Thresholds are provisional until calibrated on player data.");
         });
+    if let Some(pace) = &report.pace {
+        pace_panel(ui, pace);
+    }
     action
 }
 
@@ -203,5 +210,13 @@ mod tests {
         let r = report("track-precise", 2);
         assert_eq!(r.title, "Tracking analysis");
         assert!(r.metrics.iter().any(|(l, _)| *l == "Time on target"));
+    }
+
+    #[test]
+    fn runs_with_enough_kills_or_score_show_their_pace() {
+        let r = report("flick-wide", 2);
+        assert!(r.pace.as_ref().unwrap().rows[0].1.contains("kills/s"));
+        let r = report("track-precise", 2);
+        assert!(r.pace.as_ref().unwrap().rows[0].1.contains("points/s"));
     }
 }

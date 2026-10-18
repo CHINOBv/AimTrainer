@@ -185,6 +185,22 @@ The 300 ms and 220 ms reaction thresholds bracket the simulated recruit (0.32 s 
 
 **Trends.** `training::progress::subcategory_trend` gives each subcategory's energy at the end of each of the last weeks, using the same weekly cutoffs as the overall `benchmark_trend` (personal bests up to each cutoff). The Progress page charts one trend per subcategory once it has two played weeks.
 
+### Pace and stamina
+
+`aim_core::analytics::pace` splits every run into 6 equal time windows (5–10 s for 30–60 s runs) and measures the rate in each: kills per second for click scenarios, score per second for hold scenarios, where score accrues while on target. A frame's gain belongs to the window in which the frame started. The results screen shows the best and worst window with their time ranges, and the rate in each window.
+
+| Ratio | Definition | Flag (provisional) |
+|---|---|---|
+| Opening pace | Rate of the first window ÷ mean rate of the other five | Slow start below 70% (weakness rule); strong start above 130% (shown only, no rule, because the rest of the run is then slower) |
+| Late pace | Mean rate of the last two windows ÷ mean rate of the first two | Stamina drop below 80% (weakness rule) |
+
+A run needs at least 12 s and, in click scenarios, at least 12 kills (two per window on average), or it has no pace section. A category's ratio is the mean over its runs. All three thresholds are estimates, not calibrated on player data: the simulated aimer does not tire, so its late pace stays at or above about 90%, but its slowest preset shows opening ratios of about 50–65% from noise alone at 3–8 kills per window. Treat one slow-start verdict as a hint and look for it across several runs. The flag thresholds are constants in `pace.rs`, and a test pins them to the rules in `content/rules/recommendations.toml`.
+
+| Metric | Weakness | Recommended practice |
+|---|---|---|
+| Opening pace | < 70% | `flick-wide`, `track-precise`, `quick-warmup` routine; warm up before scored runs |
+| Late pace | < 80% | `static-headline`, `track-precise`, `fundamentals-hour` routine; relaxed grip, short breaks |
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

@@ -9,6 +9,7 @@
 
 pub mod codec;
 pub mod flick;
+pub mod pace;
 pub mod path;
 pub mod profile;
 pub mod rules;
@@ -43,6 +44,8 @@ pub struct RunAnalysis {
     pub category: Category,
     /// The analysis, by fire mode.
     pub kind: AnalysisKind,
+    /// Kill or score rate per time window, if the run was long and busy enough.
+    pub pace: Option<pace::PaceAnalysis>,
 }
 
 impl RunAnalysis {
@@ -74,6 +77,15 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         scenario_id: recording.def.id.clone(),
         category: recording.def.category,
         kind,
+        pace: pace::analyze(&samples, pace_unit(recording.def.weapon.fire)),
+    }
+}
+
+/// Click runs are paced by kills; hold runs by score, which accrues while on target.
+fn pace_unit(fire: FireMode) -> pace::PaceUnit {
+    match fire {
+        FireMode::Click => pace::PaceUnit::Kills,
+        FireMode::Hold => pace::PaceUnit::Score,
     }
 }
 
@@ -113,5 +125,16 @@ mod tests {
         assert!(matches!(a.kind, AnalysisKind::Flick(ref f) if !f.is_empty()));
         let rec = test_support::record("track-precise", AimerProfile::PRESETS[1], 4);
         assert!(analyze(&rec).tracking_summary().is_some());
+    }
+
+    #[test]
+    fn pace_counts_kills_in_click_runs_and_points_in_hold_runs() {
+        let rec = test_support::record("flick-wide", AimerProfile::PRESETS[2], 4);
+        let pace = analyze(&rec).pace.expect("click run has pace");
+        assert_eq!(pace.unit, pace::PaceUnit::Kills);
+        assert_eq!(pace.windows.len(), pace::WINDOWS);
+        let rec = test_support::record("track-precise", AimerProfile::PRESETS[2], 4);
+        let pace = analyze(&rec).pace.expect("hold run has pace");
+        assert_eq!(pace.unit, pace::PaceUnit::Score);
     }
 }

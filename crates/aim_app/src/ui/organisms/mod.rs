@@ -7,6 +7,7 @@ pub mod feedback_settings;
 pub mod history_chart;
 pub mod hotkey_settings;
 pub mod hud_panels;
+pub mod pace_panel;
 pub mod profile_code;
 pub mod progress_panel;
 pub mod replay_viewer;

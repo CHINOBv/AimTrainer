@@ -124,3 +124,25 @@ meaning = "you take long to follow a target that changes direction"
 [rules.recommendation]
 scenario_ids = ["track-reactive-strafe", "track-reactive-micro"]
 tip = "React to strafes instead of anticipating them; relax your grip so reversals are quicker."
+
+[[rules]]
+metric = "start_ratio"
+direction = "below"
+threshold = 0.70
+verdict = "weakness"
+meaning = "you score much slower at the start of a run than in the rest of it"
+[rules.recommendation]
+scenario_ids = ["flick-wide", "track-precise"]
+routine_id = "quick-warmup"
+tip = "Warm up before scored runs so the first seconds count; the quick warm-up routine gets you to full speed."
+
+[[rules]]
+metric = "stamina_ratio"
+direction = "below"
+threshold = 0.80
+verdict = "weakness"
+meaning = "your scoring rate drops in the last third of the run"
+[rules.recommendation]
+scenario_ids = ["static-headline", "track-precise"]
+routine_id = "fundamentals-hour"
+tip = "Keep a relaxed grip and steady breathing to the end; build endurance with longer sessions and short breaks between runs."
