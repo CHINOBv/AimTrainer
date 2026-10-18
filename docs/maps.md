@@ -91,10 +91,34 @@ Geometry alone decides blocking; the kind tells drills and renderers how the box
 
 | Id | Layout | Use |
 |---|---|---|
-| `training-yard` | Open 40 × 40 m yard: a 4 m center wall, two side walls, four 2.5 m pillars and four 1 m crates. Two player spawns, six bot spawns and a two-ring waypoint graph. | Deathmatch against bots. |
-| `angles-lab` | A start room, a 1.8 m doorway, a 6 m wide corridor with a wall stub and a long hall with a tall box, a crate and a far block. Player spawns at the start, the door and the hall. | Angle drills. Markers: `doorway`, `close-corner`, `off-angle`, `box` and `long-angle` (about 37 m from the hall spawn). |
-| `duel-corridor` | A 4 m wide, 32 m long corridor with a side pocket at each end. | Peek duels: `north-corner` and `south-corner`, at about 20–23 m. Jiggle peeks: `north-jiggle` and `south-jiggle`, where the enemy only shoulders 1 m out of the pocket. |
-| `signal-outpost` | A 30 × 40 m outpost: a site with two crates and a pillar, a 10 m divider that splits the attackers' approach into a west and an east lane, and a defender area behind the site. Three defender (player) spawns, three attacker (bot) spawns and a waypoint `site`. | Site holds. |
+| `training-yard` | 40 × 40 m yard: a 4 m center wall with a stacked-crate block on opposite sides of its ends (a Z shape), two side walls with a crate in front, four 2.5 m pillars each with a crate on its outer side, stacked crates beside both player spawns, near each corner bot spawn and between the spawn sides and the inner ring, wall stubs off the east and west edges and single crates on the lanes (35 boxes). Two player spawns, six bot spawns and a two-ring waypoint graph. | Deathmatch against bots. Markers: `center-east` and `center-west`, where the enemy steps out of the Z block. |
+| `angles-lab` | A start room with crates, a 1.8 m doorway, a 6 m wide corridor with a wall stub and crates at the hall end, and a long hall with a tall box, a far block, stacked crates, single crates and a wall stub (24 boxes). Player spawns at the start, the door and the hall. | Angle drills. Markers: `doorway`, `close-corner`, `off-angle`, `box` and `long-angle` (about 37 m from the hall spawn). The added cover stays out of the line from each drill's spawn to its marker, so the drills play as before. |
+| `duel-corridor` | A 4 m wide, 32 m long corridor with a side pocket at each end and a 3 m deep alcove on each side of the middle (a stacked-crate pillar and a crate in each), a wall stub on each half, single crates against the walls and at both ends, and stacked crates in the back of each pocket (20 boxes). It is the same turned 180°. | Peek duels: `north-corner` and `south-corner`, at about 20–23 m. Jiggle peeks: `north-jiggle` and `south-jiggle`, where the enemy only shoulders 1 m out of the pocket. Stub peeks: `north-stub` and `south-stub`, at about 18 m. |
+| `signal-outpost` | A 30 × 40 m outpost: a site with three crates and a pillar on each side, a 10 m divider that splits the attackers' approach into a west and an east lane, stacked crates at the attacker spawns and along both lanes, a pillar and a short wall at each lane exit, and a defender area with stacked crates (22 boxes). Mirrored left to right. Three defender (player) spawns, three attacker (bot) spawns and a waypoint `site`. | Site holds. Markers: `site-west`, `site-east` (seen from the back defender spawn) and `lane-west`, `lane-east` (seen from the side defender spawns). |
+| `freight-lanes` | A 30 × 36 m block of three parallel lanes split by two lane walls with a 4 m connector gap in the middle, and a plaza at each end. Every lane has stacked crates, single crates and a wall stub every few meters (26 boxes). It is the same turned 180°. Two player spawns, six bot spawns and a waypoint graph down each lane and across the gaps. | Mid-range deathmatch with rotations. Markers: `mid-north` and `mid-south`, at the mid-lane crates. |
+
+### Level-design audit (cover pass)
+
+Each map was reviewed as a level designer would review it: sightlines, how much cover there is and how far apart, flank routes, dead open spaces and spawn safety. Two numbers were sampled on a 1 m grid of the walkable floor: the share of the floor more than 5 m from a prop (a `cover` or `low_cover` box, or a wall that does not touch the floor edge) and the farthest waypoint from a cover spot (`MapDef::cover_spots`).
+
+| Map | Before | After |
+|---|---|---|
+| `training-yard` | 11 boxes; 43% of the floor > 5 m from a prop; waypoint up to 8.5 m from cover. The spawn sides and corners were open, so a spawning player or bot stood in the open. | 35 boxes; 9%; 2.3 m. Every route between the spawns, the pillars and the center passes stacked or single crates. |
+| `angles-lab` | 10 boxes; 57%; 7.6 m. The start room and most of the hall were empty. | 24 boxes; 18%; 3.2 m. The drills are unchanged: the golden numbers of `angles-lab-clear` did not move. |
+| `duel-corridor` | 4 boxes, no props (100% > 5 m from a prop): a bare 32 m lane where a duel had nowhere to go but the end pockets. | 20 boxes; 0%; 2.5 m. Mid alcoves give a rotation and a fall-back spot halfway; stubs and crates break the lane. |
+| `signal-outpost` | 6 boxes; 63%; 9.7 m. The 12 m wide attacker lanes were empty and the site only had cover on the defender side. | 22 boxes; 15%; 4.3 m. Both lanes and their exits have cover, and both sides of the site have a pillar. |
+| `freight-lanes` (new) | — | 26 boxes; 15%; 4.7 m. |
+
+Plan and rules followed:
+
+- **Cover within a few steps of every route.** Every waypoint has a cover spot within 5 m; `every_waypoint_has_cover_within_five_meters` enforces it for all built-in maps.
+- **Mix cover heights.** Stacked crates and pillars (`cover`) hide a standing player; single crates (`low_cover`) leave the head visible for head-high duels; wall stubs and lane walls make corners and off-angles.
+- **Keep the drills.** New boxes stay out of the lines from each drill's spawn to its angle marker, and no box sits on a waypoint link (`validate` checks the links).
+- **Fair layouts.** Duel and deathmatch maps are point- or mirror-symmetric, so neither spawn side has the better cover.
+- **Spawn safety.** Every player spawn and most bot spawns have head-high cover within a few meters.
+- **New angles.** Markers were added where the new cover makes a real peek (validation proves each one is hidden from, and then visible to, a player spawn).
+
+Left as is (by choice): the attacker staging strip at the back of `signal-outpost` and the far ends of the `angles-lab` hall stay fairly open, because they are spawn and drill spaces, not fighting spaces. The world is still flat (no height differences).
 
 ## glTF maps
 
@@ -230,3 +254,4 @@ At the first frame each bot life becomes visible to the player, the arena record
 | `angles-lab-prefire` | `angles-lab` | Pre-aim drill: the five angles against fast bots (reaction 0.2–0.3 s) that shoot back, pre-aim tolerance 5°, 90 s. |
 | `corridor-jiggle` | `duel-corridor` | Jiggle-peek drill: eight peeks alternating `north-jiggle` and `south-jiggle`, hold 0.15 s, peek delay 0.3–0.9 s, bots do not shoot back, 60 s. |
 | `outpost-site-hold` | `signal-outpost` | Site hold: 6 contender attackers, 2 at a time, strafing and shooting back; capture 3 s within 2.5 m; 90 s. |
+| `lanes-deathmatch` | `freight-lanes` | Deathmatch, 3 contender bots that strafe and shoot back, 120 s. |

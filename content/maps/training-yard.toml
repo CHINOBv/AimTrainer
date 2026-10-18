@@ -1,18 +1,31 @@
-# Original geometry: an open 40 x 40 m yard with scattered cover, for deathmatch.
+# Original geometry: a 40 x 40 m yard with layered cover, for deathmatch. Every route
+# between the spawns, the pillars and the center passes cover within a few meters: stacked
+# crates (hide a standing player), single crates (head stays visible) and wall stubs.
 # Not modeled on any game map. Coordinates in meters, +Y up, -Z forward.
 id = "training-yard"
 name = "Training Yard"
-description = "Open 40 x 40 m yard with a center wall, four pillars, side walls and single crates. For deathmatch against bots."
+description = "40 x 40 m yard with a Z-shaped center, four pillars with crates, stacked crates beside every spawn, wall stubs at the edges and single crates on the lanes. For deathmatch against bots."
 floor_x = [-20.0, 20.0]
 floor_z = [-20.0, 20.0]
 
-# Center wall, 4 m long.
+# Center wall, 4 m long, with a stacked-crate block on opposite sides of each end (a Z
+# shape), so the middle has corners to peek from instead of a flat face.
 [[boxes]]
 kind = "wall"
 min = [-2.0, 0.0, -0.3]
 max = [2.0, 3.0, 0.3]
 
-# Side walls, 4 m long.
+[[boxes]]
+kind = "cover"
+min = [-3.2, 0.0, -1.5]
+max = [-2.0, 2.2, -0.3]
+
+[[boxes]]
+kind = "cover"
+min = [2.0, 0.0, 0.3]
+max = [3.2, 2.2, 1.5]
+
+# Side walls, 4 m long, each with a single crate in front toward the center.
 [[boxes]]
 kind = "wall"
 min = [-15.0, 0.0, -2.0]
@@ -23,11 +36,49 @@ kind = "wall"
 min = [14.6, 0.0, -2.0]
 max = [15.0, 3.0, 2.0]
 
-# Pillars, 1.2 m square and 2.5 m tall: hide a standing player.
+[[boxes]]
+kind = "low_cover"
+min = [-9.5, 0.0, -0.5]
+max = [-8.5, 1.0, 0.5]
+
+[[boxes]]
+kind = "low_cover"
+min = [8.5, 0.0, -0.5]
+max = [9.5, 1.0, 0.5]
+
+# Wall stubs off the east and west edges, 2.5 m long: a corner to hold near each corner
+# spawn instead of an empty strip along the edge.
+[[boxes]]
+kind = "wall"
+min = [-20.0, 0.0, -10.2]
+max = [-17.5, 3.0, -9.8]
+
+[[boxes]]
+kind = "wall"
+min = [17.5, 0.0, -10.2]
+max = [20.0, 3.0, -9.8]
+
+[[boxes]]
+kind = "wall"
+min = [-20.0, 0.0, 9.8]
+max = [-17.5, 3.0, 10.2]
+
+[[boxes]]
+kind = "wall"
+min = [17.5, 0.0, 9.8]
+max = [20.0, 3.0, 10.2]
+
+# Pillars, 1.2 m square and 2.5 m tall: hide a standing player. Each has a single crate on
+# its outer side, so a player can hold over the crate (head only) or behind the pillar.
 [[boxes]]
 kind = "cover"
 min = [-10.0, 0.0, -10.0]
 max = [-8.8, 2.5, -8.8]
+
+[[boxes]]
+kind = "low_cover"
+min = [-11.0, 0.0, -10.0]
+max = [-10.0, 1.0, -9.0]
 
 [[boxes]]
 kind = "cover"
@@ -35,16 +86,95 @@ min = [8.8, 0.0, -10.0]
 max = [10.0, 2.5, -8.8]
 
 [[boxes]]
+kind = "low_cover"
+min = [10.0, 0.0, -10.0]
+max = [11.0, 1.0, -9.0]
+
+[[boxes]]
 kind = "cover"
 min = [8.8, 0.0, 8.8]
 max = [10.0, 2.5, 10.0]
+
+[[boxes]]
+kind = "low_cover"
+min = [10.0, 0.0, 9.0]
+max = [11.0, 1.0, 10.0]
 
 [[boxes]]
 kind = "cover"
 min = [-10.0, 0.0, 8.8]
 max = [-8.8, 2.5, 10.0]
 
-# Single 1 m crates: the head stays visible over them.
+[[boxes]]
+kind = "low_cover"
+min = [-11.0, 0.0, 9.0]
+max = [-10.0, 1.0, 10.0]
+
+# Stacked crates between the spawn sides and the inner ring, 1.2 m square.
+[[boxes]]
+kind = "cover"
+min = [-7.0, 0.0, -12.5]
+max = [-5.8, 2.2, -11.3]
+
+[[boxes]]
+kind = "cover"
+min = [5.8, 0.0, -12.5]
+max = [7.0, 2.2, -11.3]
+
+[[boxes]]
+kind = "cover"
+min = [5.8, 0.0, 11.3]
+max = [7.0, 2.2, 12.5]
+
+[[boxes]]
+kind = "cover"
+min = [-7.0, 0.0, 11.3]
+max = [-5.8, 2.2, 12.5]
+
+# Stacked crates beside each player spawn, so a fresh spawn has cover on both sides.
+[[boxes]]
+kind = "cover"
+min = [-3.5, 0.0, 13.5]
+max = [-2.3, 2.2, 14.7]
+
+[[boxes]]
+kind = "cover"
+min = [2.3, 0.0, 13.5]
+max = [3.5, 2.2, 14.7]
+
+[[boxes]]
+kind = "cover"
+min = [-3.5, 0.0, -14.7]
+max = [-2.3, 2.2, -13.5]
+
+[[boxes]]
+kind = "cover"
+min = [2.3, 0.0, -14.7]
+max = [3.5, 2.2, -13.5]
+
+# Stacked crates near each corner bot spawn: cover for a bot that just spawned and a
+# corner to clear for the player.
+[[boxes]]
+kind = "cover"
+min = [-15.0, 0.0, -18.5]
+max = [-13.8, 2.2, -17.3]
+
+[[boxes]]
+kind = "cover"
+min = [13.8, 0.0, -18.5]
+max = [15.0, 2.2, -17.3]
+
+[[boxes]]
+kind = "cover"
+min = [13.8, 0.0, 17.3]
+max = [15.0, 2.2, 18.5]
+
+[[boxes]]
+kind = "cover"
+min = [-15.0, 0.0, 17.3]
+max = [-13.8, 2.2, 18.5]
+
+# Single 1 m crates on the spawn-to-center lines: the head stays visible over them.
 [[boxes]]
 kind = "low_cover"
 min = [-6.0, 0.0, 4.0]
@@ -112,6 +242,22 @@ id = "bot-east"
 kind = "bot"
 position = [12.0, 0.0, 0.0]
 yaw_deg = -90.0
+
+# Seen from "player-south": the enemy steps out east from behind the center's Z block.
+[[angles]]
+id = "center-east"
+label = "Center east"
+position = [4.6, 0.0, -1.2]
+peek_dir = [1.0, 0.0]
+peek_distance = 1.6
+
+# Seen from "player-north": the same corner on the other side of the center.
+[[angles]]
+id = "center-west"
+label = "Center west"
+position = [-4.6, 0.0, 1.2]
+peek_dir = [-1.0, 0.0]
+peek_distance = 1.6
 
 # Navigation: an outer ring through the corners and edge midpoints, and an inner ring
 # around the center wall.

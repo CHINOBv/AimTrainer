@@ -1,10 +1,11 @@
-# Original geometry: a small fenced outpost for site holds. A site in the middle with two
-# crates and a pillar, a long divider that splits the attackers' approach into a west and
-# an east lane, and a defender area behind the site. Not modeled on any game map.
+# Original geometry: a small fenced outpost for site holds. A site in the middle with
+# crates and two pillars, a long divider that splits the attackers' approach into a west
+# and an east lane, cover along both lanes and at their exits, and a defender area behind
+# the site. The layout is mirrored left to right. Not modeled on any game map.
 # Coordinates in meters, +Y up, -Z forward.
 id = "signal-outpost"
 name = "Signal Outpost"
-description = "A site between two attacker lanes, with crates and a pillar on the site and a defender area behind it. For site holds."
+description = "A site between two attacker lanes, with crates and two pillars on the site, cover along the lanes and at their exits, and a defender area behind it. For site holds."
 floor_x = [-15.0, 15.0]
 floor_z = [-25.0, 15.0]
 
@@ -14,7 +15,68 @@ kind = "wall"
 min = [-3.0, 0.0, -18.0]
 max = [3.0, 3.5, -8.0]
 
-# Crates on the defender side of the site.
+# Attacker staging: a stacked-crate block in front of each outer spawn.
+[[boxes]]
+kind = "cover"
+min = [-12.0, 0.0, -19.5]
+max = [-10.8, 2.2, -18.3]
+
+[[boxes]]
+kind = "cover"
+min = [10.8, 0.0, -19.5]
+max = [12.0, 2.2, -18.3]
+
+# West lane: stacked crates against the outer fence, a crate by the divider and a pillar
+# near the lane exit.
+[[boxes]]
+kind = "cover"
+min = [-15.0, 0.0, -15.0]
+max = [-13.2, 2.2, -13.2]
+
+[[boxes]]
+kind = "low_cover"
+min = [-6.5, 0.0, -13.0]
+max = [-5.5, 1.0, -12.0]
+
+[[boxes]]
+kind = "cover"
+min = [-12.0, 0.0, -10.0]
+max = [-10.8, 2.5, -8.8]
+
+# East lane, mirrored.
+[[boxes]]
+kind = "cover"
+min = [13.2, 0.0, -15.0]
+max = [15.0, 2.2, -13.2]
+
+[[boxes]]
+kind = "low_cover"
+min = [5.5, 0.0, -13.0]
+max = [6.5, 1.0, -12.0]
+
+[[boxes]]
+kind = "cover"
+min = [10.8, 0.0, -10.0]
+max = [12.0, 2.5, -8.8]
+
+# Lane exits: a short wall at the outer edge of each, so an attacker leaving the lane has
+# a corner to clear and a defender has something to hold.
+[[boxes]]
+kind = "wall"
+min = [-15.0, 0.0, -5.4]
+max = [-12.0, 3.5, -5.0]
+
+[[boxes]]
+kind = "wall"
+min = [12.0, 0.0, -5.4]
+max = [15.0, 3.5, -5.0]
+
+# Site: a crate in front, crates on the defender side, and a pillar on each side.
+[[boxes]]
+kind = "low_cover"
+min = [-1.0, 0.0, -4.0]
+max = [0.0, 1.0, -3.0]
+
 [[boxes]]
 kind = "low_cover"
 min = [-3.0, 0.0, 1.0]
@@ -25,13 +87,18 @@ kind = "low_cover"
 min = [2.0, 0.0, 1.0]
 max = [3.0, 1.0, 2.0]
 
-# Pillar on the west edge of the site.
 [[boxes]]
 kind = "cover"
 min = [-6.0, 0.0, -2.0]
 max = [-4.8, 2.5, -0.8]
 
-# Wall stubs that close the outer edges of the defender area.
+[[boxes]]
+kind = "cover"
+min = [4.8, 0.0, -2.0]
+max = [6.0, 2.5, -0.8]
+
+# Defender area: wall stubs that close its outer edges, and a stacked-crate block in
+# front of each stub to fall back to.
 [[boxes]]
 kind = "wall"
 min = [-15.0, 0.0, 4.0]
@@ -41,6 +108,27 @@ max = [-9.0, 3.5, 4.4]
 kind = "wall"
 min = [9.0, 0.0, 4.0]
 max = [15.0, 3.5, 4.4]
+
+[[boxes]]
+kind = "cover"
+min = [-9.0, 0.0, 6.0]
+max = [-7.8, 2.2, 7.2]
+
+[[boxes]]
+kind = "cover"
+min = [7.8, 0.0, 6.0]
+max = [9.0, 2.2, 7.2]
+
+# Stacked crates in the back of the defender area, either side of the middle spawn.
+[[boxes]]
+kind = "cover"
+min = [-4.6, 0.0, 11.0]
+max = [-3.4, 2.2, 12.2]
+
+[[boxes]]
+kind = "cover"
+min = [3.4, 0.0, 11.0]
+max = [4.6, 2.2, 12.2]
 
 [[spawns]]
 id = "defender-back"
@@ -77,6 +165,37 @@ id = "attacker-east"
 kind = "bot"
 position = [10.0, 0.0, -22.0]
 yaw_deg = 180.0
+
+# Seen from "defender-back": an attacker steps out from behind a site pillar.
+[[angles]]
+id = "site-west"
+label = "Site west pillar"
+position = [-7.4, 0.0, -3.0]
+peek_dir = [-1.0, 0.0]
+peek_distance = 1.6
+
+[[angles]]
+id = "site-east"
+label = "Site east pillar"
+position = [7.4, 0.0, -3.0]
+peek_dir = [1.0, 0.0]
+peek_distance = 1.6
+
+# Seen from "defender-west" and "defender-east": an attacker steps out from behind the
+# pillar at a lane exit.
+[[angles]]
+id = "lane-west"
+label = "West lane pillar"
+position = [-10.0, 0.0, -10.8]
+peek_dir = [1.0, 0.0]
+peek_distance = 1.6
+
+[[angles]]
+id = "lane-east"
+label = "East lane pillar"
+position = [10.0, 0.0, -10.8]
+peek_dir = [-1.0, 0.0]
+peek_distance = 1.6
 
 [[waypoints]]
 id = "atk-west"

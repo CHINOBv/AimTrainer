@@ -1,17 +1,30 @@
-# Original geometry: a 4 m wide, 32 m long corridor with a side pocket at each end. Each
-# pocket corner is a peek spot. Not modeled on any game map.
+# Original geometry: a 4 m wide, 32 m long corridor with a side pocket at each end and a
+# side alcove on each side of the middle. Each pocket corner is a peek spot; wall stubs and
+# single crates break the lanes so a duel is never far from cover. The layout is the same
+# when turned 180 degrees, so both ends play alike. Not modeled on any game map.
 # Coordinates in meters, +Y up, -Z forward.
 id = "duel-corridor"
 name = "Duel Corridor"
-description = "A 4 m wide corridor with a side pocket at each end. Peek duels from the pocket corners at about 20 m."
+description = "A 4 m wide corridor with a side pocket at each end and an alcove on each side of the middle. Wall stubs and crates break the lanes. Peek duels from the pocket corners at about 20 m."
 floor_x = [-8.0, 8.0]
 floor_z = [-16.0, 16.0]
 
 # Solid blocks around the corridor (x in [-2, 2]). The open pockets are
-# x in [-8, -2], z in [8, 12] (south-west) and x in [2, 8], z in [-12, -8] (north-east).
+# x in [-8, -2], z in [8, 12] (south-west) and x in [2, 8], z in [-12, -8] (north-east);
+# the alcoves are x in [-5, -2] (west) and x in [2, 5] (east), both z in [-3, 3].
 [[boxes]]
 kind = "wall"
 min = [-8.0, 0.0, -16.0]
+max = [-2.0, 3.5, -3.0]
+
+[[boxes]]
+kind = "wall"
+min = [-8.0, 0.0, -3.0]
+max = [-5.0, 3.5, 3.0]
+
+[[boxes]]
+kind = "wall"
+min = [-8.0, 0.0, 3.0]
 max = [-2.0, 3.5, 8.0]
 
 [[boxes]]
@@ -22,12 +35,89 @@ max = [-2.0, 3.5, 16.0]
 [[boxes]]
 kind = "wall"
 min = [2.0, 0.0, -8.0]
+max = [8.0, 3.5, -3.0]
+
+[[boxes]]
+kind = "wall"
+min = [5.0, 0.0, -3.0]
+max = [8.0, 3.5, 3.0]
+
+[[boxes]]
+kind = "wall"
+min = [2.0, 0.0, 3.0]
 max = [8.0, 3.5, 16.0]
 
 [[boxes]]
 kind = "wall"
 min = [2.0, 0.0, -16.0]
 max = [8.0, 3.5, -12.0]
+
+# Wall stubs, 0.8 m deep, on the west wall north of the middle and on the east wall south
+# of it: each hides an enemy from the far end of the corridor.
+[[boxes]]
+kind = "wall"
+min = [-2.0, 0.0, -4.4]
+max = [-1.2, 3.5, -3.6]
+
+[[boxes]]
+kind = "wall"
+min = [1.2, 0.0, 3.6]
+max = [2.0, 3.5, 4.4]
+
+# Single crates against the corridor walls: cover for a crouching duel, head still visible
+# to a standing player.
+[[boxes]]
+kind = "low_cover"
+min = [1.0, 0.0, -6.5]
+max = [2.0, 1.0, -5.5]
+
+[[boxes]]
+kind = "low_cover"
+min = [-2.0, 0.0, 5.5]
+max = [-1.0, 1.0, 6.5]
+
+# West alcove: a stacked-crate pillar and a crate in its north-west corner.
+[[boxes]]
+kind = "cover"
+min = [-4.0, 0.0, 0.4]
+max = [-3.0, 2.2, 1.6]
+
+[[boxes]]
+kind = "low_cover"
+min = [-5.0, 0.0, -3.0]
+max = [-4.0, 1.0, -2.0]
+
+# East alcove, the same turned 180 degrees.
+[[boxes]]
+kind = "cover"
+min = [3.0, 0.0, -1.6]
+max = [4.0, 2.2, -0.4]
+
+[[boxes]]
+kind = "low_cover"
+min = [4.0, 0.0, 2.0]
+max = [5.0, 1.0, 3.0]
+
+# Stacked crates in the back of each pocket, and a crate at each end of the corridor.
+[[boxes]]
+kind = "cover"
+min = [6.6, 0.0, -11.6]
+max = [7.6, 2.2, -10.6]
+
+[[boxes]]
+kind = "cover"
+min = [-7.6, 0.0, 10.6]
+max = [-6.6, 2.2, 11.6]
+
+[[boxes]]
+kind = "low_cover"
+min = [1.0, 0.0, -15.0]
+max = [2.0, 1.0, -14.0]
+
+[[boxes]]
+kind = "low_cover"
+min = [-2.0, 0.0, 14.0]
+max = [-1.0, 1.0, 15.0]
 
 [[spawns]]
 id = "south-lane"
@@ -85,6 +175,22 @@ position = [-1.6, 0.0, 10.0]
 peek_dir = [1.0, 0.0]
 peek_distance = 1.0
 
+# Seen from "south-lane": the enemy steps out from behind the west wall stub.
+[[angles]]
+id = "north-stub"
+label = "North stub"
+position = [-0.4, 0.0, -5.2]
+peek_dir = [1.0, 0.0]
+peek_distance = 1.2
+
+# Seen from "north-lane": the enemy steps out from behind the east wall stub.
+[[angles]]
+id = "south-stub"
+label = "South stub"
+position = [0.4, 0.0, 5.2]
+peek_dir = [-1.0, 0.0]
+peek_distance = 1.2
+
 [[waypoints]]
 id = "north-end"
 position = [0.0, 0.0, -14.0]
@@ -102,7 +208,7 @@ position = [4.0, 0.0, -10.0]
 [[waypoints]]
 id = "mid"
 position = [0.0, 0.0, 0.0]
-links = ["south-mouth"]
+links = ["south-mouth", "mid-west", "mid-east"]
 
 [[waypoints]]
 id = "south-mouth"
@@ -116,3 +222,12 @@ position = [-4.0, 0.0, 10.0]
 [[waypoints]]
 id = "south-end"
 position = [0.0, 0.0, 14.0]
+
+# The alcoves, each behind its pillar as seen from the near end of the corridor.
+[[waypoints]]
+id = "mid-west"
+position = [-3.5, 0.0, -1.0]
+
+[[waypoints]]
+id = "mid-east"
+position = [3.5, 0.0, 1.0]

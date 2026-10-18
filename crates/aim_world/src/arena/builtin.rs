@@ -21,6 +21,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/arenas/corridor-jiggle.toml"),
     ),
     (
+        "lanes-deathmatch.toml",
+        include_str!("../../../../content/arenas/lanes-deathmatch.toml"),
+    ),
+    (
         "outpost-site-hold.toml",
         include_str!("../../../../content/arenas/outpost-site-hold.toml"),
     ),

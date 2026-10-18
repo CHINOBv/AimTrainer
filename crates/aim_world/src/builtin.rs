@@ -13,6 +13,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../content/maps/duel-corridor.toml"),
     ),
     (
+        "freight-lanes.toml",
+        include_str!("../../../content/maps/freight-lanes.toml"),
+    ),
+    (
         "signal-outpost.toml",
         include_str!("../../../content/maps/signal-outpost.toml"),
     ),
@@ -75,6 +79,27 @@ mod tests {
                         );
                     }
                 }
+            }
+        }
+    }
+
+    /// Level-design floor: every place bots route through has head-high cover a few steps
+    /// away, so no lane is a dead open space.
+    #[test]
+    fn every_waypoint_has_cover_within_five_meters() {
+        for map in all() {
+            let spots = map.cover_spots();
+            for w in &map.waypoints {
+                let nearest = spots
+                    .iter()
+                    .map(|s| (*s - w.position).horizontal().length())
+                    .fold(f32::INFINITY, f32::min);
+                assert!(
+                    nearest <= 5.0,
+                    "{}: waypoint '{}' is {nearest} m from cover",
+                    map.id,
+                    w.id
+                );
             }
         }
     }

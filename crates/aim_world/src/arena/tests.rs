@@ -412,9 +412,13 @@ fn a_shortened_arena_ends_early_under_its_own_key() {
 /// site objectives existed. Arenas that do not opt in to those features must keep exactly
 /// these results for the same seed and inputs. Re-recorded when the spawn grace started to
 /// cover entering the arena, not only respawns (bots now hold fire for the first
-/// `RESPAWN_GRACE_SECS`).
+/// `RESPAWN_GRACE_SECS`). Re-recorded again when the yard and corridor maps gained cover:
+/// only the accuracy and damage taken moved (more shots are stopped by boxes), the kills,
+/// deaths and crosshair errors did not. The angles-lab numbers did not change, because
+/// its new cover stays out of every drill's line of sight.
 ///
-/// The numbers were recorded on Linux x86_64 (glibc). Other math libraries round
+/// The numbers were recorded on Linux x86_64 (glibc); the cover re-recording was made on
+/// Windows x86_64 (MSVC), where the earlier numbers also reproduced exactly. Other math libraries round
 /// `sin`/`cos` differently and the run drifts, so this is a local regression check, not a CI
 /// test: run it with `cargo test -p aim_world -- --ignored` after changing arena behavior.
 #[test]
@@ -430,14 +434,14 @@ fn existing_arenas_keep_their_results_for_a_fixed_seed_and_input() {
         Golden {
             id: "yard-deathmatch",
             seed: 11,
-            perfect: (20000.0, 160, 0.94736844),
-            idle: (-1950.0, 39, 6760.0, 318.109),
+            perfect: (20000.0, 160, 0.9583333),
+            idle: (-1950.0, 39, 6520.0, 318.109),
         },
         Golden {
             id: "corridor-duels",
             seed: 42,
-            perfect: (8750.0, 70, 0.53435117),
-            idle: (-850.0, 17, 2800.0, 58.630672),
+            perfect: (8750.0, 70, 0.5785124),
+            idle: (-850.0, 17, 2760.0, 58.630672),
         },
         Golden {
             id: "angles-lab-clear",
