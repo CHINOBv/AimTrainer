@@ -1,0 +1,50 @@
+id = "phase-peek-ladder"
+name = "Peek Ladder"
+category = "reaction"
+description = """
+Waves: clear three close heads, then catch a far peeker before it ducks back; later waves strafe
+and send peekers in pairs, then a mixed finale runs until time is up.
+Five misses fail the run, and so does a close wave left standing too long."""
+duration_secs = 45
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "angular", yaw_deg = [-20.0, 20.0], pitch_deg = [0.0, 0.0], distance = [8.0, 12.0] }
+max_alive = 3
+min_separation_deg = 6
+
+[scoring]
+miss_penalty = 25
+expire_penalty = 50
+
+[fail]
+max_misses = 5
+
+[[phases]]
+name = "Close trio"
+count = 3
+advance = { kind = "cleared" }
+time_limit_secs = 6.0
+
+[[phases]]
+name = "Far peeker"
+targets = { max_alive = 1, spawn = { kind = "angular", yaw_deg = [-15.0, 15.0], pitch_deg = [0.0, 0.0], distance = [18.0, 24.0] }, motion = { kind = "strafe", weapon = "vandal", change_secs = [0.3, 0.6], max_offset = 1.5 }, appear_delay_secs = [0.4, 1.2], lifetime_secs = 2.0 }
+count = 1
+advance = { kind = "cleared" }
+
+[[phases]]
+name = "Strafing trio"
+targets = { motion = { kind = "strafe", weapon = "vandal", change_secs = [0.4, 0.8], max_offset = 1.0 } }
+count = 3
+advance = { kind = "cleared" }
+time_limit_secs = 8.0
+
+[[phases]]
+name = "Peeker pair"
+targets = { max_alive = 1, spawn = { kind = "angular", yaw_deg = [-15.0, 15.0], pitch_deg = [0.0, 0.0], distance = [18.0, 24.0] }, motion = { kind = "strafe", weapon = "vandal", change_secs = [0.3, 0.6], max_offset = 1.5 }, appear_delay_secs = [0.4, 1.0], lifetime_secs = 1.8 }
+count = 2
+advance = { kind = "cleared" }
+
+[[phases]]
+name = "Mixed finale"
+targets = { max_alive = 2, spawn = { kind = "angular", yaw_deg = [-25.0, 25.0], pitch_deg = [0.0, 0.0], distance = [8.0, 24.0] }, motion = { kind = "strafe", weapon = "vandal", change_secs = [0.3, 0.7], max_offset = 1.5 }, lifetime_secs = 2.5 }

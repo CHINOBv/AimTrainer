@@ -6,9 +6,10 @@
 //! and `scoring` modules.
 
 use super::behavior::{self, BehaviorState, Situation};
-use super::def::{FireMode, ScenarioDef, Shape};
+use super::def::{FireMode, ScenarioDef, Shape, TargetsDef};
 use super::hit::{HitZone, Ray};
 use super::motion::{Drive, MotionState};
+use super::phase::{self, FailReason, PhaseRun, RunEnd, RunOutcome};
 use super::recoil::RecoilState;
 use super::{scoring, spawn, weapon};
 use crate::games::valorant::{HumanoidDims, RecoilProfile, WeaponStats};
@@ -69,8 +70,19 @@ pub enum SessionEvent {
         /// Reload duration in seconds.
         secs: f32,
     },
-    /// The run reached its duration.
+    /// The run ended: it reached its end, or failed (then right after [`Self::RunFailed`]).
     Finished,
+    /// A phase after the first started (multi-phase scenarios); its targets replaced the
+    /// previous phase's.
+    PhaseStarted {
+        /// Index of the phase in `[[phases]]`.
+        index: usize,
+    },
+    /// A fail condition ended the run early; [`Self::Finished`] follows.
+    RunFailed {
+        /// The condition that was reached.
+        reason: FailReason,
+    },
 }
 
 /// A live target.
@@ -258,6 +270,12 @@ pub struct Session {
     recent_spawns: Vec<Vec3>,
     /// Spray state when the scenario enables `weapon.recoil`.
     recoil: Option<RecoilState>,
+    /// The definition as given, kept when phases rewrite `def.targets` during the run.
+    source: Option<Box<ScenarioDef>>,
+    /// The phase being played, in multi-phase scenarios.
+    phase: Option<PhaseRun>,
+    /// How the run ended, once it has.
+    outcome: Option<RunOutcome>,
 }
 
 impl Session {
@@ -291,15 +309,40 @@ impl Session {
             reload_until: f32::NEG_INFINITY,
             recent_spawns: Vec::new(),
             recoil,
+            source: None,
+            phase: None,
+            outcome: None,
         };
         s.ammo = s.def.weapon.ammo.map_or(0.0, |a| a.clip);
+        if let Some(first) = s.def.phases.as_ref().and_then(|p| p.first()) {
+            let targets = first.targets.apply(&s.def.targets);
+            s.source = Some(Box::new(s.def.clone()));
+            s.def.targets = targets;
+            s.phase = Some(PhaseRun::start(0, 0.0, &s.stats));
+        }
         s.refill(&mut Vec::new());
         s
     }
 
-    /// Scenario being played.
+    /// Scenario being played, as it was given (phases do not change it).
     pub fn def(&self) -> &ScenarioDef {
-        &self.def
+        self.source.as_deref().unwrap_or(&self.def)
+    }
+    /// Target settings in effect now: `def().targets` with the current phase's overrides.
+    pub fn active_targets(&self) -> &TargetsDef {
+        &self.def.targets
+    }
+    /// Index of the phase being played (or reached, once finished); `None` without phases.
+    pub fn phase_index(&self) -> Option<usize> {
+        self.phase.as_ref().map(|p| p.index)
+    }
+    /// Number of phases the scenario lists (0 without phases).
+    pub fn phase_count(&self) -> usize {
+        self.def.phases.as_ref().map_or(0, Vec::len)
+    }
+    /// How the run ended; `None` while it is running.
+    pub fn outcome(&self) -> Option<RunOutcome> {
+        self.outcome
     }
     /// Seconds elapsed.
     pub fn time(&self) -> f32 {
@@ -379,13 +422,68 @@ impl Session {
         }
         self.regenerate();
         self.expire(&mut events);
-        self.refill(&mut events);
+        self.apply_run_rules(&mut events);
+        if !self.finished {
+            self.refill(&mut events);
+        }
 
-        if self.time >= self.def.duration_secs {
-            self.finished = true;
-            events.push(SessionEvent::Finished);
+        if !self.finished && self.time >= self.def.duration_secs {
+            let outcome = match self.def.end {
+                RunEnd::Time | RunEnd::Endless => RunOutcome::Completed,
+                RunEnd::Kills { .. } => RunOutcome::Failed(FailReason::OutOfTime),
+            };
+            self.finish(outcome, &mut events);
         }
         events
+    }
+
+    /// Phase triggers and time limits, fail conditions and a kills-ended run's goal, in
+    /// that order: a trigger reached on the frame its phase times out still advances.
+    fn apply_run_rules(&mut self, events: &mut Vec<SessionEvent>) {
+        if let (Some(run), Some(phases)) = (&self.phase, &self.def.phases) {
+            let phase = &phases[run.index];
+            if run.triggered(phase, &self.stats, self.time, self.targets.len()) {
+                let next = run.index + 1;
+                if next == phases.len() {
+                    return self.finish(RunOutcome::Completed, events);
+                }
+                self.start_phase(next, events);
+            } else if run.timed_out(phase, self.time) {
+                let failed = RunOutcome::Failed(FailReason::PhaseTimeLimit);
+                return self.finish(failed, events);
+            }
+        }
+        if let Some(reason) = phase::failed(&self.def.fail, &self.stats) {
+            return self.finish(RunOutcome::Failed(reason), events);
+        }
+        if let RunEnd::Kills { kills } = self.def.end
+            && self.stats.kills >= kills
+        {
+            self.finish(RunOutcome::Completed, events);
+        }
+    }
+
+    /// Replaces the previous phase's targets with phase `index`'s.
+    fn start_phase(&mut self, index: usize, events: &mut Vec<SessionEvent>) {
+        let source = self
+            .source
+            .as_deref()
+            .expect("a phased run keeps its source");
+        let phases = source.phases.as_deref().expect("a phased run has phases");
+        self.def.targets = phases[index].targets.apply(&source.targets);
+        self.targets.clear();
+        self.phase = Some(PhaseRun::start(index, self.time, &self.stats));
+        events.push(SessionEvent::PhaseStarted { index });
+    }
+
+    /// Ends the run with `outcome`.
+    fn finish(&mut self, outcome: RunOutcome, events: &mut Vec<SessionEvent>) {
+        self.finished = true;
+        self.outcome = Some(outcome);
+        if let RunOutcome::Failed(reason) = outcome {
+            events.push(SessionEvent::RunFailed { reason });
+        }
+        events.push(SessionEvent::Finished);
     }
 
     /// Final numbers of the run so far.
@@ -755,10 +853,22 @@ impl Session {
     }
 
     fn refill(&mut self, events: &mut Vec<SessionEvent>) {
-        while self.targets.len() < self.def.targets.max_alive as usize {
+        while self.targets.len() < self.def.targets.max_alive as usize && self.wave_has_room() {
+            if let Some(run) = &mut self.phase {
+                run.spawned += 1;
+            }
             let t = self.spawn_target();
             events.push(SessionEvent::Spawned { id: t.id });
             self.targets.push(t);
+        }
+    }
+
+    /// Whether the current phase's wave (`count`) may spawn another target; always true
+    /// without phases.
+    fn wave_has_room(&self) -> bool {
+        match (&self.phase, &self.def.phases) {
+            (Some(run), Some(phases)) => run.has_room(&phases[run.index]),
+            _ => true,
         }
     }
 
@@ -880,6 +990,9 @@ mod tests {
             },
             scoring: ScoringDef::default(),
             difficulty: Default::default(),
+            end: Default::default(),
+            fail: Default::default(),
+            phases: None,
         }
     }
 

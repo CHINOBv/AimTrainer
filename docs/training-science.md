@@ -273,7 +273,7 @@ The tolerances are **estimates**: 1° for head level (about the angular height o
 | Opening pace | Rate of the first window ÷ mean rate of the other five | Slow start below 70% (weakness rule); strong start above 130% (shown only, no rule, because the rest of the run is then slower) |
 | Late pace | Mean rate of the last two windows ÷ mean rate of the first two | Stamina drop below 80% (weakness rule) |
 
-A run needs at least 12 s and, in click scenarios, at least 12 kills (two per window on average), or it has no pace section. A category's ratio is the mean over its runs. All three thresholds are estimates, not calibrated on player data: the simulated aimer does not tire, so its late pace stays at or above about 90%, but its slowest preset shows opening ratios of about 50–65% from noise alone at 3–8 kills per window. Treat one slow-start verdict as a hint and look for it across several runs. The flag thresholds are constants in `pace.rs`, and a test pins them to the rules in `content/rules/recommendations.toml`.
+A run needs at least 12 s and, in click scenarios, at least 12 kills (two per window on average), or it has no pace section. The windows split the time actually played, so a run that ends at its kills or fails early is paced over its own length. Phased scenarios get no pace section: their phases change the rate on purpose, so the windows would measure the scenario's design rather than the player's start or stamina. A category's ratio is the mean over its runs. All three thresholds are estimates, not calibrated on player data: the simulated aimer does not tire, so its late pace stays at or above about 90%, but its slowest preset shows opening ratios of about 50–65% from noise alone at 3–8 kills per window. Treat one slow-start verdict as a hint and look for it across several runs. The flag thresholds are constants in `pace.rs`, and a test pins them to the rules in `content/rules/recommendations.toml`.
 
 | Metric | Weakness | Recommended practice |
 |---|---|---|
@@ -353,7 +353,7 @@ Why 10 misses and 65% (estimates, not calibrated): with no bias, 3 of the 8 sect
 
 `aim_core::analytics::potential` estimates the score a click run would have reached if its single costliest weakness were fixed. The results card shows only that one fix, above the advice list, as "Fix X → about Y points (+Z%)", followed by the assumption behind it. Hold runs get no tip.
 
-**Model.** Every scenario ends on time, so wasted seconds are converted into points at the run's own pace: `points per second = final score ÷ elapsed time`. The final score already includes penalties, so this pace is conservative. Each fix is priced on its own, and only the largest gain is shown:
+**Model.** In a run that ends on time, wasted seconds are converted into points at the run's own pace: `points per second = final score ÷ elapsed time`. A run that ends at its kills or is endless (`[end]`, see `scenarios.md`) gains no points from saved seconds, because finishing sooner adds no kills there; only the miss penalties won back count, so such runs usually get a misses tip or none. The final score already includes penalties, so this pace is conservative. Each fix is priced on its own, and only the largest gain is shown:
 
 | Fix | Events | Saved time | Points won back | Assumption shown |
 |---|---|---|---|---|
@@ -403,6 +403,17 @@ The defaults in `spread-flicks` are estimates chosen by calibration, not sourced
 Plain hold scenarios pay the same per second whether time on target comes in one stretch or in many short touches. Regeneration with `reset_on_hit` changes that: damage only sticks if the crosshair returns within the interval, so the kill rate rewards unbroken contact, which is the tracking quality the drill is meant to build. Score decay adds a speed incentive on top of accuracy: every scenario already trades speed against accuracy (Fitts' law, above), and decay moves the scoring point towards speed. Neither effect has been measured as a training benefit; both are design choices (inference), and the idea comes from Aim Lab's scenario options (`docs/feature-analysis.md`).
 
 The numbers in `regen-track` are estimates set by calibration, not sourced values: health 1.5 s, a heal of 0.2 s every 0.3 s off target, and a value that fades to 40% over 3 s. A 0.35 m sphere at 10 m keeps contender accuracy at about 58%; with a 0.3 m sphere it fell to 48%, at the bottom of the challenge-point band.
+
+### Phases, fail conditions and run end
+
+A single-setting drill repeats one movement for the whole run. Phases change the setting inside one run (close heads, then a far peeker, then strafing targets), which is variable practice in the sense of schema theory (Schmidt 1975, cited under Spawn patterns) and close to the interleaving evidence under Routine design. Applying it within one scenario is inference, not a measured aim-training effect. A fail condition such as "five misses end the run" gives each shot a cost, which pushes the speed–accuracy trade-off (Fitts' law, above) towards accuracy, the way one missed duel ends a round. A kills-ended run turns the score into a race against the clock, and score decay keeps that race speed-sensitive. None of these designs has a published training effect (inference); the idea comes from Aim Lab's multi-phase scenarios (`docs/feature-analysis.md`).
+
+The numbers in the two built-ins are estimates set by calibration, not sourced values:
+
+- **`phase-peek-ladder`.** 5 misses fail the run. The design example was 3, but with 3 the simulated contender failed every seed within about 9 s, before the later waves. With 5 it reaches the finale on every seed and still fails there (mean 14 s of 45), at 64% accuracy, inside the challenge-point band. The close waves have 6 s and 8 s limits. The peekers stand 18–24 m away, within `peek-reaction`'s 15–25 m, and leave after 1.8–2.5 s.
+- **`phase-kill-race`.** 30 kills within a 60 s cap. The warm-up passes at 75% accuracy over at least 6 shots, then spheres shrink from 0.35 m to 0.22 m (`flick-wide`'s size), and a target's value falls to 25% over 2 s. The simulated contender passes the warm-up on 3 of 5 seeds, at 61% accuracy, and finishes in about 39 s.
+
+The simulated aimer never hesitates or tilts after a miss, so expect the fail conditions to end human runs sooner than calibration suggests. A playtest should confirm the miss budget and the time limits.
 
 ## Caveat
 

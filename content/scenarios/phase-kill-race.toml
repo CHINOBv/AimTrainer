@@ -1,0 +1,28 @@
+id = "phase-kill-race"
+name = "Kill Race"
+category = "flicking"
+description = """
+A race to 30 kills: flick to each sphere as soon as it appears, because its value fades while it waits.
+The warm-up wave uses big spheres until you hit 75% of at least 6 shots; then they shrink.
+Accuracy still counts: every miss costs points. Running out of the 60 s fails the run."""
+duration_secs = 60
+
+[targets]
+shape = { kind = "sphere", radius = 0.35 }
+spawn = { kind = "around_crosshair", offset_deg = [15.0, 40.0], distance = [12.0, 12.0], on_screen = true }
+
+[scoring]
+miss_penalty = 25
+decay = { window_secs = 2.0, floor = 0.25 }
+
+[end]
+kind = "kills"
+kills = 30
+
+[[phases]]
+name = "Warm-up"
+advance = { kind = "accuracy", accuracy = 0.75, min_shots = 6 }
+
+[[phases]]
+name = "Race"
+targets = { shape = { kind = "sphere", radius = 0.22 } }
