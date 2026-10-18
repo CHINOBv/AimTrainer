@@ -2,10 +2,11 @@
 
 use bevy_egui::egui;
 
-/// Horizontal tab strip; returns nothing, edits `current` in place.
+/// Horizontal tab strip; returns nothing, edits `current` in place. Clicks play the menu
+/// click sound when it is on.
 pub fn tab_bar<T: PartialEq + Copy>(ui: &mut egui::Ui, current: &mut T, tabs: &[(T, &str)]) {
     for (tab, label) in tabs {
-        ui.selectable_value(current, *tab, *label);
+        crate::audio::ui_click::clicked(ui.selectable_value(current, *tab, *label));
     }
 }
 
@@ -16,10 +17,11 @@ pub fn stat_row(ui: &mut egui::Ui, label: &str, value: impl Into<egui::WidgetTex
     ui.end_row();
 }
 
-/// Scenario entry with its personal best. Returns true when clicked.
+/// Scenario entry with its personal best. Returns true when clicked (with the menu click
+/// sound when it is on).
 pub fn scenario_item(ui: &mut egui::Ui, name: &str, best: Option<f32>, selected: bool) -> bool {
     let best = best.map_or(String::new(), |b| format!("  (PB {b:.0})"));
-    ui.selectable_label(selected, format!("{name}{best}"))
+    crate::audio::ui_click::clicked(ui.selectable_label(selected, format!("{name}{best}")))
         .clicked()
 }
 

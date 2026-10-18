@@ -39,7 +39,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
 - **Your setup**
   - VALORANT **crosshair codes** (import and export).
   - **Target visibility:** VALORANT's enemy highlight colours (red, purple for tritanopia, yellow for deuteranopia/protanopia) or any custom colour, an optional target outline with colour and thickness, and an environment tint for the floor grid.
-  - **Sound effects** for hits, headshots, kills and (optionally) misses, synthesized in code: several presets, a volume slider and previews.
+  - **Sound effects**, all synthesized in code (no game audio): hits, headshots, kills and (optionally) misses, with several presets, previews and a volume slider. Arenas add positional bot gunfire and footsteps, a damage thud scaled by damage, a death sound, rising streak and multi-kill stings, countdown beeps and round start/end stings. Timed runs tick through their last 10 seconds, and menu clicks are optional. Each sound has its own toggle, and four category volumes (shots, world, UI, cues) scale the master volume.
   - Subtle **hit feedback**: a short, semi-transparent hit marker (crosshair flash, dot, cross, ring or brackets; color and duration) and a target effect (flash, pop, fade or ring burst). Each can be turned off.
   - A shareable **profile code**.
   - An opt-in **sensitivity randomiser drill**: a random multiplier within your range every few seconds, shown on the HUD. Your saved sensitivity never changes.
@@ -183,7 +183,16 @@ Minimal keeps only the damage indicator (at 60%), health bar and death screen. J
 
 The game-feel effects are still being built: every key above is already read and saved, but only `damage_vignette.enabled` has an effect today.
 
-The `[sound]` table adds per-category volumes, each a percent of `volume_percent`: `shots_percent`, `world_percent`, `ui_percent` and `cues_percent` (all 100). Sound toggles: `bot_gunfire`, `footsteps`, `damage_taken`, `death`, `streak`, `round_cues` and `low_time_warning` are on; `ui_clicks` is off.
+The `[sound]` table adds per-category volumes, each a percent of `volume_percent` (a sound plays at master × category): `shots_percent`, `world_percent`, `ui_percent` and `cues_percent` (all 100).
+
+| Category | Sounds |
+|---|---|
+| Shots | Your hit, kill and miss sounds |
+| World | Arena bot gunfire and footsteps, panned to where they come from |
+| UI | Menu clicks (main tabs and the scenario list) |
+| Cues | Damage taken, death, streaks and multi-kills, countdown and round stings, low-time ticks, and the sound cues of perception drills |
+
+Sound toggles: `bot_gunfire`, `footsteps`, `damage_taken`, `death`, `streak`, `round_cues` and `low_time_warning` are on; `ui_clicks` is off. `enabled = false` silences every effect except perception-drill cues, which are part of the drill. Footsteps are heard from running bots within about 20 m; a multi-kill is a kill within 1.5 s of the previous one (both estimates, tuned by ear).
 
 ## Your own exercises
 
