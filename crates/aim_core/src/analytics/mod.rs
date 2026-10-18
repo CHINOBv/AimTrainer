@@ -9,6 +9,7 @@
 
 pub mod codec;
 pub mod flick;
+pub mod moving;
 pub mod path;
 pub mod profile;
 pub mod rules;
@@ -18,6 +19,7 @@ pub mod trace;
 pub mod tracking;
 
 pub use flick::{Flick, FlickSummary};
+pub use moving::{MovingAnalysis, MovingSummary};
 pub use path::{Engagement, ReplayPath, ShotPoint};
 pub use profile::{Finding, SkillProfile};
 pub use skills::BenchmarkProfile;
@@ -43,6 +45,8 @@ pub struct RunAnalysis {
     pub category: Category,
     /// The analysis, by fire mode.
     pub kind: AnalysisKind,
+    /// Firing-while-moving analysis, for scenarios with player movement.
+    pub moving: Option<MovingAnalysis>,
 }
 
 impl RunAnalysis {
@@ -74,6 +78,10 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         scenario_id: recording.def.id.clone(),
         category: recording.def.category,
         kind,
+        moving: recording.def.player.movement.then(|| {
+            let limit = recording.def.weapon.kind.movement().accuracy_speed_limit();
+            moving::analyze(&samples, limit)
+        }),
     }
 }
 

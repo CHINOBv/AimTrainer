@@ -6,6 +6,7 @@
 //! metrics" in `docs/training-science.md`) until they are calibrated on real player data.
 
 use super::flick::FlickSummary;
+use super::moving::MovingSummary;
 use super::tracking::TrackingSummary;
 use serde::Deserialize;
 
@@ -29,6 +30,8 @@ pub enum Metric {
     LagRatio,
     /// Median seconds to follow a target that reversed direction (tracking).
     ReversalResponse,
+    /// Share of shots fired above the accuracy speed limit (movement scenarios).
+    MovingShotRate,
 }
 
 impl Metric {
@@ -43,6 +46,7 @@ impl Metric {
             Metric::OnTargetRatio => "Time on target",
             Metric::LagRatio => "Time behind the target",
             Metric::ReversalResponse => "Reaction to direction changes",
+            Metric::MovingShotRate => "Shots fired while moving",
         }
     }
 
@@ -69,6 +73,7 @@ impl Metric {
             Metric::OnTargetRatio => Some(tracking?.on_target_ratio),
             Metric::LagRatio => tracking?.lag_ratio,
             Metric::ReversalResponse => tracking?.median_reversal_response_secs,
+            Metric::MovingShotRate => sources.moving?.moving_share,
         }
     }
 }
@@ -78,6 +83,7 @@ impl Metric {
 pub(super) struct MetricSources<'a> {
     pub flick: Option<&'a FlickSummary>,
     pub tracking: Option<&'a TrackingSummary>,
+    pub moving: Option<&'a MovingSummary>,
 }
 
 /// Whether a fired rule marks a strength or a weakness.
@@ -371,6 +377,18 @@ pub(crate) mod tests {
                 &["track-reactive-strafe", "track-reactive-micro"],
                 None,
                 "React to strafes instead of anticipating them; relax your grip so reversals are quicker.",
+            )),
+        ),
+        (
+            Metric::MovingShotRate,
+            Direction::Above,
+            0.20,
+            Verdict::Weakness,
+            "you often fire before you have stopped",
+            Some((
+                &["counter-strafe", "strafe-shot"],
+                None,
+                "Tap the opposite strafe key (or release the keys) and fire only once you have stopped; shots are accurate again at 27.5% of run speed or less.",
             )),
         ),
     ];

@@ -124,3 +124,13 @@ meaning = "you take long to follow a target that changes direction"
 [rules.recommendation]
 scenario_ids = ["track-reactive-strafe", "track-reactive-micro"]
 tip = "React to strafes instead of anticipating them; relax your grip so reversals are quicker."
+
+[[rules]]
+metric = "moving_shot_rate"
+direction = "above"
+threshold = 0.20
+verdict = "weakness"
+meaning = "you often fire before you have stopped"
+[rules.recommendation]
+scenario_ids = ["counter-strafe", "strafe-shot"]
+tip = "Tap the opposite strafe key (or release the keys) and fire only once you have stopped; shots are accurate again at 27.5% of run speed or less."

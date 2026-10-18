@@ -46,6 +46,11 @@ pub struct Sample {
     pub hit: bool,
     /// The crosshair was on a counted zone while firing this frame (hold mode).
     pub on_target: bool,
+    /// Player movement speed after this frame (the speed any shot this frame was fired
+    /// at), m/s. Always 0 in scenarios without movement.
+    pub player_speed: f32,
+    /// The player was at or below the weapon's accuracy speed limit after this frame.
+    pub accurate: bool,
 }
 
 impl Sample {
@@ -161,6 +166,8 @@ pub fn trace(recording: &Recording) -> Vec<Sample> {
             shot,
             hit: stats.hits > previous_hits,
             on_target: stats.on_target_secs > previous_on_target_secs,
+            player_speed: session.player_speed(),
+            accurate: session.is_accurate(),
         });
         previous_targets = snapshot(session);
         previous_view = input.view;
@@ -195,6 +202,28 @@ mod tests {
                 .filter(|s| s.shot)
                 .all(|s| s.aimed_target().is_some())
         );
+    }
+
+    #[test]
+    fn samples_carry_the_player_speed_and_accuracy_of_each_frame() {
+        let rec = crate::analytics::moving::tests::strafe_recording();
+        let samples = trace(&rec);
+        let mut expected = Vec::new();
+        rec.replay(|s, _| expected.push((s.player_speed(), s.is_accurate())));
+        let got: Vec<(f32, bool)> = samples
+            .iter()
+            .map(|s| (s.player_speed, s.accurate))
+            .collect();
+        assert_eq!(got, expected);
+        assert!(got.iter().any(|(_, accurate)| !accurate));
+        assert!(got.iter().any(|(speed, _)| *speed == 0.0));
+    }
+
+    #[test]
+    fn scenarios_without_movement_report_a_still_accurate_player() {
+        let rec = record("flick-wide", AimerProfile::PRESETS[2], 3);
+        let samples = trace(&rec);
+        assert!(samples.iter().all(|s| s.player_speed == 0.0 && s.accurate));
     }
 
     #[test]

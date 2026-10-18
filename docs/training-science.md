@@ -178,12 +178,29 @@ Post-run analysis (`aim_core::analytics`) re-simulates the recorded run and meas
 | Time on target | < 50% | > 75% | `track-precise` |
 | Lag ratio | > 65% (trailing) or < 35% (over-leading) | — | `track-precise`, `track-reactive-micro` |
 | Reaction to direction changes | > 250 ms | — | `track-reactive-strafe`, `track-reactive-micro` |
+| Shots fired while moving | > 20% (≥ 10 shots) | — | `counter-strafe`, `strafe-shot` |
 
 The 300 ms and 220 ms reaction thresholds bracket the simulated recruit (0.32 s + onset) and elite (0.20 s + onset); the rest are estimates.
 
 **Skill profile per benchmark subcategory.** `aim_core::analytics::skills::BenchmarkProfile` takes the benchmark definition and the run history. Each subcategory's energy comes from personal bests with the benchmark's own energy rules (above). It is compared with the arithmetic mean over the subcategories played (at least 2): more than 15% below the mean is a weakness, and the profile offers that subcategory's scenarios to practice; more than 15% above is a strength. The 15% margin is an estimate and is not calibrated. The weakest subcategory matters most because overall energy is a harmonic mean.
 
 **Trends.** `training::progress::subcategory_trend` gives each subcategory's energy at the end of each of the last weeks, using the same weekly cutoffs as the overall `benchmark_trend` (personal bests up to each cutoff). The Progress page charts one trend per subcategory once it has two played weeks.
+
+### Firing while moving (movement scenarios)
+
+`aim_core::analytics::moving` measures every shot of a scenario with `player.movement = true`. A shot is *moving* when the player was above the weapon's accuracy speed limit when it was fired (27.5% of run speed for rifles, verified in `valorant-mechanics.md`); otherwise it is *stopped*. The session already decides this; the analysis reuses its flag.
+
+| Metric | Definition |
+|---|---|
+| Speed at the shot | Median player speed (m/s) over all shots |
+| Stopped vs moving | Share of shots fired at or below the limit, and above it |
+| Hit rate split | Hit rate of the stopped shots and of the moving shots, separately |
+| Counter-strafe check | A shot *follows movement* when the player was above the limit at any frame within the last **0.5 s** (or at the shot). Counter-strafed share = shots that follow movement and were fired already accurate ÷ shots that follow movement |
+| Stop-to-shot time | For counter-strafed shots: time from the first accurate frame after the last moving frame to the shot (median) |
+
+The 0.5 s window is an estimate: it covers the measured stop (0.16 s counter-strafing, 0.17 s releasing, `valorant-mechanics.md`) plus a reaction margin, so a shot right after a stop counts and a shot after standing still does not.
+
+**Rule (provisional).** Shots fired while moving > 20% is a weakness and recommends `counter-strafe`, then `strafe-shot`. A movement category needs ≥ 10 shots before it is judged. The 20% threshold is an estimate, not calibrated.
 
 ## Caveat
 
