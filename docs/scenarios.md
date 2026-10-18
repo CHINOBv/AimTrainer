@@ -219,6 +219,62 @@ There is no line-of-sight condition: scenario targets always stand in the open. 
 
 Clicking on the stop or reversal works because the target's lateral speed passes through zero there (inference from the movement model, not a measured training effect). The simulated aimer re-aims at the target every frame, so calibrate scores understate how much harder the motion makes these drills for a human.
 
+### Phases, fail conditions and run end
+
+A scenario can chain phases (waves), fail early, and end on kills or never. All three are optional; without them a run ends after `duration_secs`, as before.
+
+```toml
+[end]
+kind = "kills"               # time (default) | kills | endless
+kills = 30                   # kills only
+
+[fail]                       # optional; the first one reached fails the run
+max_misses = 3               # click fire only; a shot on a decoy is a miss
+max_expired = 2              # needs lifetime_secs on the targets or a phase
+
+[[phases]]
+name = "Close trio"
+targets = { max_alive = 3, spawn = { kind = "angular", yaw_deg = [-20, 20], pitch_deg = [0, 0], distance = [8, 12] } }
+count = 3
+advance = { kind = "cleared" }
+time_limit_secs = 6
+
+[[phases]]
+name = "Far peeker"
+targets = { max_alive = 1, lifetime_secs = 2.0 }
+```
+
+**`[end]`.** `duration_secs` stays a hard cap for every kind, so no run can go on forever.
+
+| `kind` | The run ends |
+|---|---|
+| `time` | After `duration_secs` (default). Completed. |
+| `kills` | At the `kills`-th kill (≥ 1): completed. Reaching `duration_secs` first fails it ("ran out of time"). |
+| `endless` | When a fail condition is reached (failed), or at `duration_secs` (completed). It needs `[fail]` or a phase `time_limit_secs`. |
+
+**`[fail]`.** Counts cover the whole run, across phases. `max_misses` counts shots that hit no target (≥ 1, click fire only). `max_expired` counts expired targets (≥ 1).
+
+**`[[phases]]`** (1 to 16). The run starts in the first phase. Each phase has:
+
+| Field | Meaning |
+|---|---|
+| `name` | Shown on the results screen; "Phase N" when empty. |
+| `targets` | Overrides for the phase. Any of `shape`, `spawn`, `motion`, `max_alive`, `health`, `lifetime_secs`, `appear_delay_secs`, `reactions` and `behaviors`, written as under `[targets]`. Unset fields keep the `[targets]` value; a set `reactions` or `behaviors` replaces the scenario's block for the phase. `shape` must keep the kind of `targets.shape` (change a sphere's radius or `head_only`). The resolved targets are validated like `[targets]`. |
+| `count` | Wave size: the phase spawns this many targets in total (1 to 1000), then no more. Only with `advance = { kind = "cleared" }`, which needs it. |
+| `advance` | What moves the run to the next phase. Every phase but the last needs one. On the last phase it completes the run; a last phase without one runs until the run ends. |
+| `time_limit_secs` | Fail the run if the phase has not advanced this many seconds after it started. Needs `advance`, and must be longer than a `time` trigger. |
+
+| `advance` | Fires when |
+|---|---|
+| `{ kind = "kills", kills = 3 }` | The phase has this many kills (≥ 1). |
+| `{ kind = "accuracy", accuracy = 0.8, min_shots = 5 }` | Hits ÷ shots within the phase reach `accuracy` (in (0, 1]) after at least `min_shots` (≥ 1) phase shots. Click fire only. |
+| `{ kind = "cleared" }` | All `count` targets of the wave are gone, killed or expired. Expiries still count for `max_expired` and `expire_penalty`. |
+| `{ kind = "time", secs = 10 }` | The phase has lasted this many seconds (> 0). |
+
+Each frame the session checks, in order: the phase trigger, the phase time limit, the fail conditions, and a kills goal. So a trigger reached on the frame its phase times out still advances. When a phase starts, the previous phase's targets disappear (they do not count as expired) and the new phase's targets spawn at once. Difficulty levels and in-run tuning scale each phase's overrides exactly as they scale `[targets]`.
+
+Score, accuracy and kills per minute use the time actually played.
+
 ### Difficulty
 
 Training methods and adaptive mode play a scenario at a level from −1 (easiest) to +1 (hardest); 0 is the file as written. Each knob is the fraction a parameter changes at the ends of that range. A plain number applies both ways; `{ easy, hard }` sets each end separately. Fractions must be in `[0, 0.95)`, and `0` turns a knob off.

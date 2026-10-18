@@ -2,6 +2,7 @@
 //! building blocks (target shape, spawn area, motion, fire mode, scoring), so new
 //! exercises are written as data instead of code. See `docs/scenarios.md`.
 
+use super::phase::{FailDef, PhaseDef, RunEnd};
 use crate::games::valorant::Weapon;
 use crate::math::Range;
 use serde::{Deserialize, Serialize};
@@ -37,6 +38,16 @@ pub struct ScenarioDef {
     /// How difficulty levels scale this scenario (see `scenario::difficulty`).
     #[serde(default)]
     pub difficulty: super::difficulty::DifficultyDef,
+    /// How the run ends: after `duration_secs` (default), at a number of kills, or endless
+    /// until a fail condition (see `scenario::phase`).
+    #[serde(default, skip_serializing_if = "RunEnd::is_time")]
+    pub end: RunEnd,
+    /// Fail conditions that end the run early as failed.
+    #[serde(default, skip_serializing_if = "FailDef::is_empty")]
+    pub fail: FailDef,
+    /// Ordered phases (waves): each overrides part of `targets` and advances on a trigger.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phases: Option<Vec<PhaseDef>>,
 }
 
 fn default_duration() -> f32 {
@@ -1001,6 +1012,7 @@ impl ScenarioDef {
                 check(false, "targets.behaviors.motion", &format!("{name}: {msg}"));
             }
         }
+        errs.extend(self.run_rule_problems());
         errs
     }
 }
