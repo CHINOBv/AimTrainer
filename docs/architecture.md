@@ -77,8 +77,8 @@ New code follows this layout; existing code migrates as described in [Conformanc
 │   │       ├── overlay/        visibility, click-through, hotkey wiring
 │   │       ├── platform/       OS specifics: ipc (Unix socket), hotkeys
 │   │       └── persistence/    settings, history: port implementations
-│   └── aim_mcp/                MCP server (rmcp): serves the core coach tools and the
-│                               built-in scenarios to coding agents
+│   └── aim_mcp/                MCP server (binary `aimtrainer-mcp`, stdio, rmcp): serves the core
+│                               coach tools and the built-in scenarios to coding agents (docs/coach.md)
 ├── docs/                       architecture, standards, research with sources, decisions
 └── odd/tasks/                  feature work logs
 ```

@@ -6,12 +6,17 @@ version.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[[bin]]
+name = "aimtrainer-mcp"
+path = "src/main.rs"
+
 [dependencies]
 aim_core.workspace = true
 aim_world.workspace = true
 serde_json.workspace = true
 directories.workspace = true
 rmcp.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true
