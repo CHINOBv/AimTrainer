@@ -127,7 +127,7 @@ Other commands: `aimtrainer show` and `aimtrainer hide`.
 
 ### Windows and X11
 
-The trainer registers three global hotkeys (defaults below). To change one, open **Settings → Global hotkeys**, click **Record** and press the new combination; Esc cancels and **Clear** disables the hotkey. The change applies immediately, no restart needed. The rows flag a combination that is already used by another hotkey, or a plain key without Ctrl, Alt or Shift (it would fire while you type).
+The trainer registers three global hotkeys (defaults below). To change one, open **Settings → Global hotkeys**, click **Record** and press the new combination; Esc cancels and **Clear** disables the hotkey. A key needs Ctrl, Alt or Shift unless it is an F-key, so a hotkey never fires while you type. The change applies immediately, no restart needed. Recording stops after 10 s or when the window loses focus. A combination already used by another hotkey is flagged and only the first one is registered.
 
 | Hotkey | Action |
 |---|---|

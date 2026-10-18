@@ -160,9 +160,56 @@ pub fn problems(specs: &[&str], known: impl Fn(&str) -> bool) -> Vec<Option<Stri
         .collect()
 }
 
+/// The hotkeys to register: none while one is being recorded (the OS must hand the
+/// combination to the window), otherwise every non-empty spec `problems` accepts. Of
+/// duplicates only the first slot is kept; a bare non-function key is never registered.
+pub fn registrable<T: Copy>(
+    specs: &[(&str, T)],
+    recording: bool,
+    known: impl Fn(&str) -> bool,
+) -> Vec<(String, T)> {
+    if recording {
+        return Vec::new();
+    }
+    let texts: Vec<&str> = specs.iter().map(|(s, _)| *s).collect();
+    specs
+        .iter()
+        .zip(problems(&texts, known))
+        .filter(|((s, _), problem)| !s.trim().is_empty() && problem.is_none())
+        .map(|((s, value), _)| ((*s).to_owned(), *value))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn registrable_drops_empty_bare_invalid_and_later_duplicates() {
+        let specs = [
+            ("ctrl+shift+F10", 1),
+            ("", 2),
+            ("KeyK", 3),
+            ("F9", 4),
+            ("CTRL+SHIFT+f10", 5),
+            ("ctrl+Bogus", 6),
+            ("alt+KeyK", 7),
+        ];
+        let known = |s: &str| !s.contains("Bogus");
+        assert_eq!(
+            registrable(&specs, false, known),
+            vec![
+                ("ctrl+shift+F10".to_owned(), 1),
+                ("F9".to_owned(), 4),
+                ("alt+KeyK".to_owned(), 7),
+            ]
+        );
+    }
+
+    #[test]
+    fn registrable_is_empty_while_recording() {
+        assert!(registrable(&[("ctrl+shift+F10", 1)], true, |_| true).is_empty());
+    }
 
     fn combo(ctrl: bool, alt: bool, shift: bool, key: &str) -> Combo {
         Combo {

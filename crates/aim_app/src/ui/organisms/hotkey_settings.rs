@@ -30,7 +30,12 @@ pub fn hotkey_settings(ui: &mut egui::Ui, settings: &mut Settings, recording: &m
         for (slot, name) in SLOTS.iter().enumerate() {
             ui.label(*name);
             if *recording == Some(slot) {
-                ui.label(egui::RichText::new("Press a combination… (Esc to cancel)").color(WARN));
+                ui.label(
+                    egui::RichText::new(
+                        "Press Ctrl/Alt/Shift + a key, or an F-key… (Esc to cancel)",
+                    )
+                    .color(WARN),
+                );
             } else {
                 ui.label(egui::RichText::new(hotkey_spec::label(&specs[slot])).strong());
             }
@@ -97,7 +102,7 @@ fn take_key_press(ui: &egui::Ui) -> Option<Captured> {
 pub enum Captured {
     /// Esc: stop recording, keep the old hotkey.
     Cancel,
-    /// A lone modifier or a key hotkeys cannot use: keep waiting.
+    /// A lone modifier, a bare non-function key or a key hotkeys cannot use: keep waiting.
     Ignore,
     /// The new spec ("ctrl+shift+F10").
     Spec(String),
@@ -118,6 +123,10 @@ pub fn capture(key: Key, physical: Option<Key>, mods: Modifiers) -> Captured {
         meta: mods.mac_cmd,
         key: token,
     };
+    // A bare letter, digit or Space would steal normal typing system-wide.
+    if !combo.has_modifier() && !combo.is_function_key() {
+        return Captured::Ignore;
+    }
     Captured::Spec(combo.spec())
 }
 
@@ -236,6 +245,16 @@ mod tests {
         assert_eq!(
             capture(Key::A, Some(Key::Q), Modifiers::CTRL),
             Captured::Spec("ctrl+KeyQ".to_owned())
+        );
+    }
+
+    #[test]
+    fn bare_non_function_keys_wait_for_a_modifier() {
+        assert_eq!(capture(Key::K, None, Modifiers::NONE), Captured::Ignore);
+        assert_eq!(capture(Key::Space, None, Modifiers::NONE), Captured::Ignore);
+        assert_eq!(
+            capture(Key::K, None, Modifiers::SHIFT),
+            Captured::Spec("shift+KeyK".to_owned())
         );
     }
 
