@@ -450,18 +450,49 @@ pub struct ArrowCamera {
     pub aspect: f32,
 }
 
-/// A small semi-transparent chevron at the screen edge for every live, visible target
-/// outside the current view, pointing towards it.
-pub fn offscreen_arrows(ctx: &egui::Context, s: &Session, cam: &ArrowCamera, rgb: [f32; 3]) {
-    let half_v = cam.vfov_deg / 2.0;
-    let half_h = aim_core::fov::horizontal_from_vertical(cam.vfov_deg as f64, cam.aspect as f64)
-        as f32
-        / 2.0;
+/// Where the off-screen arrows of a scenario point: every live, visible target, at its head
+/// for humanoids and its center for spheres.
+pub fn scenario_arrow_points(s: &Session) -> Vec<aim_core::math::Vec3> {
     let head = s.dims().head_center_height();
     let humanoid = matches!(
         s.def().targets.shape,
         aim_core::scenario::Shape::Humanoid { .. }
     );
+    s.targets()
+        .filter(|t| t.health > 0.0)
+        .map(|t| {
+            let mut p = t.position;
+            if humanoid {
+                p.y += head;
+            }
+            p
+        })
+        .collect()
+}
+
+/// Where the off-screen arrows of an arena point: the head of every live bot in the
+/// player's line of sight.
+pub fn arena_arrow_points(
+    bots: impl IntoIterator<Item = aim_world::arena::BotView>,
+) -> Vec<aim_core::math::Vec3> {
+    bots.into_iter()
+        .filter(|b| b.alive && b.visible_to_player)
+        .map(|b| b.head())
+        .collect()
+}
+
+/// A small semi-transparent chevron at the screen edge for every one of `points` outside
+/// the current view, pointing towards it.
+pub fn offscreen_arrows(
+    ctx: &egui::Context,
+    points: &[aim_core::math::Vec3],
+    cam: &ArrowCamera,
+    rgb: [f32; 3],
+) {
+    let half_v = cam.vfov_deg / 2.0;
+    let half_h = aim_core::fov::horizontal_from_vertical(cam.vfov_deg as f64, cam.aspect as f64)
+        as f32
+        / 2.0;
     let screen = ctx.content_rect();
     let (w, h) = aim_core::fov::valorant_viewport(screen.width() as f64, screen.height() as f64);
     let viewport = egui::Rect::from_center_size(screen.center(), egui::vec2(w as f32, h as f32));
@@ -471,11 +502,7 @@ pub fn offscreen_arrows(ctx: &egui::Context, s: &Session, cam: &ArrowCamera, rgb
         egui::Order::Foreground,
         egui::Id::new("offscreen_arrows"),
     ));
-    for t in s.targets().filter(|t| t.health > 0.0) {
-        let mut p = t.position;
-        if humanoid {
-            p.y += head;
-        }
+    for &p in points {
         let Some(bearing) = aim_core::fov::offscreen_bearing(cam.view, cam.eye, p, half_h, half_v)
         else {
             continue;
@@ -561,9 +588,70 @@ mod countdown_tests {
 
 #[cfg(test)]
 mod offscreen_tests {
-    use super::edge_point;
+    use super::{arena_arrow_points, edge_point, scenario_arrow_points};
+    use aim_core::math::{Vec3, ViewAngles};
+    use aim_core::scenario::{FrameInput, Session, Shape, builtin};
+    use aim_world::arena::BotView;
     use bevy_egui::egui::{Pos2, Rect};
     use std::f32::consts::{FRAC_PI_2, PI};
+
+    /// A scenario a moment after it starts, with its first targets out.
+    fn started(id: &str) -> Session {
+        let def = builtin::all().into_iter().find(|d| d.id == id).unwrap();
+        let mut s = Session::new(def, 7);
+        s.update(FrameInput {
+            dt: 0.05,
+            view: ViewAngles::new(180.0, 0.0),
+            ..Default::default()
+        });
+        s
+    }
+
+    #[test]
+    fn scenario_arrows_point_at_live_targets_as_before() {
+        let mut seen_humanoid = false;
+        for def in builtin::all() {
+            let s = started(&def.id);
+            let humanoid = matches!(s.def().targets.shape, Shape::Humanoid { .. });
+            seen_humanoid |= humanoid;
+            let head = s.dims().head_center_height();
+            let expected: Vec<Vec3> = s
+                .targets()
+                .filter(|t| t.health > 0.0)
+                .map(|t| {
+                    let mut p = t.position;
+                    if humanoid {
+                        p.y += head;
+                    }
+                    p
+                })
+                .collect();
+            assert_eq!(scenario_arrow_points(&s), expected, "{}", def.id);
+        }
+        assert!(seen_humanoid, "the check covers humanoid targets too");
+    }
+
+    #[test]
+    fn arena_arrows_point_at_the_heads_of_live_bots_in_sight() {
+        let bot = |id, alive, visible_to_player| BotView {
+            id,
+            feet: Vec3::new(id as f32, 0.0, -5.0),
+            facing_yaw_deg: 0.0,
+            alive,
+            visible_to_player,
+        };
+        let bots = [
+            bot(1, true, true),
+            bot(2, true, false),
+            bot(3, false, false),
+            bot(4, true, true),
+        ];
+        assert_eq!(
+            arena_arrow_points(bots),
+            vec![bots[0].head(), bots[3].head()]
+        );
+        assert!(arena_arrow_points([]).is_empty());
+    }
 
     #[test]
     fn arrows_sit_on_the_inset_screen_edge_towards_the_bearing() {

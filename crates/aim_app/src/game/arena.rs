@@ -2,7 +2,7 @@
 //! look and input as scenarios, feeding `aim_world::arena::ArenaSession`, with the map's
 //! boxes and the bots mirrored as meshes. All rules live in `aim_world`.
 
-use super::feedback::{ShotFeedback, ShotOutcome};
+use super::feedback::{self, HitFrame, KILL_FLASH_SECS, MarkerKind, ShotFeedback, ShotOutcome};
 use super::hit_effect::{self, EffectAssets, Struck};
 use super::{
     AppState, LastResult, MainCamera, PlayerInput, TargetVisual, WorldAssets, apply_look,
@@ -147,6 +147,10 @@ pub struct ArenaRun {
     pub hit_flash: f32,
     /// Seconds left of the end-of-round hold before the results open, once the round ended.
     end_hold: Option<f32>,
+    /// The kind of hit the marker shows.
+    pub marker: MarkerKind,
+    /// Seconds left on the kill flash (`feel.kill_flash_arena`).
+    pub kill_flash: f32,
     bots: HashMap<u64, Entity>,
     /// Bots hit this frame, for their visual effect.
     struck: Vec<Struck>,
@@ -164,9 +168,25 @@ impl ArenaRun {
             zoomed: false,
             hit_flash: 0.0,
             end_hold: None,
+            marker: MarkerKind::Body,
+            kill_flash: 0.0,
             bots: HashMap::new(),
             struck: Vec::new(),
             translator: FeedbackTranslator::default(),
+        }
+    }
+
+    /// What the HUD draws for hit feedback this frame.
+    pub fn hit_frame(&self) -> HitFrame {
+        HitFrame {
+            marker_secs_left: self.hit_flash,
+            marker: self.marker,
+            kill_flash_secs: self.kill_flash,
+            // Arena sessions expose no recoil state: only movement opens the crosshair.
+            inaccuracy: feedback::movement_inaccuracy(
+                self.session.player_speed(),
+                &self.session.def().weapon.movement(),
+            ),
         }
     }
 
@@ -378,6 +398,7 @@ fn tick(
     }
     let dt = input.time.delta_secs();
     run.hit_flash = (run.hit_flash - dt).max(0.0);
+    run.kill_flash = (run.kill_flash - dt).max(0.0);
     if let Some(left) = run.end_hold {
         run.end_hold = hold_left(left, dt);
         if run.end_hold.is_none() {
@@ -396,9 +417,11 @@ fn tick(
     let frame = frame_input(dt, run.view, &input.keys, &input.buttons);
     let events = run.session.update(frame);
     arena_feedback.write_batch(run.translator.translate(&events));
+    let mut marker = None;
     for event in events {
         if let Some(outcome) = ShotOutcome::from_arena(&event) {
             feedback.write(ShotFeedback(outcome));
+            marker = marker.max(MarkerKind::of(outcome));
         }
         match event {
             ArenaEvent::Shot {
@@ -410,6 +433,9 @@ fn tick(
             }
             ArenaEvent::BotKilled { id, .. } => {
                 hit_effect::record(&mut run.struck, id, None, true);
+                if finisher.settings.feel.kill_flash_arena {
+                    run.kill_flash = KILL_FLASH_SECS;
+                }
             }
             ArenaEvent::Finished => {
                 let hold = end_hold_secs(finisher.settings.feel.round_transitions);
@@ -421,6 +447,9 @@ fn tick(
             }
             _ => {}
         }
+    }
+    if let Some(kind) = marker {
+        run.marker = kind;
     }
     // The session owns the player's view after respawns (it faces the spawn direction).
     if run.session.view() != frame.view {
