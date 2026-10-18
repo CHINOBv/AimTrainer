@@ -12,6 +12,8 @@ mod behavior;
 mod bot;
 pub mod builtin;
 mod def;
+#[cfg(test)]
+mod duel_tests;
 mod session;
 #[cfg(test)]
 mod tests;
@@ -21,8 +23,8 @@ pub use bot::{
     BOT_HEALTH, BOT_NOTICE_HALF_ANGLE_DEG, PEEK_DELAY_SECS, RETREAT_MAX_ROUTE_M, ROAM_PAUSE_SECS,
 };
 pub use def::{
-    ArenaDef, ArenaError, ArenaMode, MAX_ATTACKERS, MAX_BOTS, PRACTICE_SUFFIX, SiteObjective,
-    bot_profile, split_practice,
+    ArenaDef, ArenaError, ArenaMode, MAX_ATTACKERS, MAX_BOTS, PRACTICE_SUFFIX, ShootBackDeadline,
+    SiteObjective, bot_profile, split_practice,
 };
 pub use session::{
     ArenaEvent, ArenaSession, ArenaStats, BOT_WEAPON, BotView, DEATH_POINTS, HEADSHOT_BONUS,

@@ -126,6 +126,8 @@ pub(crate) struct Bot {
     /// Eye of the player who shot the bot since its last think, if anyone did: the only
     /// thing a shot bot learns about the player's position.
     pub shot_from: Option<Vec3>,
+    /// The shoot-back deadline of this life has already landed its sure shot.
+    pub deadline_hit: bool,
 }
 
 impl Bot {
@@ -146,6 +148,7 @@ impl Bot {
             brain,
             strafe: Strafe::Idle,
             shot_from: None,
+            deadline_hit: false,
         }
     }
 

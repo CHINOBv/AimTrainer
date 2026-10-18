@@ -239,6 +239,12 @@ The 0.5 s window is an estimate: it covers the measured stop (0.16 s counter-str
 
 The results notes show the medians. Line of sight is checked from the player's eye to the bot's head, so the exposure approximates how long the player could be seen. Later re-peeks by the same bot life are not separate engagements. These are measurements only; no rule judges them yet.
 
+### Duel pressure (arenas)
+
+An arena can set a shoot-back deadline (`[mode.deadline]`, `docs/maps.md`): a bot the player has not killed within `secs` of first seeing it lands one sure shot. The aim is to train the time-to-kill side of a duel. In a real duel, a slow kill gives the enemy time to react and fire, and the bots' own reaction-and-flick model may be too slow or too kind to teach that. The deadline makes the cost explicit and repeatable: a kill before the deadline is counted (`deadline_kills`), a miss of it costs damage and points (`deadline_hits`).
+
+The deadline length is a design value per arena, not a measured number. About 1.5 s is a sensible start, an **estimate**: about a reaction time (0.2–0.3 s), a flick and two or three Vandal shots at 9.75 rounds/s (`valorant-mechanics.md`) with margin, at 15–25 m. Following the Challenge Point Framework (above), a shorter deadline makes the drill harder; it should be tuned so a player beats it on most, not all, bot lives. No study measures the effect of such a deadline on transfer.
+
 ### Pace and stamina
 
 `aim_core::analytics::pace` splits every run into 6 equal time windows (5–10 s for 30–60 s runs) and measures the rate in each: kills per second for click scenarios, score per second for hold scenarios, where score accrues while on target. A frame's gain belongs to the window in which the frame started. The results screen shows the best and worst window with their time ranges, and the rate in each window.

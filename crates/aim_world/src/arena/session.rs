@@ -103,6 +103,10 @@ pub struct ArenaStats {
     /// to the kill, to line of sight breaking, or to the player's death. An exposure still
     /// open when the run ends adds nothing.
     pub exposure_times_secs: Vec<f32>,
+    /// Shoot-back deadline: bot lives killed before their deadline (0 without a deadline).
+    pub deadline_kills: u32,
+    /// Shoot-back deadline: sure shots bots landed because their deadline passed.
+    pub deadline_hits: u32,
 }
 
 /// The first exposure of a bot life while it lasts, for peek efficiency.
@@ -421,6 +425,7 @@ impl ArenaSession {
         if input.fire_pressed {
             self.player_shoot(&mut events);
         }
+        self.apply_deadlines(&mut events);
         self.respawn_bots();
         self.update_site(dt);
         events.append(&mut self.pending);
@@ -443,6 +448,11 @@ impl ArenaSession {
             score: s.kills as f32 * KILL_POINTS - s.deaths as f32 * DEATH_POINTS
                 + s.headshots as f32 * HEADSHOT_BONUS
                 + s.pre_aimed as f32 * PRE_AIM_POINTS
+                - self
+                    .def
+                    .mode
+                    .deadline()
+                    .map_or(0.0, |d| s.deadline_hits as f32 * d.penalty_points)
                 + if self.site_held() {
                     SITE_HELD_BONUS
                 } else {
@@ -617,6 +627,14 @@ impl ArenaSession {
             let ttk = now - bot.first_seen_at.unwrap_or(now);
             self.stats.kills += 1;
             self.stats.kill_times.push(ttk);
+            if self
+                .def
+                .mode
+                .deadline()
+                .is_some_and(|d| !bot.deadline_hit && ttk < d.secs)
+            {
+                self.stats.deadline_kills += 1;
+            }
             end_exposure(&mut self.engagements, &mut self.stats, bot.id, now);
             events.push(ArenaEvent::BotKilled {
                 id: bot.id,
@@ -694,13 +712,45 @@ impl ArenaSession {
                 .filter(|&(t, _)| self.map.raycast(ray, t).is_none());
             if let Some((_, zone)) = hit {
                 let dmg = Self::damage(&self.bot_weapon, zone);
-                self.player.health -= dmg;
-                self.stats.damage_taken += dmg;
-                events.push(ArenaEvent::PlayerHit { damage: dmg });
-                if self.player.health <= 0.0 {
-                    events.push(ArenaEvent::PlayerDied);
-                    self.player_died();
-                }
+                self.damage_player(dmg, events);
+            }
+        }
+    }
+
+    fn damage_player(&mut self, dmg: f32, events: &mut Vec<ArenaEvent>) {
+        self.player.health -= dmg;
+        self.stats.damage_taken += dmg;
+        events.push(ArenaEvent::PlayerHit { damage: dmg });
+        if self.player.health <= 0.0 {
+            events.push(ArenaEvent::PlayerDied);
+            self.player_died();
+        }
+    }
+
+    /// Shoot-back deadline: every living bot the player first saw at least `secs` ago and
+    /// has not killed lands one sure shot per life, as soon as it has line of sight to the
+    /// targetable player. Never in practice; no random draw.
+    fn apply_deadlines(&mut self, events: &mut Vec<ArenaEvent>) {
+        let Some(deadline) = self.def.mode.deadline() else {
+            return;
+        };
+        if self.practice || self.time < self.grace_until {
+            return;
+        }
+        for i in 0..self.bots.len() {
+            let b = &self.bots[i];
+            let due = b.alive
+                && !b.deadline_hit
+                && b.first_seen_at
+                    .is_some_and(|seen| self.time - seen >= deadline.secs)
+                && self.map.visible_head(b.eye(), self.player.feet);
+            if !due {
+                continue;
+            }
+            self.bots[i].deadline_hit = true;
+            self.stats.deadline_hits += 1;
+            if deadline.damage > 0.0 {
+                self.damage_player(deadline.damage, events);
             }
         }
     }

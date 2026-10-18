@@ -231,6 +231,12 @@ impl ArenaFinisher<'_, '_> {
                 )
             });
         }
+        if let Some(d) = run.session.def().mode.deadline() {
+            notes.push(format!(
+                "Deadline {:.1} s: {} kills before it, {} deadline hits taken",
+                d.secs, stats.deadline_kills, stats.deadline_hits
+            ));
+        }
         self.commands.insert_resource(LastResult {
             name: run.session.def().name.clone(),
             result,

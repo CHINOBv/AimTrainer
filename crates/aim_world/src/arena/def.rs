@@ -48,6 +48,9 @@ pub enum ArenaMode {
         /// roaming, and the run is lost if one of them captures it.
         #[serde(default)]
         objective: Option<SiteObjective>,
+        /// Bots land a sure shot on a player who has not killed them within a deadline.
+        #[serde(default)]
+        deadline: Option<ShootBackDeadline>,
     },
     /// One bot per angle marker, in order. Each bot waits hidden, peeks when the player can
     /// see the marker, holds for `hold_secs` and hides again until it is killed.
@@ -68,7 +71,27 @@ pub enum ArenaMode {
         /// [`crate::arena::PRE_AIM_POINTS`].
         #[serde(default)]
         pre_aim_tolerance_deg: Option<f32>,
+        /// Bots land a sure shot on a player who has not killed them within a deadline.
+        #[serde(default)]
+        deadline: Option<ShootBackDeadline>,
     },
+}
+
+/// Duel pressure: once the player first sees a bot life, they have `secs` to kill it. If
+/// they do not, the bot lands one sure shot the first moment it has line of sight to the
+/// targetable player: `damage` to the player and `penalty_points` off the score. Once per
+/// bot life, independent of `bots_shoot_back`, never in practice. See `docs/maps.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShootBackDeadline {
+    /// Seconds from the player first seeing a bot life to its sure shot.
+    pub secs: f32,
+    /// Damage the sure shot deals to the player.
+    #[serde(default)]
+    pub damage: f32,
+    /// Points the sure shot costs.
+    #[serde(default)]
+    pub penalty_points: f32,
 }
 
 /// A game-like objective on top of a deathmatch: defend a site against a fixed number of
@@ -120,6 +143,31 @@ impl ArenaMode {
                 bots_shoot_back, ..
             } => *bots_shoot_back,
         }
+    }
+
+    /// The shoot-back deadline, if the arena sets one.
+    pub fn deadline(&self) -> Option<ShootBackDeadline> {
+        match self {
+            Self::Deathmatch { deadline, .. } | Self::AngleClear { deadline, .. } => *deadline,
+        }
+    }
+}
+
+fn validate_deadline(d: &ShootBackDeadline, push: &mut impl FnMut(&'static str, String)) {
+    if !(d.secs.is_finite() && d.secs > 0.0) {
+        push("mode.deadline.secs", "must be > 0".into());
+    }
+    if !(d.damage.is_finite() && d.damage >= 0.0) {
+        push("mode.deadline.damage", "must be >= 0".into());
+    }
+    if !(d.penalty_points.is_finite() && d.penalty_points >= 0.0) {
+        push("mode.deadline.penalty_points", "must be >= 0".into());
+    }
+    if d.damage == 0.0 && d.penalty_points == 0.0 {
+        push(
+            "mode.deadline",
+            "needs damage or penalty_points above 0".into(),
+        );
     }
 }
 
@@ -260,6 +308,9 @@ impl ArenaDef {
                     push("mode.pre_aim_tolerance_deg", "must be in (0, 180)".into());
                 }
             }
+        }
+        if let Some(d) = self.mode.deadline() {
+            validate_deadline(&d, &mut push);
         }
         errs
     }

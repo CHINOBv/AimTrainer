@@ -8,16 +8,16 @@ use aim_core::movement::MoveInput;
 use aim_core::scenario::FrameInput;
 use std::collections::HashSet;
 
-const DT: f32 = 1.0 / 60.0;
+pub(super) const DT: f32 = 1.0 / 60.0;
 
-fn builtin(id: &str) -> (ArenaDef, MapDef) {
+pub(super) fn builtin(id: &str) -> (ArenaDef, MapDef) {
     builtin::load(id)
         .expect("known arena")
         .expect("valid arena")
 }
 
 /// Run a session to the end (or `max_secs`), feeding it `policy`'s input every frame.
-fn run(
+pub(super) fn run(
     s: &mut ArenaSession,
     max_secs: f32,
     mut policy: impl FnMut(&ArenaSession) -> FrameInput,
@@ -33,7 +33,7 @@ fn run(
 }
 
 /// Looks at the nearest visible bot's head and clicks every frame.
-fn perfect(s: &ArenaSession) -> FrameInput {
+pub(super) fn perfect(s: &ArenaSession) -> FrameInput {
     let eye = s.eye_position();
     let target = s
         .bots()
@@ -55,7 +55,7 @@ fn perfect(s: &ArenaSession) -> FrameInput {
     }
 }
 
-fn idle(s: &ArenaSession) -> FrameInput {
+pub(super) fn idle(s: &ArenaSession) -> FrameInput {
     FrameInput {
         dt: DT,
         view: s.view(),
@@ -109,7 +109,7 @@ fn builtin_arenas_match_their_spec() {
 
 /// A 20 x 20 m room, the player at z = 5 and one bot spawn at z = -5, optionally split by
 /// a full wall at z = 0.
-fn duel_room(wall: bool) -> MapDef {
+pub(super) fn duel_room(wall: bool) -> MapDef {
     let wall = if wall {
         "[[boxes]]\nkind = \"wall\"\nmin = [-10.0, 0.0, -0.2]\nmax = [10.0, 3.0, 0.2]\n"
     } else {

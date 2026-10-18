@@ -201,6 +201,17 @@ attackers = 6                 # attackers sent in the run (1..=64), at most `bot
 
 `ArenaDef::validate` checks the definition alone; `ArenaDef::validate_with_map` also checks that the map id matches, that a deathmatch map has bot spawns and that every angle id exists. `ArenaSession::new(def, map, seed)` runs both and returns `ArenaError::Invalid` on failure. `arena::builtin::load(id)` returns a built-in arena together with its built-in map.
 
+Both modes also accept a shoot-back deadline (optional, off by default):
+
+```toml
+[mode.deadline]               # duel pressure: kill each bot within `secs` of first seeing it
+secs = 1.5                    # > 0
+damage = 40.0                 # damage of the bot's sure shot (>= 0, default 0)
+penalty_points = 25.0         # score lost per sure shot (>= 0, default 0); damage or points must be > 0
+```
+
+Once the player first sees a bot life, a clock starts. If the bot is still alive after `secs`, it lands one sure shot the first moment it has line of sight to the player (`visible_head` from its eye) and the spawn grace is over: the player takes `damage` and the run loses `penalty_points`. It happens once per bot life, needs no aim and draws no random number, works whether or not `bots_shoot_back` is set, and never happens in practice. `ArenaStats::deadline_kills` counts bot lives killed before their deadline and `ArenaStats::deadline_hits` the sure shots; the results notes show both. The deadline is a design choice for duel pressure, not a VALORANT rule.
+
 ### Modes
 
 - **`deathmatch`:** `bots` bots spawn at bot spawns the player cannot see. They roam between the map's waypoints and bot spawns along `MapDef::path`, pause at the end of each route, and stop to fight when they notice the player. A killed bot respawns after `respawn_secs`. When the player dies, they respawn at the spawn (player or bot) seen by the fewest living bots, and bots ignore them for `RESPAWN_GRACE_SECS` (1.5 s, an arena rule against spawn kills, not a VALORANT value).
@@ -235,7 +246,7 @@ At the first frame each bot life becomes visible to the player, the arena record
 
 ### Result
 
-`ArenaSession::result()` returns an `aim_core::scenario::RunResult` so arenas share history and the results UI with scenarios: `scenario_id` is the arena id, `score = kills × 100 − deaths × 50 + headshot hits × 25 + pre-aimed sightings × 50 (PRE_AIM_POINTS) + 500 if the site was held (SITE_HELD_BONUS)` (the last two only in arenas that use them), `accuracy = hits / shots`, `expired` is the number of player deaths, and kills per minute, average time to kill (from first sight) and headshot rate (headshot hits / hits) are as in scenarios.
+`ArenaSession::result()` returns an `aim_core::scenario::RunResult` so arenas share history and the results UI with scenarios: `scenario_id` is the arena id, `score = kills × 100 − deaths × 50 + headshot hits × 25 + pre-aimed sightings × 50 (PRE_AIM_POINTS) + 500 if the site was held (SITE_HELD_BONUS) − deadline hits × penalty_points` (the last three only in arenas that use them), `accuracy = hits / shots`, `expired` is the number of player deaths, and kills per minute, average time to kill (from first sight) and headshot rate (headshot hits / hits) are as in scenarios.
 
 ### Simplifications
 
