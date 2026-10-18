@@ -12,7 +12,7 @@ use crate::overlay::Overlay;
 use crate::persistence::history::History;
 use crate::persistence::settings::Settings;
 use aim_core::math::ViewAngles;
-use aim_core::scenario::Shape;
+use aim_core::scenario::{HitZone, Shape};
 use aim_core::training::store::RunStore;
 use aim_world::arena::{ArenaEvent, ArenaSession};
 use aim_world::map::BoxKind;
@@ -23,6 +23,98 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 const COUNTDOWN_SECS: f32 = 3.0;
+
+/// What happened in the running arena, for sound and HUD feedback. Translated from the
+/// session's `ArenaEvent`s by the arena tick; it decides no gameplay. Positions are in
+/// Bevy world space.
+#[derive(Message, Debug, Clone, Copy, PartialEq)]
+pub enum ArenaFeedback {
+    /// A whole second of the start countdown began: 3, 2, then 1.
+    CountdownTick { seconds_left: u32 },
+    /// The countdown ended and the arena is live.
+    RoundStarted,
+    /// The player took `damage` from a bot whose eye is at `from`. `zone` is the body zone
+    /// the bullet hit, or `None` for a shoot-back deadline's sure shot.
+    PlayerHit {
+        from: Vec3,
+        damage: f32,
+        zone: Option<HitZone>,
+    },
+    /// The player died. `from` is the eye of the bot that dealt the killing damage.
+    PlayerDied { from: Option<Vec3> },
+    /// A bot fired a bullet at the player, hit or miss, from `origin` (its eye).
+    BotFired { bot_id: u64, origin: Vec3 },
+    /// The player killed a bot. `headshot` when the killing shot hit the head; `streak`
+    /// counts the kills since the run started or the player last died, this one included.
+    BotKilled {
+        bot_id: u64,
+        headshot: bool,
+        streak: u32,
+    },
+    /// The run finished; the results screen follows.
+    RoundEnded,
+}
+
+fn to_bevy(v: aim_core::math::Vec3) -> Vec3 {
+    Vec3::new(v.x, v.y, v.z)
+}
+
+/// Turns arena events into [`ArenaFeedback`], keeping the kill streak between frames.
+#[derive(Debug, Default)]
+struct FeedbackTranslator {
+    streak: u32,
+}
+
+impl FeedbackTranslator {
+    fn translate(&mut self, events: &[ArenaEvent]) -> Vec<ArenaFeedback> {
+        // The session reports a killing shot before the kill, and a hit before the death.
+        let mut last_hit: Option<(u64, HitZone)> = None;
+        let mut last_damage_from = None;
+        let mut out = Vec::new();
+        for event in events {
+            match *event {
+                ArenaEvent::Shot { hit, .. } => last_hit = hit.or(last_hit),
+                ArenaEvent::BotKilled { id, .. } => {
+                    self.streak += 1;
+                    out.push(ArenaFeedback::BotKilled {
+                        bot_id: id,
+                        headshot: last_hit == Some((id, HitZone::Head)),
+                        streak: self.streak,
+                    });
+                }
+                ArenaEvent::PlayerHit { damage, from, zone } => {
+                    let from = to_bevy(from);
+                    last_damage_from = Some(from);
+                    out.push(ArenaFeedback::PlayerHit { from, damage, zone });
+                }
+                ArenaEvent::PlayerDied => {
+                    self.streak = 0;
+                    out.push(ArenaFeedback::PlayerDied {
+                        from: last_damage_from,
+                    });
+                }
+                ArenaEvent::BotFired { bot_id, origin } => out.push(ArenaFeedback::BotFired {
+                    bot_id,
+                    origin: to_bevy(origin),
+                }),
+                ArenaEvent::Finished => out.push(ArenaFeedback::RoundEnded),
+                ArenaEvent::BotSpawned { .. } => {}
+            }
+        }
+        out
+    }
+}
+
+/// The cue for a countdown frame that went from `before` to `after` seconds left.
+fn countdown_cue(before: f32, after: f32) -> Option<ArenaFeedback> {
+    if after <= 0.0 {
+        return (before > 0.0).then_some(ArenaFeedback::RoundStarted);
+    }
+    let seconds_left = after.ceil() as u32;
+    let first_frame = before >= COUNTDOWN_SECS && after < before;
+    (first_frame || seconds_left < before.ceil() as u32)
+        .then_some(ArenaFeedback::CountdownTick { seconds_left })
+}
 
 #[derive(Resource)]
 pub struct ArenaRun {
@@ -37,6 +129,7 @@ pub struct ArenaRun {
     bots: HashMap<u64, Entity>,
     /// Bots hit this frame, for their visual effect.
     struck: Vec<Struck>,
+    translator: FeedbackTranslator,
 }
 
 impl ArenaRun {
@@ -52,6 +145,7 @@ impl ArenaRun {
             damage_flash: 0.0,
             bots: HashMap::new(),
             struck: Vec::new(),
+            translator: FeedbackTranslator::default(),
         }
     }
 
@@ -76,7 +170,7 @@ impl Plugin for ArenaPlugin {
     fn build(&self, app: &mut App) {
         let playing = in_state(AppState::Playing).and_then(resource_exists::<ArenaRun>);
         add_map_lifecycle(app);
-        app.add_systems(
+        app.add_message::<ArenaFeedback>().add_systems(
             Update,
             (pause_input, look, tick, sync_bots, update_camera)
                 .chain()
@@ -256,6 +350,7 @@ fn tick(
     mut run: ResMut<ArenaRun>,
     mut finisher: ArenaFinisher,
     mut feedback: MessageWriter<ShotFeedback>,
+    mut arena_feedback: MessageWriter<ArenaFeedback>,
 ) {
     if run.paused {
         return;
@@ -264,11 +359,17 @@ fn tick(
     run.hit_flash = (run.hit_flash - dt).max(0.0);
     run.damage_flash = (run.damage_flash - dt).max(0.0);
     if run.countdown > 0.0 {
+        let before = run.countdown;
         run.countdown -= dt;
+        if let Some(cue) = countdown_cue(before, run.countdown) {
+            arena_feedback.write(cue);
+        }
         return;
     }
     let frame = frame_input(dt, run.view, &input.keys, &input.buttons);
-    for event in run.session.update(frame) {
+    let events = run.session.update(frame);
+    arena_feedback.write_batch(run.translator.translate(&events));
+    for event in events {
         if let Some(outcome) = ShotOutcome::from_arena(&event) {
             feedback.write(ShotFeedback(outcome));
         }
@@ -283,7 +384,9 @@ fn tick(
             ArenaEvent::BotKilled { id, .. } => {
                 hit_effect::record(&mut run.struck, id, None, true);
             }
-            ArenaEvent::PlayerHit { .. } => run.damage_flash = 0.25,
+            ArenaEvent::PlayerHit { .. } if finisher.settings.feel.damage_vignette.enabled => {
+                run.damage_flash = 0.25;
+            }
             ArenaEvent::Finished => finisher.finish(&run),
             _ => {}
         }
@@ -452,6 +555,140 @@ mod tests {
         // Straight from one arena into another (a routine step), without the results screen.
         let lab = start(&mut app, "angles-lab-clear");
         assert_eq!(map_visuals(&mut app), lab, "another arena while playing");
+    }
+
+    fn world(x: f32, y: f32, z: f32) -> aim_core::math::Vec3 {
+        aim_core::math::Vec3::new(x, y, z)
+    }
+
+    #[test]
+    fn arena_events_become_feedback_with_the_shooter_position() {
+        let mut t = FeedbackTranslator::default();
+        let events = [
+            ArenaEvent::BotFired {
+                bot_id: 4,
+                origin: world(1.0, 1.6, -3.0),
+            },
+            ArenaEvent::PlayerHit {
+                damage: 40.0,
+                from: world(1.0, 1.6, -3.0),
+                zone: Some(HitZone::Body),
+            },
+            ArenaEvent::PlayerDied,
+            ArenaEvent::Finished,
+        ];
+        let from = Vec3::new(1.0, 1.6, -3.0);
+        assert_eq!(
+            t.translate(&events),
+            [
+                ArenaFeedback::BotFired {
+                    bot_id: 4,
+                    origin: from
+                },
+                ArenaFeedback::PlayerHit {
+                    from,
+                    damage: 40.0,
+                    zone: Some(HitZone::Body)
+                },
+                ArenaFeedback::PlayerDied { from: Some(from) },
+                ArenaFeedback::RoundEnded,
+            ]
+        );
+    }
+
+    #[test]
+    fn kills_count_a_streak_that_a_death_resets() {
+        let mut t = FeedbackTranslator::default();
+        let kill = |id, zone| {
+            [
+                ArenaEvent::Shot {
+                    hit: Some((id, zone)),
+                    moving: false,
+                },
+                ArenaEvent::BotKilled {
+                    id,
+                    time_to_kill_secs: 0.5,
+                },
+            ]
+        };
+        let killed = |t: &mut FeedbackTranslator, events: &[ArenaEvent]| {
+            t.translate(events)
+                .into_iter()
+                .filter(|f| matches!(f, ArenaFeedback::BotKilled { .. }))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            killed(&mut t, &kill(1, HitZone::Head)),
+            [ArenaFeedback::BotKilled {
+                bot_id: 1,
+                headshot: true,
+                streak: 1
+            }]
+        );
+        assert_eq!(
+            killed(&mut t, &kill(2, HitZone::Body)),
+            [ArenaFeedback::BotKilled {
+                bot_id: 2,
+                headshot: false,
+                streak: 2
+            }]
+        );
+        t.translate(&[ArenaEvent::PlayerDied]);
+        assert_eq!(
+            killed(&mut t, &kill(3, HitZone::Legs)),
+            [ArenaFeedback::BotKilled {
+                bot_id: 3,
+                headshot: false,
+                streak: 1
+            }]
+        );
+    }
+
+    #[test]
+    fn shots_spawns_and_unshot_kills_add_no_other_feedback() {
+        let mut t = FeedbackTranslator::default();
+        let events = [
+            ArenaEvent::Shot {
+                hit: None,
+                moving: true,
+            },
+            ArenaEvent::BotSpawned { id: 9 },
+            ArenaEvent::BotKilled {
+                id: 9,
+                time_to_kill_secs: 1.0,
+            },
+        ];
+        assert_eq!(
+            t.translate(&events),
+            [ArenaFeedback::BotKilled {
+                bot_id: 9,
+                headshot: false,
+                streak: 1
+            }]
+        );
+    }
+
+    #[test]
+    fn the_countdown_ticks_each_second_then_starts_the_round_once() {
+        let mut countdown = COUNTDOWN_SECS;
+        let mut cues = Vec::new();
+        for _ in 0..400 {
+            if countdown <= 0.0 {
+                break;
+            }
+            let before = countdown;
+            countdown -= 1.0 / 60.0;
+            cues.extend(countdown_cue(before, countdown));
+        }
+        assert_eq!(
+            cues,
+            [
+                ArenaFeedback::CountdownTick { seconds_left: 3 },
+                ArenaFeedback::CountdownTick { seconds_left: 2 },
+                ArenaFeedback::CountdownTick { seconds_left: 1 },
+                ArenaFeedback::RoundStarted,
+            ]
+        );
     }
 
     #[test]
