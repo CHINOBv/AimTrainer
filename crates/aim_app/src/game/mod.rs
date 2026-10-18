@@ -65,6 +65,8 @@ pub struct Run {
     pub kill_flash: f32,
     /// Definition, seed and every input fed to the session, for analysis and replays.
     pub recording: Recording,
+    /// Restarts keep the seed (daily challenge: everyone gets the same targets).
+    pub fixed_seed: bool,
     /// Played in adaptive mode: the result moves the scenario's difficulty staircase.
     pub adaptive: bool,
     /// Hide the overlay when the run ends (buy-phase micro drills).
@@ -91,6 +93,7 @@ impl Run {
         let recording = Recording::new(def.clone(), seed);
         Self {
             recording,
+            fixed_seed: false,
             adaptive: false,
             auto_hide: false,
             sens_override: None,

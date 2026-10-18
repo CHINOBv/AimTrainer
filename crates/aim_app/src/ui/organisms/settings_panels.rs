@@ -1,7 +1,7 @@
 //! Sensitivity (with converter and DPI check) and display settings forms, including the
 //! crosshair editor with VALORANT code import/export.
 
-use super::hotkey_settings;
+use super::{hotkey_settings, restart_key_setting};
 use crate::persistence::settings::Settings;
 use aim_core::crosshair::{
     CUSTOM_COLOR_INDEX, Crosshair, DOT_THICKNESS_PX, ERROR_MULTIPLIER_MAX, LINE_THICKNESS_MAX_PX,
@@ -161,6 +161,9 @@ pub fn display_panel(
                 .suffix(" min"),
         );
     });
+    ui.add_space(8.0);
+    ui.heading("Gameplay keys");
+    restart_key_setting::restart_key_setting(ui, &mut settings.restart_key);
     ui.add_space(8.0);
     ui.heading("Global hotkeys (Windows/X11)");
     hotkey_settings::hotkey_settings(ui, settings, recording_hotkey);

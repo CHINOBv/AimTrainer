@@ -1,6 +1,8 @@
-//! Operating-system specifics: the single-instance IPC channel and global hotkeys.
+//! Operating-system specifics: the single-instance IPC channel, global hotkeys and
+//! in-window gameplay keys.
 
 pub mod frame_stats;
+pub mod game_key;
 pub mod hotkey;
 pub mod hotkey_spec;
 pub mod ipc;

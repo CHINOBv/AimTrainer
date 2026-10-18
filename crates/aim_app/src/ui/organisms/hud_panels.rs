@@ -105,11 +105,15 @@ pub fn spray_meter(ctx: &egui::Context, s: &Session) {
         });
 }
 
-pub fn countdown(ctx: &egui::Context, secs: f32) {
+/// Countdown before a run, with a reminder of the restart key (`restart`, e.g. "R").
+pub fn countdown(ctx: &egui::Context, secs: f32, restart: &str) {
     egui::Area::new(egui::Id::new("countdown"))
         .anchor(Align2::CENTER_CENTER, [0.0, -80.0])
         .show(ctx, |ui| {
-            ui.label(big(format!("{}", secs.ceil() as i32), 56.0));
+            ui.vertical_centered(|ui| {
+                ui.label(big(format!("{}", secs.ceil() as i32), 56.0));
+                ui.small(format!("{restart}: restart"));
+            });
         });
 }
 
@@ -124,10 +128,12 @@ pub struct FloorPick<'a> {
 /// Step of the floor-height picker, meters.
 const FLOOR_STEP: f32 = 0.5;
 
-/// Pause window. With `floor`, it also offers a floor-height picker and "Apply and restart".
+/// Pause window, with a restart button labelled with the restart key (`restart`). With
+/// `floor`, it also offers a floor-height picker and "Apply and restart".
 pub fn pause_window(
     ctx: &egui::Context,
     description: &str,
+    restart: &str,
     floor: Option<FloorPick>,
 ) -> Option<UiAction> {
     let mut action = None;
@@ -162,6 +168,13 @@ pub fn pause_window(
             }
             if ui.button("Resume (Esc)").clicked() {
                 action = Some(UiAction::Resume);
+            }
+            if ui
+                .button(format!("Restart ({restart})"))
+                .on_hover_text("Start this run again as it is; nothing is recorded")
+                .clicked()
+            {
+                action = Some(UiAction::Restart);
             }
             if ui.button("Quit to menu").clicked() {
                 action = Some(UiAction::BackToMenu);
