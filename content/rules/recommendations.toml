@@ -225,3 +225,23 @@ meaning = "your flicks in one direction hit far less often than the rest"
 [rules.recommendation]
 scenario_ids = ["flick-wide", "flick-headshot"]
 tip = "Give extra reps to the direction the flick grid marks weakest, and slow down there until its hit rate catches up."
+
+[[rules]]
+metric = "miss_below_share"
+direction = "above"
+threshold = 0.65
+verdict = "weakness"
+meaning = "most of your misses land below the head or target center, so your crosshair sits too low"
+[rules.recommendation]
+scenario_ids = ["static-headline", "flick-headshot"]
+tip = "Keep the crosshair at head height while you wait and between targets, and finish each flick at the top half of the head."
+
+[[rules]]
+metric = "miss_above_share"
+direction = "above"
+threshold = 0.65
+verdict = "weakness"
+meaning = "most of your misses land above the head or target center, so your flicks pull up past it"
+[rules.recommendation]
+scenario_ids = ["micro-adjust", "static-headline"]
+tip = "Flick level with the head instead of pulling up through it, and let the vertical part of the movement stop on the target."
