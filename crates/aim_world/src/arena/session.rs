@@ -625,6 +625,7 @@ impl ArenaSession {
         bot.health -= dmg;
         // A bot that survives knows where the shot came from (roaming bots fall back).
         bot.shot_from = Some(ray.origin);
+        bot.last_hit_at = now;
         if bot.health <= 0.0 {
             bot.alive = false;
             bot.died_at = now;
@@ -672,9 +673,12 @@ impl ArenaSession {
         };
         let site = self.site.as_ref().map(|s| s.center);
         let shoot_back = self.def.mode.bots_shoot_back();
-        let reactive = match &self.def.mode {
-            ArenaMode::Deathmatch { reactive, .. } => *reactive,
-            ArenaMode::AngleClear { .. } => None,
+        // Cloned so the loop can damage the player; empty for arenas without rules.
+        let (reactive, rules) = match &self.def.mode {
+            ArenaMode::Deathmatch {
+                reactive, rules, ..
+            } => (*reactive, rules.clone()),
+            ArenaMode::AngleClear { .. } => (None, Vec::new()),
         };
         let player_vel = self.player.vel.to_world(self.player.view.yaw_deg);
         for i in 0..self.bots.len() {
@@ -697,6 +701,8 @@ impl ArenaSession {
                 player_vel,
                 player_fired: self.shot_fired,
                 reactive,
+                rules: &rules,
+                player_speed: self.player.vel.speed(),
             };
             let bot = &mut self.bots[i];
             let landed = bot.think(&ctx, &mut self.rng);
@@ -945,7 +951,8 @@ impl ArenaSession {
                 retreat: Retreat::default(),
             },
         };
-        let bot = Bot::new(id, feet, yaw, brain);
+        let mut bot = Bot::new(id, feet, yaw, brain);
+        bot.spawned_at = self.time;
         match slot {
             Some(i) => self.bots[i] = bot,
             None => self.bots.push(bot),

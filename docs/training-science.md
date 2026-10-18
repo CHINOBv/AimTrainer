@@ -249,7 +249,13 @@ The deadline length is a design value per arena, not a measured number. About 1.
 
 With `[mode.reactive]` (`docs/maps.md`), deathmatch bots copy or oppose the player's strafe, juke when the crosshair gets close and juke when the player fires. The aim is to stop the player from learning one bot's rhythm: a plain ADAD bot switches on its own timer, so after a few duels a player can time the switch instead of tracking it. Reactions tie the bot's movement to the player's own actions, as a human opponent's movement is. The expected benefit is an analogy to the contextual-interference effect (Shea & Morgan 1979, see "Routine design" above: less predictable practice retains and transfers better), not a tested result: no study measures reactive bots.
 
-Every juke waits one bot reaction time (the preset's `reaction_secs`, 0.20–0.32 s) after its trigger, so a bot never reacts faster than a human could. The chances and the dodge angle are per-arena design values, not measured from players. The built-in values are **estimates**, chosen so that about a third of the strafe decisions copy and a third oppose the player.
+Every juke waits one bot reaction time (the preset's `reaction_secs`, 0.20–0.32 s) after its trigger, so a bot never reacts faster than a human could. The chances and the dodge angle are per-arena design values, not measured from players. The values of the built-in `corridor-reactive` are **estimates**, chosen so that about a third of the strafe decisions copy and a third oppose the player.
+
+### Conditional bot behavior
+
+`[[mode.rules]]` (`docs/maps.md`) switches a roaming bot's behavior on what it knows: its health, recent damage, time alive, its line of sight, the distance to the player and the player's speed. The example the feature was built for, used by `corridor-reactive`, is "holds the angle, strafes when hit, retreats under 50% health". The purpose is game sense rather than raw aim: a wounded enemy falling back, a holder who starts moving once hit, an enemy who pushes the last place it saw you. Recognizing such patterns and choosing when to re-peek is part of a real duel that a fixed bot never asks for. No study measures the effect of such bots on aim or game sense; the claim is a design rationale.
+
+The `corridor-reactive` values (retreat under 0.5 health, strafe for 1.5 s after a hit, hold beyond 20 m, the reaction chances and the deadline above) are **estimates** for a contender-level duel, not calibrated against player data.
 
 ### Pace and stamina
 

@@ -820,7 +820,7 @@ fn practice_only_applies_before_the_run_starts() {
 
 /// The duel room with a 1.2 m pillar east of the bot spawn and a waypoint behind it, so a
 /// shot bot has cover to fall back to. Without the pillar the room is open.
-fn cover_room(pillar: bool) -> MapDef {
+pub(super) fn cover_room(pillar: bool) -> MapDef {
     let pillar = if pillar {
         "[[boxes]]\nkind = \"cover\"\nmin = [1.0, 0.0, -6.2]\nmax = [2.2, 2.5, -5.0]\n"
     } else {

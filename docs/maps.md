@@ -204,7 +204,32 @@ oppose_strafe_chance = 0.35   # chance to strafe against the player (the two sum
 dodge_within_deg = 4.0        # juke when the crosshair comes this close to the head (0..90)
 dodge_chance = 0.5            # chance of that juke (0..=1, default 1)
 react_to_shots = true         # juke when the player fires
+
+[[mode.rules]]                # optional, ordered: the first rule whose `when` all holds wins
+when = { health_below = 0.5 } # every condition set must hold; an empty `when` always holds
+behavior = "retreat"          # hold | peek | strafe | retreat (optional)
+speed_multiplier = 1.0        # optional, (0, 2]: scales run speed and acceleration
 ```
+
+Rule conditions (all optional; at most `MAX_RULES` = 16 rules; not allowed with `[mode.objective]`):
+
+| Condition | Holds when |
+|---|---|
+| `health_below` | the bot's health is below this fraction of 150, in (0, 1] |
+| `damaged_within_secs` | the player hit the bot within the last this many seconds |
+| `alive_over_secs` | the bot spawned at least this many seconds ago |
+| `sees_player` | the bot has (true) or lacks (false) line of sight to the player's head (`visible_head`, and not during the spawn grace) |
+| `distance_below_m`, `distance_above_m` | the horizontal distance to the player is below / above this many meters |
+| `player_speed_above`, `player_speed_below` | the player's speed is above / below this many m/s |
+
+| Behavior | What the roaming bot does while the rule holds |
+|---|---|
+| `hold` | Stands still and holds the angle: no roaming, strafing or falling back. It still turns to fight what it sees. |
+| `peek` | Walks along `MapDef::path` to where it last noticed the player, or was shot from, until it sees them and stops to fight. On arrival it forgets the spot and roams. |
+| `strafe` | Strafes (ADAD) while it fights, as with `bot_strafe`, instead of falling back when shot. |
+| `retreat` | Falls back to the nearest cover spot (`MapDef::cover_from`) out of sight of where it last knew the player to be, holding its fire while it runs, and stays hidden there until it sees the player. With no cover within `RETREAT_MAX_ROUTE_M` it holds its ground. |
+
+A rule without `behavior` only changes the speed. When no rule holds, the bot behaves as described in the bot model below. Rules only read what the bot could know (its health, its own sight, the last place it saw the player), never the player's position through walls; distance and player speed are a simplification, read directly. Evaluating rules draws no random numbers.
 
 `ArenaDef::validate` checks the definition alone; `ArenaDef::validate_with_map` also checks that the map id matches, that a deathmatch map has bot spawns and that every angle id exists. `ArenaSession::new(def, map, seed)` runs both and returns `ArenaError::Invalid` on failure. `arena::builtin::load(id)` returns a built-in arena together with its built-in map.
 
@@ -244,6 +269,7 @@ Once the player first sees a bot life, a clock starts. If the bot is still alive
 | Reactions | Only with `[mode.reactive]` (deathmatch). Reactive bots strafe while they fight, as with `bot_strafe`, and react to the player in three ways. **Copy or oppose:** at each strafe-key decision (the start of a strafe and each switch), one random roll makes the bot strafe the same world direction as the player (`mirror_strafe_chance`), against it (`oppose_strafe_chance`) or as the plain ADAD would. The player counts as strafing when their speed across the bot's view is at least `PLAYER_STRAFE_MIN_SPEED` (0.5 m/s, a design choice). **Dodge:** when the player's crosshair comes within `dodge_within_deg` of the bot's head while it fights, the bot jukes with `dodge_chance`: one bot reaction time later (the `bot_skill` preset's reaction time) it switches strafe keys at once. **Shots:** with `react_to_shots`, a bot that sees the player fire jukes one reaction time later. A bot has at most one pending juke and drops it when it stops fighting. The rolls only happen in arenas that set these options, so other arenas keep their random sequence. |
 | Behavior | The angle peek cycle (hidden, peek, hold, hide), the strafe (ADAD) and the attacker push (duel, press on) are small state machines in `arena/behavior.rs`, unit-tested on their own. They only draw random numbers on the transitions that need them, so an arena that does not use a machine keeps its random sequence. |
 | Cover | A roaming deathmatch bot that is shot and survives falls back: it runs to the nearest cover spot (`MapDef::cover_from`) that hides its head from the eye the shot came from and is at most `RETREAT_MAX_ROUTE_M` (8 m) away along its route, holding its fire while it runs. It hides there for 0.6–1.4 s (`COVER_HOLD_SECS`), then walks back to where it was hit to re-peek; if it sees the player while hiding or re-peeking, it stops to fight. With no cover in reach it holds its ground. The bot only learns the shooter's position at the moment of the shot, never later (no wallhack). Durations and distance are design choices, not VALORANT values. Angle bots and site attackers do not fall back. The state machine is `Retreat` in `arena/behavior.rs`. |
+| Rules | Only with `[[mode.rules]]` (roaming deathmatch bots). Every frame the first rule whose conditions all hold switches the bot to its behavior (`hold`, `peek`, `strafe` or `retreat`, above) and speed multiplier; any behavior other than `retreat` also cancels the cover fall-back below. A bot remembers the player's eye where it last noticed them or was shot from; `peek` walks there and `retreat` hides from it. Logic in `Bot::active_rule` and `Bot::move_goal` (`arena/bot.rs`). |
 | Sight | Line of sight from the bot's eye to any part of the player's head (`visible_head`). Roaming bots only notice the player within 60° of where they face (`BOT_NOTICE_HALF_ANGLE_DEG`, an estimate from VALORANT's 103° horizontal field of view); once engaged they track at any angle. |
 | Aim | The `sim::AimerProfile` model: a reaction delay, then a minimum-jerk flick to the player's head whose duration follows Fitts' law (`fitts_a + fitts_b · log2(d / 2r + 1)`) and whose endpoint misses by a Gaussian error of `endpoint_noise · r`, where `r` is the head's angular radius. After each shot the bot plans a corrective flick after half its reaction time. Deathmatch bots use the `bot_skill` preset; angle bots use the contender flick constants with `bot_reaction_secs` as their reaction time. |
 | Fire | When the flick has landed, at the Vandal fire rate, only if `bots_shoot_back`. Bot shots are occluded by the map like the player's. |
@@ -274,3 +300,4 @@ At the first frame each bot life becomes visible to the player, the arena record
 | `corridor-jiggle` | `duel-corridor` | Jiggle-peek drill: eight peeks alternating `north-jiggle` and `south-jiggle`, hold 0.15 s, peek delay 0.3–0.9 s, bots do not shoot back, 60 s. |
 | `outpost-site-hold` | `signal-outpost` | Site hold: 6 contender attackers, 2 at a time, strafing and shooting back; capture 3 s within 2.5 m; 90 s. |
 | `lanes-deathmatch` | `freight-lanes` | Deathmatch, 3 contender bots that strafe and shoot back, 120 s. |
+| `corridor-reactive` | `duel-corridor` | Reactive duels: 2 contender bots that shoot back. They copy (35%) or oppose (35%) the player's strafe, juke when the crosshair is within 4° (50%) or the player fires; they hold long angles beyond 20 m, strafe for 1.5 s after a hit and retreat under half health. Shoot-back deadline 1.5 s (40 damage, −25 points). 90 s. |

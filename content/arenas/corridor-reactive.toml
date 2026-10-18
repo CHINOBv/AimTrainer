@@ -1,0 +1,39 @@
+# Reactive duels in the original Duel Corridor: bots that read the player and punish slow kills.
+id = "corridor-reactive"
+name = "Reactive Duels"
+description = "Two bots hold long angles, strafe when hit and fall back under half health. They copy or fight your strafe and juke when your crosshair gets close or you fire. Kill each bot within 1.5 s of seeing it, or it lands a shot."
+map = "duel-corridor"
+duration_secs = 90.0
+weapon = "vandal"
+
+[mode]
+kind = "deathmatch"
+bots = 2
+bot_skill = "contender"
+respawn_secs = 2.0
+bots_shoot_back = true
+
+# Reaction chances, dodge angle and deadline are estimates (docs/training-science.md).
+[mode.reactive]
+mirror_strafe_chance = 0.35
+oppose_strafe_chance = 0.35
+dodge_within_deg = 4.0
+dodge_chance = 0.5
+react_to_shots = true
+
+[mode.deadline]
+secs = 1.5
+damage = 40.0
+penalty_points = 25.0
+
+[[mode.rules]]
+when = { health_below = 0.5 }
+behavior = "retreat"
+
+[[mode.rules]]
+when = { damaged_within_secs = 1.5 }
+behavior = "strafe"
+
+[[mode.rules]]
+when = { sees_player = true, distance_above_m = 20.0 }
+behavior = "hold"
