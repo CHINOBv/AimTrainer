@@ -150,7 +150,9 @@ The trainer is a separate window. It does not read game memory or inject input. 
 
 ## Sensitivity setup
 
-Open **Settings → Sensitivity** and enter:
+On the very first start (no `settings.toml` yet) a short wizard asks for your game, sensitivity, DPI and feedback preset (Minimal / Standard / Juicy). Skip it at any step; it is not shown again, and players with an existing settings file never see it (`first_run_done` in `settings.toml`).
+
+To change them later, open **Settings → Sensitivity** and enter:
 
 - your **VALORANT sensitivity**;
 - your **DPI**;

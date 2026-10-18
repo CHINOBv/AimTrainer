@@ -7,6 +7,7 @@ pub mod benchmark_panel;
 pub mod coaching_overlay;
 pub mod decision_panel;
 pub mod feedback_settings;
+pub mod first_run;
 pub mod flick_directions;
 pub mod history_chart;
 pub mod hotkey_settings;

@@ -30,7 +30,7 @@ use crate::ui::organisms::today_panel::{
     TodayAction, TodayModel,
 };
 use crate::ui::organisms::{
-    arena_list, benchmark_panel, feedback_settings, routine_list, scenario_browser,
+    arena_list, benchmark_panel, feedback_settings, first_run, routine_list, scenario_browser,
 };
 use aim_core::fov;
 use aim_core::training::method::{MethodDef, Weekday};
@@ -140,6 +140,7 @@ struct MenuState {
     /// The section whose "Reset" was clicked once and waits for confirmation.
     confirm_reset: Option<SettingsTab>,
     scenario_filter: scenario_browser::ScenarioFilter,
+    wizard_step: first_run::WizardStep,
 }
 
 /// The Settings tab: search, sub-tabs, a reset per section, and the rows.
@@ -537,6 +538,7 @@ fn menu(
         Tab::Settings => settings_page(&mut root, state, &mut cfg),
     }
 
+    first_run::first_run_wizard(ctx, &mut state.wizard_step, &mut cfg.settings);
     let hotkeys_shown = state.tab == Tab::Settings
         && (state.settings_tab == SettingsTab::Keys || !state.settings_query.trim().is_empty());
     if !hotkeys_shown {
