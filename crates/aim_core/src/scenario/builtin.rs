@@ -50,6 +50,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/flick-wide.toml"),
     ),
     (
+        "go-no-go.toml",
+        include_str!("../../../../content/scenarios/go-no-go.toml"),
+    ),
+    (
         "long-range-heads.toml",
         include_str!("../../../../content/scenarios/long-range-heads.toml"),
     ),
@@ -60,6 +64,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "peek-reaction.toml",
         include_str!("../../../../content/scenarios/peek-reaction.toml"),
+    ),
+    (
+        "precision-rings.toml",
+        include_str!("../../../../content/scenarios/precision-rings.toml"),
     ),
     (
         "spray-transfer.toml",

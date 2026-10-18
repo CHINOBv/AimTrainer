@@ -4,7 +4,9 @@
 //! `Session` recovers where every target was, which one the crosshair was nearest to, and
 //! what each shot did. Flick and tracking analysis read these samples, never the session.
 
+use super::decision::DecisionCounts;
 use crate::math::{Vec3, ViewAngles, angle_between_deg, wrap_degrees};
+use crate::scenario::Stats;
 use crate::scenario::{Recording, Session, Shape, Target};
 
 /// One visible target as seen from the eye in a given frame.
@@ -18,6 +20,8 @@ pub struct TargetSample {
     pub radius_deg: f32,
     /// Session time when the target became visible, seconds.
     pub visible_at_secs: f32,
+    /// Go/no-go "non-match" decoy, to be left alone.
+    pub decoy: bool,
 }
 
 /// What happened in one `Session::update` call.
@@ -46,6 +50,8 @@ pub struct Sample {
     pub hit: bool,
     /// The crosshair was on a counted zone while firing this frame (hold mode).
     pub on_target: bool,
+    /// Go/no-go outcomes resolved this frame (all zero without decoys).
+    pub decision: DecisionCounts,
 }
 
 impl Sample {
@@ -102,6 +108,7 @@ fn snapshot(session: &Session) -> Vec<TargetSample> {
                 aim_point: ViewAngles::from_direction(point - eye),
                 radius_deg,
                 visible_at_secs: t.visible_at,
+                decoy: t.decoy,
             }
         })
         .collect()
@@ -117,6 +124,27 @@ fn nearest(view: ViewAngles, targets: &[TargetSample]) -> Option<usize> {
         .map(|(i, _)| i)
 }
 
+/// Go/no-go outcomes counted so far in `stats`.
+fn decision_totals(stats: &Stats) -> DecisionCounts {
+    DecisionCounts {
+        match_hits: stats.kills,
+        match_waits: stats.expired,
+        nonmatch_hits: stats.decoy_hits,
+        nonmatch_waits: stats.decoy_waits,
+    }
+}
+
+/// Go/no-go outcomes added to `stats` since `before`.
+fn decision_since(stats: &Stats, before: DecisionCounts) -> DecisionCounts {
+    let now = decision_totals(stats);
+    DecisionCounts {
+        match_hits: now.match_hits - before.match_hits,
+        match_waits: now.match_waits - before.match_waits,
+        nonmatch_hits: now.nonmatch_hits - before.nonmatch_hits,
+        nonmatch_waits: now.nonmatch_waits - before.nonmatch_waits,
+    }
+}
+
 /// Re-simulate `recording` and return one sample per input frame.
 pub fn trace(recording: &Recording) -> Vec<Sample> {
     let mut samples = Vec::with_capacity(recording.inputs.len());
@@ -127,13 +155,14 @@ pub fn trace(recording: &Recording) -> Vec<Sample> {
     let mut previous_hits = initial.stats().hits;
     let mut previous_on_target_secs = initial.stats().on_target_secs;
     let mut previous_kills = initial.stats().kills;
+    let mut previous_decision = decision_totals(initial.stats());
 
     recording.replay(|session, input| {
         let stats = session.stats();
         let mut targets = snapshot(session);
         // A target killed by this frame's shot is gone after the update; keep it so the shot
         // can be attributed to the target it was aimed at.
-        if stats.kills > previous_kills {
+        if stats.kills > previous_kills || stats.decoy_hits > previous_decision.nonmatch_hits {
             for gone in &previous_targets {
                 if !targets.iter().any(|t| t.id == gone.id) {
                     targets.push(*gone);
@@ -161,6 +190,7 @@ pub fn trace(recording: &Recording) -> Vec<Sample> {
             shot,
             hit: stats.hits > previous_hits,
             on_target: stats.on_target_secs > previous_on_target_secs,
+            decision: decision_since(stats, previous_decision),
         });
         previous_targets = snapshot(session);
         previous_view = input.view;
@@ -168,6 +198,7 @@ pub fn trace(recording: &Recording) -> Vec<Sample> {
         previous_hits = stats.hits;
         previous_on_target_secs = stats.on_target_secs;
         previous_kills = stats.kills;
+        previous_decision = decision_totals(stats);
     });
     samples
 }

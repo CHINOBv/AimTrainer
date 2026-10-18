@@ -853,4 +853,31 @@ mod tests {
         };
         assert!(!k.is_valid());
     }
+
+    #[test]
+    fn difficulty_and_tuning_keep_decoys_and_score_rings() {
+        for id in ["go-no-go", "precision-rings"] {
+            let d = find(id);
+            let tuned = Tuning {
+                size_pct: 150,
+                distance_pct: 80,
+                speed_pct: 100,
+            };
+            for v in [
+                d.at_difficulty(-1.0),
+                d.at_difficulty(1.0),
+                d.with_tuning(tuned),
+            ] {
+                assert_eq!(v.targets.decoy_chance, d.targets.decoy_chance, "{id}");
+                assert_eq!(v.scoring.decoy_penalty, d.scoring.decoy_penalty, "{id}");
+                assert_eq!(v.scoring.rings, d.scoring.rings, "{id}");
+                let errs: Vec<_> = v
+                    .validate()
+                    .into_iter()
+                    .filter(|e| e.field != "id")
+                    .collect();
+                assert!(errs.is_empty(), "{id}: {errs:?}");
+            }
+        }
+    }
 }

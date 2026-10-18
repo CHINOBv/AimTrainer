@@ -202,6 +202,7 @@ mod tests {
             scenario_id: "flick-wide".into(),
             category: Category::Flicking,
             kind: AnalysisKind::Flick(flicks),
+            decision: None,
         };
         let p = SkillProfile::build(&[run]);
         let recs = p.recommendations();

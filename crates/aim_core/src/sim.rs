@@ -65,6 +65,19 @@ impl AimerProfile {
             tracking_gain: 18.0,
         },
     ];
+
+    /// Go/no-go: chance of clicking a decoy instead of recognizing it. An estimate that
+    /// grows with endpoint noise (recruit ≈ 22%, elite ≈ 9%); no player data backs it yet.
+    pub fn decoy_mistake_chance(&self) -> f32 {
+        0.25 * self.endpoint_noise
+    }
+
+    /// Go/no-go: extra delay to tell a match target from a decoy before moving, half the
+    /// simple reaction time (an estimate in the spirit of Hick's law: a choice is slower
+    /// than a simple reaction).
+    pub fn recognition_secs(&self) -> f32 {
+        0.5 * self.reaction_secs
+    }
 }
 
 struct Plan {
@@ -82,6 +95,8 @@ pub struct SimAimer {
     rng: Rng,
     view: ViewAngles,
     plan: Option<Plan>,
+    /// Go/no-go decoys the aimer recognized and decided to leave alone.
+    ignored: Vec<u64>,
 }
 
 impl SimAimer {
@@ -92,6 +107,26 @@ impl SimAimer {
             rng: Rng::new(seed ^ 0xA1A1),
             view: ViewAngles::default(),
             plan: None,
+            ignored: Vec::new(),
+        }
+    }
+
+    /// The next target to click. Without decoys it is the nearest target. With decoys the
+    /// aimer looks at the nearest target it has not dismissed; a decoy is dismissed unless
+    /// the aimer mistakes it for a match. Random draws happen only when decoys are on, so
+    /// other scenarios keep their exact results.
+    fn pick(&mut self, session: &Session) -> Option<Target> {
+        if session.def().targets.decoy_chance <= 0.0 {
+            return self.nearest(session);
+        }
+        self.ignored
+            .retain(|id| session.targets().any(|t| t.id == *id));
+        loop {
+            let t = self.nearest_where(session, |t| !self.ignored.contains(&t.id))?;
+            if !t.decoy || self.rng.next_f32() < self.profile.decoy_mistake_chance() {
+                return Some(t);
+            }
+            self.ignored.push(t.id);
         }
     }
 
@@ -123,9 +158,14 @@ impl SimAimer {
     }
 
     fn nearest(&self, session: &Session) -> Option<Target> {
+        self.nearest_where(session, |_| true)
+    }
+
+    fn nearest_where(&self, session: &Session, keep: impl Fn(&Target) -> bool) -> Option<Target> {
         let dir = self.view.direction();
         session
             .targets()
+            .filter(|t| keep(t))
             .min_by(|a, b| {
                 let da = angle_between_deg(dir, Self::aim(session, a).0 - session.eye_position());
                 let db = angle_between_deg(dir, Self::aim(session, b).0 - session.eye_position());
@@ -168,7 +208,7 @@ impl SimAimer {
             Some(t) => t,
             None => {
                 self.plan = None;
-                match self.nearest(session) {
+                match self.pick(session) {
                     Some(t) => t,
                     None => {
                         return FrameInput {
@@ -193,6 +233,8 @@ impl SimAimer {
             let error = (self.gaussian() * sd, self.gaussian() * sd);
             let reaction = if corrective {
                 self.profile.reaction_secs * 0.5
+            } else if session.def().targets.decoy_chance > 0.0 {
+                self.profile.reaction_secs + self.profile.recognition_secs()
             } else {
                 self.profile.reaction_secs
             };
@@ -276,5 +318,60 @@ mod tests {
             .unwrap();
         let p = AimerProfile::PRESETS[1];
         assert_eq!(simulate(&def, p, 5), simulate(&def, p, 5));
+    }
+
+    fn builtin(id: &str) -> ScenarioDef {
+        builtin::all().into_iter().find(|d| d.id == id).unwrap()
+    }
+
+    /// Scores recorded before score rings and decoys existed: scenarios that use neither
+    /// must keep their random sequences, and so their exact results.
+    #[test]
+    fn scenarios_without_decoys_simulate_exactly_as_before() {
+        let contender = AimerProfile::PRESETS[1];
+        for (id, score, kills, expired) in [
+            ("micro-adjust", 5850.0, 67, 0),
+            ("switch-heads", 5300.0, 57, 0),
+            ("peek-reaction", 1900.0, 22, 2),
+            ("dodge-peek", 2200.0, 24, 0),
+            ("track-precise", 2681.6558, 0, 0),
+        ] {
+            let r = simulate(&builtin(id), contender, 9);
+            assert!((r.score - score).abs() < 1e-2, "{id}: {}", r.score);
+            assert_eq!((r.kills, r.expired), (kills, expired), "{id}");
+        }
+    }
+
+    /// Decoys shot and decoys left alone over five seeds.
+    fn decoy_choices(profile: AimerProfile) -> (u32, u32) {
+        let def = builtin("go-no-go");
+        let (mut shot, mut waited) = (0, 0);
+        for seed in 1..=5 {
+            let mut session = Session::new(def.clone(), seed);
+            let mut aimer = SimAimer::new(profile, seed);
+            while !session.is_finished() {
+                let input = aimer.input(&session, 1.0 / 240.0);
+                session.update(input);
+            }
+            shot += session.stats().decoy_hits;
+            waited += session.stats().decoy_waits;
+        }
+        (shot, waited)
+    }
+
+    #[test]
+    fn the_aimer_mostly_leaves_decoys_alone_and_better_aimers_err_less() {
+        let (recruit_shot, recruit_waited) = decoy_choices(AimerProfile::PRESETS[0]);
+        let (elite_shot, elite_waited) = decoy_choices(AimerProfile::PRESETS[3]);
+        assert!(
+            recruit_waited > recruit_shot,
+            "{recruit_shot}/{recruit_waited}"
+        );
+        assert!(elite_waited > elite_shot, "{elite_shot}/{elite_waited}");
+        assert!(recruit_shot > elite_shot, "{recruit_shot} vs {elite_shot}");
+        assert!(
+            elite_shot > 0,
+            "even an elite aimer sometimes clicks a decoy"
+        );
     }
 }

@@ -6,6 +6,7 @@
 use crate::ui::UiAction;
 use crate::ui::atoms::{GOOD, WARN};
 use crate::ui::molecules::stat_row;
+use crate::ui::organisms::decision_panel::DecisionReport;
 use aim_core::analytics::{RunAnalysis, SkillProfile};
 use bevy_egui::egui;
 
@@ -27,6 +28,8 @@ pub struct RunReport {
     pub metrics: Vec<(&'static str, String)>,
     pub strengths: Vec<String>,
     pub advice: Vec<Advice>,
+    /// Go/no-go section, for runs with decoys.
+    pub decision: Option<DecisionReport>,
 }
 
 fn ms(secs: f32) -> String {
@@ -137,6 +140,7 @@ impl RunReport {
             metrics,
             strengths,
             advice,
+            decision: analysis.decision.as_ref().map(DecisionReport::new),
         }
     }
 }
@@ -233,5 +237,17 @@ mod tests {
             "{speed}"
         );
         assert!(value("Time on the target's edge").is_some());
+    }
+
+    #[test]
+    fn only_runs_with_decoys_get_a_decision_section() {
+        let go = report("go-no-go", 0);
+        let d = go.decision.expect("go-no-go has decoys");
+        assert!(
+            d.metrics
+                .iter()
+                .any(|(l, _)| *l == "Decoys shot (non-match hit)")
+        );
+        assert!(report("flick-wide", 1).decision.is_none());
     }
 }
