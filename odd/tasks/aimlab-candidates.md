@@ -32,13 +32,13 @@ Rules that hold for every spec:
 
 | ID | Specs | Route | Status | Commit |
 |---|---|---|---|---|
-| T1 | S15 (plan) | inline | done | this commit |
-| T2 | S1, S2 (scenario targets), S5, S14 | delegated, wave 1 (worktree `cand-targets`) | pending | |
-| T3 | S6, S8 | delegated, wave 1 (worktree `cand-analytics`) | pending | |
-| T4 | S9, S12, S13 | delegated, wave 1 (worktree `cand-player`) | pending | |
-| T5 | S1, S2 (arena bots), S7, S10 | delegated, wave 1 (worktree `cand-arena`) | pending | |
-| T6 | S3 | delegated, wave 2, after T2 merges (worktree `cand-phases`) | pending | |
-| T7 | S4, S11 | delegated, wave 2, after T2 merges (worktree `cand-perception`) | pending | |
+| T1 | S15 (plan) | inline | done | c60ad3d |
+| T2 | S1, S2 (scenario targets), S5, S14 | delegated, wave 1 (worktree `cand-targets`) | done (playtest pending) | 97fb221, e8daca6, 162d520, merge bb438cd |
+| T3 | S6, S8 | delegated, wave 1 (worktree `cand-analytics`) | done (playtest pending) | c022ad6, a67133e, merge a5eda13 |
+| T4 | S9, S12, S13 | delegated, wave 1 (worktree `cand-player`) | done (playtest pending) | b6bdc75, 512d1a5, d536110, merge 183c35f |
+| T5 | S1, S2 (arena bots), S7, S10 | delegated, wave 1 (worktree `cand-arena`) | done (playtest pending) | 69d1ea3, 6447b42, d3ab727, dcb29c6, merge 6640289, f877a73 |
+| T6 | S3 | delegated, wave 2, after T2 merges (worktree `cand-phases`) | in progress | |
+| T7 | S4, S11 | delegated, wave 2, after T2 merges (worktree `cand-perception`) | in progress | |
 | T8 | S1–S15 seam: merge, docs, full suite, calibrate, verifier, review, merge to main, build and launch | inline | pending | |
 
 ## Log
@@ -49,3 +49,15 @@ Rules that hold for every spec:
   - The scenario core (`def.rs`, `session.rs`, `sim.rs`) is shared by S1/S2/S5/S14, S3, S4 and S11. To avoid three writers editing the same session logic in parallel, it is split into two waves: T2 first, then T6 and T7 on top of it.
   - Each worktree uses its own private cargo target (`cp -al` from main's target, then `cargo clean -p` for the workspace crates), never a shared one (lesson from the previous feature). The disk has 199 GB free.
   - RDD consent is granted automatically, per the user's standing preference.
+- L4 (2026-10-18) Wave 1 merged into integration. Order: T3, T4, T2, T5. The only conflicts were append collisions in `training-science.md`, `hud.rs` and `menu.rs`; both sides were kept.
+  - Checks with a private integration target: all tests pass (app 188, core 356, world 100 + 1 ignored); clippy clean; arena golden passes.
+  - T2 calibrate: the 30 pre-existing rows are identical. New rows:
+    - spread-flicks 2612/4404/6488/8540, contender accuracy 0.66;
+    - regen-track 1469/2089/2936/4715, 0.58;
+    - react-duel 5670/8424/12494/17290, 0.79 (the simulated aimer understates reactive difficulty).
+  - T5 left the coaching opt-in unsaved, because the settings file was outside its surface. The parent moved it into `Settings.arena_coaching` (f877a73, test first).
+  - Writer decisions:
+    - T4 offers one yellow plus custom RGB (the exact VALORANT shades are unpublished) and an outline instead of a glow (targets are unlit);
+    - T2 implements "adjacent spawn points" as an angle around recent spawns (spawns are positions, not cells);
+    - T5 rule "speed" means the player's speed.
+  - Wave 2 (T6 phases, T7 perception) started from bb438cd.
