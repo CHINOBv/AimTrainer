@@ -8,6 +8,7 @@
 //! turns one into per-target crosshair paths for the replay viewer.
 
 pub mod codec;
+pub mod decision;
 pub mod flick;
 pub mod path;
 pub mod profile;
@@ -43,6 +44,8 @@ pub struct RunAnalysis {
     pub category: Category,
     /// The analysis, by fire mode.
     pub kind: AnalysisKind,
+    /// Go/no-go decisions, for scenarios with decoys.
+    pub decision: Option<decision::DecisionSummary>,
 }
 
 impl RunAnalysis {
@@ -74,6 +77,7 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         scenario_id: recording.def.id.clone(),
         category: recording.def.category,
         kind,
+        decision: decision::analyze(&samples),
     }
 }
 

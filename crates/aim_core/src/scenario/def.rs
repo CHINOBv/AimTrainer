@@ -243,6 +243,10 @@ pub struct TargetsDef {
     /// acceleration). Set by in-run tuning; scenario files normally leave it at 1.
     #[serde(default = "one_f", skip_serializing_if = "is_one")]
     pub speed_scale: f32,
+    /// Go/no-go: chance in [0, 1) that a spawned target is a "non-match" decoy, which the
+    /// player must leave alone until it expires. Needs `lifetime_secs` and click fire.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub decoy_chance: f32,
 }
 
 fn one() -> u32 {
@@ -253,6 +257,9 @@ fn one_f() -> f32 {
 }
 fn is_one(v: &f32) -> bool {
     *v == 1.0
+}
+fn is_zero(v: &f32) -> bool {
+    *v == 0.0
 }
 fn zero_range() -> Range {
     Range::fixed(0.0)
@@ -436,6 +443,9 @@ pub struct ScoringDef {
     /// Score-zone rings: hits near the center of a sphere or head score more.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rings: Option<ScoreRings>,
+    /// Points subtracted per shot on a go/no-go decoy (see `targets.decoy_chance`).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub decoy_penalty: f32,
 }
 
 /// Score-zone rings around the center of a sphere or a humanoid head. A hit's points are
@@ -492,6 +502,7 @@ impl Default for ScoringDef {
             expire_penalty: 0.0,
             burst_bonus: 0.0,
             rings: None,
+            decoy_penalty: 0.0,
         }
     }
 }
@@ -568,6 +579,20 @@ impl ScenarioDef {
             self.scoring.rings.as_ref().is_none_or(ScoreRings::is_valid),
             "scoring.rings",
             "needs ascending radius fractions in (0, 1] and one multiplier > 0 per radius",
+        );
+        check(
+            self.scoring.decoy_penalty.is_finite() && self.scoring.decoy_penalty >= 0.0,
+            "scoring.decoy_penalty",
+            "must be >= 0",
+        );
+        let decoys = self.targets.decoy_chance;
+        check(
+            (0.0..1.0).contains(&decoys)
+                && (decoys == 0.0
+                    || (self.targets.lifetime_secs.is_some()
+                        && self.weapon.fire == FireMode::Click)),
+            "targets.decoy_chance",
+            "must be in [0, 1) and needs targets.lifetime_secs and fire = \"click\"",
         );
         check(
             self.difficulty.is_valid(),
@@ -996,5 +1021,53 @@ mod tests {
         assert_eq!(fields(vec![0.5], vec![f32::NAN]), bad, "NaN multiplier");
         assert_eq!(fields(vec![0.5, 1.0], vec![2.0]), bad, "lengths differ");
         assert!(fields(vec![1.0], vec![0.5]).is_empty());
+    }
+
+    #[test]
+    fn decoys_default_off_stay_out_of_saved_files_and_are_validated() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!(
+            (d.targets.decoy_chance, d.scoring.decoy_penalty),
+            (0.0, 0.0)
+        );
+        let saved = toml::to_string(&d).unwrap();
+        assert!(
+            !saved.contains("decoy") && !saved.contains("rings"),
+            "{saved}"
+        );
+
+        let src = MINIMAL.replace(
+            "distance = [10, 10] }",
+            "distance = [10, 10] }\nlifetime_secs = 1.5\ndecoy_chance = 0.3\n[scoring]\ndecoy_penalty = 150",
+        );
+        let go = ScenarioDef::from_toml(&src).unwrap();
+        assert_eq!(
+            (go.targets.decoy_chance, go.scoring.decoy_penalty),
+            (0.3, 150.0)
+        );
+        assert!(go.validate().is_empty(), "{:?}", go.validate());
+        assert!(ScenarioDef::from_toml(&src.replace("decoy_chance", "decoy_chanse")).is_err());
+
+        let fields = |b: ScenarioDef| -> Vec<&'static str> {
+            b.validate().into_iter().map(|e| e.field).collect()
+        };
+        for bad in [-0.1, 1.0, f32::NAN] {
+            let mut b = go.clone();
+            b.targets.decoy_chance = bad;
+            assert_eq!(fields(b), ["targets.decoy_chance"], "{bad}");
+        }
+        let mut forever = go.clone();
+        forever.targets.lifetime_secs = None;
+        assert_eq!(
+            fields(forever),
+            ["targets.decoy_chance"],
+            "a decoy must be able to leave"
+        );
+        let mut hold = go.clone();
+        hold.weapon.fire = FireMode::Hold;
+        assert_eq!(fields(hold), ["targets.decoy_chance"]);
+        let mut negative = go;
+        negative.scoring.decoy_penalty = -5.0;
+        assert_eq!(fields(negative), ["scoring.decoy_penalty"]);
     }
 }

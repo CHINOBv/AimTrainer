@@ -185,6 +185,14 @@ The 300 ms and 220 ms reaction thresholds bracket the simulated recruit (0.32 s 
 
 **Trends.** `training::progress::subcategory_trend` gives each subcategory's energy at the end of each of the last weeks, using the same weekly cutoffs as the overall `benchmark_trend` (personal bests up to each cutoff). The Progress page charts one trend per subcategory once it has two played weeks.
 
+### Go/no-go decisions and score rings
+
+**Go/no-go.** `go-no-go` mixes match targets, which must be shot, with faint decoys that must be left alone until they vanish. This is the shape of the go/no-go task that cognitive psychology uses to measure response inhibition; no source in this repository yet backs it, so treat it as background, not a verified claim. The in-game link is a judgement call (an estimate, not a measured transfer): a duel often rewards confirming friend or foe, or a real peek against a fake one, before clicking. `aim_core::analytics::decision` reports four counts from the traced run (matchHit, matchWait, nonmatchHit, nonmatchWait), decision accuracy, and two verdicts with their thresholds: decoys shot above 20% of all decoys reads as impulsive, and match targets missed above 20% reads as hesitant. Both thresholds are estimates.
+
+The simulated aimer adds a recognition delay of half its reaction time before each movement, since a choice takes longer than a simple reaction (Hick, 1952, *Quarterly Journal of Experimental Psychology* 4(1); the factor of 0.5 is an estimate). It mistakes a decoy for a match with a chance of 0.25 × its endpoint noise (recruit ≈ 22%, elite ≈ 9%), also an estimate. Scenarios without decoys draw no extra random numbers, so their results are unchanged.
+
+**Score rings.** `precision-rings` pays more for hits near the center (×3, ×2, ×1). The aim is to reward landing on the exact point aimed at rather than anywhere on the target. That this helps in-game headshot precision is an estimate with no study behind it.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

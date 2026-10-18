@@ -95,6 +95,17 @@ pub(super) fn record_expired(stats: &mut Stats, scoring: &ScoringDef) {
     stats.score -= scoring.expire_penalty;
 }
 
+/// Counts a shot on a go/no-go decoy (a "non-match hit") and applies its penalty.
+pub(super) fn record_decoy_hit(stats: &mut Stats, scoring: &ScoringDef) {
+    stats.decoy_hits += 1;
+    stats.score -= scoring.decoy_penalty;
+}
+
+/// Counts a decoy that was left alone until it expired (a correct "non-match wait").
+pub(super) fn record_decoy_wait(stats: &mut Stats) {
+    stats.decoy_waits += 1;
+}
+
 /// The final numbers of a run of `def` that lasted `time` seconds.
 pub(super) fn run_result(def: &ScenarioDef, stats: &Stats, time: f32) -> RunResult {
     let s = stats;
