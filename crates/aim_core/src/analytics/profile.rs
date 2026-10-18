@@ -256,6 +256,8 @@ mod tests {
             miss_compass: None,
             potential: None,
             audio_cue: None,
+            detection: None,
+            radar_recall: None,
         }
     }
 
@@ -443,6 +445,8 @@ mod tests {
             miss_compass: None,
             potential: None,
             audio_cue: None,
+            detection: None,
+            radar_recall: None,
         }
     }
 

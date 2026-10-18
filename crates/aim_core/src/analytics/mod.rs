@@ -16,6 +16,7 @@ pub mod miss_compass;
 pub mod moving;
 pub mod pace;
 pub mod path;
+pub mod perception;
 pub mod potential;
 pub mod priority;
 pub mod profile;
@@ -70,6 +71,10 @@ pub struct RunAnalysis {
     pub potential: Option<potential::PotentialTip>,
     /// Turn reaction and angular error per sound cue, for sound-localisation runs.
     pub audio_cue: Option<audio_cue::AudioCueAnalysis>,
+    /// Per-area detection and false alarms, for peripheral detection runs.
+    pub detection: Option<perception::DetectionAnalysis>,
+    /// Correct and incorrect picks, for radar-recall runs.
+    pub radar_recall: Option<perception::RadarRecall>,
 }
 
 impl RunAnalysis {
@@ -111,7 +116,11 @@ impl RunAnalysis {
 /// Analyze a run as flicks (click scenarios) or tracking (hold scenarios).
 pub fn analyze(recording: &Recording) -> RunAnalysis {
     let samples = trace::trace(recording);
+    let drill = recording.def.targets.perception.as_ref();
+    let detection = drill.is_some_and(|p| p.is_detection());
     let kind = match recording.def.weapon.fire {
+        // A detection click is not aimed, so it is no flick.
+        FireMode::Click if detection => AnalysisKind::Flick(Vec::new()),
         FireMode::Click => AnalysisKind::Flick(flick::flicks(&samples)),
         FireMode::Hold => AnalysisKind::Tracking(tracking::analyze(&samples)),
     };
@@ -123,11 +132,16 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         AnalysisKind::Flick(f) => potential::potential(f, run_totals(recording, &samples)),
         AnalysisKind::Tracking(_) => None,
     };
+    let decision = decision::analyze(&samples);
+    let radar_recall = drill
+        .filter(|p| p.is_radar())
+        .and(decision.as_ref())
+        .map(|d| perception::RadarRecall::from_counts(&d.counts));
     RunAnalysis {
         scenario_id: recording.def.id.clone(),
         category: recording.def.category,
         kind,
-        decision: decision::analyze(&samples),
+        decision,
         moving: recording.def.player.movement.then(|| {
             let limit = recording.def.weapon.kind.movement().accuracy_speed_limit();
             moving::analyze(&samples, limit)
@@ -138,6 +152,8 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         miss_compass: miss_compass::analyze(&samples),
         potential,
         audio_cue: audio_cue::analyze(&samples),
+        detection: detection.then(|| perception::detection(&samples)),
+        radar_recall,
     }
 }
 

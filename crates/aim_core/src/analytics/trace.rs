@@ -63,6 +63,8 @@ pub struct Sample {
     pub kills: u32,
     /// Sound cues that played this frame (sound-cue drills only).
     pub cues: Vec<CueSample>,
+    /// Blank trials that ended this frame (detection drills only).
+    pub blank_trials: u32,
 }
 
 /// A sound cue as heard from the eye in the frame it played.
@@ -195,6 +197,7 @@ pub fn trace(recording: &Recording) -> Vec<Sample> {
     let mut previous_kills = initial.stats().kills;
     let mut previous_decision = decision_totals(initial.stats());
     let mut heard: Vec<u64> = Vec::new();
+    let mut previous_blanks = initial.stats().blank_trials;
 
     recording.replay(|session, input| {
         let stats = session.stats();
@@ -235,6 +238,7 @@ pub fn trace(recording: &Recording) -> Vec<Sample> {
             score: stats.score,
             kills: stats.kills,
             cues: new_cues(session, &mut heard),
+            blank_trials: stats.blank_trials - previous_blanks,
         });
         previous_targets = snapshot(session);
         previous_view = input.view;
@@ -243,6 +247,7 @@ pub fn trace(recording: &Recording) -> Vec<Sample> {
         previous_on_target_secs = stats.on_target_secs;
         previous_kills = stats.kills;
         previous_decision = decision_totals(stats);
+        previous_blanks = stats.blank_trials;
     });
     samples
 }

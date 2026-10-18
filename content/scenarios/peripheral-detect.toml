@@ -1,0 +1,27 @@
+id = "peripheral-detect"
+name = "Peripheral Flash"
+category = "reaction"
+description = """
+Keep your crosshair still in the middle. A small dot flashes for 0.5 s in one of eight areas
+around it, 6–18° away; click (anywhere, no need to aim) as soon as you see one. Some trials stay
+blank: a click with no flash is a false alarm and costs 50. Trains noticing enemies at the edge of
+your vision."""
+
+[player]
+# Raised floor, so flashes below the crosshair stay above the ground.
+elevation = 2.0
+
+[targets]
+shape = { kind = "sphere", radius = 0.06 }   # ≈1.1° wide at 6 m
+spawn = { kind = "around_crosshair", offset_deg = [6.0, 18.0], distance = [6.0, 6.0] }
+lifetime_secs = 0.5
+appear_delay_secs = [0.8, 2.2]
+
+[targets.perception]
+kind = "detection"
+blank_chance = 0.25
+
+[scoring]
+miss_penalty = 50
+expire_penalty = 25
+decay = { window_secs = 0.5, floor = 0.2 }

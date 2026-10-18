@@ -878,10 +878,18 @@ fn sync_targets(
         &transforms,
         &shape,
     );
+    // Radar decoys look like every other target: only the radar tells them apart.
+    let disguised = run
+        .session
+        .def()
+        .targets
+        .perception
+        .as_ref()
+        .is_some_and(|p| p.disguises_decoys());
     let decoys: Vec<u64> = run
         .session
         .targets()
-        .filter(|t| t.decoy)
+        .filter(|t| t.decoy && !disguised)
         .map(|t| t.id)
         .collect();
     let alive: HashMap<u64, (Vec3, f32)> = run

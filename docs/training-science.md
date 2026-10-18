@@ -398,6 +398,20 @@ The panning constants (full level within 6 m, a floor of 35% for far sources, 30
 
 **Calibration caveat.** The simulated aimer cannot hear: it waits for the target to appear 0.8 s after the sound and then flicks. `sound-turn` calibrates at about 75% contender accuracy, but a human who turns on the sound reveals targets earlier and scores more. A playtest should confirm the difficulty.
 
+### Peripheral perception
+
+Enemies often first show up away from the crosshair, and the minimap tells where they are before they are on screen. Two drills train these inputs. Both are design choices inspired by Aim Lab's perception tasks (`docs/feature-analysis.md`); neither has a measured transfer to games (inference).
+
+**Detection (`peripheral-detect`).** With the crosshair held still, a small dot flashes in one of eight screen areas, and some trials stay blank. This is a yes/no detection task, the setting of signal detection theory, which separates sensitivity (hits) from response bias (false alarms) (Green and Swets 1966, *Signal Detection Theory and Psychophysics*, Wiley). Counting false alarms keeps a player from scoring by clicking on every expected flash. Detection is generally slower and less reliable farther from the point of fixation (a general finding, not quantified here), and the per-area grid shows where a player's field is weakest.
+
+- **Areas:** each flash is binned by the direction of its aim point from the crosshair in the frame it appeared, the same eight 45° sectors as the miss compass.
+- **Metrics:** hit rate and median reaction time per area, false alarms (clicks with no flash) and blank trials.
+- **Estimates, not sourced values:** the 0.5 s flash, the 0.8–2.2 s wait before a flash, the 6–18° eccentricity, the 0.06 m dot at 6 m (about 1.1° wide) and the 25% blank trials were set by calibration.
+
+**Radar recall (`radar-recall`).** A radar shows two of the four enemies of a round for 1.5 s; the round then appears with all four looking alike, so only the remembered positions tell which two to shoot. Correct and incorrect picks are the go/no-go outcomes (match and non-match hits) of these rounds. Holding a few positions for a few seconds is within visual working memory, which is commonly put at about three to four items (Luck and Vogel 1997, *Nature* 390, 279–281); two dots out of four targets keeps the task inside that limit. The 1.5 s radar, the 15° minimum separation and the 3 s lifetime are **estimates** set by calibration.
+
+**Simulated aimer.** For detection it holds the crosshair still, clicks each flash one reaction time after it appears, and with no flash showing clicks anyway at its go/no-go mistake rate per second (recruit ≈ 0.22/s, elite ≈ 0.09/s, an **estimate**). For radar recall it treats the targets the radar did not show like go/no-go decoys, mistaking one for a match at the same rate. `peripheral-detect` calibrates at about 71% and `radar-recall` at about 67% contender accuracy, inside the challenge-point band. Neither model forgets the radar or misses a flash outright, so a playtest should confirm the difficulty.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

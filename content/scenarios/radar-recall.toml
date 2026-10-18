@@ -1,0 +1,25 @@
+id = "radar-recall"
+name = "Radar Recall"
+category = "reaction"
+description = """
+Glance at the radar: for 1.5 s it shows where 2 enemies stand. Then 4 identical agents appear;
+shoot only the 2 the radar showed and leave the others alone until they vanish. A wrong pick costs
+150, a missed enemy 50. Trains reading the minimap and committing to the right angle."""
+
+[targets]
+shape = { kind = "humanoid" }
+spawn = { kind = "angular", yaw_deg = [-70.0, 70.0], pitch_deg = [0.0, 0.0], distance = [8.0, 22.0] }
+max_alive = 4
+min_separation_deg = 15
+lifetime_secs = 3.0
+appear_delay_secs = [0.4, 0.8]
+
+[targets.perception]
+kind = "radar"
+show_secs = 1.5
+dots = 2
+
+[scoring]
+miss_penalty = 10
+expire_penalty = 50
+decoy_penalty = 150

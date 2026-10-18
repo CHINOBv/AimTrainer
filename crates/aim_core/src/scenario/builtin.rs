@@ -66,8 +66,16 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/peek-reaction.toml"),
     ),
     (
+        "peripheral-detect.toml",
+        include_str!("../../../../content/scenarios/peripheral-detect.toml"),
+    ),
+    (
         "precision-rings.toml",
         include_str!("../../../../content/scenarios/precision-rings.toml"),
+    ),
+    (
+        "radar-recall.toml",
+        include_str!("../../../../content/scenarios/radar-recall.toml"),
     ),
     (
         "react-duel.toml",
