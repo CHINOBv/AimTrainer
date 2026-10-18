@@ -2,7 +2,7 @@
 //! ones, and orients it towards the player.
 
 use super::MIN_SPHERE_HEIGHT;
-use super::def::{Shape, SpawnArea, SpawnRules, TargetsDef};
+use super::def::{Shape, SpawnArea, SpawnGrid, SpawnRules, TargetsDef};
 use super::session::Target;
 use crate::fov;
 use crate::games::valorant::HumanoidDims;
@@ -130,6 +130,23 @@ fn sample_point(def: &TargetsDef, eye: Vec3, view: ViewAngles, rng: &mut Rng) ->
             yaw_deg,
             pitch_deg,
             distance,
+            grid: Some(g),
+        } => {
+            // A random grid point: one draw per axis (humanoids skip the rows).
+            let pick = |rng: &mut Rng, n: u32| ((rng.next_f32() * n as f32) as u32).min(n - 1);
+            let yaw = SpawnGrid::line(yaw_deg, pick(rng, g.cols), g.cols);
+            let pitch = if humanoid {
+                0.0
+            } else {
+                SpawnGrid::line(pitch_deg, pick(rng, g.rows), g.rows)
+            };
+            eye + ViewAngles::new(yaw, pitch).direction() * rng.in_range(distance)
+        }
+        SpawnArea::Angular {
+            yaw_deg,
+            pitch_deg,
+            distance,
+            grid: None,
         } => {
             let yaw = rng.in_range(yaw_deg);
             let pitch = if humanoid {
@@ -164,10 +181,11 @@ fn sample_point(def: &TargetsDef, eye: Vec3, view: ViewAngles, rng: &mut Rng) ->
             Vec3::new(rng.in_range(x), rng.in_range(height), rng.in_range(z))
         }
     };
-    if humanoid {
-        p.y = 0.0;
-    } else {
-        p.y = p.y.max(MIN_SPHERE_HEIGHT);
+    match def.shape {
+        Shape::Humanoid { .. } => p.y = 0.0,
+        // A capsule never spawns through the floor.
+        Shape::Capsule { height, .. } => p.y = p.y.max(MIN_SPHERE_HEIGHT).max(height / 2.0),
+        Shape::Sphere { .. } => p.y = p.y.max(MIN_SPHERE_HEIGHT),
     }
     p
 }
@@ -229,6 +247,7 @@ pub(super) fn aim_point(shape: &Shape, dims: &HumanoidDims, p: Vec3) -> Vec3 {
     match shape {
         Shape::Humanoid { .. } => p + Vec3::new(0.0, dims.head_center_height(), 0.0),
         Shape::Sphere { .. } => p,
+        Shape::Capsule { .. } => p + Vec3::UP * shape.capsule_aim().map_or(0.0, |a| a.0),
     }
 }
 
@@ -481,5 +500,48 @@ mod tests {
         };
         assert_eq!(aims(6), aims(6));
         assert_ne!(aims(6), aims(7));
+    }
+
+    #[test]
+    fn grid_snaps_angular_spawns_to_rows_and_columns() {
+        let grid = r#"{ kind = "angular", yaw_deg = [-20, 20], pitch_deg = [0, 10], distance = [12, 12], grid = { rows = 2, cols = 3 } }"#;
+        let (first, chain) = kill_chain(area_def(SPHERE, grid, ""), 3, 120);
+        let eye = chain[0].eye;
+        let mut cells = std::collections::HashSet::new();
+        for aim in std::iter::once(first).chain(chain.iter().map(|r| r.aim)) {
+            let v = ViewAngles::from_direction(aim - eye);
+            let col = [-20.0, 0.0, 20.0]
+                .iter()
+                .position(|y: &f32| (v.yaw_deg - y).abs() < 1e-3);
+            let row = [0.0, 10.0]
+                .iter()
+                .position(|p: &f32| (v.pitch_deg - p).abs() < 1e-3);
+            assert!(col.is_some() && row.is_some(), "{v:?} is off the grid");
+            cells.insert((row, col));
+        }
+        assert_eq!(cells.len(), 6, "every cell is used");
+
+        // Humanoids stand on the floor: only the columns apply.
+        let (first, chain) = kill_chain(area_def(HUMANOID, grid, ""), 3, 60);
+        for aim in std::iter::once(first).chain(chain.iter().map(|r| r.aim)) {
+            let v = ViewAngles::from_direction(aim - eye);
+            assert!(
+                [-20.0f32, 0.0, 20.0]
+                    .iter()
+                    .any(|y| (v.yaw_deg - y).abs() < 1e-3),
+                "{v:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_single_grid_row_or_column_sits_in_the_middle_of_the_range() {
+        let grid = r#"{ kind = "angular", yaw_deg = [-20, 20], pitch_deg = [0, 10], distance = [12, 12], grid = { rows = 1, cols = 1 } }"#;
+        let (first, chain) = kill_chain(area_def(SPHERE, grid, ""), 3, 5);
+        let v = ViewAngles::from_direction(first - chain[0].eye);
+        assert!(
+            v.yaw_deg.abs() < 1e-3 && (v.pitch_deg - 5.0).abs() < 1e-3,
+            "{v:?}"
+        );
     }
 }

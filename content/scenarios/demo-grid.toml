@@ -1,0 +1,13 @@
+id = "demo-grid"
+name = "Demo: Grid"
+category = "flicking"
+description = """
+Engine demo for spawn grids. Three spheres at a time sit on a 3 × 5 grid of fixed points.
+Kill them in any order; each one is replaced on another grid point."""
+duration_secs = 45
+
+[targets]
+shape = { kind = "sphere", radius = 0.25 }
+spawn = { kind = "angular", yaw_deg = [-24.0, 24.0], pitch_deg = [0.0, 12.0], distance = [12.0, 12.0], grid = { rows = 3, cols = 5 } }
+max_alive = 3
+min_separation_deg = 5

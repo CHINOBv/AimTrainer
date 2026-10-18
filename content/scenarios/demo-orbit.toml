@@ -1,0 +1,17 @@
+id = "demo-orbit"
+name = "Demo: Orbit"
+category = "tracking"
+description = """
+Engine demo for the orbit motion. A sphere circles around you at a fixed distance and turns
+back now and then; every four seconds a new one takes its place. Follow it all the way around."""
+duration_secs = 45
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.35 }
+spawn = { kind = "angular", yaw_deg = [-20.0, 20.0], pitch_deg = [2.0, 8.0], distance = [10.0, 10.0] }
+motion = { kind = "orbit", speed_deg = [12.0, 26.0], change_secs = [1.0, 2.5], reverse_chance = 0.5 }
+health = inf
+lifetime_secs = 4.0

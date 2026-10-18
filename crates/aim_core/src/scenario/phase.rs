@@ -275,12 +275,16 @@ impl ScenarioDef {
             );
         }
         if let Some(e) = self.fail.max_expired {
+            // Ballistic targets expire when they land, so they need no lifetime.
             let lifetimes = self.targets.lifetime_secs.is_some()
+                || matches!(self.targets.motion, Motion::Ballistic { .. })
                 || phases.iter().any(|p| p.targets.lifetime_secs.is_some());
             check(
                 e >= 1 && lifetimes,
                 "fail.max_expired",
-                "must be >= 1 and needs lifetime_secs on the targets or a phase".into(),
+                "must be >= 1 and needs lifetime_secs on the targets or a phase, or a \
+                 ballistic motion"
+                    .into(),
             );
         }
 
@@ -388,6 +392,8 @@ pub enum FailReason {
     PhaseTimeLimit,
     /// A kills-ended run reached `duration_secs` before its kills.
     OutOfTime,
+    /// A ballistic target with `on_floor = "fail"` landed.
+    Dropped,
 }
 
 impl FailReason {
@@ -398,6 +404,7 @@ impl FailReason {
             FailReason::Expired => "too many targets expired",
             FailReason::PhaseTimeLimit => "phase time limit",
             FailReason::OutOfTime => "ran out of time",
+            FailReason::Dropped => "a target hit the floor",
         }
     }
 }
@@ -572,7 +579,7 @@ mod tests {
     fn radius(t: &TargetsDef) -> f32 {
         match t.shape {
             Shape::Sphere { radius } => radius,
-            Shape::Humanoid { .. } => panic!("sphere expected"),
+            Shape::Humanoid { .. } | Shape::Capsule { .. } => panic!("sphere expected"),
         }
     }
 

@@ -18,6 +18,38 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/counter-strafe.toml"),
     ),
     (
+        "demo-ballistic.toml",
+        include_str!("../../../../content/scenarios/demo-ballistic.toml"),
+    ),
+    (
+        "demo-bounce.toml",
+        include_str!("../../../../content/scenarios/demo-bounce.toml"),
+    ),
+    (
+        "demo-capsule.toml",
+        include_str!("../../../../content/scenarios/demo-capsule.toml"),
+    ),
+    (
+        "demo-depth.toml",
+        include_str!("../../../../content/scenarios/demo-depth.toml"),
+    ),
+    (
+        "demo-grid.toml",
+        include_str!("../../../../content/scenarios/demo-grid.toml"),
+    ),
+    (
+        "demo-orbit.toml",
+        include_str!("../../../../content/scenarios/demo-orbit.toml"),
+    ),
+    (
+        "demo-profiles.toml",
+        include_str!("../../../../content/scenarios/demo-profiles.toml"),
+    ),
+    (
+        "demo-shrink.toml",
+        include_str!("../../../../content/scenarios/demo-shrink.toml"),
+    ),
+    (
         "dodge-crouch-spam.toml",
         include_str!("../../../../content/scenarios/dodge-crouch-spam.toml"),
     ),

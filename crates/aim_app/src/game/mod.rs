@@ -179,6 +179,8 @@ pub(crate) struct WorldAssets {
     head: Handle<StandardMaterial>,
     body: Handle<StandardMaterial>,
     unit_sphere: Handle<Mesh>,
+    /// Unit cylinder (radius 1, height 1), scaled per capsule target.
+    unit_cylinder: Handle<Mesh>,
     head_box: Handle<Mesh>,
     body_box: Handle<Mesh>,
     legs_box: Handle<Mesh>,
@@ -380,6 +382,7 @@ fn setup_world(
         head: unlit(&mut materials, target_color),
         body: unlit(&mut materials, Color::srgb(0.55, 0.2, 0.25)),
         unit_sphere: meshes.add(Sphere::new(1.0).mesh().ico(5).expect("valid icosphere")),
+        unit_cylinder: meshes.add(Cylinder::new(1.0, 1.0)),
         head_box: meshes.add(Cuboid::new(d.head_size, d.head_size, d.head_size)),
         body_box: meshes.add(Cuboid::new(
             d.body_width,
@@ -880,6 +883,56 @@ fn spawn_target_visual(
                 }
             });
         }
+        Shape::Capsule {
+            radius,
+            height,
+            head,
+        } => {
+            // A cylinder and two end spheres (uniformly scaled, so the caps stay round),
+            // plus the head sphere; the parent keeps scale 1.
+            let half = (height / 2.0 - radius).max(0.0);
+            let body = if head.is_some() {
+                pick(&assets.body)
+            } else {
+                pick(&assets.target)
+            };
+            let mut parts = vec![
+                (
+                    assets.unit_cylinder.clone(),
+                    body,
+                    Transform::from_scale(Vec3::new(radius, 2.0 * half, radius)),
+                ),
+                (
+                    assets.unit_sphere.clone(),
+                    body,
+                    Transform::from_xyz(0.0, half, 0.0).with_scale(Vec3::splat(radius)),
+                ),
+                (
+                    assets.unit_sphere.clone(),
+                    body,
+                    Transform::from_xyz(0.0, -half, 0.0).with_scale(Vec3::splat(radius)),
+                ),
+            ];
+            if let Some(h) = head {
+                parts.push((
+                    assets.unit_sphere.clone(),
+                    pick(&assets.head),
+                    Transform::from_xyz(0.0, h.offset, 0.0).with_scale(Vec3::splat(h.radius)),
+                ));
+            }
+            e.with_children(|p| {
+                for (mesh, mat, tf) in parts {
+                    let mut part = p.spawn((Mesh3d(mesh.clone()), material(mat), tf));
+                    if let Some((outline_mat, outline_tf)) = &outline {
+                        part.with_child((
+                            Mesh3d(mesh),
+                            MeshMaterial3d(outline_mat.clone()),
+                            *outline_tf,
+                        ));
+                    }
+                }
+            });
+        }
     }
     e.id()
 }
@@ -904,6 +957,7 @@ fn sync_targets(
         &transforms,
         &shape,
     );
+    let shrinking = run.session.def().targets.shrink_per_kill.is_some();
     // Radar decoys look like every other target: only the radar tells them apart.
     let disguised = run
         .session
@@ -947,11 +1001,15 @@ fn sync_targets(
         if let Ok(mut tf) = transforms.get_mut(entity) {
             tf.translation = pos;
             tf.rotation = rotation;
+            // Shrinking spheres (`targets.shrink_per_kill`) follow the active radius.
+            if let (true, Shape::Sphere { radius }) = (shrinking, &shape) {
+                tf.scale = Vec3::splat(*radius);
+            }
         } else {
             // Spawned this frame: commands have not been applied yet.
             let scale = match shape {
                 Shape::Sphere { radius } => Vec3::splat(radius),
-                Shape::Humanoid { .. } => Vec3::ONE,
+                Shape::Humanoid { .. } | Shape::Capsule { .. } => Vec3::ONE,
             };
             commands.entity(entity).insert(Transform {
                 translation: pos,

@@ -400,6 +400,7 @@ mod tests {
                 yaw_deg: Range::new(-180.0, 180.0),
                 pitch_deg: Range::fixed(0.0),
                 distance: Range::new(6.0, 14.0),
+                grid: None,
             };
             let mut s = Session::new(def, seed);
             let mut log = Vec::new();
