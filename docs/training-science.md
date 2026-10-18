@@ -310,6 +310,20 @@ Why 15 flicks and 30% (estimates): the simulated aimer has no directional bias, 
 - **Applying:** only the overall multiplier can be applied, through `Sensitivity::from_cm_per_360` (cm/360 ÷ multiplier, same game and DPI), the same path as the sensitivity finder. The vertical line is information only: mouse look uses one sensitivity for both axes, and decision L5 adds no vertical multiplier setting. Nothing is applied automatically. Once applied, the button stays hidden until new replays arrive.
 - **Limits:** replays do not record the sensitivity they were played at. Runs from before a sensitivity change, and sensitivity-finder test runs (also saved as replays), therefore mix into the evidence. No published source gives the 40-flick minimum, the bounds or the band; they are provisional.
 
+### Miss compass
+
+`aim_core::analytics::miss_compass` takes every missed shot at a target (go/no-go decoys are left to the decision analysis) and measures where the crosshair was relative to the target's aim point at the shot. The aim point is the head center on humanoids and the center on spheres, the same point the trace and the flick analysis use. On head-only humanoids, a body shot counts as a miss, so it shows up below the head.
+
+- **Direction**, by `atan2(dy, dx)` of the screen-space offset (`.0` right, `.1` up), in 45° sectors centered on each direction. Each sector includes its counter-clockwise start edge: right [−22.5°, 22.5°), up-right [22.5°, 67.5°), up [67.5°, 112.5°), up-left [112.5°, 157.5°), left [157.5°, 202.5°), down-left [−157.5°, −112.5°), down [−112.5°, −67.5°), down-right [−67.5°, −22.5°). A zero offset has no direction and is not counted.
+- **Above / below:** above is up-left + up + up-right; below is down-left + down + down-right. Pure left and right misses count for neither. The results card shows the 3 × 3 compass and "Above N · below M of K misses".
+
+| Metric | Weakness | Recommended practice |
+|---|---|---|
+| Misses below the aim point | > 65% of misses (≥ 10 misses): crosshair kept too low | `static-headline`, `flick-headshot` |
+| Misses above the aim point | > 65% of misses (≥ 10 misses): flicks pull up past the head | `micro-adjust`, `static-headline` |
+
+Why 10 misses and 65% (estimates, not calibrated): with no bias, 3 of the 8 sectors are "below", so about 37.5% of misses land there by chance. The simulated aimer has no vertical bias. Over seeds 1–3, four presets and seven click scenarios (`flick-wide`, `flick-headshot`, `micro-adjust`, `static-headline`, `switch-wide`, `peek-reaction`, `long-range-heads`), its largest share among runs with at least 10 misses was 60%, both above and below. A 65% threshold therefore never fires on it. With fewer than 10 misses, chance shares swing too much to judge. The skill profile pools a category's recent runs. No published source gives these values; replace them once real player data exists.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

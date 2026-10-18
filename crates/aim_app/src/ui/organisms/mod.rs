@@ -9,6 +9,7 @@ pub mod flick_directions;
 pub mod history_chart;
 pub mod hotkey_settings;
 pub mod hud_panels;
+pub mod miss_compass;
 pub mod moving_panel;
 pub mod pace_panel;
 pub mod priority_panel;

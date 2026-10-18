@@ -7,6 +7,7 @@
 
 use super::direction::DirectionSummary;
 use super::flick::FlickSummary;
+use super::miss_compass::MissCompass;
 use super::moving::MovingSummary;
 use super::tracking::TrackingSummary;
 use serde::Deserialize;
@@ -53,6 +54,10 @@ pub enum Metric {
     ClickDelay,
     /// Hit rate of every other flick minus that of the weakest screen quadrant (flicks).
     WeakestDirectionGap,
+    /// Share of missed shots that went below the aim point (head or sphere center).
+    MissBelowShare,
+    /// Share of missed shots that went above the aim point (head or sphere center).
+    MissAboveShare,
 }
 
 impl Metric {
@@ -76,6 +81,8 @@ impl Metric {
             Metric::MissedOpportunityRate => "Missed opportunities",
             Metric::ClickDelay => "Median click delay",
             Metric::WeakestDirectionGap => "Hit-rate gap of your weakest flick direction",
+            Metric::MissBelowShare => "Misses below the aim point",
+            Metric::MissAboveShare => "Misses above the aim point",
         }
     }
 
@@ -112,6 +119,8 @@ impl Metric {
             Metric::MissedOpportunityRate => sources.priority?.missed_rate(),
             Metric::ClickDelay => flick?.median_click_delay_secs,
             Metric::WeakestDirectionGap => sources.direction?.weakest.map(|w| w.gap()),
+            Metric::MissBelowShare => sources.miss_compass?.below_share(),
+            Metric::MissAboveShare => sources.miss_compass?.above_share(),
         }
     }
 }
@@ -125,6 +134,7 @@ pub(super) struct MetricSources<'a> {
     pub pace: Option<&'a PaceSummary>,
     pub priority: Option<&'a PriorityAnalysis>,
     pub direction: Option<&'a DirectionSummary>,
+    pub miss_compass: Option<&'a MissCompass>,
 }
 
 /// Whether a fired rule marks a strength or a weakness.
@@ -534,6 +544,30 @@ pub(crate) mod tests {
                 &["flick-wide", "flick-headshot"],
                 None,
                 "Give extra reps to the direction the flick grid marks weakest, and slow down there until its hit rate catches up.",
+            )),
+        ),
+        (
+            Metric::MissBelowShare,
+            Direction::Above,
+            0.65,
+            Verdict::Weakness,
+            "most of your misses land below the head or target center, so your crosshair sits too low",
+            Some((
+                &["static-headline", "flick-headshot"],
+                None,
+                "Keep the crosshair at head height while you wait and between targets, and finish each flick at the top half of the head.",
+            )),
+        ),
+        (
+            Metric::MissAboveShare,
+            Direction::Above,
+            0.65,
+            Verdict::Weakness,
+            "most of your misses land above the head or target center, so your flicks pull up past it",
+            Some((
+                &["micro-adjust", "static-headline"],
+                None,
+                "Flick level with the head instead of pulling up through it, and let the vertical part of the movement stop on the target.",
             )),
         ),
     ];

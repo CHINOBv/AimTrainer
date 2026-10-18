@@ -11,6 +11,7 @@ pub mod codec;
 pub mod decision;
 pub mod direction;
 pub mod flick;
+pub mod miss_compass;
 pub mod moving;
 pub mod pace;
 pub mod path;
@@ -61,6 +62,8 @@ pub struct RunAnalysis {
     pub priority: Option<priority::PriorityAnalysis>,
     /// Near/far split of the run's flicks, or `None` for a tracking run.
     pub distance_split: Option<DistanceSplit>,
+    /// Where missed shots went relative to the aim point, if any shot missed a target.
+    pub miss_compass: Option<miss_compass::MissCompass>,
 }
 
 impl RunAnalysis {
@@ -122,6 +125,7 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         pace: pace::analyze(&samples, pace_unit(recording.def.weapon.fire)),
         priority: priority::analyze(&samples),
         distance_split,
+        miss_compass: miss_compass::analyze(&samples),
     }
 }
 

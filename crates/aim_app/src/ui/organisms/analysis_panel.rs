@@ -8,6 +8,7 @@ use crate::ui::atoms::{GOOD, WARN};
 use crate::ui::molecules::stat_row;
 use crate::ui::organisms::decision_panel::DecisionReport;
 use crate::ui::organisms::flick_directions::{DirectionGrid, flick_directions};
+use crate::ui::organisms::miss_compass::MissCompassGrid;
 use crate::ui::organisms::moving_panel::MovingReport;
 use aim_core::analytics::{RunAnalysis, SkillProfile};
 use bevy_egui::egui;
@@ -41,6 +42,8 @@ pub struct RunReport {
     pub priority: Option<PriorityReport>,
     /// Per-direction flick grid (click runs only).
     pub directions: Option<DirectionGrid>,
+    /// Where missed shots went around the aim point, when any shot missed a target.
+    pub miss_compass: Option<MissCompassGrid>,
 }
 
 pub(crate) fn ms(secs: f32) -> String {
@@ -160,6 +163,7 @@ impl RunReport {
                 .as_ref()
                 .map(|p| PriorityReport::new(p, profile.findings())),
             directions: DirectionGrid::new(analysis),
+            miss_compass: analysis.miss_compass.as_ref().map(MissCompassGrid::new),
         }
     }
 }
@@ -261,6 +265,59 @@ mod tests {
             "{:?}",
             r.metrics[click]
         );
+    }
+
+    /// New per-run sections (miss compass, potential score) never add or reorder metric rows,
+    /// and the unbiased simulated aimer gets no miss-compass advice.
+    #[test]
+    fn existing_metric_rows_and_advice_are_unchanged_by_the_new_sections() {
+        let r = report("flick-wide", 0);
+        let labels: Vec<&str> = r.metrics.iter().map(|(l, _)| *l).collect();
+        assert_eq!(
+            labels,
+            [
+                "Flicks",
+                "Reaction (median)",
+                "Movement time (median)",
+                "Peak speed (median)",
+                "Overshoot / undershoot",
+                "Corrections per flick",
+                "Settle time (median)",
+                "Path efficiency",
+                "Throughput (ISO 9241-9)",
+                "Click delay (median)",
+            ]
+        );
+        let t = report("track-precise", 2);
+        let labels: Vec<&str> = t.metrics.iter().map(|(l, _)| *l).collect();
+        assert_eq!(
+            labels,
+            [
+                "Time on target",
+                "Error from center (median)",
+                "Behind the target",
+                "Reaction to direction changes",
+                "Speed match",
+                "Time on the target's edge",
+            ]
+        );
+        for r in [&r, &t] {
+            assert!(
+                r.advice
+                    .iter()
+                    .all(|a| !a.explanation.starts_with("Misses ")),
+                "{:?}",
+                r.advice
+            );
+        }
+    }
+
+    #[test]
+    fn click_runs_with_misses_show_a_miss_compass_and_hold_runs_do_not() {
+        let r = report("flick-wide", 0);
+        let grid = r.miss_compass.expect("the recruit misses");
+        assert!(grid.split_note.ends_with(" misses"), "{grid:?}");
+        assert_eq!(report("track-precise", 2).miss_compass, None);
     }
 
     #[test]
