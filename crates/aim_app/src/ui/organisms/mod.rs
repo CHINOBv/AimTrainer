@@ -17,6 +17,7 @@ pub mod routine_list;
 pub mod scenario_browser;
 pub mod sens_converter;
 pub mod sens_finder;
+pub mod sens_suggestion;
 pub mod settings_panels;
 pub mod system_check;
 pub mod today_panel;

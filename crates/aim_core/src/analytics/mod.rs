@@ -13,6 +13,7 @@ pub mod flick;
 pub mod path;
 pub mod profile;
 pub mod rules;
+pub mod sens_suggest;
 pub mod skills;
 mod stats;
 pub mod trace;
