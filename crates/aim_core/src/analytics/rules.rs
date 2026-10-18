@@ -57,11 +57,9 @@ impl Metric {
         }
     }
 
-    pub(super) fn value(
-        self,
-        flick: Option<&FlickSummary>,
-        tracking: Option<&TrackingSummary>,
-    ) -> Option<f32> {
+    pub(super) fn value(self, sources: &MetricSources) -> Option<f32> {
+        let flick = sources.flick;
+        let tracking = sources.tracking;
         match self {
             Metric::ReactionTime => flick?.median_reaction_secs,
             Metric::OvershootRate => Some(flick?.overshoot_rate),
@@ -73,6 +71,13 @@ impl Metric {
             Metric::ReversalResponse => tracking?.median_reversal_response_secs,
         }
     }
+}
+
+/// The aggregates a rule's metric can read. Each analysis adds its own summary here.
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct MetricSources<'a> {
+    pub flick: Option<&'a FlickSummary>,
+    pub tracking: Option<&'a TrackingSummary>,
 }
 
 /// Whether a fired rule marks a strength or a weakness.

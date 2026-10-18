@@ -9,7 +9,7 @@
 //! per-benchmark-subcategory profile is in [`super::skills`].
 
 use super::flick::{Flick, FlickSummary};
-use super::rules::{self, RuleSet};
+use super::rules::{self, MetricSources, RuleSet};
 use super::tracking::{TrackingAnalysis, TrackingSummary};
 use super::{AnalysisKind, RunAnalysis};
 use crate::scenario::Category;
@@ -75,17 +75,12 @@ pub struct SkillProfile {
     pub categories: Vec<CategoryProfile>,
 }
 
-fn evaluate(
-    rules: &RuleSet,
-    category: Category,
-    flick: Option<&FlickSummary>,
-    tracking: Option<&TrackingSummary>,
-) -> Vec<Finding> {
+fn evaluate(rules: &RuleSet, category: Category, sources: &MetricSources) -> Vec<Finding> {
     rules
         .rules
         .iter()
         .filter_map(|rule| {
-            let value = rule.metric.value(flick, tracking)?;
+            let value = rule.metric.value(sources)?;
             rule.fires(value).then(|| Finding {
                 category,
                 verdict: rule.verdict,
@@ -139,7 +134,14 @@ impl SkillProfile {
             categories.push(CategoryProfile {
                 category,
                 runs: runs.len(),
-                findings: evaluate(rules, category, flick.as_ref(), tracking.as_ref()),
+                findings: evaluate(
+                    rules,
+                    category,
+                    &MetricSources {
+                        flick: flick.as_ref(),
+                        tracking: tracking.as_ref(),
+                    },
+                ),
                 flick,
                 tracking,
             });
