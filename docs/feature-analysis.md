@@ -66,6 +66,33 @@ A static analysis of an installed Aim Lab build listed its analytics and trainin
 
 Every new threshold is provisional, set against the simulated aimer, and documented with its rationale under "Analytics metrics" in `training-science.md`.
 
+## Candidates from a second Aim Lab pass (not scheduled)
+
+A second static pass (2026-10-18) looked at what F1–F22 and the roadmap do not cover. The richest source was Aim Lab's Creator Studio, a modular system of bot behaviours, conditions and triggers. Its VALORANT-specific code is thin (crosshair placement, movement accuracy, peek efficiency, a callout-based task generator), and we already cover it.
+
+These ideas are recorded, **not planned**. Each one waits for the owner's go-ahead (YAGNI). Size: S small, M medium. The evidence names are Aim Lab identifiers from the analysis; only the ideas would be reused.
+
+| # | Candidate | What it adds | Size | Likely owner | Evidence |
+|---|---|---|---|---|---|
+| C1 | **Reactive bots** | Bots copy or oppose the player's strafe (ADAD), dodge when the crosshair gets close, and react to shots. Our jukes run on fixed timers. | M | `scenario` motion, `aim_world` bots | `mimicPlayerDirectionChance`, `crosshairMaxDist`, `onShotFrequency` |
+| C2 | **Conditional bot behaviour** | Switch behaviour on conditions such as health, recent damage, time alive, line of sight, distance or speed. Example: "holds the angle, strafes when hit, retreats under 50% health". | M | `scenario` def/session, `aim_world` | `ConditionalOverrideData`, `BotSwitchCondition` |
+| C3 | **Multi-phase scenarios** | Chained waves, triggers on kills, accuracy or wave clear, fail conditions, and end types (time, kills, endless) | M | `scenario` def/session, content | `TriggerSpawnersOnKill`, `Wave`, `LEVEL_END_TYPES` |
+| C4 | **Sound localisation drill** | Turn to footsteps or gunshots; angular error and reaction time in 8 directions | M | `scenario`, `analytics`, app audio | `AudioSpatialData` (`accB`/`rtB`/`errB` per 8 bins) |
+| C5 | **Spawn-pattern controls** | Block the last or adjacent spawn points, enforce a minimum flick distance, exclude the middle | S | `scenario::def` spawn areas | `blockLastSpawn`, `blockAdjacentSpawnPoints`, `ignoreMiddlePercentage` |
+| C6 | **Miss compass relative to the head** | Misses in 8 directions: above or below the head shows a crosshair-height problem | S | `analytics` | `missUp` … `missDownRight` |
+| C7 | **Live coaching overlays in arenas** | Crosshair placement and movement accuracy shown while playing, with automatic corner detection | M | `aim_world`, app UI | `VTCSettingsData.show*InPratice`, `CornerFinder` |
+| C8 | **Potential score with one tip** | "Fix overshoot and you would score about X", instead of a list of warnings | M | `analytics`, app UI | `PotentialScoreHandler`, `*ResultMetricTip` |
+| C9 | **Compound missions** | Missions with AND conditions (for example accuracy ≥ 75% and 62 kills), mastery missions, and a low/medium/high commitment level | S | `training`, app UI | `ChallengeType`, `IsMastery`, `ProgressionCommitmentLevel` |
+| C10 | **Bots that shoot back on a deadline** | Points are lost if a kill takes too long, giving duel pressure | M | `aim_world`, `scenario` scoring | `FireballShooter.scorePenalty`, `LifeTimeDespawn.scoreOnDespawn` |
+| C11 | **Peripheral perception** | Detection in 8 screen areas with false alarms, and a minimap-glance recall drill | M | content, `analytics` | `DetectionData` (`rtB0..7`, `FATotal`), `RadarCapacityTaskManager` |
+| C12 | **Colour-blind palettes and target visibility** | VALORANT's three enemy highlight colours, plus target outline/glow and environment colour | S | app settings and rendering | `TargetColorType`, `targetOutlineEnabled`, `GrayboxSettingsData` |
+| C13 | **Sensitivity randomiser** | A robustness drill with bounded random sensitivity changes | S | `sensitivity`, app input | `sensitivityRandomizer*` |
+| C14 | **Health regeneration and score decay** | Tracking targets regenerate and target value decays over time, rewarding staying on target and fast kills | S | `scenario` scoring | `HealthRegeneration`, `ScoreOverrides.interpolateTime*` |
+
+**Suggested first batch:** C1, C5, C6, C9 and C12, which offer the most VALORANT value for a contained size. C1 with C2 would make bots believable opponents.
+
+**Rejected:** sniper ballistics, bunny-hop or jetpack movement, controller aim assist, the server-side AI coach, leaderboards and percentiles (they need a player population), rhythm with licensed music, cosmetics and economy.
+
 ## Honest limits
 
 - **Heuristic thresholds:** the readiness, fatigue and sensitivity-finder thresholds are documented constants built on the cited research, not validated per player. Every message shows the numbers behind it.
