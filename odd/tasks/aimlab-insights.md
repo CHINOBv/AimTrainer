@@ -88,3 +88,28 @@ Each analytics item explains itself: it shows the metric and the threshold behin
     - the Progress tab calls `replays::list` twice per frame;
     - the go/no-go nearest-target logic can pick a decoy;
     - L7's known gaps still apply.
+- L9 (2026-10-18) Native review (RDD). The user asked for a review per unit after the whole-branch candidate hit `lens_context_budget_exceeded`.
+  - Six slices were reviewed against the previous slice end (629895e..6733cd8, ..3f31fb0, ..9724533, ..adf3fde, ..18d5f83, ..69c118d), with the readability and reliability lenses. All six were approved and acknowledged (authority burned).
+  - Non-blocking findings, kept as follow-up work.
+
+  Likely user-visible:
+  - (a) after Apply, the sensitivity panel recomputes from the new sensitivity and shows a never-applied "Suggested" value;
+  - (b) prioritization counts a kill on the frame right after the previous kill as contested and nearest-first, which inflates the share;
+  - (c) a decoy shot is attributed to the decoy in samples, so go-no-go flick metrics can count it as a missed flick;
+  - (d) a correctly ignored decoy emits the same `Expired` event as a missed target;
+  - (e) the replay viewer goes blank with no message when the selected entry leaves the list;
+  - (f) the compare verdict uses the unrounded delta, e.g. "+0 pts ▲ better";
+  - (g) the Progress tab scans the replays twice per frame and reloads all replays when the set changes.
+
+  Maintainability:
+  - labels duplicated with `Metric::label` (speed match, edge), and the `1.9` literal duplicated with `FAR_DIVISOR`;
+  - `PaceAnalysis` methods panic if it is built by hand with fewer than 2 windows;
+  - the weakest-direction gap can be negative;
+  - the legend swatch positions are literals;
+  - the duplicate expiry push;
+  - the arena note wording;
+  - unused fields (`accurate_share`, `MovingShot::time_secs`);
+  - the private `Engagement` name clash in the arena;
+  - the slow-start rule can fire on noise for weak players;
+  - speed match can give a false weakness on strafe-heavy tracking;
+  - a machine-specific path in this log.
