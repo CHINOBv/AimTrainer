@@ -380,6 +380,17 @@ Plain hold scenarios pay the same per second whether time on target comes in one
 
 The numbers in `regen-track` are estimates set by calibration, not sourced values: health 1.5 s, a heal of 0.2 s every 0.3 s off target, and a value that fades to 40% over 3 s. A 0.35 m sphere at 10 m keeps contender accuracy at about 58%; with a 0.3 m sphere it fell to 48%, at the bottom of the challenge-point band.
 
+### Phases, fail conditions and run end
+
+A single-setting drill repeats one movement for the whole run. Phases change the setting inside one run (close heads, then a far peeker, then strafing targets), which is variable practice in the sense of schema theory (Schmidt 1975, cited under Spawn patterns) and close to the interleaving evidence under Routine design. Applying it within one scenario is inference, not a measured aim-training effect. A fail condition such as "five misses end the run" gives each shot a cost, which pushes the speed–accuracy trade-off (Fitts' law, above) towards accuracy, the way one missed duel ends a round. A kills-ended run turns the score into a race against the clock, and score decay keeps that race speed-sensitive. None of these designs has a published training effect (inference); the idea comes from Aim Lab's multi-phase scenarios (`docs/feature-analysis.md`).
+
+The numbers in the two built-ins are estimates set by calibration, not sourced values:
+
+- **`phase-peek-ladder`.** 5 misses fail the run. The design example was 3, but with 3 the simulated contender failed every seed within about 9 s, before the later waves. With 5 it reaches the finale on every seed and still fails there (mean 14 s of 45), at 64% accuracy, inside the challenge-point band. The close waves have 6 s and 8 s limits. The peekers stand 18–24 m away, within `peek-reaction`'s 15–25 m, and leave after 1.8–2.5 s.
+- **`phase-kill-race`.** 30 kills within a 60 s cap. The warm-up passes at 75% accuracy over at least 6 shots, then spheres shrink from 0.35 m to 0.22 m (`flick-wide`'s size), and a target's value falls to 25% over 2 s. The simulated contender passes the warm-up on 3 of 5 seeds, at 61% accuracy, and finishes in about 39 s.
+
+The simulated aimer never hesitates or tilts after a miss, so expect the fail conditions to end human runs sooner than calibration suggests. A playtest should confirm the miss budget and the time limits.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

@@ -221,7 +221,7 @@ Clicking on the stop or reversal works because the target's lateral speed passes
 
 ### Phases, fail conditions and run end
 
-A scenario can chain phases (waves), fail early, and end on kills or never. All three are optional; without them a run ends after `duration_secs`, as before.
+A scenario can chain phases (waves), fail early, and end on kills or never. All three are optional; without them a run ends after `duration_secs`, as before. The built-in `phase-peek-ladder` chains close and far waves and fails at 5 misses; `phase-kill-race` ends at 30 kills after an accuracy-gated warm-up.
 
 ```toml
 [end]

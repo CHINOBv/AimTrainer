@@ -1046,4 +1046,51 @@ mod tests {
         assert_eq!(phases[1].targets.max_alive, Some(2));
         assert_eq!(phases[1].targets.shape, None);
     }
+
+    fn builtin(id: &str) -> ScenarioDef {
+        crate::scenario::builtin::all()
+            .into_iter()
+            .find(|d| d.id == id)
+            .expect("builtin exists")
+    }
+
+    /// Phase reached (0-based) and outcome of a simulated run.
+    fn simulated(def: &ScenarioDef, profile: usize, seed: u64) -> (usize, Option<RunOutcome>) {
+        let mut s = Session::new(def.clone(), seed);
+        let mut aimer = crate::sim::SimAimer::new(crate::sim::AimerProfile::PRESETS[profile], seed);
+        while !s.is_finished() {
+            let input = aimer.input(&s, 1.0 / 240.0);
+            s.update(input);
+        }
+        (s.phase_index().unwrap_or(0), s.outcome())
+    }
+
+    #[test]
+    fn the_peek_ladder_chains_waves_with_triggers_and_fails_on_misses() {
+        let d = builtin("phase-peek-ladder");
+        let phases = d.phases.as_ref().unwrap();
+        assert!(phases.len() >= 2);
+        assert!(
+            phases
+                .iter()
+                .any(|p| p.advance == Some(PhaseTrigger::Cleared))
+        );
+        assert!(phases.iter().any(|p| p.time_limit_secs.is_some()));
+        assert!(d.fail.max_misses.is_some());
+        let (contender, _) = simulated(&d, 1, 3);
+        assert!(contender >= 1, "a contender gets past the first wave");
+        let (elite, outcome) = simulated(&d, 3, 3);
+        assert_eq!(elite, phases.len() - 1, "an elite reaches the finale");
+        assert!(outcome.is_some());
+    }
+
+    #[test]
+    fn the_kill_race_ends_at_its_kills_after_an_accuracy_gated_warm_up() {
+        let d = builtin("phase-kill-race");
+        assert!(matches!(d.end, RunEnd::Kills { .. }));
+        let first = &d.phases.as_ref().unwrap()[0];
+        assert!(matches!(first.advance, Some(PhaseTrigger::Accuracy { .. })));
+        let (phase, outcome) = simulated(&d, 3, 3);
+        assert_eq!((phase, outcome), (1, Some(RunOutcome::Completed)));
+    }
 }
