@@ -944,4 +944,89 @@ mod tests {
         let speed = t.velocity().length();
         assert!((speed - expected).abs() < 0.05, "{speed} vs {expected}");
     }
+
+    /// A sphere at `AHEAD` with these `[[targets.motion_profiles]]` tables.
+    fn profiled(profiles: &str) -> ScenarioDef {
+        let d = ScenarioDef::from_toml(&format!(
+            r#"
+            id = "p"
+            name = "p"
+            category = "custom"
+            duration_secs = 100.0
+            [targets]
+            shape = {SPHERE}
+            spawn = {AHEAD}
+            {profiles}
+            "#
+        ))
+        .unwrap();
+        assert!(d.validate().is_empty(), "{:?}", d.validate());
+        d
+    }
+
+    const STILL_AND_ORBIT: &str = r#"
+            [[targets.motion_profiles]]
+            weight = 1
+            switch_secs = [0.5, 0.5]
+            motion = { kind = "static" }
+            [[targets.motion_profiles]]
+            weight = 1
+            switch_secs = [0.5, 0.5]
+            motion = { kind = "orbit", speed_deg = [40, 40] }
+    "#;
+
+    /// Whether the target moved during each 0.5 s window of a 10 s run.
+    fn moving_windows(s: &mut Session) -> Vec<bool> {
+        let (path, _) = run(s, 1000, 0.01);
+        path.chunks(50)
+            .map(|w| (w[48].unwrap() - w[1].unwrap()).length() > 0.05)
+            .collect()
+    }
+
+    #[test]
+    fn motion_profiles_switch_between_weighted_motions_on_their_timer() {
+        let mut s = Session::new(profiled(STILL_AND_ORBIT), 4);
+        let windows = moving_windows(&mut s);
+        assert!(
+            windows.contains(&true) && windows.contains(&false),
+            "{windows:?}"
+        );
+
+        let never = STILL_AND_ORBIT.replacen("weight = 1", "weight = 0", 1);
+        let mut s = Session::new(profiled(&never), 4);
+        assert!(
+            moving_windows(&mut s).iter().all(|m| *m),
+            "a zero weight is never picked"
+        );
+    }
+
+    #[test]
+    fn motion_profiles_are_deterministic_per_seed() {
+        let path = |seed| {
+            let mut s = Session::new(profiled(STILL_AND_ORBIT), seed);
+            run(&mut s, 600, 0.01).0
+        };
+        assert_eq!(path(5), path(5));
+        assert_ne!(path(5), path(6));
+    }
+
+    #[test]
+    fn a_profile_without_a_timer_lasts_the_target_s_life() {
+        let once = r#"
+            [[targets.motion_profiles]]
+            weight = 1
+            motion = { kind = "static" }
+            [[targets.motion_profiles]]
+            weight = 1
+            motion = { kind = "orbit", speed_deg = [40, 40] }
+        "#;
+        for seed in 1..=6 {
+            let mut s = Session::new(profiled(once), seed);
+            let windows = moving_windows(&mut s);
+            assert!(
+                windows.iter().all(|m| *m == windows[0]),
+                "{seed}: {windows:?}"
+            );
+        }
+    }
 }

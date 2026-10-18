@@ -105,7 +105,13 @@ pub fn tangent_offset_deg(from: ViewAngles, to: ViewAngles) -> (f32, f32) {
 /// simulated aimer goes for.
 fn aim_zone(session: &Session, t: &Target) -> (Vec3, f32) {
     let eye = session.eye_position();
-    match session.def().targets.shape {
+    // Shrinking targets are aimed at at their current size; others at the defined one.
+    let shape = if session.def().targets.shrink_per_kill.is_some() {
+        &session.active_targets().shape
+    } else {
+        &session.def().targets.shape
+    };
+    match *shape {
         Shape::Sphere { radius } => {
             let d = (t.position - eye).length().max(1e-3);
             (t.position, (radius / d).atan().to_degrees())

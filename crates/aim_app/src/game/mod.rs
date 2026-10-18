@@ -904,6 +904,7 @@ fn sync_targets(
         &transforms,
         &shape,
     );
+    let shrinking = run.session.def().targets.shrink_per_kill.is_some();
     // Radar decoys look like every other target: only the radar tells them apart.
     let disguised = run
         .session
@@ -947,6 +948,10 @@ fn sync_targets(
         if let Ok(mut tf) = transforms.get_mut(entity) {
             tf.translation = pos;
             tf.rotation = rotation;
+            // Shrinking spheres (`targets.shrink_per_kill`) follow the active radius.
+            if let (true, Shape::Sphere { radius }) = (shrinking, &shape) {
+                tf.scale = Vec3::splat(*radius);
+            }
         } else {
             // Spawned this frame: commands have not been applied yet.
             let scale = match shape {

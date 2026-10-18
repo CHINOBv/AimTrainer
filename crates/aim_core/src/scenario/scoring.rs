@@ -1,7 +1,7 @@
 //! Scoring: which hit zones count, how many points each is worth, how shots, hits, burst
 //! bullets, kills and expiries update the run's [`Stats`], and the final [`RunResult`].
 
-use super::def::{FireMode, ScenarioDef, ScoringDef, Shape};
+use super::def::{AccuracyMult, FireMode, ScenarioDef, ScoringDef, Shape};
 use super::hit::HitZone;
 use super::session::{RunResult, Stats};
 
@@ -112,14 +112,20 @@ pub(super) fn run_result(def: &ScenarioDef, stats: &Stats, time: f32) -> RunResu
     let hold = def.weapon.fire == FireMode::Hold;
     let ratio = |a: f32, b: f32| if b > 0.0 { a / b } else { 0.0 };
     let elapsed = time.max(f32::EPSILON);
+    let accuracy = if hold {
+        ratio(s.on_target_secs, s.hold_secs)
+    } else {
+        ratio(s.hits as f32, s.shots as f32)
+    };
+    let score = s.score.max(0.0);
     RunResult {
         scenario_id: def.id.clone(),
-        score: s.score.max(0.0),
-        accuracy: if hold {
-            ratio(s.on_target_secs, s.hold_secs)
-        } else {
-            ratio(s.hits as f32, s.shots as f32)
+        // Without a multiplier the score is exactly as earned.
+        score: match def.scoring.accuracy_mult {
+            AccuracyMult::None => score,
+            mult => score * mult.factor(accuracy),
         },
+        accuracy,
         kills: s.kills,
         kills_per_min: s.kills as f32 * 60.0 / elapsed,
         avg_time_to_kill: (!s.kill_times.is_empty())
@@ -132,5 +138,116 @@ pub(super) fn run_result(def: &ScenarioDef, stats: &Stats, time: f32) -> RunResu
         moving_shots: s.moving_shots,
         expired: s.expired,
         duration_secs: time,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::math::{Vec3, ViewAngles};
+    use crate::scenario::{FrameInput, ScenarioDef, Session, Shape};
+
+    /// One static sphere of `radius` straight ahead at 10 m, with `targets` and `scoring`
+    /// lines added.
+    fn def(radius: f32, targets: &str, scoring: &str) -> ScenarioDef {
+        let d = ScenarioDef::from_toml(&format!(
+            r#"
+            id = "s"
+            name = "s"
+            category = "custom"
+            duration_secs = 100.0
+            [targets]
+            shape = {{ kind = "sphere", radius = {radius} }}
+            spawn = {{ kind = "angular", yaw_deg = [0, 0], pitch_deg = [0, 0], distance = [10, 10] }}
+            {targets}
+            [scoring]
+            {scoring}
+            "#
+        ))
+        .unwrap();
+        assert!(d.validate().is_empty(), "{:?}", d.validate());
+        d
+    }
+
+    /// Clicks once along `view`, after waiting out the fire rate.
+    fn click(s: &mut Session, view: ViewAngles) {
+        s.update(FrameInput {
+            dt: 0.2,
+            ..Default::default()
+        });
+        s.update(FrameInput {
+            dt: 0.001,
+            view,
+            fire_pressed: true,
+            ..Default::default()
+        });
+    }
+
+    /// The view from the eye to `p` turned `off` meters sideways at its distance.
+    fn view_beside(s: &Session, p: Vec3, off: f32) -> ViewAngles {
+        ViewAngles::from_direction(p + Vec3::new(off, 0.0, 0.0) - s.eye_position())
+    }
+
+    fn sphere_radius(shape: &Shape) -> f32 {
+        match shape {
+            Shape::Sphere { radius } => *radius,
+            other => panic!("sphere expected, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_accuracy_multiplier_scales_the_final_score() {
+        for (mult, expected) in [
+            ("none", 100.0),
+            ("linear", 50.0),
+            ("sqrt", 100.0 * 0.5f32.sqrt()),
+        ] {
+            let mut s = Session::new(def(0.3, "", &format!("accuracy_mult = \"{mult}\"")), 1);
+            let p = s.targets().next().unwrap().position;
+            let v = view_beside(&s, p, 0.0);
+            click(&mut s, v);
+            click(&mut s, ViewAngles::new(180.0, 0.0));
+            let r = s.result();
+            assert!((r.accuracy - 0.5).abs() < 1e-6, "{mult}");
+            assert!((r.score - expected).abs() < 1e-3, "{mult}: {}", r.score);
+            assert!(
+                (s.stats().score - 100.0).abs() < 1e-3,
+                "the live score is unchanged"
+            );
+        }
+        let plain = def(0.3, "", "");
+        assert_eq!(
+            plain.scoring,
+            def(0.3, "", "accuracy_mult = \"none\"").scoring
+        );
+    }
+
+    #[test]
+    fn shrink_per_kill_shrinks_targets_down_to_their_floor() {
+        let d = def(0.4, "shrink_per_kill = { factor = 0.5, floor = 0.3 }", "");
+        let mut s = Session::new(d, 1);
+        let mut radii = Vec::new();
+        for _ in 0..3 {
+            let p = s.targets().next().unwrap().position;
+            let v = view_beside(&s, p, 0.0);
+            click(&mut s, v);
+            radii.push(sphere_radius(&s.active_targets().shape));
+        }
+        assert_eq!(s.stats().kills, 3);
+        let floor = 0.4 * 0.3;
+        assert!((radii[0] - 0.2).abs() < 1e-6, "{radii:?}");
+        assert!((radii[1] - floor).abs() < 1e-6, "{radii:?}");
+        assert!((radii[2] - floor).abs() < 1e-6, "{radii:?}");
+        assert_eq!(
+            sphere_radius(&s.def().targets.shape),
+            0.4,
+            "the definition is kept"
+        );
+
+        // The hit test uses the shrunken radius: 0.2 m beside the center now misses.
+        let p = s.targets().next().unwrap().position;
+        let v = view_beside(&s, p, 0.2);
+        click(&mut s, v);
+        assert_eq!(s.stats().kills, 3);
+        assert_eq!(s.stats().shots, 4);
     }
 }

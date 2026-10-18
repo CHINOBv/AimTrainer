@@ -1,0 +1,15 @@
+id = "demo-shrink"
+name = "Demo: Shrink"
+category = "precision"
+description = """
+Engine demo for shrink_per_kill and accuracy_mult. Every kill makes the next sphere a
+little smaller, down to half its size, and the final score is multiplied by your accuracy."""
+duration_secs = 45
+
+[targets]
+shape = { kind = "sphere", radius = 0.3 }
+spawn = { kind = "angular", yaw_deg = [-25.0, 25.0], pitch_deg = [0.0, 12.0], distance = [12.0, 12.0] }
+shrink_per_kill = { factor = 0.97, floor = 0.5 }
+
+[scoring]
+accuracy_mult = "linear"

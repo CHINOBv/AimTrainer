@@ -444,6 +444,9 @@ fn scale_targets(targets: &mut TargetsDef, c: &DifficultyDef, d: f32) {
         *l *= 1.0 - c.lifetime.at(d);
     }
     scale_motion(&mut targets.motion, c.speed.at(d));
+    for p in &mut targets.motion_profiles {
+        scale_motion(&mut p.motion, c.speed.at(d));
+    }
     let count = c.count.at(d);
     if count != 0.0 {
         let alive = targets.max_alive as f32 * (1.0 + count);

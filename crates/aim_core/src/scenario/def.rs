@@ -278,6 +278,14 @@ pub struct TargetsDef {
     /// [`super::cue::Perception`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub perception: Option<super::cue::Perception>,
+    /// Every kill shrinks the targets: their size is multiplied by `factor`, down to
+    /// `floor` times the starting size. Spheres only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shrink_per_kill: Option<ShrinkDef>,
+    /// Weighted motion profiles: each target picks one by weight when it spawns and
+    /// again every `switch_secs`. When set, they replace `motion`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub motion_profiles: Vec<MotionProfile>,
 }
 
 /// How a target reacts to the player (`targets.reactions`). A reaction sets the target's
@@ -444,6 +452,10 @@ pub enum SpawnArea {
         pitch_deg: Range,
         /// Distance from the eye in meters.
         distance: Range,
+        /// Snap spawns to a grid of `rows` × `cols` points spanning the yaw and pitch
+        /// ranges (humanoids use the columns only).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        grid: Option<SpawnGrid>,
     },
     /// Offset from wherever the crosshair currently points (flicks, microcorrections).
     /// Humanoids only use the horizontal component.
@@ -709,6 +721,10 @@ pub struct ScoringDef {
     /// fast kills.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decay: Option<ScoreDecay>,
+    /// Multiplies the final score by the run's accuracy (`linear`) or its square root
+    /// (`sqrt`); `none` by default.
+    #[serde(default, skip_serializing_if = "AccuracyMult::is_none")]
+    pub accuracy_mult: AccuracyMult,
 }
 
 /// Score decay (`scoring.decay`). Points for hitting a target fall linearly from full value
@@ -730,6 +746,83 @@ impl ScoreDecay {
         1.0 - (1.0 - self.floor) * progress
     }
 }
+
+/// How the final score depends on accuracy (`scoring.accuracy_mult`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AccuracyMult {
+    /// The score as earned.
+    #[default]
+    None,
+    /// Score × accuracy.
+    Linear,
+    /// Score × √accuracy: a gentler penalty.
+    Sqrt,
+}
+
+impl AccuracyMult {
+    /// Score multiplier for a run with `accuracy` in [0, 1].
+    pub fn factor(self, accuracy: f32) -> f32 {
+        match self {
+            AccuracyMult::None => 1.0,
+            AccuracyMult::Linear => accuracy,
+            AccuracyMult::Sqrt => accuracy.max(0.0).sqrt(),
+        }
+    }
+
+    fn is_none(&self) -> bool {
+        *self == AccuracyMult::None
+    }
+}
+
+/// Per-kill shrinking (`targets.shrink_per_kill`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShrinkDef {
+    /// Size multiplier applied at every kill, in (0, 1).
+    pub factor: f32,
+    /// Smallest size, as a fraction of the starting size, in (0, 1].
+    pub floor: f32,
+}
+
+/// Grid snapping of an `angular` spawn area (`spawn.grid`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpawnGrid {
+    /// Pitch rows, 1–16, from `pitch_deg.min` to `pitch_deg.max` (one row sits in the middle).
+    pub rows: u32,
+    /// Yaw columns, 1–16, from `yaw_deg.min` to `yaw_deg.max` (one column sits in the middle).
+    pub cols: u32,
+}
+
+impl SpawnGrid {
+    /// The value of grid line `i` of `n` across `r`.
+    pub(super) fn line(r: Range, i: u32, n: u32) -> f32 {
+        if n <= 1 {
+            r.lerp(0.5)
+        } else {
+            r.lerp(i as f32 / (n - 1) as f32)
+        }
+    }
+}
+
+/// One weighted motion profile (`[[targets.motion_profiles]]`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MotionProfile {
+    /// Relative chance of picking this profile, ≥ 0.
+    #[serde(default = "one_f")]
+    pub weight: f32,
+    /// Time until the target picks a profile again, seconds; without it the pick lasts
+    /// the target's life.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub switch_secs: Option<Range>,
+    /// The motion, written like `targets.motion` (not `ballistic`).
+    pub motion: Motion,
+}
+
+/// Most motion profiles a scenario may list.
+pub const MAX_MOTION_PROFILES: usize = 8;
 
 /// Score-zone rings around the center of a sphere or a humanoid head. A hit's points are
 /// multiplied by the multiplier of the innermost ring it lands in, by the hit's
@@ -787,6 +880,7 @@ impl Default for ScoringDef {
             rings: None,
             decoy_penalty: 0.0,
             decay: None,
+            accuracy_mult: AccuracyMult::None,
         }
     }
 }
@@ -955,6 +1049,7 @@ impl ScenarioDef {
                 yaw_deg,
                 pitch_deg,
                 distance,
+                ..
             } => {
                 check(
                     yaw_deg.is_valid() && pitch_deg.is_valid(),
@@ -1057,6 +1152,65 @@ impl ScenarioDef {
         for (field, msg) in motion_problems(&t.motion) {
             check(false, field, msg);
         }
+        if let Some(s) = t.shrink_per_kill {
+            check(
+                s.factor > 0.0 && s.factor < 1.0 && s.floor > 0.0 && s.floor <= 1.0,
+                "targets.shrink_per_kill",
+                "needs factor in (0, 1) and floor in (0, 1]",
+            );
+            check(
+                matches!(t.shape, Shape::Sphere { .. }),
+                "targets.shrink_per_kill",
+                "needs a sphere shape",
+            );
+        }
+        if let SpawnArea::Angular { grid: Some(g), .. } = &t.spawn {
+            check(
+                (1..=16).contains(&g.rows) && (1..=16).contains(&g.cols),
+                "targets.spawn.grid",
+                "rows and cols must be between 1 and 16",
+            );
+        }
+        let profiles = &t.motion_profiles;
+        check(
+            profiles.len() <= MAX_MOTION_PROFILES,
+            "targets.motion_profiles",
+            &format!("at most {MAX_MOTION_PROFILES} profiles"),
+        );
+        check(
+            profiles.is_empty()
+                || (profiles
+                    .iter()
+                    .all(|p| p.weight.is_finite() && p.weight >= 0.0)
+                    && profiles.iter().map(|p| p.weight).sum::<f32>() > 0.0),
+            "targets.motion_profiles.weight",
+            "weights must be >= 0 and add up to more than 0",
+        );
+        check(
+            profiles.is_empty() || t.motion == Motion::Static,
+            "targets.motion",
+            "leave it out when motion_profiles is set: the profiles replace it",
+        );
+        for p in profiles {
+            check(
+                p.switch_secs.is_none_or(|s| s.is_valid() && s.min > 0.0),
+                "targets.motion_profiles.switch_secs",
+                "must be a positive [min, max]",
+            );
+            check(
+                !matches!(p.motion, Motion::Ballistic { .. }),
+                "targets.motion_profiles.motion",
+                "ballistic is a whole flight: use it as targets.motion",
+            );
+            for (field, msg) in motion_problems(&p.motion) {
+                let name = field.strip_prefix("targets.motion.").unwrap_or("chances");
+                check(
+                    false,
+                    "targets.motion_profiles.motion",
+                    &format!("{name}: {msg}"),
+                );
+            }
+        }
         if let Some(r) = &t.reactions {
             for (chance, field) in [
                 (
@@ -1089,10 +1243,15 @@ impl ScenarioDef {
                 "targets.reactions.react_secs",
                 "must be a positive [min, max]",
             );
+            let reacts = |m: &Motion| matches!(m, Motion::Strafe { .. } | Motion::Dodge { .. });
             check(
-                matches!(t.motion, Motion::Strafe { .. } | Motion::Dodge { .. }),
+                if t.motion_profiles.is_empty() {
+                    reacts(&t.motion)
+                } else {
+                    t.motion_profiles.iter().all(|p| reacts(&p.motion))
+                },
                 "targets.reactions",
-                "needs motion kind = \"strafe\" or \"dodge\"",
+                "needs motion kind = \"strafe\" or \"dodge\" (every motion profile's, with profiles)",
             );
             // Options that could never act are refused rather than silently ignored.
             check(
@@ -2229,5 +2388,135 @@ mod tests {
         ] {
             assert_eq!(motion_fields(motion, ""), [field], "{motion}");
         }
+    }
+
+    /// Fields of the validation problems of `MINIMAL` with `lines` added under `[targets]`
+    /// and `scoring` lines under `[scoring]`.
+    fn extra_fields(lines: &str, scoring: &str) -> Vec<&'static str> {
+        let src = format!("{MINIMAL}{lines}\n[scoring]\n{scoring}\n");
+        ScenarioDef::from_toml(&src)
+            .unwrap_or_else(|e| panic!("{lines}: {e}"))
+            .validate()
+            .into_iter()
+            .map(|e| e.field)
+            .collect()
+    }
+
+    #[test]
+    fn scoring_and_spawn_extras_parse_and_validate() {
+        let none: Vec<&str> = Vec::new();
+        assert_eq!(extra_fields("", "accuracy_mult = \"sqrt\""), none);
+        assert!(
+            ScenarioDef::from_toml(&format!(
+                "{MINIMAL}\n[scoring]\naccuracy_mult = \"cubic\"\n"
+            ))
+            .is_err()
+        );
+
+        let shrink = |s: &str| extra_fields(&format!("shrink_per_kill = {s}"), "");
+        assert_eq!(shrink("{ factor = 0.9, floor = 0.4 }"), none);
+        for bad in [
+            "{ factor = 1.0, floor = 0.4 }",
+            "{ factor = 0.9, floor = 0 }",
+            "{ factor = 0.9, floor = 1.2 }",
+        ] {
+            assert_eq!(shrink(bad), ["targets.shrink_per_kill"], "{bad}");
+        }
+        let humanoid = format!(
+            "{}shrink_per_kill = {{ factor = 0.9, floor = 0.4 }}\n",
+            MINIMAL.replace(
+                "{ kind = \"sphere\", radius = 0.2 }",
+                "{ kind = \"humanoid\" }"
+            )
+        );
+        let fields: Vec<_> = ScenarioDef::from_toml(&humanoid)
+            .unwrap()
+            .validate()
+            .into_iter()
+            .map(|e| e.field)
+            .collect();
+        assert_eq!(fields, ["targets.shrink_per_kill"], "spheres only");
+
+        let grid = |g: &str| {
+            let src = MINIMAL.replace(
+                "spawn = { kind = \"around_crosshair\", offset_deg = [10, 40], distance = [10, 10] }",
+                &format!("spawn = {{ kind = \"angular\", yaw_deg = [-20, 20], pitch_deg = [0, 10], distance = [10, 10], grid = {g} }}"),
+            );
+            ScenarioDef::from_toml(&src)
+                .unwrap()
+                .validate()
+                .into_iter()
+                .map(|e| e.field)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(grid("{ rows = 2, cols = 3 }"), none);
+        assert_eq!(grid("{ rows = 0, cols = 3 }"), ["targets.spawn.grid"]);
+        assert_eq!(grid("{ rows = 2, cols = 17 }"), ["targets.spawn.grid"]);
+    }
+
+    #[test]
+    fn motion_profiles_validate_weights_timers_and_motions() {
+        let profile = |weight: &str, extra: &str, motion: &str| {
+            format!(
+                "\n[[targets.motion_profiles]]\nweight = {weight}\n{extra}\nmotion = {motion}\n"
+            )
+        };
+        let still = "{ kind = \"static\" }";
+        let orbit = "{ kind = \"orbit\", speed_deg = [20, 30] }";
+        let ok = format!(
+            "{}{}",
+            profile("1", "switch_secs = [1, 2]", still),
+            profile("2", "", orbit)
+        );
+        let none: Vec<&str> = Vec::new();
+        let fields = |profiles: &str| {
+            ScenarioDef::from_toml(&format!("{MINIMAL}{profiles}"))
+                .unwrap_or_else(|e| panic!("{profiles}: {e}"))
+                .validate()
+                .into_iter()
+                .map(|e| e.field)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(fields(&ok), none);
+        assert_eq!(
+            fields(&format!(
+                "{}{}",
+                profile("0", "", still),
+                profile("0", "", orbit)
+            )),
+            ["targets.motion_profiles.weight"]
+        );
+        assert_eq!(
+            fields(&profile("-1", "", still)),
+            ["targets.motion_profiles.weight"]
+        );
+        assert_eq!(
+            fields(&profile("1", "switch_secs = [0, 1]", still)),
+            ["targets.motion_profiles.switch_secs"]
+        );
+        assert_eq!(
+            fields(&profile(
+                "1",
+                "",
+                "{ kind = \"ballistic\", speed = [5, 6], angle_deg = [40, 60] }"
+            )),
+            ["targets.motion_profiles.motion"]
+        );
+        assert_eq!(
+            fields(&profile(
+                "1",
+                "",
+                "{ kind = \"orbit\", speed_deg = [0, 30] }"
+            )),
+            ["targets.motion_profiles.motion"]
+        );
+        let with_motion = format!("motion = {orbit}\n{ok}");
+        assert_eq!(
+            fields(&with_motion),
+            ["targets.motion"],
+            "the profiles replace targets.motion"
+        );
+        let nine: String = (0..9).map(|_| profile("1", "", still)).collect();
+        assert_eq!(fields(&nine), ["targets.motion_profiles"]);
     }
 }

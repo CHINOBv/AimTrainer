@@ -142,7 +142,13 @@ impl SimAimer {
     /// Point the aimer wants to hit and its angular radius (degrees).
     fn aim(session: &Session, t: &Target) -> (Vec3, f32) {
         let eye = session.eye_position();
-        match session.def().targets.shape {
+        // Shrinking targets are aimed at at their current size; others at the defined one.
+        let shape = if session.def().targets.shrink_per_kill.is_some() {
+            &session.active_targets().shape
+        } else {
+            &session.def().targets.shape
+        };
+        match *shape {
             Shape::Sphere { radius } => {
                 let d = (t.position - eye).length();
                 (t.position, (radius / d).atan().to_degrees())

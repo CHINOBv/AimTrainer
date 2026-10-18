@@ -47,6 +47,7 @@ decoy_chance = 0             # go/no-go: share of spawns that are decoys, in [0,
 regen = { interval_secs = 0.5, amount = 1, reset_on_hit = false }   # optional health regeneration
 spawn_rules = { avoid_last_deg = 10, min_flick_deg = 15 }          # optional spawn-pattern controls
 perception = { kind = "sound_cue", sound = "footsteps", reveal_after_secs = 0.8 }   # optional perception drill
+shrink_per_kill = { factor = 0.97, floor = 0.5 }                  # optional: every kill shrinks spheres
 
 [scoring]                    # all optional
 head = 100                   # per hit (click) or per second (hold)
@@ -60,6 +61,7 @@ burst_bonus = 0              # per hit within the weapon's protected bullets; ne
 rings = { radius = [0.25, 0.5, 1.0], multiplier = [3.0, 2.0, 1.0] }   # optional score-zone rings
 decoy_penalty = 0            # per shot on a go/no-go decoy
 decay = { window_secs = 2.0, floor = 0.3 }   # optional: a target's value fades after it appears
+accuracy_mult = "none"       # "linear" or "sqrt": the final score × accuracy (or its square root)
 ```
 
 ### Go/no-go decoys
@@ -104,6 +106,50 @@ decay = { window_secs = 3.0, floor = 0.4 }
 
 The value falls linearly: a hit `age` seconds after the target appeared scores its points × `1 − (1 − floor) × min(age / window_secs, 1)`. It multiplies the score-ring multiplier, and in hold mode it scales the points per second. The built-in `regen-track` combines both: breaking off lets the sphere heal, and a slow kill earns less, so steady tracking pays twice.
 
+### Accuracy multiplier and shrinking targets
+
+`scoring.accuracy_mult` makes accuracy part of the score, and `targets.shrink_per_kill` makes every kill harder than the last. Both are optional and off by default.
+
+```toml
+[targets]
+shrink_per_kill = { factor = 0.97, floor = 0.5 }
+
+[scoring]
+accuracy_mult = "linear"
+```
+
+| Field | Meaning |
+|---|---|
+| `accuracy_mult` | `"none"` (default), `"linear"` or `"sqrt"`. The final score (on the results screen and in history) is multiplied by the run's accuracy, or by its square root, a gentler penalty. Accuracy is hits ÷ shots in click mode and time on target ÷ time firing in hold mode. The live score during the run is not multiplied. |
+| `shrink_per_kill.factor` | Every kill multiplies the sphere radius by this, in (0, 1). Live targets shrink too. |
+| `shrink_per_kill.floor` | The smallest radius, as a fraction of the starting one, in (0, 1]. |
+
+Shrinking needs a sphere. With phases, each phase starts again at its own radius. The built-in `demo-shrink` uses both.
+
+### Motion profiles
+
+`[[targets.motion_profiles]]` (optional, at most 8) gives each target several motions to switch between. A target picks a profile by weight when it spawns, and again every `switch_secs`; picking the same profile keeps it moving without interruption. When profiles are set they replace `targets.motion`, which must be left out. The built-in `demo-profiles`:
+
+```toml
+[[targets.motion_profiles]]
+weight = 2
+switch_secs = [1.0, 2.0]
+motion = { kind = "drift", speed = [1.5, 2.5], change_secs = [0.8, 1.5], max_offset = 4.0 }
+
+[[targets.motion_profiles]]
+weight = 1
+switch_secs = [0.5, 1.0]
+motion = { kind = "static" }
+```
+
+| Field | Meaning |
+|---|---|
+| `weight` | Relative chance of picking the profile, ≥ 0 (default 1); the weights must add up to more than 0. A zero weight is never picked. |
+| `switch_secs` | Time until the target picks again, seconds (a positive range). Without it the first pick lasts the target's life. |
+| `motion` | Any motion except `ballistic`, written like `targets.motion`. When a pick changes the motion, the new motion decides at once and movement it has no part in stops, as with behaviour rules. |
+
+Behaviour rules still override the profile in force. `reactions` need every profile's motion to be `strafe` or `dodge`. The difficulty speed knob and speed tuning scale every profile's motion.
+
 ### Play area and floor height
 
 With `movement = true`, the player's feet stay inside `bounds_x` and `bounds_z`; pushing into an edge stops only that direction, so you slide along it. The edges are drawn as low, see-through strips on the floor, a few centimeters high, so they never block the view. The built-in movement drills use `counter-strafe` x [−8, 8], z [−2, 5] and `strafe-shot` x [−7, 7], z [−3, 5].
@@ -127,7 +173,7 @@ Recoil moves the bullets, not the camera. `simulate_spread` still adds running i
 
 | `kind` | Fields | Meaning |
 |---|---|---|
-| `angular` | `yaw_deg`, `pitch_deg`, `distance` | A direction relative to the starting view. Humanoids ignore pitch and stand on the floor. |
+| `angular` | `yaw_deg`, `pitch_deg`, `distance`, `grid` (optional) | A direction relative to the starting view. Humanoids ignore pitch and stand on the floor. `grid = { rows, cols }` (each 1–16) snaps spawns to a grid of points: `cols` yaws from `yaw_deg.min` to `yaw_deg.max` and `rows` pitches from `pitch_deg.min` to `pitch_deg.max`, evenly spaced (a single row or column sits in the middle); each spawn picks a random point, so use `min_separation_deg` to keep live targets on different points. Humanoids use the columns only. The built-in `demo-grid` uses a 3 × 5 grid. |
 | `around_crosshair` | `offset_deg`, `distance`, `pitch_limit_deg` (default `[-15, 30]`), `on_screen` (default `false`) | Spawns relative to where you aim right now. Use it for flicks (large offsets) and microcorrections (1–6°). `pitch_limit_deg` keeps every spawn inside a vertical band around the horizon, so chained flicks cannot drift into the sky or the floor. `on_screen = true` keeps every spawn inside VALORANT's view from the crosshair at spawn time, with a 4° margin: at most 47.5° sideways and ≈31.3° up or down (half of 103° × 70.53°, minus the margin). `offset_deg.max` must then be ≤ 47.5, and difficulty scaling clamps the offset to that limit. Humanoids only use the horizontal offset. |
 | `floor` | `x`, `z`, `height` | A world-space box. Use it for agents at realistic positions, or spheres at head height (`height = [1.8, 1.95]`). |
 

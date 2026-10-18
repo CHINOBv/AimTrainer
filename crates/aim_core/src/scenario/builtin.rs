@@ -30,8 +30,20 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/demo-depth.toml"),
     ),
     (
+        "demo-grid.toml",
+        include_str!("../../../../content/scenarios/demo-grid.toml"),
+    ),
+    (
         "demo-orbit.toml",
         include_str!("../../../../content/scenarios/demo-orbit.toml"),
+    ),
+    (
+        "demo-profiles.toml",
+        include_str!("../../../../content/scenarios/demo-profiles.toml"),
+    ),
+    (
+        "demo-shrink.toml",
+        include_str!("../../../../content/scenarios/demo-shrink.toml"),
     ),
     (
         "dodge-crouch-spam.toml",
