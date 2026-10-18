@@ -113,3 +113,14 @@ Each analytics item explains itself: it shows the metric and the threshold behin
   - the slow-start rule can fire on noise for weak players;
   - speed match can give a false weakness on strafe-heavy tracking;
   - a machine-specific path in this log.
+- L10 (2026-10-18) User: "Arreglar (a)–(g) y fusionar". Fixed with tests: 57d8a95 (b, c), 210d1fa (d), ef31c25 (a, e, f, g).
+  - RED observed:
+    - priority contested 2 vs 1;
+    - decoy shot produced a flick;
+    - decoy wait emitted `Expired`;
+    - compare verdict `Some(true)` on "+0 pts";
+    - the sensitivity panel API did not exist (compile).
+  - (e) and (g) are UI-only with no automated test. (g) was half-true: `take(RECENT_RUNS)` is lazy, so only the double directory scan was real.
+  - After the fixes: `cargo test --workspace` all passed (app 174, core 299, world 66 + 1 ignored, others); clippy clean; calibrate identical to the integration run.
+  - RDD assess of 69c118d..ef31c25: medium, `under_budget` (not due).
+  - Remaining maintainability advisories from L9 stay as follow-up work.
