@@ -203,3 +203,23 @@ meaning = "your crosshair rests on targets that you then leave without firing"
 [rules.recommendation]
 scenario_ids = ["static-headline", "switch-heads"]
 tip = "Fire as soon as the crosshair is on the target; trust it instead of waiting for a perfect picture."
+
+[[rules]]
+metric = "click_delay"
+direction = "above"
+threshold = 0.20
+verdict = "weakness"
+meaning = "you hesitate on the target before clicking"
+[rules.recommendation]
+scenario_ids = ["flick-wide", "peek-reaction"]
+tip = "Click as soon as the crosshair reaches the target; trust the first placement instead of confirming it."
+
+[[rules]]
+metric = "weakest_direction_gap"
+direction = "above"
+threshold = 0.30
+verdict = "weakness"
+meaning = "your flicks in one direction hit far less often than the rest"
+[rules.recommendation]
+scenario_ids = ["flick-wide", "flick-headshot"]
+tip = "Give extra reps to the direction the flick grid marks weakest, and slow down there until its hit rate catches up."

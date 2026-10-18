@@ -271,6 +271,45 @@ The session's own `on_target` flag only exists while firing, so the "under the c
 | Nearest target first | < 50% | > 85% | `switch-wide`, `switch-speed`; clear the closest target first |
 | Missed opportunities | > 15% | — | `static-headline`, `switch-heads`; fire as soon as the crosshair is on the target |
 
+### Click timing (hesitation)
+
+`Flick::click_delay_secs` is the time from the first frame of the flick in which the crosshair is inside the target's aim zone (the same angular radius the flick analysis uses) to the shot. It counts from the *first* entry, so a flick that passes over the target, comes back and then clicks includes that correction time. A flick whose crosshair never reached the zone has no click delay. The results card shows the median over the run as "Click delay (median)".
+
+| Metric | Weakness | Recommended practice |
+|---|---|---|
+| Median click delay | > 200 ms ("you hesitate on the target before clicking") | `flick-wide`, `peek-reaction` |
+
+Why 200 ms (estimate, not calibrated): the simulated aimer clicks as soon as its minimum-jerk movement ends, so its click delay is only the deceleration tail inside the target. Measured with seed 2, it runs from about 70 ms (elite) to about 190 ms (recruit) across `flick-wide`, `micro-adjust`, `flick-headshot`, `static-headline`, `switch-wide` and `peek-reaction`. A median above 200 ms is therefore slower than any simulated aimer and suggests deliberate confirmation before the click. No published source gives a target value for this delay; replace the threshold once real player data exists.
+
+### Per-direction flicks
+
+`aim_core::analytics::direction` classifies each fresh flick (retries after a miss start next to the target and are left out) by its screen-space vector from the crosshair at the start of the flick to the target (`Flick::direction_deg`, `.0` right, `.1` up):
+
+- **Quadrant**, by `atan2(dy, dx)` in degrees: up-right (0°, 90°], up-left (90°, 180°], down-left (−180°, −90°], down-right (−90°, 0°]. A pure right flick (0°) is down-right, a pure up flick (90°) is up-right, and −180° is treated as 180° (up-left). A zero vector has no quadrant.
+- **Distance class:** far when the flick's distance is above `(min + max) / 1.9` of the scenario's possible target distances. The divisor comes from Aim Lab's analysis (an observed rule, not a sourced constant); we treat it as a tunable estimate. `min` and `max` come from the spawn area: a crosshair-relative spawn gives its `offset_deg` range; an angular box gives 0 up to its diagonal `hypot(yaw span, pitch span)`, the farthest two spawns can be apart. **Fallback:** a `floor` spawn is in meters, so its run uses the smallest and largest flick distances it actually observed. The results card says which source it used.
+
+Each of the 4 × 2 buckets reports its fresh flicks, hit rate and median reaction time.
+
+**Weakest direction (rule input).** Near and far are pooled per quadrant. A quadrant needs ≥ 15 fresh flicks, and so do all other quadrants together. The weakest is the quadrant with the lowest hit rate. Its gap is the hit rate of every other fresh flick minus its own.
+
+| Metric | Weakness | Recommended practice |
+|---|---|---|
+| Hit-rate gap of your weakest flick direction | > 30% | `flick-wide`, `flick-headshot` |
+
+Why 15 flicks and 30% (estimates): the simulated aimer has no directional bias, yet over single runs (seeds 1–5, six click scenarios, four presets) its gap reached 26 points by chance. With fewer than 15 flicks per quadrant, chance gaps grow quickly. The skill profile pools the category's recent runs, which shrinks this noise.
+
+**Weak axis (shown, not a rule).** `Flick::primary_offset_deg` is the crosshair's offset from the target at the end of the primary sub-movement. On each axis the flick moved at least 2°, that offset is signed along the axis's movement and divided by the target radius. Beyond +1 radius is an axis overshoot and beyond −1 an undershoot, matching the existing overshoot rule. An axis is weak when its over/undershoot rate is more than 20 points above the other axis's, with ≥ 20 measured flicks on each axis. Why (estimates): with 5 samples and a 15-point margin, the simulated recruit, which has no axis bias, was flagged "vertical" in 2 of 5 runs; 20 samples and 20 points flag none. The 2° floor drops axes the flick barely moved on, where a sub-degree error would read as a huge miss.
+
+### Passive sensitivity suggestion
+
+`aim_core::analytics::sens_suggest::suggest` reads the fresh flicks of the newest 20 click-run replays (the Progress page loads them; replays are kept for the last 50 runs). For each flick it takes where the primary sub-movement ended relative to the target (`Flick::primary_offset_deg`) and divides it by the flick's distance. The result is signed along the movement: positive means past the target, negative means short. Three means are kept: along the movement, horizontal and vertical. An axis counts only if the flick moved at least 2° on it.
+
+- **Multiplier** = `1 / (1 + mean bias)`: the gain that would have made the average primary movement land on the target. Consistent overshoot gives less than 1 (lower sensitivity) and undershoot more than 1. The working assumption is that the primary sub-movement is the planned, pre-correction part of the flick (Meyer et al. 1988, above), so its gain reflects the hand-to-view mapping. Primary movements are known to fall slightly short by design, so a small undershoot is normal; that is one reason for the no-change band.
+- **Evidence:** the panel shows the sample count and mean bias per axis. Fewer than 40 measured flicks give no suggestion, and an axis with fewer than 40 gives no axis line.
+- **Bounds (estimates):** ×0.85 to ×1.15 per suggestion, so one step never changes sensitivity by more than about 15%. Within ±3% the panel says "no change". Flicks whose primary ended more than 50% of the distance past or short are dropped. In the simulated aimer, about a quarter of a contender's fresh flicks have a "primary" that is a short blip at the start of the flick (relative error near −100%). Before the drop, they pulled its mean bias to −22% even though its movements are unbiased; after it, the simulated presets get "no change".
+- **Applying:** only the overall multiplier can be applied, through `Sensitivity::from_cm_per_360` (cm/360 ÷ multiplier, same game and DPI), the same path as the sensitivity finder. The vertical line is information only: mouse look uses one sensitivity for both axes, and decision L5 adds no vertical multiplier setting. Nothing is applied automatically. Once applied, the button stays hidden until new replays arrive.
+- **Limits:** replays do not record the sensitivity they were played at. Runs from before a sensitivity change, and sensitivity-finder test runs (also saved as replays), therefore mix into the evidence. No published source gives the 40-flick minimum, the bounds or the band; they are provisional.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

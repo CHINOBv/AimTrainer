@@ -8,6 +8,7 @@
 //! `docs/training-science.md`) until they are calibrated on real player data. The
 //! per-benchmark-subcategory profile is in [`super::skills`].
 
+use super::direction::DirectionSummary;
 use super::flick::{Flick, FlickSummary};
 use super::moving::MovingAnalysis;
 use super::rules::{self, MetricSources, RuleSet};
@@ -154,6 +155,10 @@ impl SkillProfile {
                     Some(sum)
                 },
             );
+            // Each run classifies near/far with its own scenario's distances.
+            let direction = (flicks.len() >= MIN_FLICKS).then(|| {
+                DirectionSummary::from_flicks(runs.iter().flat_map(|r| r.classified_flicks()))
+            });
             categories.push(CategoryProfile {
                 category,
                 runs: runs.len(),
@@ -166,6 +171,7 @@ impl SkillProfile {
                         moving: moving.as_ref(),
                         pace: pace.as_ref(),
                         priority: priority.as_ref(),
+                        direction: direction.as_ref(),
                     },
                 ),
                 flick,
@@ -203,28 +209,31 @@ mod tests {
     use crate::analytics::test_support::record;
     use crate::sim::AimerProfile;
 
-    #[test]
-    fn findings_state_the_metric_value_and_threshold() {
-        let flicks = vec![
-            Flick {
-                kind: crate::analytics::flick::FlickKind::Fresh,
-                target_id: 1,
-                hit: true,
-                distance_deg: 20.0,
-                target_radius_deg: 1.0,
-                reaction_secs: Some(0.4),
-                movement_secs: Some(0.3),
-                peak_speed_deg_per_sec: 200.0,
-                primary_error_radii: Some(2.0),
-                endpoint_error_deg: 0.0,
-                effective_distance_deg: 20.0,
-                corrections: 1,
-                settle_secs: Some(0.1),
-                path_efficiency: Some(0.9),
-            };
-            MIN_FLICKS
-        ];
-        let run = RunAnalysis {
+    /// A slow, overshooting flick that hits.
+    fn overshooting_flick() -> Flick {
+        Flick {
+            kind: crate::analytics::flick::FlickKind::Fresh,
+            target_id: 1,
+            hit: true,
+            distance_deg: 20.0,
+            target_radius_deg: 1.0,
+            reaction_secs: Some(0.4),
+            movement_secs: Some(0.3),
+            peak_speed_deg_per_sec: 200.0,
+            primary_error_radii: Some(2.0),
+            endpoint_error_deg: 0.0,
+            effective_distance_deg: 20.0,
+            corrections: 1,
+            settle_secs: Some(0.1),
+            path_efficiency: Some(0.9),
+            click_delay_secs: Some(0.05),
+            direction_deg: (20.0, 0.0),
+            primary_offset_deg: Some((2.0, 0.0)),
+        }
+    }
+
+    fn flick_run(flicks: Vec<Flick>) -> RunAnalysis {
+        RunAnalysis {
             scenario_id: "flick-wide".into(),
             category: Category::Flicking,
             kind: AnalysisKind::Flick(flicks),
@@ -232,7 +241,92 @@ mod tests {
             moving: None,
             pace: None,
             priority: None,
+            distance_split: None,
+        }
+    }
+
+    #[test]
+    fn a_long_click_delay_is_a_hesitation_weakness_with_its_threshold() {
+        let slow = Flick {
+            click_delay_secs: Some(0.3),
+            ..overshooting_flick()
         };
+        let p = SkillProfile::build(&[flick_run(vec![slow; MIN_FLICKS])]);
+        let f = p
+            .findings()
+            .find(|f| f.metric == Metric::ClickDelay)
+            .expect("300 ms click delay fires");
+        assert_eq!(f.verdict, Verdict::Weakness);
+        assert_eq!((f.value, f.threshold), (0.3, 0.20));
+        assert_eq!(
+            f.explanation,
+            "Median click delay 300 ms is above the 200 ms threshold: you hesitate on the target before clicking."
+        );
+        let rec = f.recommendation.as_ref().unwrap();
+        assert_eq!(rec.scenario_ids, vec!["flick-wide", "peek-reaction"]);
+        // A quick click (50 ms) fires nothing for this metric.
+        let p = SkillProfile::build(&[flick_run(vec![overshooting_flick(); MIN_FLICKS])]);
+        assert!(p.findings().all(|f| f.metric != Metric::ClickDelay));
+    }
+
+    #[test]
+    fn a_direction_far_below_the_others_is_a_weakness_with_its_threshold() {
+        use crate::analytics::direction::{DistanceSplit, MIN_QUADRANT_FLICKS, RangeSource};
+        let aimed = |direction_deg, hit| Flick {
+            direction_deg,
+            hit,
+            ..overshooting_flick()
+        };
+        let mut flicks = Vec::new();
+        for i in 0..MIN_QUADRANT_FLICKS {
+            flicks.push(aimed((-10.0, 5.0), i % 5 == 0)); // up-left: 20% hit
+            flicks.push(aimed((10.0, 5.0), true)); // up-right: all hit
+        }
+        let mut run = flick_run(flicks);
+        run.distance_split = Some(DistanceSplit {
+            min_deg: 0.0,
+            max_deg: 40.0,
+            source: RangeSource::Observed,
+        });
+        // The same flicks split across two runs are pooled per category.
+        let AnalysisKind::Flick(all) = &run.kind else {
+            unreachable!()
+        };
+        let (a, b) = all.split_at(MIN_QUADRANT_FLICKS);
+        let mut first = run.clone();
+        first.kind = AnalysisKind::Flick(a.to_vec());
+        let mut second = run.clone();
+        second.kind = AnalysisKind::Flick(b.to_vec());
+        for runs in [vec![run.clone()], vec![first, second]] {
+            let p = SkillProfile::build(&runs);
+            let f = p
+                .findings()
+                .find(|f| f.metric == Metric::WeakestDirectionGap)
+                .expect("an 80-point gap fires");
+            assert_eq!(f.verdict, Verdict::Weakness);
+            assert!((f.value - 0.8).abs() < 1e-6, "{}", f.value);
+            assert_eq!(f.threshold, 0.30);
+            assert_eq!(
+                f.explanation,
+                "Hit-rate gap of your weakest flick direction 80% is above the 30% threshold: your flicks in one direction hit far less often than the rest."
+            );
+            assert_eq!(
+                f.recommendation.as_ref().unwrap().scenario_ids,
+                vec!["flick-wide", "flick-headshot"]
+            );
+        }
+        // Without a near/far split (no direction summary) the rule cannot fire.
+        run.distance_split = None;
+        let p = SkillProfile::build(&[run]);
+        assert!(
+            p.findings()
+                .all(|f| f.metric != Metric::WeakestDirectionGap)
+        );
+    }
+
+    #[test]
+    fn findings_state_the_metric_value_and_threshold() {
+        let run = flick_run(vec![overshooting_flick(); MIN_FLICKS]);
         let p = SkillProfile::build(&[run]);
         let recs = p.recommendations();
         let overshoot = recs
@@ -331,6 +425,7 @@ mod tests {
             decision: None,
             pace: None,
             priority: None,
+            distance_split: None,
         }
     }
 

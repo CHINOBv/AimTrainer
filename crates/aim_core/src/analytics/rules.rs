@@ -5,6 +5,7 @@
 //! `content/rules/recommendations.toml`; all thresholds are provisional (see "Analytics
 //! metrics" in `docs/training-science.md`) until they are calibrated on real player data.
 
+use super::direction::DirectionSummary;
 use super::flick::FlickSummary;
 use super::moving::MovingSummary;
 use super::tracking::TrackingSummary;
@@ -48,6 +49,10 @@ pub enum Metric {
     NearestFirstShare,
     /// Missed opportunities ÷ (kills + missed opportunities) (prioritization).
     MissedOpportunityRate,
+    /// Median seconds from the crosshair first entering the target to the shot (flicks).
+    ClickDelay,
+    /// Hit rate of every other flick minus that of the weakest screen quadrant (flicks).
+    WeakestDirectionGap,
 }
 
 impl Metric {
@@ -69,6 +74,8 @@ impl Metric {
             Metric::StaminaRatio => "Late pace (vs early run)",
             Metric::NearestFirstShare => "Nearest target first",
             Metric::MissedOpportunityRate => "Missed opportunities",
+            Metric::ClickDelay => "Median click delay",
+            Metric::WeakestDirectionGap => "Hit-rate gap of your weakest flick direction",
         }
     }
 
@@ -79,6 +86,7 @@ impl Metric {
                 format!("{:.0} ms", value * 1000.0)
             }
             Metric::Corrections => format!("{value:.2}"),
+            Metric::ClickDelay => format!("{:.0} ms", value * 1000.0),
             _ => format!("{:.0}%", value * 100.0),
         }
     }
@@ -102,6 +110,8 @@ impl Metric {
             Metric::StaminaRatio => sources.pace?.stamina_ratio,
             Metric::NearestFirstShare => sources.priority?.nearest_share(),
             Metric::MissedOpportunityRate => sources.priority?.missed_rate(),
+            Metric::ClickDelay => flick?.median_click_delay_secs,
+            Metric::WeakestDirectionGap => sources.direction?.weakest.map(|w| w.gap()),
         }
     }
 }
@@ -114,6 +124,7 @@ pub(super) struct MetricSources<'a> {
     pub moving: Option<&'a MovingSummary>,
     pub pace: Option<&'a PaceSummary>,
     pub priority: Option<&'a PriorityAnalysis>,
+    pub direction: Option<&'a DirectionSummary>,
 }
 
 /// Whether a fired rule marks a strength or a weakness.
@@ -499,6 +510,30 @@ pub(crate) mod tests {
                 &["static-headline", "switch-heads"],
                 None,
                 "Fire as soon as the crosshair is on the target; trust it instead of waiting for a perfect picture.",
+            )),
+        ),
+        (
+            Metric::ClickDelay,
+            Direction::Above,
+            0.20,
+            Verdict::Weakness,
+            "you hesitate on the target before clicking",
+            Some((
+                &["flick-wide", "peek-reaction"],
+                None,
+                "Click as soon as the crosshair reaches the target; trust the first placement instead of confirming it.",
+            )),
+        ),
+        (
+            Metric::WeakestDirectionGap,
+            Direction::Above,
+            0.30,
+            Verdict::Weakness,
+            "your flicks in one direction hit far less often than the rest",
+            Some((
+                &["flick-wide", "flick-headshot"],
+                None,
+                "Give extra reps to the direction the flick grid marks weakest, and slow down there until its hit rate catches up.",
             )),
         ),
     ];

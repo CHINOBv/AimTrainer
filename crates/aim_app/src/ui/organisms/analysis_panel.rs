@@ -7,6 +7,7 @@ use crate::ui::UiAction;
 use crate::ui::atoms::{GOOD, WARN};
 use crate::ui::molecules::stat_row;
 use crate::ui::organisms::decision_panel::DecisionReport;
+use crate::ui::organisms::flick_directions::{DirectionGrid, flick_directions};
 use crate::ui::organisms::moving_panel::MovingReport;
 use aim_core::analytics::{RunAnalysis, SkillProfile};
 use bevy_egui::egui;
@@ -38,6 +39,8 @@ pub struct RunReport {
     pub moving: Option<MovingReport>,
     pub pace: Option<PaceReport>,
     pub priority: Option<PriorityReport>,
+    /// Per-direction flick grid (click runs only).
+    pub directions: Option<DirectionGrid>,
 }
 
 pub(crate) fn ms(secs: f32) -> String {
@@ -87,6 +90,7 @@ impl RunReport {
                 "Throughput (ISO 9241-9)",
                 f.throughput_bits_per_sec.map(|v| format!("{v:.1} bits/s")),
             );
+            push("Click delay (median)", f.median_click_delay_secs.map(ms));
             "Flick analysis"
         } else if let Some(t) = analysis.tracking_summary() {
             push("Time on target", Some(pct(t.on_target_ratio)));
@@ -155,6 +159,7 @@ impl RunReport {
                 .priority
                 .as_ref()
                 .map(|p| PriorityReport::new(p, profile.findings())),
+            directions: DirectionGrid::new(analysis),
         }
     }
 }
@@ -189,6 +194,9 @@ pub fn analysis_panel(ui: &mut egui::Ui, report: &RunReport) -> Option<UiAction>
             }
             if report.strengths.is_empty() && report.advice.is_empty() {
                 ui.small("No metric crossed a threshold in this run.");
+            }
+            if let Some(grid) = &report.directions {
+                flick_directions(ui, grid);
             }
             ui.small("Thresholds are provisional until calibrated on player data.");
         });
@@ -233,6 +241,26 @@ mod tests {
         assert!(first.explanation.contains("threshold"), "{first:?}");
         assert!(!first.practice.is_empty());
         assert!(r.advice.len() <= MAX_RECOMMENDATIONS);
+    }
+
+    #[test]
+    fn flick_runs_show_the_median_click_delay_after_the_existing_metrics() {
+        let r = report("flick-wide", 2);
+        let labels: Vec<&str> = r.metrics.iter().map(|(l, _)| *l).collect();
+        let click = labels
+            .iter()
+            .position(|l| *l == "Click delay (median)")
+            .expect("click delay row");
+        let throughput = labels
+            .iter()
+            .position(|l| *l == "Throughput (ISO 9241-9)")
+            .expect("existing rows are kept");
+        assert!(click > throughput, "{labels:?}");
+        assert!(
+            r.metrics[click].1.ends_with(" ms"),
+            "{:?}",
+            r.metrics[click]
+        );
     }
 
     #[test]

@@ -70,6 +70,15 @@ pub struct Flick {
     pub settle_secs: Option<f32>,
     /// Straight-line angle from start to shot divided by the angle travelled (1 = straight).
     pub path_efficiency: Option<f32>,
+    /// First frame the crosshair was inside the target's aim zone to the shot, seconds.
+    /// `None` when the crosshair never reached the zone during the flick.
+    pub click_delay_secs: Option<f32>,
+    /// Screen-space vector from the crosshair at the start to the target at the shot,
+    /// degrees: `.0` horizontal (positive right), `.1` vertical (positive up).
+    pub direction_deg: (f32, f32),
+    /// Where the primary sub-movement ended relative to the target, in the same screen axes,
+    /// degrees (positive = right of / above the target). `None` without a primary movement.
+    pub primary_offset_deg: Option<(f32, f32)>,
 }
 
 impl Flick {
@@ -110,6 +119,8 @@ pub struct FlickSummary {
     pub median_path_efficiency: Option<f32>,
     /// Fitts' law effective throughput (ISO 9241-9), bits/s.
     pub throughput_bits_per_sec: Option<f32>,
+    /// Median time from first entering the target to the shot, over flicks that entered it.
+    pub median_click_delay_secs: Option<f32>,
 }
 
 impl FlickSummary {
@@ -154,6 +165,7 @@ impl FlickSummary {
             median_settle_secs: median(&collect(|f| f.settle_secs)),
             median_path_efficiency: median(&collect(|f| f.path_efficiency)),
             throughput_bits_per_sec: throughput(flicks),
+            median_click_delay_secs: median(&collect(|f| f.click_delay_secs)),
         }
     }
 }
@@ -186,7 +198,7 @@ fn unit(v: (f32, f32)) -> Option<(f32, f32)> {
     (len > 1e-6).then(|| (v.0 / len, v.1 / len))
 }
 
-fn dot(a: (f32, f32), b: (f32, f32)) -> f32 {
+pub(super) fn dot(a: (f32, f32), b: (f32, f32)) -> f32 {
     a.0 * b.0 + a.1 * b.1
 }
 
@@ -266,6 +278,7 @@ fn analyze_one(
 
     let (mut reaction, mut movement, mut primary_error, mut settle) = (None, None, None, None);
     let mut corrections = 0;
+    let mut primary_offset = None;
     if let Some(onset) = onset {
         let onset_time = segment[onset].time_secs - segment[onset].dt_secs;
         reaction = Some((onset_time - start_secs).max(0.0));
@@ -275,6 +288,7 @@ fn analyze_one(
         if let Some(&(_, end)) = subs.first() {
             let s = &segment[end];
             primary_error = Some(along_error_deg(s.view, goal_at(s), dir) / radius);
+            primary_offset = Some(tangent_offset_deg(goal_at(s), s.view));
             settle = Some((shot.time_secs - s.time_secs).max(0.0));
         }
     }
@@ -283,6 +297,17 @@ fn analyze_one(
         .map(|s| s.angular_speed_deg_per_sec * s.dt_secs)
         .sum();
     let straight = angle_between_deg(start_view.direction(), shot.view.direction());
+    // Hesitation: how long the crosshair had already been on the target (since it first got
+    // there) when the shot was fired.
+    let click_delay = segment
+        .iter()
+        .find(|s| {
+            let (point, radius) = s
+                .target(target.id)
+                .map_or((goal, target.radius_deg), |t| (t.aim_point, t.radius_deg));
+            angle_between_deg(s.view.direction(), point.direction()) <= radius
+        })
+        .map(|s| (shot.time_secs - s.time_secs).max(0.0));
     Flick {
         kind,
         target_id: target.id,
@@ -298,6 +323,9 @@ fn analyze_one(
         corrections,
         settle_secs: settle,
         path_efficiency: (travelled > 1e-3).then(|| (straight / travelled).min(1.0)),
+        click_delay_secs: click_delay,
+        direction_deg: tangent_offset_deg(start_view, goal),
+        primary_offset_deg: primary_offset,
     }
 }
 
@@ -453,6 +481,113 @@ mod tests {
         let reaction = f.reaction_secs.unwrap();
         assert!((0.15..0.30).contains(&reaction), "{reaction}");
         assert!(f.settle_secs.unwrap() > 0.1);
+    }
+
+    const DT: f32 = 1.0 / 240.0;
+
+    /// Hand-built samples: one fixed target at yaw 10°, radius 1°, visible from the start;
+    /// the crosshair follows `yaws` (pitch 0) and the last frame fires.
+    fn scripted(yaws: &[f32]) -> Vec<Sample> {
+        let target = TargetSample {
+            id: 1,
+            aim_point: ViewAngles::new(10.0, 0.0),
+            radius_deg: 1.0,
+            visible_at_secs: 0.0,
+            decoy: false,
+        };
+        let mut previous = 0.0;
+        yaws.iter()
+            .enumerate()
+            .map(|(i, &yaw)| {
+                let last = i + 1 == yaws.len();
+                let speed = (yaw - previous).abs() / DT;
+                previous = yaw;
+                Sample {
+                    time_secs: (i + 1) as f32 * DT,
+                    dt_secs: DT,
+                    view: ViewAngles::new(yaw, 0.0),
+                    view_velocity_deg_per_sec: (speed, 0.0),
+                    angular_speed_deg_per_sec: speed,
+                    targets: vec![target],
+                    aimed: Some(0),
+                    fire_held: last,
+                    shot: last,
+                    hit: last && (yaw - 10.0).abs() <= 1.0,
+                    on_target: false,
+                    ..Default::default()
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn click_delay_runs_from_first_entering_the_target_to_the_shot() {
+        // Enters the 1° radius at frame 9 (yaw 9.5) and fires at frame 13.
+        let yaws = [
+            0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 4.0, 6.0, 8.0, 9.5, 10.0, 10.0, 10.0, 10.0,
+        ];
+        let fl = flicks(&scripted(&yaws));
+        assert_eq!(fl.len(), 1);
+        let delay = fl[0]
+            .click_delay_secs
+            .expect("the crosshair entered the target");
+        assert!((delay - 4.0 * DT).abs() < 1e-6, "{delay}");
+        assert!(fl[0].hit);
+        // Entering, leaving and re-entering still counts from the first entry (frame 6).
+        let yaws = [0.0, 0.0, 0.0, 3.0, 6.0, 8.0, 9.2, 11.5, 11.5, 10.5, 10.0];
+        let delay = flicks(&scripted(&yaws))[0].click_delay_secs.unwrap();
+        assert!((delay - 4.0 * DT).abs() < 1e-6, "{delay}");
+    }
+
+    #[test]
+    fn a_flick_records_its_screen_direction_and_per_axis_primary_offset() {
+        // Moves right from yaw 0 and stops at yaw 12, 2° past the target at yaw 10.
+        let yaws = [0.0, 0.0, 3.0, 6.0, 9.0, 12.0, 12.0, 12.0, 12.0];
+        let f = &flicks(&scripted(&yaws))[0];
+        let (dx, dy) = f.direction_deg;
+        assert!(
+            (dx - 10.0).abs() < 1e-4 && dy.abs() < 1e-6,
+            "{:?}",
+            f.direction_deg
+        );
+        let (ox, oy) = f
+            .primary_offset_deg
+            .expect("a primary movement was detected");
+        assert!(
+            (ox - 2.0).abs() < 1e-4 && oy.abs() < 1e-6,
+            "{:?}",
+            f.primary_offset_deg
+        );
+        // The along-direction error is unchanged: 2° past a 1° radius.
+        assert!((f.primary_error_radii.unwrap() - 2.0).abs() < 1e-4);
+        // A crosshair that never moves has no primary movement.
+        let still = &flicks(&scripted(&[0.0, 0.0, 0.0]))[0];
+        assert_eq!(still.primary_offset_deg, None);
+        assert!((still.direction_deg.0 - 10.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn click_delay_is_none_when_the_crosshair_never_reached_the_target() {
+        let yaws = [0.0, 0.0, 2.0, 4.0, 6.0, 7.0, 7.0];
+        let fl = flicks(&scripted(&yaws));
+        assert_eq!(fl[0].click_delay_secs, None);
+        assert!(!fl[0].hit);
+    }
+
+    #[test]
+    fn summary_reports_the_median_click_delay_of_flicks_that_reached_the_target() {
+        let mut fl = flicks(&scripted(&[0.0, 0.0, 5.0, 9.5, 10.0, 10.0]));
+        fl.extend(flicks(&scripted(&[
+            0.0, 0.0, 5.0, 9.5, 10.0, 10.0, 10.0, 10.0,
+        ])));
+        fl.extend(flicks(&scripted(&[0.0, 0.0, 5.0, 7.0])));
+        let s = FlickSummary::from_flicks(&fl);
+        // Delays 2·DT and 4·DT; the miss that never entered is left out.
+        let median = s.median_click_delay_secs.unwrap();
+        assert!((median - 3.0 * DT).abs() < 1e-6, "{median}");
+        assert_eq!(s.flicks, 3);
+        assert!((s.hit_rate - 2.0 / 3.0).abs() < 1e-6);
+        assert_eq!(FlickSummary::from_flicks(&[]).median_click_delay_secs, None);
     }
 
     #[test]
