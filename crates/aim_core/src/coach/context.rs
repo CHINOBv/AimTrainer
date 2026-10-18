@@ -684,7 +684,10 @@ fn describe_fatigue(f: &FatigueSignal) -> Option<String> {
     })
 }
 
-fn snake_debug<T: std::fmt::Debug, S: Serializer>(v: &T, s: S) -> Result<S::Ok, S::Error> {
+pub(super) fn snake_debug<T: std::fmt::Debug, S: Serializer>(
+    v: &T,
+    s: S,
+) -> Result<S::Ok, S::Error> {
     s.serialize_str(&snake_case(&format!("{v:?}")))
 }
 
