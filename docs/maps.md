@@ -282,7 +282,7 @@ At the first frame each bot life becomes visible to the player, the arena record
 
 ### Live coaching overlay
 
-The **Live coaching overlay** checkbox on the Arenas tab (off by default, kept until the app closes) shows, while an arena runs, what the post-run crosshair placement metric measures, live. `ArenaSession::coaching()` computes the values each frame as a pure read (it changes nothing and draws no random number); the app only draws them:
+The **Live coaching overlay** checkbox on the Arenas tab (off by default, saved in settings as `arena_coaching`) shows, while an arena runs, what the post-run crosshair placement metric measures, live. `ArenaSession::coaching()` computes the values each frame as a pure read (it changes nothing and draws no random number); the app only draws them:
 
 - **Nearest corner:** among the map's exposed corners (`MapDef::exposed_corners` from the player's eye), the one at the smallest angle from the crosshair, and that angle. Within `COACH_CORNER_TOLERANCE_DEG` (5°, the pre-aim tolerance above) the player counts as holding it.
 - **Head level:** the crosshair's pitch minus the pitch of that corner's head point, signed (positive is above head level). Within `COACH_HEAD_LEVEL_TOLERANCE_DEG` (1°, an estimate: about a head's angular height at 15 m) it shows as on head level. A small gauge draws the crosshair dot against the head line.
