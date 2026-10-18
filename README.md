@@ -70,23 +70,23 @@ On Windows, install Rust with rustup and run `cargo build --release`. The binary
 | ADS zoom (weapons that have a scope) | Right mouse button |
 | Move (movement scenarios) | WASD, Shift to walk |
 | Pause / resume | Esc |
-| Restart the run as it is (scenarios and arenas, also paused or in the countdown; keeps an adaptive run's level and records nothing) | R (Settings → Gameplay keys) |
+| Restart the run as it is (scenarios and arenas, also paused or in the countdown; keeps an adaptive run's level and records nothing) | R (Settings → Keys) |
 | Change your floor height (scenario pause menu) | Floor height −/+ (0.5 m steps), then Apply and restart |
 | Tune target size, distance and speed (scenario pause menu; tuned runs are saved apart and never move the adaptive level or the benchmark) | Size / Distance / Target speed −/+ (10% steps, 50–200%), then Apply and restart; Reset to scenario defaults |
 | Retry or next routine run (on the results screen) | Space |
 
-The menu tabs:
+The menu tabs (keys 1–8 switch tabs while no text field has focus):
 
 | Tab | What it holds |
 |---|---|
-| Today | The day's method session, the daily challenge, daily missions |
+| Today | Quick play (your last scenario) and Continue (a routine you started today), the day's method session, the daily challenge, daily missions |
 | Progress | Goal, readiness, fatigue, trend, per-skill strengths and trends, bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
-| Scenarios | Play, or play adaptively |
+| Scenarios | Search and filter (category, click or hold, moving or standing, waves); ★ pins a scenario to Favourites (saved as `favorites` in `settings.toml`); Recent lists your last 5 scenarios. Play, or play adaptively |
 | Routines | The routines (resume a split one), your personalized playlist |
 | Arenas | Deathmatch, site hold, angle clearing, jiggle-peek and pre-aim drills; a Practice button plays any arena with bots that never shoot |
 | Benchmark | Your benchmark energy and ranks, at novice, intermediate or advanced tier |
 | Tools | Sensitivity converter (360°, monitor distance 0/75/100%), sensitivity finder, system check |
-| Settings | Sensitivity, DPI check, crosshair, sound, hit feedback, profile code, hotkeys |
+| Settings | Sub-tabs: Sensitivity (DPI check, profile code), Crosshair, Feedback (hit feedback, game feel), Audio, Overlay, Keys, Training. A search box filters every section; each sub-tab has a reset to defaults. Changes save automatically ("Saved ✔") |
 
 ## Command line
 
@@ -136,7 +136,7 @@ Other commands: `aimtrainer show` and `aimtrainer hide`.
 
 ### Windows and X11
 
-The trainer registers three global hotkeys (defaults below). To change one, open **Settings → Global hotkeys**, click **Record** and press the new combination; Esc cancels and **Clear** disables the hotkey. A key needs Ctrl, Alt or Shift unless it is an F-key, so a hotkey never fires while you type. The change applies immediately, no restart needed. Recording stops after 10 s or when the window loses focus. A combination already used by another hotkey is flagged and only the first one is registered.
+The trainer registers three global hotkeys (defaults below). To change one, open **Settings → Keys → Global hotkeys**, click **Record** and press the new combination; Esc cancels and **Clear** disables the hotkey. A key needs Ctrl, Alt or Shift unless it is an F-key, so a hotkey never fires while you type. The change applies immediately, no restart needed. Recording stops after 10 s or when the window loses focus. A combination already used by another hotkey is flagged and only the first one is registered.
 
 | Hotkey | Action |
 |---|---|
@@ -150,7 +150,9 @@ The trainer is a separate window. It does not read game memory or inject input. 
 
 ## Sensitivity setup
 
-Open Settings and enter:
+On the very first start (no `settings.toml` yet) a short wizard asks for your game, sensitivity, DPI and feedback preset (Minimal / Standard / Juicy). Skip it at any step; it is not shown again, and players with an existing settings file never see it (`first_run_done` in `settings.toml`).
+
+To change them later, open **Settings → Sensitivity** and enter:
 
 - your **VALORANT sensitivity**;
 - your **DPI**;
@@ -159,6 +161,8 @@ Open Settings and enter:
 Then use **DPI check**: move the mouse exactly 10 cm along a ruler. The measured DPI should be within a few percent of the DPI you configured. If it isn't, you have OS mouse acceleration on or the wrong DPI.
 
 ## Feel settings
+
+Every key below has a control in **Settings → Feedback** (game feel) or **Settings → Audio** (sound): a checkbox, plus an intensity slider for toggles. The Feedback tab's preset picker (Minimal / Standard / Juicy) sets every feel key at once.
 
 Game-feel effects live in the `[feel]` table of `settings.toml`. Missing keys take the Standard preset, which keeps the look of effects that already existed (the red damage flash stays on at its usual strength). A toggle is a table with `enabled` and `intensity_percent` (100 = designed strength); a toggle table that leaves out `enabled` turns the effect on.
 

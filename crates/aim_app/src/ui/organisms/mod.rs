@@ -9,6 +9,7 @@ pub mod damage_indicator;
 pub mod death_screen;
 pub mod decision_panel;
 pub mod feedback_settings;
+pub mod first_run;
 pub mod flick_directions;
 pub mod health_bar;
 pub mod history_chart;

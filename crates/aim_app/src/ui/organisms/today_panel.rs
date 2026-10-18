@@ -1,6 +1,7 @@
 //! Today's session of the weekly method: skill of the day, tier, progress, start/resume.
 
 use crate::ui::atoms::{GOOD, WARN, big};
+use aim_core::training::resume::RoutinePosition;
 use bevy_egui::egui;
 
 /// Plain data the Today page shows.
@@ -60,7 +61,19 @@ pub struct RoutineModel {
     pub progress: Option<(usize, usize)>,
 }
 
+/// The Today page's shortcuts, shown even without a weekly method.
+pub struct QuickModel {
+    /// `(id, name)` of the scenario played last.
+    pub last_scenario: Option<(String, String)>,
+    /// An unfinished routine from today, with its name.
+    pub routine: Option<(RoutinePosition, String)>,
+}
+
 pub enum TodayAction {
+    /// Play the last scenario again.
+    QuickPlay(String),
+    /// Continue a routine started today where it stopped.
+    Continue(RoutinePosition),
     Challenge,
     SelectTier(String),
     Start(String),
@@ -152,9 +165,46 @@ fn routine_card(ui: &mut egui::Ui, r: &RoutineModel, action: &mut Option<TodayAc
     }
 }
 
+/// Minimum size of the shortcut buttons, points.
+const QUICK_BUTTON: egui::Vec2 = egui::vec2(0.0, 30.0);
+
+/// "Quick play" and "Continue routine" buttons; nothing when neither applies.
+pub fn quick_bar(ui: &mut egui::Ui, m: &QuickModel) -> Option<TodayAction> {
+    let mut action = None;
+    if m.last_scenario.is_none() && m.routine.is_none() {
+        return None;
+    }
+    ui.horizontal_wrapped(|ui| {
+        if let Some((id, name)) = &m.last_scenario
+            && ui
+                .add(egui::Button::new(format!("▶  Quick play: {name}")).min_size(QUICK_BUTTON))
+                .on_hover_text("Play the scenario you played last.")
+                .clicked()
+        {
+            action = Some(TodayAction::QuickPlay(id.clone()));
+        }
+        if let Some((pos, name)) = &m.routine
+            && ui
+                .add(
+                    egui::Button::new(format!(
+                        "⏵ Continue {name} (run {}/{})",
+                        pos.next_index + 1,
+                        pos.total_runs
+                    ))
+                    .min_size(QUICK_BUTTON),
+                )
+                .clicked()
+        {
+            action = Some(TodayAction::Continue(pos.clone()));
+        }
+    });
+    ui.separator();
+    action
+}
+
 pub fn today_panel(ui: &mut egui::Ui, m: &TodayModel) -> Option<TodayAction> {
     let mut action = None;
-    egui::ScrollArea::vertical().show(ui, |ui| {
+    egui::ScrollArea::vertical().id_salt("today").show(ui, |ui| {
         ui.label(big(format!("{} · {}", m.weekday, m.method_name), 24.0));
         ui.label(&m.method_description);
         ui.add_space(8.0);

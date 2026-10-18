@@ -92,6 +92,16 @@ pub struct Settings {
     pub arena_coaching: bool,
     /// Game-feel effects (HUD indicators, transitions, crosshair extras).
     pub feel: FeelSettings,
+    /// Scenario ids starred in the scenario list, in the order they were starred.
+    pub favorites: Vec<String>,
+    /// The first-run wizard was finished or skipped. False only for a new player (no
+    /// settings file yet); a file without this key comes from an existing player.
+    #[serde(default = "first_run_done_in_old_files")]
+    pub first_run_done: bool,
+}
+
+fn first_run_done_in_old_files() -> bool {
+    true
 }
 
 /// VALORANT's "Enemy Highlight Color" options (General → Accessibility), applied to
@@ -398,13 +408,6 @@ impl FeelSettings {
     }
 
     /// Set every toggle to `preset`'s values.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the settings UI and first-run wizard will apply presets"
-        )
-    )]
     pub fn apply_preset(&mut self, preset: FeelPreset) {
         *self = Self::for_preset(preset);
     }
@@ -440,6 +443,8 @@ impl Default for Settings {
             sens_randomizer: RandomizerConfig::default(),
             arena_coaching: false,
             feel: FeelSettings::default(),
+            favorites: Vec::new(),
+            first_run_done: false,
         }
     }
 }
@@ -521,15 +526,21 @@ fn set_legacy_color(crosshair: &mut Crosshair, rgb: [f32; 3]) {
 impl Settings {
     pub fn load(paths: &Paths) -> Self {
         match fs::read_to_string(&paths.settings_file) {
-            Ok(src) => toml::from_str(&src).unwrap_or_else(|e| {
-                bevy::log::warn!(
-                    "invalid {}: {e}; using defaults",
-                    paths.settings_file.display()
-                );
-                Self::default()
-            }),
+            Ok(src) => Self::parse(&src),
             Err(_) => Self::default(),
         }
+    }
+
+    /// Settings from an existing file's text; invalid text falls back to the defaults.
+    fn parse(src: &str) -> Self {
+        toml::from_str(src).unwrap_or_else(|e| {
+            bevy::log::warn!("invalid settings file: {e}; using defaults");
+            // The file exists, so this is not a new player.
+            Self {
+                first_run_done: true,
+                ..Self::default()
+            }
+        })
     }
 
     pub fn save(&self, paths: &Paths) {
@@ -820,6 +831,40 @@ mod tests {
         assert_eq!(sound.volume_percent, 50);
         let text = toml::to_string_pretty(&settings).unwrap();
         assert_eq!(toml::from_str::<Settings>(&text).unwrap(), settings);
+    }
+
+    #[test]
+    fn favorites_are_empty_for_old_settings_files_and_round_trip() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert!(old.favorites.is_empty());
+        let starred = Settings {
+            favorites: vec!["flick-headshot".into(), "track-precise".into()],
+            ..Settings::default()
+        };
+        let text = toml::to_string_pretty(&starred).unwrap();
+        assert_eq!(toml::from_str::<Settings>(&text).unwrap(), starred);
+    }
+
+    #[test]
+    fn the_first_run_wizard_shows_only_without_a_settings_file() {
+        assert!(
+            !Settings::default().first_run_done,
+            "no settings file yet: a new player"
+        );
+        assert!(
+            Settings::parse("fullscreen = false").first_run_done,
+            "a file written before the wizard existed"
+        );
+        assert!(
+            Settings::parse("not = [valid").first_run_done,
+            "an unreadable file still means an existing player"
+        );
+        let pending = Settings::default();
+        let text = toml::to_string_pretty(&pending).unwrap();
+        assert!(
+            !Settings::parse(&text).first_run_done,
+            "a file saved while the wizard is still open keeps it open"
+        );
     }
 
     #[test]

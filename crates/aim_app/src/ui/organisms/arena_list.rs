@@ -14,7 +14,7 @@ pub fn arena_list(
     coaching: &mut bool,
 ) -> Option<UiAction> {
     let mut action = None;
-    egui::ScrollArea::vertical().show(ui, |ui| {
+    egui::ScrollArea::vertical().id_salt("arenas").show(ui, |ui| {
         ui.label(
             "Bots move with VALORANT movement and shoot back. Maps are original training layouts.",
         );
