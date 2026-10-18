@@ -77,3 +77,11 @@ Rules that hold for every spec:
   - Writer notes:
     - T6: kills and endless runs still stop at `duration_secs` as a cap; `phase-peek-ladder` fails at 5 misses (3 failed the simulated contender too early).
     - T7: Bevy spatial audio cannot tell front from back, so cues are panned in stereo with a muffled rear; a detection click counts anywhere on screen.
+- L6 (2026-10-18) Independent verifier: 14 of 15 specs pass; S1 was partial on one blocker, now fixed in cc295f7.
+  - **B1:** `mirror_strafe_chance` / `oppose_strafe_chance` were accepted without `player.movement`, and `shot_juke_chance` with hold fire. Both never act. `validate()` now refuses them, and so does `avoid_recent > 1` without `avoid_last_deg`. RED was observed first.
+  - A stray `git stash` briefly hid the fix during one re-run. The fix was restored and re-verified: all tests pass; clippy clean; calibrate identical to the pre-fix run.
+  - Advisories kept:
+    - `speed_scale` on a static target (it may still scale retreats; T2's own test uses it);
+    - the `phase-peek-ladder` simulated contender fails at the finale;
+    - the `phase-kill-race` 0.75 warm-up gate is above the contender's 0.61 accuracy on 2 of 5 seeds.
+  - Invariants: 30 baseline calibrate rows identical; earlier analysis output and RunReport rows identical (matching 227 812-byte dumps); baseline settings files load unchanged; arena golden passes.
