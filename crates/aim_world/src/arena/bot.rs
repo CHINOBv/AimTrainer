@@ -245,7 +245,7 @@ impl Bot {
                         ctx.map
                             .cover_from(ctx.cover_spots, threat, feet, RETREAT_MAX_ROUTE_M)
                 {
-                    *retreat = Retreat::start(spot, feet);
+                    *retreat = Retreat::start(spot, feet, ctx.now);
                 }
                 let sense = RetreatSense {
                     now: ctx.now,

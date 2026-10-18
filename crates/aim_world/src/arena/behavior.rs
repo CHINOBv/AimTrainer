@@ -147,6 +147,11 @@ pub const COVER_HOLD_SECS: Range = Range::new(0.6, 1.4);
 /// Distance under which a bot counts as having reached its cover spot or its re-peek spot,
 /// meters.
 const RETREAT_ARRIVE: f32 = 0.3;
+/// Longest a bot runs for cover before it gives up and fights again, seconds. A design
+/// choice: the longest cover route ([`super::RETREAT_MAX_ROUTE_M`], about 1.5 s at rifle run
+/// speed) plus a margin, so a bot whose spot turns out unreachable (collision sliding)
+/// never flees forever with its fire held.
+pub const RETREAT_GIVE_UP_SECS: f32 = 2.5;
 
 /// The fall-back of a roaming bot that was shot: run to a cover spot out of the shooter's
 /// sight, hide there for [`COVER_HOLD_SECS`], then walk back to where it was hit and fight
@@ -156,8 +161,12 @@ pub(crate) enum Retreat {
     /// Not falling back: the bot roams and fights as usual.
     #[default]
     Off,
-    /// Running to `spot`; it will re-peek `back_to`.
-    ToCover { spot: Vec3, back_to: Vec3 },
+    /// Running to `spot` until `give_up_at` at the latest; it will re-peek `back_to`.
+    ToCover {
+        spot: Vec3,
+        back_to: Vec3,
+        give_up_at: f32,
+    },
     /// Hiding on `spot` until `until`.
     Hiding {
         spot: Vec3,
@@ -178,24 +187,28 @@ pub(crate) struct RetreatSense {
 }
 
 impl Retreat {
-    /// Start falling back to `spot` from `feet`, the place the bot will re-peek.
-    pub fn start(spot: Vec3, feet: Vec3) -> Self {
+    /// Start falling back at `now` to `spot` from `feet`, the place the bot will re-peek.
+    pub fn start(spot: Vec3, feet: Vec3, now: f32) -> Self {
         Self::ToCover {
             spot,
             back_to: feet,
+            give_up_at: now + RETREAT_GIVE_UP_SECS,
         }
     }
 
     /// The state after this frame. A bot running to cover keeps running even if it still
-    /// sees the player; a hiding or re-peeking bot that sees the player stops to fight.
+    /// sees the player, until [`RETREAT_GIVE_UP_SECS`]; a hiding or re-peeking bot that sees
+    /// the player stops to fight.
     pub fn next(self, s: &RetreatSense, rng: &mut Rng) -> Self {
         let at = |p: Vec3| (p - s.feet).horizontal().length() < RETREAT_ARRIVE;
         match self {
-            Self::ToCover { spot, back_to } if at(spot) => Self::Hiding {
+            Self::ToCover { spot, back_to, .. } if at(spot) => Self::Hiding {
                 spot,
                 back_to,
                 until: s.now + rng.in_range(COVER_HOLD_SECS),
             },
+            // The spot is out of reach (blocked or sliding along a wall): fight again.
+            Self::ToCover { give_up_at, .. } if s.now >= give_up_at => Self::Off,
             Self::Hiding { .. } | Self::Repeek { .. } if s.fighting => Self::Off,
             Self::Hiding { back_to, until, .. } if s.now >= until => Self::Repeek { back_to },
             Self::Repeek { back_to } if at(back_to) => Self::Off,
@@ -374,7 +387,7 @@ mod tests {
     fn a_shot_bot_runs_to_cover_hides_then_repeeks_where_it_was_hit() {
         let mut rng = Rng::new(6);
         let (spot, hit_at) = (Vec3::new(4.0, 0.0, 0.0), Vec3::ZERO);
-        let running = Retreat::start(spot, hit_at);
+        let running = Retreat::start(spot, hit_at, 0.0);
         assert!(running.fleeing());
         assert_eq!(running.goal(), Some(spot));
         assert_eq!(
@@ -428,7 +441,25 @@ mod tests {
         };
         repeek.next(&at(1.0, 0.0, false), &mut rng);
         Retreat::Off.next(&at(1.0, 0.0, true), &mut rng);
-        Retreat::start(Vec3::new(5.0, 0.0, 0.0), Vec3::ZERO).next(&at(1.0, 0.0, false), &mut rng);
+        let running = Retreat::start(Vec3::new(5.0, 0.0, 0.0), Vec3::ZERO, 0.0);
+        running.next(&at(1.0, 0.0, false), &mut rng);
+        running.next(&at(RETREAT_GIVE_UP_SECS, 0.0, false), &mut rng);
         assert_eq!(rng.next_u64(), probe.next_u64(), "no random draw");
+    }
+
+    #[test]
+    fn a_bot_that_cannot_reach_its_cover_gives_up_and_fights_again() {
+        let mut rng = Rng::new(9);
+        // Stuck short of the spot (e.g. sliding along a wall): the feet never arrive.
+        let running = Retreat::start(Vec3::new(4.0, 0.0, 0.0), Vec3::ZERO, 1.0);
+        let stuck = 1.5;
+        let cap = 1.0 + RETREAT_GIVE_UP_SECS;
+        let before = running.next(&at(cap - 0.01, stuck, false), &mut rng);
+        assert_eq!(before, running, "still running before the cap");
+        assert!(before.fleeing());
+        let after = running.next(&at(cap, stuck, false), &mut rng);
+        assert_eq!(after, Retreat::Off, "gives up the unreachable spot");
+        assert!(!after.fleeing(), "fires again");
+        assert_eq!(after.goal(), None, "back to roaming");
     }
 }
