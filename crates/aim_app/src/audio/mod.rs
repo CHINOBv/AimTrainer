@@ -113,11 +113,7 @@ impl Iterator for ClipDecoder {
 
 impl Source for ClipDecoder {
     fn current_span_len(&self) -> Option<usize> {
-        Some(if self.pos >= self.samples.len() {
-            0
-        } else {
-            self.samples.len()
-        })
+        Some(self.samples.len().saturating_sub(self.pos))
     }
 
     fn channels(&self) -> ChannelCount {
@@ -192,6 +188,19 @@ fn play_sounds(
 mod tests {
     use super::*;
     use bevy::ecs::system::assert_is_system;
+
+    #[test]
+    fn span_len_counts_the_samples_left() {
+        let mut decoder = ClipDecoder {
+            samples: vec![0.0; 4].into(),
+            pos: 0,
+        };
+        assert_eq!(decoder.current_span_len(), Some(4));
+        decoder.next();
+        assert_eq!(decoder.current_span_len(), Some(3));
+        decoder.by_ref().for_each(drop);
+        assert_eq!(decoder.current_span_len(), Some(0));
+    }
 
     #[test]
     fn systems_have_no_conflicting_access() {
