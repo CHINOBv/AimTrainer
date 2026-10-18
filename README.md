@@ -12,10 +12,10 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - Rifle and knife speeds and the stopping curves Riot measured.
   - Shots above 27.5% of run speed are inaccurate.
 - **Training content**
-  - **30 exercises as TOML files**, with difficulty levels generated from one definition. They include **precision rings** (more points near the center) and a **go/no-go** drill (leave the decoys alone).
+  - **38 exercises as TOML files**, with difficulty levels generated from one definition. They include **precision rings** (more points near the center), a **go/no-go** drill (leave the decoys alone), **reactive targets** that mirror your strafe, dodge your crosshair and change behaviour when hit, **multi-phase** drills with fail conditions and kill goals, **sound localisation**, **peripheral detection** and **radar recall**.
   - **Spray and burst drills** with a recoil model built on Riot's published parameters.
   - **Ammo-economy clicking.**
-  - **Arenas:** deathmatch, a site hold (stop bots from capturing a site), angle clearing, jiggle-peek and pre-aim drills against bots that peek, strafe and hold like VALORANT players, on original maps (TOML or glTF).
+  - **Arenas:** deathmatch, a site hold (stop bots from capturing a site), angle clearing, jiggle-peek and pre-aim drills against bots that peek, strafe and hold like VALORANT players, on original maps (TOML or glTF). Bots can react to your strafe and shots, follow behaviour rules and shoot back when a kill takes too long. An optional **live coaching overlay** shows crosshair height at the nearest corner and movement accuracy.
 - **How to train**
   - A **weekly method** in the style of VDIM: one skill per day, drills → variants → benchmark, with tiers.
   - Interleaved routines and a **personalized playlist**.
@@ -28,18 +28,21 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - **Fatigue warnings.**
   - **Daily goals and streaks.**
   - A **daily challenge** that everyone plays with the same seed.
+  - **Compound daily missions** built from your own recent bests (for example "accuracy ≥ 75% AND kills ≥ 62"), with mastery missions and a low/medium/high commitment level.
 - **Feedback**
   - Flick and tracking analysis with explained recommendations.
-  - **Run insights:** flicks by screen direction and distance, click timing, pace and stamina, target priority, tracking speed match and edge time, and firing while moving. In arenas: peek timing.
+  - **Run insights:** flicks by screen direction and distance, click timing, pace and stamina, target priority, tracking speed match and edge time, and firing while moving. In arenas: peek timing. A **miss compass** shows whether you miss above or below the head, and a **potential score** names the one fix worth the most points.
   - A **sensitivity suggestion** from your recent flicks' over/undershoot, with the evidence shown. It is applied only when you choose to.
   - A **replay viewer** of your crosshair path: the trail is coloured by speed, and it has a hit/miss heatmap and a side-by-side comparison with an earlier run.
   - Benchmark trends and personal bests.
   - Offline **post-match analysis** of official match files.
 - **Your setup**
   - VALORANT **crosshair codes** (import and export).
+  - **Target visibility:** VALORANT's enemy highlight colours (red, purple for tritanopia, yellow for deuteranopia/protanopia) or any custom colour, an optional target outline with colour and thickness, and an environment tint for the floor grid.
   - **Sound effects** for hits, headshots, kills and (optionally) misses, synthesized in code: several presets, a volume slider and previews.
   - Subtle **hit feedback**: a short, semi-transparent hit marker (crosshair flash, dot, cross, ring or brackets; color and duration) and a target effect (flash, pop, fade or ring burst). Each can be turned off.
   - A shareable **profile code**.
+  - An opt-in **sensitivity randomiser drill**: a random multiplier within your range every few seconds, shown on the HUD. Your saved sensitivity never changes.
   - A **system check**: FPS, 1% lows, vsync, acceleration.
 
 The research behind the training is in [`docs/training-science.md`](docs/training-science.md), and the features are justified in [`docs/feature-analysis.md`](docs/feature-analysis.md).
@@ -76,7 +79,7 @@ The menu tabs:
 
 | Tab | What it holds |
 |---|---|
-| Today | The day's method session, the daily challenge |
+| Today | The day's method session, the daily challenge, daily missions |
 | Progress | Goal, readiness, fatigue, trend, per-skill strengths and trends, bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
 | Scenarios | Play, or play adaptively |
 | Routines | The routines (resume a split one), your personalized playlist |

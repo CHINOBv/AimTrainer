@@ -16,6 +16,24 @@ pub struct TodayModel {
     pub benchmark_energy: Option<f32>,
     pub day: DayModel,
     pub challenge: Option<ChallengeModel>,
+    pub missions: MissionsModel,
+}
+
+/// Today's compound missions.
+pub struct MissionsModel {
+    pub commitment: &'static str,
+    pub missions: Vec<MissionModel>,
+}
+
+pub struct MissionModel {
+    pub scenario_id: String,
+    pub scenario_name: String,
+    /// Each condition, for example "accuracy ≥ 75%".
+    pub conditions: Vec<String>,
+    pub mastery: bool,
+    pub done: bool,
+    /// Most conditions met in a single run today.
+    pub best_met: usize,
 }
 
 /// Today's daily challenge: same scenario and targets for every player.
@@ -48,6 +66,44 @@ pub enum TodayAction {
     Start(String),
     Resume(String),
     WarmUp,
+    /// Play a mission's scenario.
+    PlayMission(String),
+}
+
+fn missions_section(ui: &mut egui::Ui, m: &MissionsModel, action: &mut Option<TodayAction>) {
+    ui.heading("Daily missions");
+    ui.small(format!(
+        "Commitment: {} (change it in Settings). Every condition must hold in the same run; targets come from your recent bests.",
+        m.commitment
+    ));
+    if m.missions.is_empty() {
+        ui.label("Play any scenario at its normal difficulty to unlock missions built from your own scores.");
+        return;
+    }
+    for (i, mission) in m.missions.iter().enumerate() {
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            let title = if mission.mastery {
+                format!("★ Mastery · {}", mission.scenario_name)
+            } else {
+                mission.scenario_name.clone()
+            };
+            ui.strong(title);
+            if mission.done {
+                ui.colored_label(GOOD, "✔ done");
+            } else {
+                ui.small(format!(
+                    "best run today: {}/{} conditions",
+                    mission.best_met,
+                    mission.conditions.len()
+                ));
+                if ui.push_id(i, |ui| ui.button("▶  Play")).inner.clicked() {
+                    *action = Some(TodayAction::PlayMission(mission.scenario_id.clone()));
+                }
+            }
+        });
+        ui.label(mission.conditions.join("  AND  "));
+    }
 }
 
 fn routine_card(ui: &mut egui::Ui, r: &RoutineModel, action: &mut Option<TodayAction>) {
@@ -168,6 +224,8 @@ pub fn today_panel(ui: &mut egui::Ui, m: &TodayModel) -> Option<TodayAction> {
                 ui.small(best);
             });
         }
+        ui.separator();
+        missions_section(ui, &m.missions, &mut action);
         ui.add_space(10.0);
         ui.small(&m.credit);
     });

@@ -2,7 +2,9 @@
 
 use super::behavior::{Phase, Push, Retreat};
 use super::bot::{Bot, Brain, Ctx, PEEK_DELAY_SECS, head_of, yaw_of};
+use super::coaching::Coaching;
 use super::def::{ArenaDef, ArenaError, ArenaMode, PRACTICE_SUFFIX, SiteObjective, bot_profile};
+use crate::corner::PeekCorner;
 use crate::map::{DEFAULT_PLAYER_RADIUS, MapDef, SpawnKind};
 use aim_core::activity::{Activity, ActivityEvent};
 use aim_core::games::valorant::{HumanoidDims, Weapon, WeaponStats};
@@ -103,6 +105,10 @@ pub struct ArenaStats {
     /// to the kill, to line of sight breaking, or to the player's death. An exposure still
     /// open when the run ends adds nothing.
     pub exposure_times_secs: Vec<f32>,
+    /// Shoot-back deadline: bot lives killed before their deadline (0 without a deadline).
+    pub deadline_kills: u32,
+    /// Shoot-back deadline: sure shots bots landed because their deadline passed.
+    pub deadline_hits: u32,
 }
 
 /// The first exposure of a bot life while it lasts, for peek efficiency.
@@ -212,6 +218,8 @@ pub struct ArenaSession {
     roam_points: Vec<Vec3>,
     /// The map's cover spots, computed once.
     cover_spots: Vec<Vec3>,
+    /// The map's peek corners, computed once, for live coaching.
+    corners: Vec<PeekCorner>,
     /// Angle clear: index into the mode's angle list of the angle being cleared.
     angle_index: usize,
     /// Bots ignore the player until this time (spawn grace).
@@ -222,6 +230,8 @@ pub struct ArenaSession {
     site: Option<Site>,
     /// Bot lives in their first exposure, for peek efficiency.
     engagements: Vec<Engagement>,
+    /// The player fired this frame; reactive bots see it in the next frame.
+    shot_fired: bool,
 }
 
 /// The aimer preset angle bots use for flick speed and endpoint error; their reaction time
@@ -270,12 +280,14 @@ impl ArenaSession {
             stats: ArenaStats::default(),
             roam_points,
             cover_spots: map.cover_spots(),
+            corners: map.peek_corners(),
             angle_index: 0,
             // Entering the arena is a spawn too.
             grace_until: RESPAWN_GRACE_SECS,
             practice: false,
             site: None,
             engagements: Vec::new(),
+            shot_fired: false,
             def,
             map,
         };
@@ -386,6 +398,28 @@ impl ArenaSession {
         self.player_speed() <= self.profile.accuracy_speed_limit()
     }
 
+    /// Live coaching values for this frame: crosshair placement against head height at
+    /// the exposed corner nearest to the crosshair (`MapDef::exposed_corners`), and
+    /// movement accuracy. A pure read: it changes nothing and draws no random number.
+    pub fn coaching(&self) -> Coaching {
+        let eye = self.eye_position();
+        let view = self.player.view;
+        let dir = view.direction();
+        let nearest = self
+            .map
+            .exposed_corners(&self.corners, eye)
+            .map(|c| (angle_between_deg(dir, c.head - eye), c.head))
+            .min_by(|a, b| a.0.total_cmp(&b.0));
+        Coaching {
+            corner: nearest.map(|(_, head)| head),
+            corner_offset_deg: nearest.map(|(offset, _)| offset),
+            head_level_error_deg: nearest
+                .map(|(_, head)| view.pitch_deg - ViewAngles::from_direction(head - eye).pitch_deg),
+            speed: self.player_speed(),
+            accurate: self.is_accurate(),
+        }
+    }
+
     /// The site objective, if the arena has one.
     pub fn objective(&self) -> Option<ObjectiveStatus> {
         self.site.as_ref().map(|s| ObjectiveStatus {
@@ -417,10 +451,12 @@ impl ArenaSession {
 
         self.move_player(input, dt);
         self.update_bots(dt, &mut events);
+        self.shot_fired = false;
         self.update_player_sight();
         if input.fire_pressed {
             self.player_shoot(&mut events);
         }
+        self.apply_deadlines(&mut events);
         self.respawn_bots();
         self.update_site(dt);
         events.append(&mut self.pending);
@@ -443,6 +479,11 @@ impl ArenaSession {
             score: s.kills as f32 * KILL_POINTS - s.deaths as f32 * DEATH_POINTS
                 + s.headshots as f32 * HEADSHOT_BONUS
                 + s.pre_aimed as f32 * PRE_AIM_POINTS
+                - self
+                    .def
+                    .mode
+                    .deadline()
+                    .map_or(0.0, |d| s.deadline_hits as f32 * d.penalty_points)
                 + if self.site_held() {
                     SITE_HELD_BONUS
                 } else {
@@ -566,6 +607,7 @@ impl ArenaSession {
             &mut self.rng,
         );
         self.player.last_shot_at = self.time;
+        self.shot_fired = true;
         self.stats.shots += 1;
         for e in self.engagements.iter_mut().filter(|e| !e.shot) {
             e.shot = true;
@@ -610,6 +652,7 @@ impl ArenaSession {
         bot.health -= dmg;
         // A bot that survives knows where the shot came from (roaming bots fall back).
         bot.shot_from = Some(ray.origin);
+        bot.last_hit_at = now;
         if bot.health <= 0.0 {
             bot.alive = false;
             bot.died_at = now;
@@ -617,6 +660,14 @@ impl ArenaSession {
             let ttk = now - bot.first_seen_at.unwrap_or(now);
             self.stats.kills += 1;
             self.stats.kill_times.push(ttk);
+            if self
+                .def
+                .mode
+                .deadline()
+                .is_some_and(|d| !bot.deadline_hit && ttk < d.secs)
+            {
+                self.stats.deadline_kills += 1;
+            }
             end_exposure(&mut self.engagements, &mut self.stats, bot.id, now);
             events.push(ArenaEvent::BotKilled {
                 id: bot.id,
@@ -649,6 +700,14 @@ impl ArenaSession {
         };
         let site = self.site.as_ref().map(|s| s.center);
         let shoot_back = self.def.mode.bots_shoot_back();
+        // Cloned so the loop can damage the player; empty for arenas without rules.
+        let (reactive, rules) = match &self.def.mode {
+            ArenaMode::Deathmatch {
+                reactive, rules, ..
+            } => (*reactive, rules.clone()),
+            ArenaMode::AngleClear { .. } => (None, Vec::new()),
+        };
+        let player_vel = self.player.vel.to_world(self.player.view.yaw_deg);
         for i in 0..self.bots.len() {
             let ctx = Ctx {
                 map: &self.map,
@@ -665,12 +724,18 @@ impl ArenaSession {
                 cover_spots: &self.cover_spots,
                 bot_strafe,
                 site,
+                player_view: self.player.view,
+                player_vel,
+                player_fired: self.shot_fired,
+                reactive,
+                rules: &rules,
+                player_speed: self.player.vel.speed(),
             };
             let bot = &mut self.bots[i];
             let landed = bot.think(&ctx, &mut self.rng);
             let can_fire = self.time - bot.last_shot_at >= 1.0 / self.bot_weapon.fire_rate;
             // A strafing bot waits for the slow moment of its counter-strafe to fire.
-            let steady = !bot_strafe
+            let steady = !bot.careful_fire
                 || bot.vel.horizontal().length() <= self.bot_movement.accuracy_speed_limit();
             if !(landed && shoot_back && can_fire && steady) {
                 continue;
@@ -694,13 +759,45 @@ impl ArenaSession {
                 .filter(|&(t, _)| self.map.raycast(ray, t).is_none());
             if let Some((_, zone)) = hit {
                 let dmg = Self::damage(&self.bot_weapon, zone);
-                self.player.health -= dmg;
-                self.stats.damage_taken += dmg;
-                events.push(ArenaEvent::PlayerHit { damage: dmg });
-                if self.player.health <= 0.0 {
-                    events.push(ArenaEvent::PlayerDied);
-                    self.player_died();
-                }
+                self.damage_player(dmg, events);
+            }
+        }
+    }
+
+    fn damage_player(&mut self, dmg: f32, events: &mut Vec<ArenaEvent>) {
+        self.player.health -= dmg;
+        self.stats.damage_taken += dmg;
+        events.push(ArenaEvent::PlayerHit { damage: dmg });
+        if self.player.health <= 0.0 {
+            events.push(ArenaEvent::PlayerDied);
+            self.player_died();
+        }
+    }
+
+    /// Shoot-back deadline: every living bot the player first saw at least `secs` ago and
+    /// has not killed lands one sure shot per life, as soon as it has line of sight to the
+    /// targetable player. Never in practice; no random draw.
+    fn apply_deadlines(&mut self, events: &mut Vec<ArenaEvent>) {
+        let Some(deadline) = self.def.mode.deadline() else {
+            return;
+        };
+        if self.practice || self.time < self.grace_until {
+            return;
+        }
+        for i in 0..self.bots.len() {
+            let b = &self.bots[i];
+            let due = b.alive
+                && !b.deadline_hit
+                && b.first_seen_at
+                    .is_some_and(|seen| self.time - seen >= deadline.secs)
+                && self.map.visible_head(b.eye(), self.player.feet);
+            if !due {
+                continue;
+            }
+            self.bots[i].deadline_hit = true;
+            self.stats.deadline_hits += 1;
+            if deadline.damage > 0.0 {
+                self.damage_player(deadline.damage, events);
             }
         }
     }
@@ -881,7 +978,8 @@ impl ArenaSession {
                 retreat: Retreat::default(),
             },
         };
-        let bot = Bot::new(id, feet, yaw, brain);
+        let mut bot = Bot::new(id, feet, yaw, brain);
+        bot.spawned_at = self.time;
         match slot {
             Some(i) => self.bots[i] = bot,
             None => self.bots.push(bot),

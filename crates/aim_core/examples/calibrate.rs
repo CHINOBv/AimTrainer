@@ -1,8 +1,11 @@
 //! Print simulated scores per aimer profile for every built-in scenario.
 //! Used to generate provisional benchmark thresholds: `cargo run -p aim_core --release --example calibrate`.
+//!
+//! Scenarios with phases, fail conditions or a non-time end get one more line: how far the
+//! contender got and how often its runs failed.
 
-use aim_core::scenario::builtin;
-use aim_core::sim::{AimerProfile, simulate};
+use aim_core::scenario::{RunOutcome, ScenarioDef, Session, builtin};
+use aim_core::sim::{AimerProfile, SimAimer, simulate};
 
 const SEEDS: [u64; 5] = [1, 2, 3, 4, 5];
 
@@ -25,5 +28,31 @@ fn main() {
         }
         let m = mid.unwrap();
         println!("{:>10.2}{:>8}", m.accuracy, m.kills);
+        if def.phases.is_some() || !def.fail.is_empty() || !def.end.is_time() {
+            print_run_rules(&def);
+        }
     }
+}
+
+/// The contender's phase reached (1-based) and outcome over every seed.
+fn print_run_rules(def: &ScenarioDef) {
+    const DT: f32 = 1.0 / 240.0;
+    let contender = AimerProfile::PRESETS[1];
+    let (mut phases, mut failed, mut secs) = (Vec::new(), 0, 0.0);
+    for seed in SEEDS {
+        let mut session = Session::new(def.clone(), seed);
+        let mut aimer = SimAimer::new(contender, seed);
+        while !session.is_finished() {
+            let input = aimer.input(&session, DT);
+            session.update(input);
+        }
+        phases.push(session.phase_index().map_or(0, |i| i + 1));
+        failed += usize::from(matches!(session.outcome(), Some(RunOutcome::Failed(_))));
+        secs += session.time() / SEEDS.len() as f32;
+    }
+    println!(
+        "  contender: phase reached {phases:?} of {}, failed {failed}/{}, mean {secs:.0} s",
+        def.phases.as_ref().map_or(0, Vec::len),
+        SEEDS.len()
+    );
 }

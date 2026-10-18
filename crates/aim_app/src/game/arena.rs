@@ -146,6 +146,7 @@ fn look(
     motion: Res<AccumulatedMouseMotion>,
     buttons: Res<ButtonInput<MouseButton>>,
     settings: Res<Settings>,
+    drill: Res<super::SensDrill>,
     mut run: ResMut<ArenaRun>,
 ) {
     if run.paused {
@@ -160,7 +161,7 @@ fn look(
     } else {
         settings.sensitivity.deg_per_count()
     };
-    run.view = apply_look(run.view, &motion, k);
+    run.view = apply_look(run.view, &motion, k * drill.multiplier());
 }
 
 /// Record the finished arena run and show the results screen.
@@ -230,6 +231,12 @@ impl ArenaFinisher<'_, '_> {
                     o.attackers
                 )
             });
+        }
+        if let Some(d) = run.session.def().mode.deadline() {
+            notes.push(format!(
+                "Deadline {:.1} s: {} kills before it, {} deadline hits taken",
+                d.secs, stats.deadline_kills, stats.deadline_hits
+            ));
         }
         self.commands.insert_resource(LastResult {
             name: run.session.def().name.clone(),

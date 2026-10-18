@@ -1,12 +1,16 @@
 //! Sound effects for shots: every clip is synthesized once at startup (`synth`), then
-//! played on the frame's strongest [`ShotFeedback`] and on settings previews.
+//! played on the frame's strongest [`ShotFeedback`] and on settings previews. Sound cues
+//! of perception drills are panned to where they come from (`cue`).
 
+pub mod cue;
 pub mod synth;
 
 use crate::game::feedback::{ShotFeedback, ShotOutcome, strongest};
 use crate::persistence::settings::{Settings, SoundSettings};
+use aim_core::scenario::cue::CueSound;
 use bevy::audio::{AddAudioSource, ChannelCount, Decodable, Sample, SampleRate, Source, Volume};
 use bevy::prelude::*;
+pub use cue::CueHeard;
 use std::collections::HashMap;
 use std::num::NonZero;
 use std::sync::Arc;
@@ -73,10 +77,27 @@ pub fn gain(volume_percent: u8) -> f32 {
 #[derive(Message, Debug, Clone, Copy, PartialEq)]
 pub struct SoundPreview(pub Clip);
 
-/// Mono samples rendered in memory, played without any decoder.
+/// Samples rendered in memory (mono, or interleaved stereo), played without any decoder.
 #[derive(Asset, TypePath, Debug, Clone)]
 pub struct SynthClip {
     samples: Arc<[f32]>,
+    channels: NonZero<u16>,
+}
+
+impl SynthClip {
+    fn mono(samples: Vec<f32>) -> Self {
+        Self {
+            samples: samples.into(),
+            channels: NonZero::<u16>::MIN,
+        }
+    }
+
+    fn stereo(interleaved: Vec<f32>) -> Self {
+        Self {
+            samples: interleaved.into(),
+            channels: NonZero::new(2).expect("two is non-zero"),
+        }
+    }
 }
 
 impl Decodable for SynthClip {
@@ -86,6 +107,7 @@ impl Decodable for SynthClip {
         ClipDecoder {
             samples: self.samples.clone(),
             pos: 0,
+            channels: self.channels,
         }
     }
 }
@@ -94,6 +116,7 @@ impl Decodable for SynthClip {
 pub struct ClipDecoder {
     samples: Arc<[f32]>,
     pos: usize,
+    channels: NonZero<u16>,
 }
 
 impl Iterator for ClipDecoder {
@@ -117,7 +140,7 @@ impl Source for ClipDecoder {
     }
 
     fn channels(&self) -> ChannelCount {
-        NonZero::<u16>::MIN
+        self.channels
     }
 
     fn sample_rate(&self) -> SampleRate {
@@ -125,8 +148,9 @@ impl Source for ClipDecoder {
     }
 
     fn total_duration(&self) -> Option<Duration> {
+        let frames = self.samples.len() / usize::from(self.channels.get());
         Some(Duration::from_secs_f64(
-            self.samples.len() as f64 / f64::from(SAMPLE_RATE),
+            frames as f64 / f64::from(SAMPLE_RATE),
         ))
     }
 }
@@ -134,6 +158,10 @@ impl Source for ClipDecoder {
 /// Every clip, built once so playing one never synthesizes or allocates samples.
 #[derive(Resource, Default)]
 struct SoundBank(HashMap<Clip, Handle<SynthClip>>);
+
+/// The mono sound of every cue, synthesized once; each cue is panned from it when heard.
+#[derive(Resource, Default)]
+struct CueBank(HashMap<CueSound, Vec<f32>>);
 
 pub struct SoundPlugin;
 
@@ -143,23 +171,47 @@ impl Plugin for SoundPlugin {
             .add_message::<SoundPreview>()
             .add_systems(Startup, build_bank)
             // After `Update`, so a shot is heard from the frame it was fired in.
-            .add_systems(PostUpdate, play_sounds);
+            .add_systems(PostUpdate, (play_sounds, play_cues));
     }
 }
 
 fn build_bank(mut commands: Commands, mut clips: ResMut<Assets<SynthClip>>) {
     let bank = Clip::all()
-        .filter_map(|clip| {
-            let samples = clip.samples()?;
-            Some((
-                clip,
-                clips.add(SynthClip {
-                    samples: samples.into(),
-                }),
-            ))
-        })
+        .filter_map(|clip| Some((clip, clips.add(SynthClip::mono(clip.samples()?)))))
         .collect();
     commands.insert_resource(SoundBank(bank));
+    let cues = [CueSound::Footsteps, CueSound::Gunshot]
+        .into_iter()
+        .map(|s| (s, synth::render(&synth::cue_recipe(s), 1.0)))
+        .collect();
+    commands.insert_resource(CueBank(cues));
+}
+
+/// Plays each sound cue of a perception drill, panned to where it comes from. Cues are
+/// the drill itself, so they play even with shot sound effects off; only a zero volume
+/// silences them.
+fn play_cues(
+    mut commands: Commands,
+    settings: Res<Settings>,
+    bank: Option<Res<CueBank>>,
+    mut clips: ResMut<Assets<SynthClip>>,
+    mut heard: MessageReader<CueHeard>,
+) {
+    let Some(bank) = bank else { return };
+    let volume = Volume::Linear(gain(settings.sound.volume_percent));
+    for cue in heard.read() {
+        let Some(mono) = bank.0.get(&cue.sound) else {
+            continue;
+        };
+        if settings.sound.volume_percent == 0 {
+            continue;
+        }
+        let handle = clips.add(SynthClip::stereo(cue::stereo(mono, cue::place(cue))));
+        commands.spawn((
+            AudioPlayer(handle),
+            PlaybackSettings::DESPAWN.with_volume(volume),
+        ));
+    }
 }
 
 fn play_sounds(
@@ -191,10 +243,7 @@ mod tests {
 
     #[test]
     fn span_len_counts_the_samples_left() {
-        let mut decoder = ClipDecoder {
-            samples: vec![0.0; 4].into(),
-            pos: 0,
-        };
+        let mut decoder = SynthClip::mono(vec![0.0; 4]).decoder();
         assert_eq!(decoder.current_span_len(), Some(4));
         decoder.next();
         assert_eq!(decoder.current_span_len(), Some(3));
@@ -206,6 +255,18 @@ mod tests {
     fn systems_have_no_conflicting_access() {
         assert_is_system(build_bank);
         assert_is_system(play_sounds);
+        assert_is_system(play_cues);
+    }
+
+    #[test]
+    fn stereo_clips_report_two_channels_and_their_length_in_frames() {
+        let clip = SynthClip::stereo(vec![0.0; 2 * SAMPLE_RATE as usize]);
+        let decoder = clip.decoder();
+        assert_eq!(decoder.channels().get(), 2);
+        assert_eq!(decoder.total_duration(), Some(Duration::from_secs(1)));
+        let mono = SynthClip::mono(vec![0.0; SAMPLE_RATE as usize]).decoder();
+        assert_eq!(mono.channels().get(), 1);
+        assert_eq!(mono.total_duration(), Some(Duration::from_secs(1)));
     }
 
     #[test]

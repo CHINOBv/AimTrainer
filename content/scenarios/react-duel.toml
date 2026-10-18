@@ -1,0 +1,37 @@
+id = "react-duel"
+name = "Reactive Duel"
+category = "reaction"
+description = """
+Duel an agent that holds its angle but reacts to you: it may copy or counter your A/D strafe,
+dodges when your crosshair gets close, and jukes when you fire. Once hit it strafes hard,
+and under half health it backs off. Three hits kill. Stop moving before you shoot."""
+
+[weapon]
+simulate_spread = true
+
+[player]
+movement = true
+bounds_x = [-3.0, 3.0]
+bounds_z = [-1.0, 1.0]
+
+[targets]
+shape = { kind = "humanoid" }
+spawn = { kind = "floor", x = [-3.0, 3.0], z = [-20.0, -14.0] }
+motion = { kind = "strafe", weapon = "vandal", change_secs = [0.5, 1.0], stop_chance = 0.8, max_offset = 2.5 }
+health = 3
+reactions = { mirror_strafe_chance = 0.3, oppose_strafe_chance = 0.3, dodge_within_deg = 2.5, shot_juke_chance = 0.35 }
+
+# Holds the angle, strafes when hit, retreats under 50% health.
+[[targets.behaviors]]
+when = { health_below = 0.5 }
+retreat_m = 4
+
+[[targets.behaviors]]
+when = { damaged_within_secs = 1.5 }
+motion = { kind = "dodge", weapon = "vandal", change_secs = [0.2, 0.45], juke_chance = 0.4, stop_chance = 0.1, max_offset = 2.5 }
+
+[scoring]
+head = 100
+body = 40
+legs = 25
+miss_penalty = 10

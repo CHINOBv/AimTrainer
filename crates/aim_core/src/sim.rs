@@ -97,6 +97,8 @@ pub struct SimAimer {
     plan: Option<Plan>,
     /// Go/no-go decoys the aimer recognized and decided to leave alone.
     ignored: Vec<u64>,
+    /// Detection drills: the last flash the aimer clicked.
+    answered: Option<u64>,
 }
 
 impl SimAimer {
@@ -108,6 +110,7 @@ impl SimAimer {
             view: ViewAngles::default(),
             plan: None,
             ignored: Vec::new(),
+            answered: None,
         }
     }
 
@@ -116,7 +119,7 @@ impl SimAimer {
     /// the aimer mistakes it for a match. Random draws happen only when decoys are on, so
     /// other scenarios keep their exact results.
     fn pick(&mut self, session: &Session) -> Option<Target> {
-        if session.def().targets.decoy_chance <= 0.0 {
+        if !has_decoys(session.def()) {
             return self.nearest(session);
         }
         self.ignored
@@ -178,6 +181,7 @@ impl SimAimer {
     pub fn input(&mut self, session: &Session, dt: f32) -> FrameInput {
         match session.def().weapon.fire {
             FireMode::Hold => self.track(session, dt),
+            FireMode::Click if is_detection(session.def()) => self.detect(session, dt),
             FireMode::Click => self.click(session, dt),
         }
     }
@@ -194,6 +198,32 @@ impl SimAimer {
             dt,
             view: self.view,
             fire_held: true,
+            ..Default::default()
+        }
+    }
+
+    /// Detection drills: keep the crosshair still and click once per flash, a reaction
+    /// time after it appears. With no flash showing the aimer sometimes clicks anyway, at
+    /// [`AimerProfile::decoy_mistake_chance`] times per second (an estimate). Random draws
+    /// happen only here, so other scenarios keep their exact results.
+    fn detect(&mut self, session: &Session, dt: f32) -> FrameInput {
+        let now = session.time();
+        let fire = match session.targets().next() {
+            Some(t) => {
+                let due = now >= t.visible_at + self.profile.reaction_secs;
+                let fire = due && self.answered != Some(t.id);
+                if fire {
+                    self.answered = Some(t.id);
+                }
+                fire
+            }
+            None => self.rng.next_f32() < self.profile.decoy_mistake_chance() * dt,
+        };
+        FrameInput {
+            dt,
+            view: self.view,
+            fire_pressed: fire,
+            fire_held: fire,
             ..Default::default()
         }
     }
@@ -233,7 +263,7 @@ impl SimAimer {
             let error = (self.gaussian() * sd, self.gaussian() * sd);
             let reaction = if corrective {
                 self.profile.reaction_secs * 0.5
-            } else if session.def().targets.decoy_chance > 0.0 {
+            } else if has_decoys(session.def()) {
                 self.profile.reaction_secs + self.profile.recognition_secs()
             } else {
                 self.profile.reaction_secs
@@ -271,6 +301,24 @@ impl SimAimer {
             ..Default::default()
         }
     }
+}
+
+/// Whether `def` has decoys to recognize: go/no-go decoys, or the targets a radar did not
+/// show (the aimer's memory of the radar errs like its recognition of a decoy).
+fn has_decoys(def: &ScenarioDef) -> bool {
+    def.targets.decoy_chance > 0.0
+        || def
+            .targets
+            .perception
+            .as_ref()
+            .is_some_and(|p| p.is_radar())
+}
+
+fn is_detection(def: &ScenarioDef) -> bool {
+    def.targets
+        .perception
+        .as_ref()
+        .is_some_and(|p| p.is_detection())
 }
 
 /// Run a whole scenario with a simulated aimer at a fixed timestep.
@@ -340,6 +388,76 @@ mod tests {
             assert!((r.score - score).abs() < 1e-2, "{id}: {}", r.score);
             assert_eq!((r.kills, r.expired), (kills, expired), "{id}");
         }
+    }
+
+    /// Results recorded before reactive targets, conditional behaviours, spawn rules,
+    /// regeneration and score decay existed. One scenario per spawn area, motion, fire mode
+    /// and weapon feature: scenarios that use none of the new blocks must keep their random
+    /// sequences, and so their exact results.
+    #[test]
+    fn scenarios_without_the_target_behaviour_blocks_simulate_exactly_as_before() {
+        let contender = AimerProfile::PRESETS[1];
+        let mut changed = Vec::new();
+        for (id, score, kills, shots, hits) in PINNED {
+            let mut session = Session::new(builtin(id), 9);
+            let mut aimer = SimAimer::new(contender, 9);
+            while !session.is_finished() {
+                let input = aimer.input(&session, 1.0 / 240.0);
+                session.update(input);
+            }
+            let s = session.stats();
+            let now = (s.score.to_bits(), s.kills, s.shots, s.hits);
+            if now != (score.to_bits(), kills, shots, hits) {
+                changed.push(format!(
+                    "(\"{id}\", {:?}, {}, {}, {})",
+                    s.score, s.kills, s.shots, s.hits
+                ));
+            }
+        }
+        assert!(changed.is_empty(), "{changed:#?}");
+    }
+
+    /// `(id, score, kills, shots, hits)` of a contender run with seed 9.
+    const PINNED: [(&str, f32, u32, u32, u32); 9] = [
+        ("flick-wide", 4460.0, 49, 71, 49),
+        ("switch-wide", 5265.0, 57, 86, 57),
+        ("counter-strafe", 4420.0, 47, 75, 47),
+        ("track-orbit", 3189.722, 0, 0, 0),
+        ("dodge-juke-heads", 4070.0, 51, 65, 51),
+        ("go-no-go", 150.0, 15, 41, 15),
+        ("precision-rings", 4525.0, 64, 93, 64),
+        ("spray-transfer", 6950.0, 8, 85, 67),
+        ("track-reactive-strafe", 1749.9491, 0, 0, 0),
+    ];
+
+    #[test]
+    fn perception_drills_simulate_deterministically_and_better_aimers_false_alarm_less() {
+        let p = AimerProfile::PRESETS[1];
+        for id in ["sound-turn", "peripheral-detect", "radar-recall"] {
+            assert_eq!(
+                simulate(&builtin(id), p, 5),
+                simulate(&builtin(id), p, 5),
+                "{id}"
+            );
+        }
+        let false_alarms = |profile: AimerProfile| {
+            (1..=5)
+                .map(|seed| {
+                    let mut session = Session::new(builtin("peripheral-detect"), seed);
+                    let mut aimer = SimAimer::new(profile, seed);
+                    while !session.is_finished() {
+                        let input = aimer.input(&session, 1.0 / 240.0);
+                        session.update(input);
+                    }
+                    session.stats().false_alarms
+                })
+                .sum::<u32>()
+        };
+        let (recruit, elite) = (
+            false_alarms(AimerProfile::PRESETS[0]),
+            false_alarms(AimerProfile::PRESETS[3]),
+        );
+        assert!(recruit > elite && elite > 0, "{recruit} vs {elite}");
     }
 
     /// Decoys shot and decoys left alone over five seeds.

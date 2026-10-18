@@ -133,6 +133,7 @@ Spreading the skills across the week does give VDIM spacing between sessions. Ou
 - Voltaic says changing sensitivity is not harmful for practice, and that a change can help break a plateau (verified, https://app.voltaic.gg/blog/muscle-memory).
 - No controlled evidence supports or rejects sensitivity randomization.
 - **Our default:** train at your exact VALORANT sensitivity. The trainer converts it to the same cm/360.
+- **Sensitivity randomiser drill (opt-in, off by default).** `aim_core::sensitivity::randomizer` changes the look sensitivity to a random multiplier of your own every interval. The defaults are ×0.8–×1.2 every 10 s, with optional easing between values. The bounds are limited to ×0.5–×2.0 and the interval to at least 2 s. It is deterministic per seed. The HUD shows the current multiplier. The saved sensitivity never changes, and sensitivity-finder tests never use the drill. Because no controlled evidence supports or rejects randomisation (above), the drill is offered as an occasional robustness exercise in the spirit of Voltaic's plateau advice. The default range and the limits are **estimates**.
 
 ## Analytics metrics
 
@@ -239,6 +240,30 @@ The 0.5 s window is an estimate: it covers the measured stop (0.16 s counter-str
 
 The results notes show the medians. Line of sight is checked from the player's eye to the bot's head, so the exposure approximates how long the player could be seen. Later re-peeks by the same bot life are not separate engagements. These are measurements only; no rule judges them yet.
 
+### Duel pressure (arenas)
+
+An arena can set a shoot-back deadline (`[mode.deadline]`, `docs/maps.md`): a bot the player has not killed within `secs` of first seeing it lands one sure shot. The aim is to train the time-to-kill side of a duel. In a real duel, a slow kill gives the enemy time to react and fire, and the bots' own reaction-and-flick model may be too slow or too kind to teach that. The deadline makes the cost explicit and repeatable: a kill before the deadline is counted (`deadline_kills`), a miss of it costs damage and points (`deadline_hits`).
+
+The deadline length is a design value per arena, not a measured number. About 1.5 s is a sensible start, an **estimate**: about a reaction time (0.2–0.3 s), a flick and two or three Vandal shots at 9.75 rounds/s (`valorant-mechanics.md`) with margin, at 15–25 m. Following the Challenge Point Framework (above), a shorter deadline makes the drill harder; it should be tuned so a player beats it on most, not all, bot lives. No study measures the effect of such a deadline on transfer.
+
+### Reactive arena bots
+
+With `[mode.reactive]` (`docs/maps.md`), deathmatch bots copy or oppose the player's strafe, juke when the crosshair gets close and juke when the player fires. The aim is to stop the player from learning one bot's rhythm: a plain ADAD bot switches on its own timer, so after a few duels a player can time the switch instead of tracking it. Reactions tie the bot's movement to the player's own actions, as a human opponent's movement is. The expected benefit is an analogy to the contextual-interference effect (Shea & Morgan 1979, see "Routine design" above: less predictable practice retains and transfers better), not a tested result: no study measures reactive bots.
+
+Every juke waits one bot reaction time (the preset's `reaction_secs`, 0.20–0.32 s) after its trigger, so a bot never reacts faster than a human could. The chances and the dodge angle are per-arena design values, not measured from players. The values of the built-in `corridor-reactive` are **estimates**, chosen so that about a third of the strafe decisions copy and a third oppose the player.
+
+### Conditional bot behavior
+
+`[[mode.rules]]` (`docs/maps.md`) switches a roaming bot's behavior on what it knows: its health, recent damage, time alive, its line of sight, the distance to the player and the player's speed. The example the feature was built for, used by `corridor-reactive`, is "holds the angle, strafes when hit, retreats under 50% health". The purpose is game sense rather than raw aim: a wounded enemy falling back, a holder who starts moving once hit, an enemy who pushes the last place it saw you. Recognizing such patterns and choosing when to re-peek is part of a real duel that a fixed bot never asks for. No study measures the effect of such bots on aim or game sense; the claim is a design rationale.
+
+The `corridor-reactive` values (retreat under 0.5 health, strafe for 1.5 s after a hit, hold beyond 20 m, the reaction chances and the deadline above) are **estimates** for a contender-level duel, not calibrated against player data.
+
+### Live coaching in arenas
+
+The arena overlay (`docs/maps.md`, "Live coaching overlay") shows crosshair height against head level at the nearest corner an enemy can appear from, and whether the player is still enough to shoot accurately. The results notes already report crosshair placement and head level after the run; the overlay gives the same information while the player can still act on it. This is concurrent augmented feedback. Motor-learning research finds it helps performance while it is present, but frequent concurrent feedback can create dependence and weaker retention once it is removed: the guidance hypothesis (Salmoni, Schmidt & Walter 1984, *Psychological Bulletin* 95(3); Winstein & Schmidt 1990, *Journal of Experimental Psychology: Learning, Memory, and Cognition* 16(4); verified as general findings, not tested for aim training). That is why the overlay is opt-in and off by default: use it to learn where head level is on a map, then turn it off and check the post-run numbers.
+
+The tolerances are **estimates**: 1° for head level (about the angular height of a 0.25 m head at 15 m) and 5° for holding a corner (the pre-aim tolerance, which already allows for the head being first seen while partly behind cover).
+
 ### Pace and stamina
 
 `aim_core::analytics::pace` splits every run into 6 equal time windows (5–10 s for 30–60 s runs) and measures the rate in each: kills per second for click scenarios, score per second for hold scenarios, where score accrues while on target. A frame's gain belongs to the window in which the frame started. The results screen shows the best and worst window with their time ranges, and the rate in each window.
@@ -248,7 +273,7 @@ The results notes show the medians. Line of sight is checked from the player's e
 | Opening pace | Rate of the first window ÷ mean rate of the other five | Slow start below 70% (weakness rule); strong start above 130% (shown only, no rule, because the rest of the run is then slower) |
 | Late pace | Mean rate of the last two windows ÷ mean rate of the first two | Stamina drop below 80% (weakness rule) |
 
-A run needs at least 12 s and, in click scenarios, at least 12 kills (two per window on average), or it has no pace section. A category's ratio is the mean over its runs. All three thresholds are estimates, not calibrated on player data: the simulated aimer does not tire, so its late pace stays at or above about 90%, but its slowest preset shows opening ratios of about 50–65% from noise alone at 3–8 kills per window. Treat one slow-start verdict as a hint and look for it across several runs. The flag thresholds are constants in `pace.rs`, and a test pins them to the rules in `content/rules/recommendations.toml`.
+A run needs at least 12 s and, in click scenarios, at least 12 kills (two per window on average), or it has no pace section. The windows split the time actually played, so a run that ends at its kills or fails early is paced over its own length. Phased scenarios get no pace section: their phases change the rate on purpose, so the windows would measure the scenario's design rather than the player's start or stamina. A category's ratio is the mean over its runs. All three thresholds are estimates, not calibrated on player data: the simulated aimer does not tire, so its late pace stays at or above about 90%, but its slowest preset shows opening ratios of about 50–65% from noise alone at 3–8 kills per window. Treat one slow-start verdict as a hint and look for it across several runs. The flag thresholds are constants in `pace.rs`, and a test pins them to the rules in `content/rules/recommendations.toml`.
 
 | Metric | Weakness | Recommended practice |
 |---|---|---|
@@ -309,6 +334,118 @@ Why 15 flicks and 30% (estimates): the simulated aimer has no directional bias, 
 - **Bounds (estimates):** ×0.85 to ×1.15 per suggestion, so one step never changes sensitivity by more than about 15%. Within ±3% the panel says "no change". Flicks whose primary ended more than 50% of the distance past or short are dropped. In the simulated aimer, about a quarter of a contender's fresh flicks have a "primary" that is a short blip at the start of the flick (relative error near −100%). Before the drop, they pulled its mean bias to −22% even though its movements are unbiased; after it, the simulated presets get "no change".
 - **Applying:** only the overall multiplier can be applied, through `Sensitivity::from_cm_per_360` (cm/360 ÷ multiplier, same game and DPI), the same path as the sensitivity finder. The vertical line is information only: mouse look uses one sensitivity for both axes, and decision L5 adds no vertical multiplier setting. Nothing is applied automatically. Once applied, the button stays hidden until new replays arrive.
 - **Limits:** replays do not record the sensitivity they were played at. Runs from before a sensitivity change, and sensitivity-finder test runs (also saved as replays), therefore mix into the evidence. No published source gives the 40-flick minimum, the bounds or the band; they are provisional.
+
+### Miss compass
+
+`aim_core::analytics::miss_compass` takes every missed shot at a target (go/no-go decoys are left to the decision analysis) and measures where the crosshair was relative to the target's aim point at the shot. The aim point is the head center on humanoids and the center on spheres, the same point the trace and the flick analysis use. On head-only humanoids, a body shot counts as a miss, so it shows up below the head.
+
+- **Direction**, by `atan2(dy, dx)` of the screen-space offset (`.0` right, `.1` up), in 45° sectors centered on each direction. Each sector includes its counter-clockwise start edge: right [−22.5°, 22.5°), up-right [22.5°, 67.5°), up [67.5°, 112.5°), up-left [112.5°, 157.5°), left [157.5°, 202.5°), down-left [−157.5°, −112.5°), down [−112.5°, −67.5°), down-right [−67.5°, −22.5°). A zero offset has no direction and is not counted.
+- **Above / below:** above is up-left + up + up-right; below is down-left + down + down-right. Pure left and right misses count for neither. The results card shows the 3 × 3 compass and "Above N · below M of K misses".
+
+| Metric | Weakness | Recommended practice |
+|---|---|---|
+| Misses below the aim point | > 65% of misses (≥ 10 misses): crosshair kept too low | `static-headline`, `flick-headshot` |
+| Misses above the aim point | > 65% of misses (≥ 10 misses): flicks pull up past the head | `micro-adjust`, `static-headline` |
+
+Why 10 misses and 65% (estimates, not calibrated): with no bias, 3 of the 8 sectors are "below", so about 37.5% of misses land there by chance. The simulated aimer has no vertical bias. Over seeds 1–3, four presets and seven click scenarios (`flick-wide`, `flick-headshot`, `micro-adjust`, `static-headline`, `switch-wide`, `peek-reaction`, `long-range-heads`), its largest share among runs with at least 10 misses was 60%, both above and below. A 65% threshold therefore never fires on it. With fewer than 10 misses, chance shares swing too much to judge. The skill profile pools a category's recent runs. No published source gives these values; replace them once real player data exists.
+
+### Potential score (one tip)
+
+`aim_core::analytics::potential` estimates the score a click run would have reached if its single costliest weakness were fixed. The results card shows only that one fix, above the advice list, as "Fix X → about Y points (+Z%)", followed by the assumption behind it. Hold runs get no tip.
+
+**Model.** In a run that ends on time, wasted seconds are converted into points at the run's own pace: `points per second = final score ÷ elapsed time`. A run that ends at its kills or is endless (`[end]`, see `scenarios.md`) gains no points from saved seconds, because finishing sooner adds no kills there; only the miss penalties won back count, so such runs usually get a misses tip or none. The final score already includes penalties, so this pace is conservative. Each fix is priced on its own, and only the largest gain is shown:
+
+| Fix | Events | Saved time | Points won back | Assumption shown |
+|---|---|---|---|---|
+| Overshoot | Flicks whose primary movement overshot (see the overshoot metric) | Σ max(0, settle time − median settle of clean flicks) | — | "if your N overshoots settled like your clean flicks (median X ms)" |
+| Misses | Flicks that missed | ½ × the summed duration of correction flicks (miss → retry shot) | ½ × misses × `miss_penalty` | "if half of your N misses had hit the first time" |
+| Click hesitation | Flicks with a click delay above 200 ms | Σ (click delay − 200 ms) | — | "if your N slow clicks came within 200 ms of reaching the target" |
+
+- **Clean flicks** hit and landed within one radius (neither an overshoot nor an undershoot). The overshoot fix needs at least 3 of them as its reference.
+- **Guards (provisional):** a fix needs at least 3 events. A tip is shown only when its gain is at least 3% of the score, and never for a run that scored 0 or less. Ties go to the first fix in the table.
+- **Overlaps:** click delay counts from the first entry into the target, so it includes the correction after an overshoot. The fixes therefore overlap and are never added together; showing only the largest avoids double counting.
+
+Why these values (estimates, not calibrated): fixing half the misses, rather than all of them, keeps the projection reachable. The 200 ms reference is the click-delay weakness threshold above. The 3% floor stops tips on runs with nothing to fix. For the simulated aimer (seed 2, six click scenarios), the elite gets no tip, and the other presets get a misses tip worth about +4% to +35%, largest for the recruit. Its movements rarely overshoot by design, so the overshoot fix rarely shows for it. **Limits:** the model assumes saved time turns into points at the average pace. That holds when targets respawn on a kill, and overstates the gain when targets appear on a fixed schedule. No published source gives these assumptions; they are provisional until real player data exists.
+
+## Compound missions
+
+`aim_core::training::missions` builds the Today page's daily missions. A mission names one scenario and two conditions that must all hold in the **same run**, for example "accuracy ≥ 75% AND kills ≥ 62".
+
+- **Anti-spam rule:** every mission pairs one volume condition (score, kills or shots hit) with one precision condition (accuracy or headshot rate). Spam clicking raises volume but sinks precision. One careful shot has precision but no volume. Neither passes.
+- **Mastery missions** add a third condition and a stricter target. The third condition is time per kill when kills are timed; otherwise it is the other precision or volume metric.
+- **Targets** come from the player's own recent bests on that scenario. The bests are taken per metric over the last 10 plain runs of each of the 12 most recently played scenarios. Plain runs exclude difficulty levels, shortened runs, tuning, floor height and the daily challenge. Regular targets are the best × the commitment factor. Mastery adds +0.08 to the factor. Time per kill is the best ÷ factor. Ratio targets are capped at 95%. Headshot rate is used only when the best reaches 5%.
+- **Commitment** (Settings): low gives 2 missions at ×0.85 with no mastery. Medium gives 3 at ×0.92, the last one mastery. High gives 4 at ×0.97, the last two mastery.
+- **Determinism:** missions depend only on the day, a per-install seed, the commitment and the recent runs. They are generated once per local day and then frozen, so a best set during the day does not move them. Changing the commitment regenerates the day.
+- **Evidence:** the 0.85/0.92/0.97 factors, the +0.08 mastery bonus, the 95% cap, the 5% headshot floor and the 10-run and 12-scenario windows are **estimates**, with no published source. The intent follows the Challenge Point Framework above: goals near, but not above, current ability. Personal-best goals are the player's own baseline, not a population norm.
+
+## Target behaviour and spawn patterns
+
+### Reactive targets and behaviour rules
+
+Scripted strafes are predictable: after a few runs the player learns the rhythm instead of reacting. Targets that answer the player's own strafe, crosshair and shots put the decision back on what the target does in response, which is closer to a real duel. Rules such as "strafes when hit, retreats under 50% health" give each engagement phases the player must read. This is a design choice inspired by Aim Lab's Creator Studio behaviours (`docs/feature-analysis.md`); no study measures its training effect (inference).
+
+Estimates, not sourced values:
+
+- **Strafe notice speed, 1 m/s.** About a fifth of the Vandal's 5.4 m/s run speed (`valorant-mechanics.md`), reached within a few hundredths of a second of pressing A or D. It ignores slow drifting but reacts almost at the key press, so mirroring targets are faster than a human opponent would be.
+- **Reaction hold, 0.2–0.4 s.** Long enough for a juke to cover visible distance at VALORANT acceleration, short enough that the motion takes over again within about one strafe.
+- **`react-duel` numbers** (chances 0.3/0.3/0.35, a 2.5° dodge circle, 1.5 s "recently hit", a 4 m retreat) were set by calibration.
+
+**Calibration caveat.** The simulated aimer re-aims at the target's current position every frame and never moves, so it neither triggers strafe mirroring nor suffers from jukes the way a human does. `react-duel` therefore calibrates at about 79% contender accuracy, near the top of the challenge-point band; expect a human to find it harder than that number suggests. A playtest should confirm the difficulty.
+
+### Spawn patterns (`spawn_rules`)
+
+Random spawns repeat by chance: in `spread-flicks` without rules, consecutive targets regularly land within a few degrees of each other or of the crosshair, so some "flicks" are no movement at all. Blocking recent spawn points, enforcing a minimum flick and emptying the middle of the area make every rep a real flick in a new direction. The rationale is variable practice: varying the movement within a session builds a more general skill than repeating one movement (schema theory, Schmidt 1975, *Psychological Review* 82(4), 225–260; the related interleaving evidence is cited under Routine design above). Applying it to spawn placement is inference, not a measured aim-training effect.
+
+The defaults in `spread-flicks` are estimates chosen by calibration, not sourced values: `avoid_last_deg = 15` with `avoid_recent = 2`, `min_flick_deg = 12` and `exclude_center = 0.25`. They keep contender accuracy at about 66%, the same as `flick-wide` (inside the challenge-point band, see Difficulty).
+
+### Health regeneration and score decay
+
+Plain hold scenarios pay the same per second whether time on target comes in one stretch or in many short touches. Regeneration with `reset_on_hit` changes that: damage only sticks if the crosshair returns within the interval, so the kill rate rewards unbroken contact, which is the tracking quality the drill is meant to build. Score decay adds a speed incentive on top of accuracy: every scenario already trades speed against accuracy (Fitts' law, above), and decay moves the scoring point towards speed. Neither effect has been measured as a training benefit; both are design choices (inference), and the idea comes from Aim Lab's scenario options (`docs/feature-analysis.md`).
+
+The numbers in `regen-track` are estimates set by calibration, not sourced values: health 1.5 s, a heal of 0.2 s every 0.3 s off target, and a value that fades to 40% over 3 s. A 0.35 m sphere at 10 m keeps contender accuracy at about 58%; with a 0.3 m sphere it fell to 48%, at the bottom of the challenge-point band.
+
+### Phases, fail conditions and run end
+
+A single-setting drill repeats one movement for the whole run. Phases change the setting inside one run (close heads, then a far peeker, then strafing targets), which is variable practice in the sense of schema theory (Schmidt 1975, cited under Spawn patterns) and close to the interleaving evidence under Routine design. Applying it within one scenario is inference, not a measured aim-training effect. A fail condition such as "five misses end the run" gives each shot a cost, which pushes the speed–accuracy trade-off (Fitts' law, above) towards accuracy, the way one missed duel ends a round. A kills-ended run turns the score into a race against the clock, and score decay keeps that race speed-sensitive. None of these designs has a published training effect (inference); the idea comes from Aim Lab's multi-phase scenarios (`docs/feature-analysis.md`).
+
+The numbers in the two built-ins are estimates set by calibration, not sourced values:
+
+- **`phase-peek-ladder`.** 5 misses fail the run. The design example was 3, but with 3 the simulated contender failed every seed within about 9 s, before the later waves. With 5 it reaches the finale on every seed and still fails there (mean 14 s of 45), at 64% accuracy, inside the challenge-point band. The close waves have 6 s and 8 s limits. The peekers stand 18–24 m away, within `peek-reaction`'s 15–25 m, and leave after 1.8–2.5 s.
+- **`phase-kill-race`.** 30 kills within a 60 s cap. The warm-up passes at 75% accuracy over at least 6 shots, then spheres shrink from 0.35 m to 0.22 m (`flick-wide`'s size), and a target's value falls to 25% over 2 s. The simulated contender passes the warm-up on 3 of 5 seeds, at 61% accuracy, and finishes in about 39 s.
+
+The simulated aimer never hesitates or tilts after a miss, so expect the fail conditions to end human runs sooner than calibration suggests. A playtest should confirm the miss budget and the time limits.
+
+## Perception drills
+
+### Sound localisation
+
+In tactical shooters many fights start with a sound: footsteps or shots from outside the view. Turning straight to the source, instead of searching, saves the time a visual search would cost. `sound-turn` isolates that step: a target is heard first and appears only later, so the score rewards turning to the right place before seeing anything. Training the turn this way is a design choice inspired by Aim Lab's audio drills (`docs/feature-analysis.md`); no study measures its transfer to games (inference).
+
+The sounds are synthesized and panned in stereo: equal-power left/right panning plus a duller, quieter sound for sources behind the player. Over headphones without individual head-related transfer functions, listeners confuse front and back sources far more often than with natural hearing (Wenzel et al. 1993, *Journal of the Acoustical Society of America* 93(1), 111–123). The rear filtering gives a front/back cue to learn, but expect some front/back mistakes; the per-direction grid shows them as large errors in the "front" or "back" cells.
+
+Metrics, per cue, from the replayed run:
+
+- **Angular error:** the angle between the view and the source 1 s after the sound, or at the first shot if that comes sooner. 1 s is an **estimate**: a reaction to a sound (roughly 0.2–0.3 s, approximate) plus a fast turn of up to 180°.
+- **Turn reaction time:** from the sound to the first frame the crosshair turns towards the source at 60°/s or faster, searched for 2 s. Both numbers are **estimates**: 60°/s is well above hand tremor and well below a flick's peak speed.
+- **Directions:** each cue is binned by its horizontal angle from the view when the sound played, into eight 45° bins centered on front, front-right, right, back-right, back, back-left, left and front-left.
+
+The panning constants (full level within 6 m, a floor of 35% for far sources, 30% quieter and an 85% low-pass straight behind) are **estimates** tuned by ear, not a model of how VALORANT renders sound.
+
+**Calibration caveat.** The simulated aimer cannot hear: it waits for the target to appear 0.8 s after the sound and then flicks. `sound-turn` calibrates at about 75% contender accuracy, but a human who turns on the sound reveals targets earlier and scores more. A playtest should confirm the difficulty.
+
+### Peripheral perception
+
+Enemies often first show up away from the crosshair, and the minimap tells where they are before they are on screen. Two drills train these inputs. Both are design choices inspired by Aim Lab's perception tasks (`docs/feature-analysis.md`); neither has a measured transfer to games (inference).
+
+**Detection (`peripheral-detect`).** With the crosshair held still, a small dot flashes in one of eight screen areas, and some trials stay blank. This is a yes/no detection task, the setting of signal detection theory, which separates sensitivity (hits) from response bias (false alarms) (Green and Swets 1966, *Signal Detection Theory and Psychophysics*, Wiley). Counting false alarms keeps a player from scoring by clicking on every expected flash. Detection is generally slower and less reliable farther from the point of fixation (a general finding, not quantified here), and the per-area grid shows where a player's field is weakest.
+
+- **Areas:** each flash is binned by the direction of its aim point from the crosshair in the frame it appeared, the same eight 45° sectors as the miss compass.
+- **Metrics:** hit rate and median reaction time per area, false alarms (clicks with no flash) and blank trials.
+- **Estimates, not sourced values:** the 0.5 s flash, the 0.8–2.2 s wait before a flash, the 6–18° eccentricity, the 0.06 m dot at 6 m (about 1.1° wide) and the 25% blank trials were set by calibration.
+
+**Radar recall (`radar-recall`).** A radar shows two of the four enemies of a round for 1.5 s; the round then appears with all four looking alike, so only the remembered positions tell which two to shoot. Correct and incorrect picks are the go/no-go outcomes (match and non-match hits) of these rounds. Holding a few positions for a few seconds is within visual working memory, which is commonly put at about three to four items (Luck and Vogel 1997, *Nature* 390, 279–281); two dots out of four targets keeps the task inside that limit. The 1.5 s radar, the 15° minimum separation and the 3 s lifetime are **estimates** set by calibration.
+
+**Simulated aimer.** For detection it holds the crosshair still, clicks each flash one reaction time after it appears, and with no flash showing clicks anyway at its go/no-go mistake rate per second (recruit ≈ 0.22/s, elite ≈ 0.09/s, an **estimate**). For radar recall it treats the targets the radar did not show like go/no-go decoys, mistaking one for a match at the same rate. `peripheral-detect` calibrates at about 71% and `radar-recall` at about 67% contender accuracy, inside the challenge-point band. Neither model forgets the radar or misses a flash outright, so a playtest should confirm the difficulty.
 
 ## Caveat
 

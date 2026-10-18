@@ -10,6 +10,7 @@
 
 use super::direction::DirectionSummary;
 use super::flick::{Flick, FlickSummary};
+use super::miss_compass::MissCompass;
 use super::moving::MovingAnalysis;
 use super::rules::{self, MetricSources, RuleSet};
 use super::tracking::{TrackingAnalysis, TrackingSummary};
@@ -156,6 +157,15 @@ impl SkillProfile {
                 },
             );
             // Each run classifies near/far with its own scenario's distances.
+            // Miss counts add up across runs; the share methods apply the minimum-miss guard.
+            let miss_compass = runs.iter().filter_map(|r| r.miss_compass.as_ref()).fold(
+                None,
+                |acc: Option<MissCompass>, c| {
+                    let mut sum = acc.unwrap_or_default();
+                    sum.merge(c);
+                    Some(sum)
+                },
+            );
             let direction = (flicks.len() >= MIN_FLICKS).then(|| {
                 DirectionSummary::from_flicks(runs.iter().flat_map(|r| r.classified_flicks()))
             });
@@ -172,6 +182,7 @@ impl SkillProfile {
                         pace: pace.as_ref(),
                         priority: priority.as_ref(),
                         direction: direction.as_ref(),
+                        miss_compass: miss_compass.as_ref(),
                     },
                 ),
                 flick,
@@ -242,6 +253,11 @@ mod tests {
             pace: None,
             priority: None,
             distance_split: None,
+            miss_compass: None,
+            potential: None,
+            audio_cue: None,
+            detection: None,
+            radar_recall: None,
         }
     }
 
@@ -426,6 +442,11 @@ mod tests {
             pace: None,
             priority: None,
             distance_split: None,
+            miss_compass: None,
+            potential: None,
+            audio_cue: None,
+            detection: None,
+            radar_recall: None,
         }
     }
 
@@ -644,5 +665,74 @@ mod tests {
             .find(|f| f.metric == Metric::NearestFirstShare)
             .expect("6 contested kills are judged");
         assert_eq!(f.value, 0.0);
+    }
+
+    fn compass_run(below: usize, above: usize) -> RunAnalysis {
+        let mut offsets = vec![(0.0, -1.0); below];
+        offsets.extend(vec![(0.0, 1.0); above]);
+        RunAnalysis {
+            miss_compass: Some(MissCompass::from_offsets(offsets)),
+            ..flick_run(Vec::new())
+        }
+    }
+
+    fn miss_finding(p: &SkillProfile, metric: Metric) -> Option<&Finding> {
+        p.findings().find(|f| f.metric == metric)
+    }
+
+    #[test]
+    fn misses_mostly_below_the_head_are_a_crosshair_height_weakness() {
+        let p = SkillProfile::build(&[compass_run(8, 2)]);
+        let f = miss_finding(&p, Metric::MissBelowShare).expect("80% below fires");
+        assert_eq!(f.verdict, Verdict::Weakness);
+        assert_eq!((f.value, f.threshold), (0.8, 0.65));
+        assert_eq!(
+            f.explanation,
+            "Misses below the aim point 80% is above the 65% threshold: most of your misses \
+             land below the head or target center, so your crosshair sits too low."
+        );
+        let rec = f.recommendation.as_ref().expect("practice");
+        assert_eq!(rec.scenario_ids, ["static-headline", "flick-headshot"]);
+        assert_eq!(miss_finding(&p, Metric::MissAboveShare), None);
+        // Nine misses are too few to judge, even all below.
+        let p = SkillProfile::build(&[compass_run(9, 0)]);
+        assert_eq!(miss_finding(&p, Metric::MissBelowShare), None);
+        // Counts pool across the category's runs: 5 + 5 below of 10.
+        let p = SkillProfile::build(&[compass_run(5, 0), compass_run(5, 0)]);
+        assert!(miss_finding(&p, Metric::MissBelowShare).is_some());
+    }
+
+    #[test]
+    fn misses_mostly_above_the_head_are_a_vertical_overflick_weakness() {
+        let p = SkillProfile::build(&[compass_run(3, 7)]);
+        let f = miss_finding(&p, Metric::MissAboveShare).expect("70% above fires");
+        assert_eq!((f.value, f.threshold), (0.7, 0.65));
+        assert_eq!(miss_finding(&p, Metric::MissBelowShare), None);
+        // 65% exactly does not fire: rules are strict.
+        let p = SkillProfile::build(&[compass_run(7, 13)]);
+        assert_eq!(miss_finding(&p, Metric::MissAboveShare), None);
+    }
+
+    /// The miss-compass rules only add findings: every other finding is what the rules
+    /// without them find, and the unbiased simulated aimer never triggers them.
+    #[test]
+    fn the_miss_compass_rules_leave_every_other_finding_unchanged() {
+        let is_compass = |m: Metric| matches!(m, Metric::MissBelowShare | Metric::MissAboveShare);
+        let mut without = rules::builtin::rules().clone();
+        without.rules.retain(|r| !is_compass(r.metric));
+        for (id, preset) in [
+            ("flick-wide", 0),
+            ("flick-headshot", 1),
+            ("micro-adjust", 0),
+            ("static-headline", 1),
+            ("track-precise", 1),
+        ] {
+            let runs = [analyze(&record(id, AimerProfile::PRESETS[preset], 2))];
+            let now = SkillProfile::build(&runs);
+            let before = SkillProfile::build_with(&runs, &without);
+            let kept: Vec<&Finding> = now.findings().filter(|f| !is_compass(f.metric)).collect();
+            assert_eq!(kept, before.findings().collect::<Vec<_>>(), "{id}");
+            assert!(now.findings().all(|f| !is_compass(f.metric)), "{id}");
+        }
     }
 }

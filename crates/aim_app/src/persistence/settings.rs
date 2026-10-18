@@ -4,6 +4,8 @@ use crate::audio::synth::{HitSound, KillSound};
 use crate::game::feedback::{HitMarkerStyle, MarkerColor, TargetEffect};
 use aim_core::crosshair::{CUSTOM_COLOR_INDEX, Crosshair, PRESET_COLORS, Rgba};
 use aim_core::sensitivity::Sensitivity;
+use aim_core::sensitivity::randomizer::RandomizerConfig;
+use aim_core::training::missions::Commitment;
 use bevy::prelude::Resource;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
@@ -80,6 +82,95 @@ pub struct Settings {
     pub offscreen_arrows: bool,
     pub sound: SoundSettings,
     pub hit_feedback: HitFeedbackSettings,
+    /// How many daily missions are offered and how hard they are.
+    pub mission_commitment: Commitment,
+    /// Target outline and environment tint (colour-vision and visibility options).
+    pub target_visibility: TargetVisibility,
+    /// Sensitivity randomiser drill (off by default; never changes `sensitivity`).
+    pub sens_randomizer: RandomizerConfig,
+    /// Live coaching overlay in arenas (crosshair placement and movement accuracy).
+    pub arena_coaching: bool,
+}
+
+/// VALORANT's "Enemy Highlight Color" options (General → Accessibility), applied to
+/// `Settings::target_color`. Only the option names come from VALORANT (see
+/// `docs/valorant-mechanics.md`); the RGB values are our own estimates, not Riot assets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnemyHighlight {
+    /// The default. It is the trainer's original target colour.
+    Red,
+    /// For tritanopia.
+    Purple,
+    /// For deuteranopia and protanopia.
+    Yellow,
+    /// Any other colour.
+    Custom,
+}
+
+impl EnemyHighlight {
+    /// The presets and their colours (estimates).
+    pub const PRESETS: [(EnemyHighlight, [f32; 3]); 3] = [
+        (EnemyHighlight::Red, [1.0, 0.27, 0.33]),
+        (EnemyHighlight::Purple, [0.75, 0.3, 1.0]),
+        (EnemyHighlight::Yellow, [1.0, 0.92, 0.2]),
+    ];
+
+    /// Name shown in the settings.
+    pub fn label(self) -> &'static str {
+        match self {
+            EnemyHighlight::Red => "Red (default)",
+            EnemyHighlight::Purple => "Purple (tritanopia)",
+            EnemyHighlight::Yellow => "Yellow (deuteranopia/protanopia)",
+            EnemyHighlight::Custom => "Custom",
+        }
+    }
+
+    /// The option a stored colour corresponds to.
+    pub fn of(rgb: [f32; 3]) -> Self {
+        Self::PRESETS
+            .iter()
+            .find(|(_, c)| *c == rgb)
+            .map_or(EnemyHighlight::Custom, |(h, _)| *h)
+    }
+}
+
+/// Target outline and environment tint. Missing keys keep today's look: no outline and
+/// the original grid colours.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TargetVisibility {
+    /// Draw a solid outline around targets (decoys never get one).
+    pub outline: bool,
+    pub outline_color: [f32; 3],
+    /// Outline thickness as a percentage of the target's size.
+    pub outline_percent: u8,
+    /// Colour of the floor grid and play area; `None` keeps the original colours.
+    pub environment_tint: Option<[f32; 3]>,
+}
+
+impl TargetVisibility {
+    pub const OUTLINE_PERCENT: std::ops::RangeInclusive<u8> = 2..=30;
+
+    /// Scale of the outline shell relative to the target, when the outline is on.
+    pub fn outline_scale(&self) -> Option<f32> {
+        self.outline.then(|| {
+            let pct = self
+                .outline_percent
+                .clamp(*Self::OUTLINE_PERCENT.start(), *Self::OUTLINE_PERCENT.end());
+            1.0 + f32::from(pct) / 100.0
+        })
+    }
+}
+
+impl Default for TargetVisibility {
+    fn default() -> Self {
+        Self {
+            outline: false,
+            outline_color: [1.0, 1.0, 1.0],
+            outline_percent: 8,
+            environment_tint: None,
+        }
+    }
 }
 
 /// Visual feedback on hits. Missing keys (older files) take the subtle defaults.
@@ -160,6 +251,10 @@ impl Default for Settings {
             offscreen_arrows: true,
             sound: SoundSettings::default(),
             hit_feedback: HitFeedbackSettings::default(),
+            mission_commitment: Commitment::default(),
+            target_visibility: TargetVisibility::default(),
+            sens_randomizer: RandomizerConfig::default(),
+            arena_coaching: false,
         }
     }
 }
@@ -292,6 +387,18 @@ mod tests {
     }
 
     #[test]
+    fn arena_coaching_is_off_for_old_settings_files_and_persists() {
+        let settings: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert!(!settings.arena_coaching);
+        let on = Settings {
+            arena_coaching: true,
+            ..Settings::default()
+        };
+        let back: Settings = toml::from_str(&toml::to_string(&on).unwrap()).unwrap();
+        assert!(back.arena_coaching);
+    }
+
+    #[test]
     fn restart_key_defaults_to_r_for_old_settings_files() {
         let settings: Settings = toml::from_str("fullscreen = false").unwrap();
         assert_eq!(settings.restart_key, "KeyR");
@@ -368,6 +475,71 @@ mod tests {
         assert!(ch.outlines && ch.center_dot);
         assert_eq!(ch.outline_opacity, 1.0);
         assert!(!ch.outer.show, "the legacy crosshair had no outer lines");
+    }
+
+    #[test]
+    fn sens_randomizer_is_off_for_old_settings_files_and_round_trips() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(old.sens_randomizer, RandomizerConfig::default());
+        assert!(!old.sens_randomizer.enabled);
+        let src = "[sens_randomizer]\nenabled = true\nmin = 0.9\n";
+        let on: Settings = toml::from_str(src).unwrap();
+        assert!(on.sens_randomizer.enabled);
+        assert_eq!(on.sens_randomizer.min, 0.9);
+        assert_eq!(on.sens_randomizer.max, RandomizerConfig::default().max);
+        let text = toml::to_string_pretty(&on).unwrap();
+        assert_eq!(toml::from_str::<Settings>(&text).unwrap(), on);
+        assert_eq!(on.sensitivity, Settings::default().sensitivity);
+    }
+
+    #[test]
+    fn mission_commitment_defaults_to_medium_and_reads_kebab_case() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(old.mission_commitment, Commitment::Medium);
+        let high: Settings = toml::from_str("mission_commitment = \"high\"").unwrap();
+        assert_eq!(high.mission_commitment, Commitment::High);
+    }
+
+    #[test]
+    fn red_highlight_is_the_default_and_keeps_the_original_target_colour() {
+        let settings: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(settings.target_color, [1.0, 0.27, 0.33]);
+        assert_eq!(
+            EnemyHighlight::of(settings.target_color),
+            EnemyHighlight::Red
+        );
+        for (h, rgb) in EnemyHighlight::PRESETS {
+            assert_eq!(EnemyHighlight::of(rgb), h);
+        }
+        assert_eq!(EnemyHighlight::of([0.1, 0.2, 0.3]), EnemyHighlight::Custom);
+    }
+
+    #[test]
+    fn target_visibility_defaults_keep_todays_look() {
+        let v = toml::from_str::<Settings>("fullscreen = false")
+            .unwrap()
+            .target_visibility;
+        assert_eq!(v, TargetVisibility::default());
+        assert!(!v.outline && v.environment_tint.is_none());
+        assert_eq!(v.outline_scale(), None);
+    }
+
+    #[test]
+    fn target_visibility_round_trips_and_clamps_the_outline() {
+        let settings = Settings {
+            target_visibility: TargetVisibility {
+                outline: true,
+                outline_color: [0.0, 1.0, 0.0],
+                outline_percent: 200,
+                environment_tint: Some([0.2, 0.3, 0.4]),
+            },
+            ..Settings::default()
+        };
+        let text = toml::to_string_pretty(&settings).unwrap();
+        assert_eq!(toml::from_str::<Settings>(&text).unwrap(), settings);
+        assert_eq!(settings.target_visibility.outline_scale(), Some(1.3));
+        let partial: Settings = toml::from_str("[target_visibility]\noutline = true\n").unwrap();
+        assert_eq!(partial.target_visibility.outline_scale(), Some(1.08));
     }
 
     #[test]

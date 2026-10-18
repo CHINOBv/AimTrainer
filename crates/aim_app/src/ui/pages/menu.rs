@@ -8,6 +8,7 @@ use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::history::History;
 use crate::persistence::library::Library;
 use crate::persistence::method_progress::{DayProgress, MethodProgress};
+use crate::persistence::missions::Missions;
 use crate::persistence::replays;
 use crate::persistence::settings::{Paths, Settings};
 use crate::platform::frame_stats::FrameStats;
@@ -25,7 +26,8 @@ use crate::ui::organisms::sens_suggestion::{self, RECENT_RUNS, SensSuggestionSta
 use crate::ui::organisms::settings_panels::{self, DpiMeter};
 use crate::ui::organisms::system_check::{self, SystemModel};
 use crate::ui::organisms::today_panel::{
-    self, ChallengeModel, DayModel, RoutineModel, TodayAction, TodayModel,
+    self, ChallengeModel, DayModel, MissionModel, MissionsModel, RoutineModel, TodayAction,
+    TodayModel,
 };
 use crate::ui::organisms::{
     arena_list, benchmark_panel, feedback_settings, routine_list, scenario_browser,
@@ -117,6 +119,7 @@ struct TrainingState<'w> {
     adaptive: Res<'w, AdaptiveLevels>,
     finder: ResMut<'w, FinderState>,
     frames: Res<'w, FrameStats>,
+    missions: ResMut<'w, Missions>,
 }
 
 /// Settings plus what is needed to persist and preview them.
@@ -190,8 +193,15 @@ fn menu(
     let mut today_action: Option<TodayAction> = None;
     match state.tab {
         Tab::Today => {
+            training.missions.refresh(
+                &today,
+                local_day_number(),
+                cfg.settings.mission_commitment,
+                &cfg.paths,
+            );
+            let missions = missions_model(lib, &training.missions, cfg.settings.mission_commitment);
             egui::CentralPanel::default().show(&mut root, |ui| {
-                match today_model(lib, &history, &training.progress, &today, weekday) {
+                match today_model(lib, &history, &training.progress, &today, weekday, missions) {
                     Some(model) => today_action = today_panel::today_panel(ui, &model),
                     None => {
                         ui.label("No weekly training method is available.");
@@ -298,9 +308,13 @@ fn menu(
         Tab::Arenas => {
             egui::CentralPanel::default().show(&mut root, |ui| {
                 let arenas = aim_world::arena::builtin::all();
-                action = action
-                    .take()
-                    .or(arena_list::arena_list(ui, &arenas, |id| history.best(id)));
+                let coaching = &mut cfg.settings.arena_coaching;
+                action = action.take().or(arena_list::arena_list(
+                    ui,
+                    &arenas,
+                    |id| history.best(id),
+                    coaching,
+                ));
             });
         }
         Tab::Benchmark => {
@@ -528,6 +542,7 @@ fn today_model(
     progress: &MethodProgress,
     date: &str,
     weekday: Weekday,
+    missions: MissionsModel,
 ) -> Option<TodayModel> {
     let (method, _, energy, selected) = method_context(lib, history, progress)?;
     let plan = method.day(weekday);
@@ -569,7 +584,38 @@ fn today_model(
                 .map_or(c.scenario_id.clone(), |d| d.name.clone()),
             best_today: history.best(&c.run_key()),
         }),
+        missions,
     })
+}
+
+/// Local day number (days since 0001-01-01), the seed input for today's missions.
+fn local_day_number() -> i64 {
+    i64::from(chrono::Local::now().date_naive().num_days_from_ce())
+}
+
+/// Today's missions as the Today page shows them.
+fn missions_model(
+    lib: &Library,
+    missions: &Missions,
+    commitment: aim_core::training::missions::Commitment,
+) -> MissionsModel {
+    let list = missions.0.today.as_ref().map_or(&[][..], |d| &d.missions);
+    MissionsModel {
+        commitment: commitment.label(),
+        missions: list
+            .iter()
+            .map(|m| MissionModel {
+                scenario_id: m.scenario.clone(),
+                scenario_name: lib
+                    .scenario(&m.scenario)
+                    .map_or(m.scenario.clone(), |d| d.name.clone()),
+                conditions: m.conditions.iter().map(|c| c.describe()).collect(),
+                mastery: m.mastery,
+                done: m.done,
+                best_met: m.best_met,
+            })
+            .collect(),
+    }
 }
 
 /// Turn a Today action into progress updates and the navigation action to apply.
@@ -626,6 +672,7 @@ fn apply_today(
             })
         }
         TodayAction::WarmUp => Some(UiAction::StartRoutine("quick-warmup".to_owned())),
+        TodayAction::PlayMission(scenario) => Some(UiAction::StartScenario(scenario)),
         TodayAction::Challenge => todays_challenge(lib).map(|c| UiAction::StartChallenge {
             key: c.run_key(),
             scenario: c.scenario_id,

@@ -6,7 +6,7 @@
 //! `[difficulty]` table, e.g. `size = { easy = 0.5, hard = 0.1 }`. Training methods use fixed
 //! offsets (drill, variant, "hard"); adaptive training moves the level continuously.
 
-use super::def::{Motion, ScenarioDef, Shape, SpawnArea};
+use super::def::{Motion, ScenarioDef, Shape, SpawnArea, TargetsDef};
 use crate::math::Range;
 use serde::{Deserialize, Serialize};
 
@@ -333,19 +333,7 @@ impl ScenarioDef {
             _ => (self.id.as_str(), String::new()),
         };
         out.id = format!("{rest}{}{elevation}", t.suffix());
-        let k = |pct: u16| f32::from(pct) / 100.0;
-        if let Shape::Sphere { radius } = &mut out.targets.shape {
-            *radius *= k(t.size_pct);
-        }
-        let dist = k(t.distance_pct);
-        match &mut out.targets.spawn {
-            SpawnArea::Angular { distance, .. } | SpawnArea::AroundCrosshair { distance, .. } => {
-                *distance = scale(*distance, dist)
-            }
-            // Floor boxes extend away from the player along -Z.
-            SpawnArea::Floor { z, .. } => *z = scale(*z, dist),
-        }
-        out.targets.speed_scale *= k(t.speed_pct);
+        out.transform_targets(|targets| tune_targets(targets, t));
         out
     }
 
@@ -368,70 +356,91 @@ impl ScenarioDef {
         if d == 0.0 {
             return out;
         }
-        let c = &self.difficulty;
         out.id = run_key(&self.id, d);
-        let humanoid = matches!(out.targets.shape, Shape::Humanoid { .. });
-
-        if let Shape::Sphere { radius } = &mut out.targets.shape {
-            *radius *= 1.0 - c.size.at(d);
-        }
-        if let Some(l) = &mut out.targets.lifetime_secs {
-            *l *= 1.0 - c.lifetime.at(d);
-        }
-        match &mut out.targets.motion {
-            Motion::Static => {}
-            Motion::Strafe { change_secs, .. } => {
-                *change_secs = scale(*change_secs, 1.0 - c.speed.at(d))
-            }
-            Motion::Dodge {
-                change_secs,
-                juke_secs,
-                ..
-            } => {
-                *change_secs = scale(*change_secs, 1.0 - c.speed.at(d));
-                *juke_secs = scale(*juke_secs, 1.0 - c.speed.at(d));
-            }
-            Motion::Drift {
-                speed, change_secs, ..
-            } => {
-                *speed = scale(*speed, 1.0 + c.speed.at(d));
-                *change_secs = scale(*change_secs, 1.0 - c.speed.at(d));
-            }
-        }
-        let count = c.count.at(d);
-        if count != 0.0 {
-            let alive = out.targets.max_alive as f32 * (1.0 + count);
-            out.targets.max_alive = (alive.round() as u32).clamp(1, 32);
-        }
-        let dist_k = if humanoid {
-            1.0 + c.distance.at(d)
-        } else {
-            1.0
-        };
-        match &mut out.targets.spawn {
-            SpawnArea::Angular { distance, .. } => *distance = scale(*distance, dist_k),
-            SpawnArea::AroundCrosshair {
-                offset_deg,
-                distance,
-                on_screen,
-                ..
-            } => {
-                *distance = scale(*distance, dist_k);
-                let k = 1.0 + c.offset.at(d);
-                let cap = if *on_screen {
-                    crate::fov::valorant_on_screen_half_h_deg() as f32
-                } else {
-                    180.0
-                };
-                *offset_deg =
-                    Range::new((offset_deg.min * k).min(cap), (offset_deg.max * k).min(cap));
-            }
-            SpawnArea::Floor { z, .. } => {
-                // Floor boxes extend away from the player along -Z.
-                *z = scale(*z, dist_k);
-            }
-        }
+        let c = &self.difficulty;
+        out.transform_targets(|targets| scale_targets(targets, c, d));
         out
+    }
+}
+
+/// Applies `tuning` to `targets`: sphere radius, spawn distance and motion speed.
+fn tune_targets(targets: &mut TargetsDef, t: Tuning) {
+    let k = |pct: u16| f32::from(pct) / 100.0;
+    if let Shape::Sphere { radius } = &mut targets.shape {
+        *radius *= k(t.size_pct);
+    }
+    let dist = k(t.distance_pct);
+    match &mut targets.spawn {
+        SpawnArea::Angular { distance, .. } | SpawnArea::AroundCrosshair { distance, .. } => {
+            *distance = scale(*distance, dist)
+        }
+        // Floor boxes extend away from the player along -Z.
+        SpawnArea::Floor { z, .. } => *z = scale(*z, dist),
+    }
+    targets.speed_scale *= k(t.speed_pct);
+}
+
+/// Scales `targets` by the difficulty coefficients `c` at level `d` (not 0).
+fn scale_targets(targets: &mut TargetsDef, c: &DifficultyDef, d: f32) {
+    let humanoid = matches!(targets.shape, Shape::Humanoid { .. });
+
+    if let Shape::Sphere { radius } = &mut targets.shape {
+        *radius *= 1.0 - c.size.at(d);
+    }
+    if let Some(l) = &mut targets.lifetime_secs {
+        *l *= 1.0 - c.lifetime.at(d);
+    }
+    match &mut targets.motion {
+        Motion::Static => {}
+        Motion::Strafe { change_secs, .. } => {
+            *change_secs = scale(*change_secs, 1.0 - c.speed.at(d))
+        }
+        Motion::Dodge {
+            change_secs,
+            juke_secs,
+            ..
+        } => {
+            *change_secs = scale(*change_secs, 1.0 - c.speed.at(d));
+            *juke_secs = scale(*juke_secs, 1.0 - c.speed.at(d));
+        }
+        Motion::Drift {
+            speed, change_secs, ..
+        } => {
+            *speed = scale(*speed, 1.0 + c.speed.at(d));
+            *change_secs = scale(*change_secs, 1.0 - c.speed.at(d));
+        }
+    }
+    let count = c.count.at(d);
+    if count != 0.0 {
+        let alive = targets.max_alive as f32 * (1.0 + count);
+        targets.max_alive = (alive.round() as u32).clamp(1, 32);
+    }
+    let dist_k = if humanoid {
+        1.0 + c.distance.at(d)
+    } else {
+        1.0
+    };
+    match &mut targets.spawn {
+        SpawnArea::Angular { distance, .. } => *distance = scale(*distance, dist_k),
+        SpawnArea::AroundCrosshair {
+            offset_deg,
+            distance,
+            on_screen,
+            ..
+        } => {
+            *distance = scale(*distance, dist_k);
+            let k = 1.0 + c.offset.at(d);
+            let cap = if *on_screen {
+                crate::fov::valorant_on_screen_half_h_deg() as f32
+            } else {
+                180.0
+            };
+            *offset_deg = Range::new((offset_deg.min * k).min(cap), (offset_deg.max * k).min(cap));
+        }
+        SpawnArea::Floor { z, .. } => {
+            // Floor boxes extend away from the player along -Z.
+            *z = scale(*z, dist_k);
+        }
     }
 }
 
@@ -855,6 +864,35 @@ mod tests {
     }
 
     #[test]
+    fn difficulty_and_tuning_keep_the_target_behaviour_blocks() {
+        for id in ["spread-flicks", "regen-track", "react-duel"] {
+            let d = find(id);
+            let tuned = Tuning {
+                size_pct: 150,
+                distance_pct: 80,
+                speed_pct: 130,
+            };
+            for v in [
+                d.at_difficulty(-1.0),
+                d.at_difficulty(1.0),
+                d.with_tuning(tuned),
+            ] {
+                assert_eq!(v.targets.spawn_rules, d.targets.spawn_rules, "{id}");
+                assert_eq!(v.targets.regen, d.targets.regen, "{id}");
+                assert_eq!(v.scoring.decay, d.scoring.decay, "{id}");
+                assert_eq!(v.targets.reactions, d.targets.reactions, "{id}");
+                assert_eq!(v.targets.behaviors, d.targets.behaviors, "{id}");
+                let errs: Vec<_> = v
+                    .validate()
+                    .into_iter()
+                    .filter(|e| e.field != "id")
+                    .collect();
+                assert!(errs.is_empty(), "{id}: {errs:?}");
+            }
+        }
+    }
+
+    #[test]
     fn difficulty_and_tuning_keep_decoys_and_score_rings() {
         for id in ["go-no-go", "precision-rings"] {
             let d = find(id);
@@ -878,6 +916,61 @@ mod tests {
                     .collect();
                 assert!(errs.is_empty(), "{id}: {errs:?}");
             }
+        }
+    }
+
+    #[test]
+    fn difficulty_and_tuning_scale_each_phase_like_the_base_targets() {
+        let d = ScenarioDef::from_toml(
+            r#"
+            id = "phased"
+            name = "Phased"
+            category = "custom"
+            [difficulty]
+            count = 0.5
+            [targets]
+            shape = { kind = "sphere", radius = 0.3 }
+            spawn = { kind = "angular", yaw_deg = [-30, 30], pitch_deg = [0, 5], distance = [10, 12] }
+            lifetime_secs = 2.0
+            [[phases]]
+            targets = { shape = { kind = "sphere", radius = 0.5 }, max_alive = 2 }
+            advance = { kind = "kills", kills = 3 }
+            [[phases]]
+            targets = { spawn = { kind = "floor", x = [-3, 3], z = [-20, -15] }, lifetime_secs = 1.0, motion = { kind = "drift", speed = [1, 2], change_secs = [0.5, 1.0] } }
+            "#,
+        )
+        .unwrap();
+        let tuned = Tuning {
+            size_pct: 150,
+            distance_pct: 80,
+            speed_pct: 120,
+        };
+        type Variant = fn(&ScenarioDef, Tuning) -> ScenarioDef;
+        let variants: [(&str, Variant); 3] = [
+            ("easy", |d, _| d.at_difficulty(-1.0)),
+            ("hard", |d, _| d.at_difficulty(1.0)),
+            ("tuned", |d, t| d.with_tuning(t)),
+        ];
+        for (name, variant) in variants {
+            let scaled = variant(&d, tuned);
+            assert_ne!(scaled.phases, d.phases, "{name}: phases scale");
+            for (i, phase) in d.phases.as_ref().unwrap().iter().enumerate() {
+                // The phase played as a plain scenario, then scaled.
+                let mut alone = d.clone();
+                alone.targets = phase.targets.apply(&d.targets);
+                alone.phases = None;
+                let expected = variant(&alone, tuned).targets;
+                let got = scaled.phases.as_ref().unwrap()[i]
+                    .targets
+                    .apply(&scaled.targets);
+                assert_eq!(got, expected, "{name}: phase {i}");
+            }
+            let errs: Vec<_> = scaled
+                .validate()
+                .into_iter()
+                .filter(|e| e.field != "id")
+                .collect();
+            assert!(errs.is_empty(), "{name}: {errs:?}");
         }
     }
 }

@@ -4,5 +4,6 @@ pub mod adaptive;
 pub mod history;
 pub mod library;
 pub mod method_progress;
+pub mod missions;
 pub mod replays;
 pub mod settings;

@@ -48,6 +48,18 @@ pub enum ArenaMode {
         /// roaming, and the run is lost if one of them captures it.
         #[serde(default)]
         objective: Option<SiteObjective>,
+        /// Bots land a sure shot on a player who has not killed them within a deadline.
+        #[serde(default)]
+        deadline: Option<ShootBackDeadline>,
+        /// Bots react to the player: they copy or oppose the player's strafe and juke when
+        /// the crosshair gets close or the player fires. Reactive bots strafe while they
+        /// fight, as with `bot_strafe`.
+        #[serde(default)]
+        reactive: Option<ReactiveBots>,
+        /// Conditional behavior of roaming bots: the first rule whose conditions all hold
+        /// overrides the bot's behavior and speed this frame. Not with a site objective.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        rules: Vec<BehaviorRule>,
     },
     /// One bot per angle marker, in order. Each bot waits hidden, peeks when the player can
     /// see the marker, holds for `hold_secs` and hides again until it is killed.
@@ -68,7 +80,207 @@ pub enum ArenaMode {
         /// [`crate::arena::PRE_AIM_POINTS`].
         #[serde(default)]
         pre_aim_tolerance_deg: Option<f32>,
+        /// Bots land a sure shot on a player who has not killed them within a deadline.
+        #[serde(default)]
+        deadline: Option<ShootBackDeadline>,
     },
+}
+
+/// Most behavior rules an arena may list.
+pub const MAX_RULES: usize = 16;
+
+/// One conditional behavior of roaming deathmatch bots: when every condition set in `when`
+/// holds (an empty `when` always holds), the bot uses `behavior` and moves at
+/// `speed_multiplier` times its normal speed. Rules are checked in order every frame and the
+/// first match wins. See `docs/maps.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BehaviorRule {
+    #[serde(default)]
+    pub when: RuleConditions,
+    /// The behavior to switch to; `None` keeps the normal one (only the speed changes).
+    #[serde(default)]
+    pub behavior: Option<BotBehavior>,
+    /// Scales the bot's run speed and acceleration, in (0, 2]. Default 1.
+    #[serde(default)]
+    pub speed_multiplier: Option<f32>,
+}
+
+/// Conditions of a [`BehaviorRule`]. Unset conditions are ignored.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuleConditions {
+    /// Health below this fraction of [`crate::arena::BOT_HEALTH`], in (0, 1].
+    #[serde(default)]
+    pub health_below: Option<f32>,
+    /// The player hit the bot within the last this many seconds.
+    #[serde(default)]
+    pub damaged_within_secs: Option<f32>,
+    /// The bot has been alive (since its spawn) at least this many seconds.
+    #[serde(default)]
+    pub alive_over_secs: Option<f32>,
+    /// Whether the bot has line of sight to the player's head (`MapDef::visible_head`).
+    #[serde(default)]
+    pub sees_player: Option<bool>,
+    /// Horizontal distance to the player below this many meters.
+    #[serde(default)]
+    pub distance_below_m: Option<f32>,
+    /// Horizontal distance to the player above this many meters.
+    #[serde(default)]
+    pub distance_above_m: Option<f32>,
+    /// The player moves faster than this, m/s.
+    #[serde(default)]
+    pub player_speed_above: Option<f32>,
+    /// The player moves slower than this, m/s.
+    #[serde(default)]
+    pub player_speed_below: Option<f32>,
+}
+
+/// The behavior a [`BehaviorRule`] switches a roaming bot to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BotBehavior {
+    /// Stand still and hold the angle: no roaming, no strafing, no falling back; fight from
+    /// where it stands.
+    Hold,
+    /// Walk to where it last saw the player (or was shot from) until it sees them again,
+    /// then stop to fight.
+    Peek,
+    /// Strafe (ADAD) while it fights instead of falling back when shot.
+    Strafe,
+    /// Fall back to cover out of sight of where it last saw the player and stay hidden
+    /// until it sees the player again; with no cover in reach it holds its ground.
+    Retreat,
+}
+
+fn validate_rules(rules: &[BehaviorRule], push: &mut impl FnMut(&'static str, String)) {
+    if rules.len() > MAX_RULES {
+        push("mode.rules", format!("at most {MAX_RULES} rules"));
+    }
+    for (i, r) in rules.iter().enumerate() {
+        let mut bad = |what: &str, need: &str| {
+            push("mode.rules", format!("rule {}: {what} {need}", i + 1));
+        };
+        if r.behavior.is_none() && r.speed_multiplier.is_none() {
+            bad("needs", "a behavior or a speed_multiplier");
+        }
+        if let Some(m) = r.speed_multiplier
+            && !(m.is_finite() && m > 0.0 && m <= 2.0)
+        {
+            bad("speed_multiplier", "must be in (0, 2]");
+        }
+        let w = &r.when;
+        if let Some(h) = w.health_below
+            && !(h.is_finite() && h > 0.0 && h <= 1.0)
+        {
+            bad("when.health_below", "must be in (0, 1]");
+        }
+        if let Some(s) = w.damaged_within_secs
+            && !(s.is_finite() && s > 0.0)
+        {
+            bad("when.damaged_within_secs", "must be > 0");
+        }
+        let non_negative = [
+            ("when.alive_over_secs", w.alive_over_secs),
+            ("when.distance_below_m", w.distance_below_m),
+            ("when.distance_above_m", w.distance_above_m),
+            ("when.player_speed_above", w.player_speed_above),
+            ("when.player_speed_below", w.player_speed_below),
+        ];
+        for (name, v) in non_negative {
+            if let Some(v) = v
+                && !(v.is_finite() && v >= 0.0)
+            {
+                bad(name, "must be >= 0");
+            }
+        }
+    }
+}
+
+/// Reactions of deathmatch bots to the player while they fight. Every reaction changes the
+/// bot's strafe (ADAD), so reactive bots always strafe while they fight. See `docs/maps.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReactiveBots {
+    /// Chance, at each strafe-key decision, that the bot strafes the same world direction
+    /// as the player is strafing (copies the player's ADAD).
+    #[serde(default)]
+    pub mirror_strafe_chance: f32,
+    /// Chance, at each strafe-key decision, that the bot strafes against the player's
+    /// direction. `mirror_strafe_chance + oppose_strafe_chance` is at most 1.
+    #[serde(default)]
+    pub oppose_strafe_chance: f32,
+    /// When the player's crosshair comes within this many degrees of the bot's head, the
+    /// bot jukes (switches strafe direction) after its reaction time.
+    #[serde(default)]
+    pub dodge_within_deg: Option<f32>,
+    /// Chance of a juke each time the crosshair comes that close. Default 1.
+    #[serde(default = "always")]
+    pub dodge_chance: f32,
+    /// A bot that sees the player fire jukes after its reaction time.
+    #[serde(default)]
+    pub react_to_shots: bool,
+}
+
+fn always() -> f32 {
+    1.0
+}
+
+fn validate_reactive(r: &ReactiveBots, push: &mut impl FnMut(&'static str, String)) {
+    let chance = |c: f32| c.is_finite() && (0.0..=1.0).contains(&c);
+    if !chance(r.mirror_strafe_chance) {
+        push(
+            "mode.reactive.mirror_strafe_chance",
+            "must be in [0, 1]".into(),
+        );
+    }
+    if !chance(r.oppose_strafe_chance) {
+        push(
+            "mode.reactive.oppose_strafe_chance",
+            "must be in [0, 1]".into(),
+        );
+    }
+    if r.mirror_strafe_chance + r.oppose_strafe_chance > 1.0 {
+        push(
+            "mode.reactive",
+            "mirror_strafe_chance + oppose_strafe_chance must be at most 1".into(),
+        );
+    }
+    if let Some(d) = r.dodge_within_deg
+        && !(d.is_finite() && d > 0.0 && d < 90.0)
+    {
+        push(
+            "mode.reactive.dodge_within_deg",
+            "must be in (0, 90)".into(),
+        );
+    }
+    if !(chance(r.dodge_chance) && r.dodge_chance > 0.0) {
+        push("mode.reactive.dodge_chance", "must be in (0, 1]".into());
+    }
+    let strafes = r.mirror_strafe_chance > 0.0 || r.oppose_strafe_chance > 0.0;
+    if !(strafes || r.dodge_within_deg.is_some() || r.react_to_shots) {
+        push(
+            "mode.reactive",
+            "needs a strafe chance, dodge_within_deg or react_to_shots".into(),
+        );
+    }
+}
+
+/// Duel pressure: once the player first sees a bot life, they have `secs` to kill it. If
+/// they do not, the bot lands one sure shot the first moment it has line of sight to the
+/// targetable player: `damage` to the player and `penalty_points` off the score. Once per
+/// bot life, independent of `bots_shoot_back`, never in practice. See `docs/maps.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShootBackDeadline {
+    /// Seconds from the player first seeing a bot life to its sure shot.
+    pub secs: f32,
+    /// Damage the sure shot deals to the player.
+    #[serde(default)]
+    pub damage: f32,
+    /// Points the sure shot costs.
+    #[serde(default)]
+    pub penalty_points: f32,
 }
 
 /// A game-like objective on top of a deathmatch: defend a site against a fixed number of
@@ -120,6 +332,31 @@ impl ArenaMode {
                 bots_shoot_back, ..
             } => *bots_shoot_back,
         }
+    }
+
+    /// The shoot-back deadline, if the arena sets one.
+    pub fn deadline(&self) -> Option<ShootBackDeadline> {
+        match self {
+            Self::Deathmatch { deadline, .. } | Self::AngleClear { deadline, .. } => *deadline,
+        }
+    }
+}
+
+fn validate_deadline(d: &ShootBackDeadline, push: &mut impl FnMut(&'static str, String)) {
+    if !(d.secs.is_finite() && d.secs > 0.0) {
+        push("mode.deadline.secs", "must be > 0".into());
+    }
+    if !(d.damage.is_finite() && d.damage >= 0.0) {
+        push("mode.deadline.damage", "must be >= 0".into());
+    }
+    if !(d.penalty_points.is_finite() && d.penalty_points >= 0.0) {
+        push("mode.deadline.penalty_points", "must be >= 0".into());
+    }
+    if d.damage == 0.0 && d.penalty_points == 0.0 {
+        push(
+            "mode.deadline",
+            "needs damage or penalty_points above 0".into(),
+        );
     }
 }
 
@@ -193,8 +430,20 @@ impl ArenaDef {
                 bot_skill,
                 respawn_secs,
                 objective,
+                reactive,
+                rules,
                 ..
             } => {
+                if let Some(r) = reactive {
+                    validate_reactive(r, &mut push);
+                }
+                validate_rules(rules, &mut push);
+                if !rules.is_empty() && objective.is_some() {
+                    push(
+                        "mode.rules",
+                        "behavior rules do not apply to site attackers; drop [mode.objective] or the rules".into(),
+                    );
+                }
                 if !(1..=MAX_BOTS).contains(bots) {
                     push("mode.bots", format!("must be in 1..={MAX_BOTS}"));
                 }
@@ -260,6 +509,9 @@ impl ArenaDef {
                     push("mode.pre_aim_tolerance_deg", "must be in (0, 180)".into());
                 }
             }
+        }
+        if let Some(d) = self.mode.deadline() {
+            validate_deadline(&d, &mut push);
         }
         errs
     }

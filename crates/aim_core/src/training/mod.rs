@@ -4,6 +4,7 @@ pub mod adaptive;
 pub mod benchmark;
 pub mod challenge;
 pub mod method;
+pub mod missions;
 pub mod playlist;
 pub mod progress;
 pub mod resume;

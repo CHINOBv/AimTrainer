@@ -1,0 +1,27 @@
+id = "sound-turn"
+name = "Sound Turn"
+category = "reaction"
+description = """
+Turn to the sound. Each agent is first only heard: synthesized footsteps from your sides or behind
+you. It appears 0.8 s later, or as soon as your crosshair gets within 25° of it. Turn towards the
+sound at once, then take the head. Use headphones; the results show your error and turn time per
+direction."""
+
+[targets]
+shape = { kind = "humanoid" }
+# Relative to where you look when it spawns: always beside or behind you.
+spawn = { kind = "around_crosshair", offset_deg = [60.0, 180.0], distance = [8.0, 16.0] }
+max_alive = 1
+appear_delay_secs = [0.4, 1.2]
+lifetime_secs = 3.0
+
+[targets.perception]
+kind = "sound_cue"
+sound = "footsteps"
+reveal_after_secs = 0.8
+reveal_within_deg = 25
+
+[scoring]
+miss_penalty = 10
+expire_penalty = 50
+decay = { window_secs = 3.0, floor = 0.3 }

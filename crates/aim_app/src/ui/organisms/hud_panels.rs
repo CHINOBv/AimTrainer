@@ -3,7 +3,7 @@
 
 use crate::ui::UiAction;
 use crate::ui::atoms::{BAD, GOOD, WARN, big};
-use aim_core::scenario::{RunKey, Session, Tuning};
+use aim_core::scenario::{RunEnd, RunKey, Session, Tuning};
 use bevy_egui::egui::{self, Align2, FontId, RichText};
 
 pub fn run_status(ctx: &egui::Context, s: &Session) {
@@ -35,8 +35,42 @@ pub fn run_status(ctx: &egui::Context, s: &Session) {
                         stats.on_target_secs, stats.hold_secs
                     ));
                 }
+                let names: Vec<&str> = s
+                    .def()
+                    .phases
+                    .iter()
+                    .flatten()
+                    .map(|p| p.name.as_str())
+                    .collect();
+                if let Some(text) =
+                    progress_label(s.phase_index(), &names, s.def().end, stats.kills)
+                {
+                    ui.label(RichText::new(text).color(WARN));
+                }
             });
         });
+}
+
+/// The current phase of a multi-phase run and the progress towards a kills goal, if the
+/// scenario has either. The timer above still shows the time left before the cap.
+fn progress_label(phase: Option<usize>, names: &[&str], end: RunEnd, kills: u32) -> Option<String> {
+    let phase = phase.filter(|_| !names.is_empty()).map(|i| {
+        let name = names.get(i).copied().unwrap_or_default();
+        let head = format!("phase {}/{}", i + 1, names.len());
+        if name.is_empty() {
+            head
+        } else {
+            format!("{head} · {name}")
+        }
+    });
+    let goal = match end {
+        RunEnd::Kills { kills: goal } => Some(format!("{kills}/{goal} kills")),
+        RunEnd::Time | RunEnd::Endless => None,
+    };
+    match (phase, goal) {
+        (Some(p), Some(g)) => Some(format!("{p}  ·  {g}")),
+        (p, g) => p.or(g),
+    }
 }
 
 pub fn movement_meter(ctx: &egui::Context, s: &Session) {
@@ -413,6 +447,39 @@ fn edge_point(rect: egui::Rect, bearing: f32, inset: f32) -> egui::Pos2 {
         f32::INFINITY
     };
     c + egui::vec2(dx, dy) * tx.min(ty)
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::progress_label;
+    use aim_core::scenario::RunEnd;
+
+    #[test]
+    fn phased_and_kill_goal_runs_show_their_progress() {
+        assert_eq!(
+            progress_label(Some(1), &["Close trio", "Far peeker"], RunEnd::Time, 4),
+            Some("phase 2/2 · Far peeker".to_owned())
+        );
+        assert_eq!(
+            progress_label(Some(0), &["", ""], RunEnd::Time, 0),
+            Some("phase 1/2".to_owned())
+        );
+        assert_eq!(
+            progress_label(None, &[], RunEnd::Kills { kills: 30 }, 12),
+            Some("12/30 kills".to_owned())
+        );
+        assert_eq!(
+            progress_label(
+                Some(0),
+                &["Warm-up", "Race"],
+                RunEnd::Kills { kills: 30 },
+                3
+            ),
+            Some("phase 1/2 · Warm-up  ·  3/30 kills".to_owned())
+        );
+        assert_eq!(progress_label(None, &[], RunEnd::Time, 5), None);
+        assert_eq!(progress_label(None, &[], RunEnd::Endless, 5), None);
+    }
 }
 
 #[cfg(test)]

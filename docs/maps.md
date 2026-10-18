@@ -86,6 +86,8 @@ Geometry alone decides blocking; the kind tells drills and renderers how the box
 | `nearest_waypoint(p)`, `path(from, to)` | Bot routes: Dijkstra over the waypoint graph, or the direct segment when it is walkable. |
 | `cover_spots()` | Standable points that hug every `wall` and `cover` box: one at each end of each face (the corner a player peeks from) and more in between, at most `COVER_SPOT_SPACING` (2 m) apart, `COVER_SPOT_OFFSET` (0.5 m) out from the face. `low_cover` is skipped: it leaves a standing head visible. |
 | `cover_from(spots, threat_eye, from, max_route)` | The spot nearest to `from` that hides a standing head from `threat_eye` and is reachable along `path` within `max_route` meters. |
+| `peek_corners()` | Peek corners: the four vertical edges of every `wall` and `cover` box, each with the head point (standing head height, `HumanoidDims::head_center_height`) of an enemy just around it, `COVER_SPOT_OFFSET` out from both faces. `low_cover` is skipped and so are edges where a player could not stand. |
+| `exposed_corners(corners, eye)` | The corners an enemy could appear from, seen from `eye`: the edge is on its box's silhouette (the eye sees exactly one of its two faces, so something can hide behind the other), its head point is in line of sight and at least `MIN_CORNER_DISTANCE_M` (1 m, a design choice) away. |
 
 ## Built-in maps
 
@@ -184,7 +186,7 @@ peek_delay_secs = [0.3, 0.9]           # optional, default [0.4, 1.2] (PEEK_DELA
 pre_aim_tolerance_deg = 5.0            # optional: count and score pre-aimed sightings
 ```
 
-Deathmatch options, both optional and off by default so existing arenas behave as before:
+Deathmatch options, all optional and off by default so existing arenas behave as before:
 
 ```toml
 [mode]
@@ -197,9 +199,52 @@ site = "site"                 # waypoint id of the map: the site's center
 site_radius = 2.5             # meters
 capture_secs = 3.0            # an attacker on the site this long, uninterrupted, captures it
 attackers = 6                 # attackers sent in the run (1..=64), at most `bots` alive at once
+
+[mode.reactive]               # optional: bots react to the player while they fight
+mirror_strafe_chance = 0.35   # chance per strafe-key decision to strafe the player's way (0..=1)
+oppose_strafe_chance = 0.35   # chance to strafe against the player (the two sum to at most 1)
+dodge_within_deg = 4.0        # juke when the crosshair comes this close to the head (0..90)
+dodge_chance = 0.5            # chance of that juke (0..=1, default 1)
+react_to_shots = true         # juke when the player fires
+
+[[mode.rules]]                # optional, ordered: the first rule whose `when` all holds wins
+when = { health_below = 0.5 } # every condition set must hold; an empty `when` always holds
+behavior = "retreat"          # hold | peek | strafe | retreat (optional)
+speed_multiplier = 1.0        # optional, (0, 2]: scales run speed and acceleration
 ```
 
+Rule conditions (all optional; at most `MAX_RULES` = 16 rules; not allowed with `[mode.objective]`):
+
+| Condition | Holds when |
+|---|---|
+| `health_below` | the bot's health is below this fraction of 150, in (0, 1] |
+| `damaged_within_secs` | the player hit the bot within the last this many seconds |
+| `alive_over_secs` | the bot spawned at least this many seconds ago |
+| `sees_player` | the bot has (true) or lacks (false) line of sight to the player's head (`visible_head`, and not during the spawn grace) |
+| `distance_below_m`, `distance_above_m` | the horizontal distance to the player is below / above this many meters |
+| `player_speed_above`, `player_speed_below` | the player's speed is above / below this many m/s |
+
+| Behavior | What the roaming bot does while the rule holds |
+|---|---|
+| `hold` | Stands still and holds the angle: no roaming, strafing or falling back. It still turns to fight what it sees. |
+| `peek` | Walks along `MapDef::path` to where it last noticed the player, or was shot from, until it sees them and stops to fight. On arrival it forgets the spot and roams. |
+| `strafe` | Strafes (ADAD) while it fights, as with `bot_strafe`, instead of falling back when shot. |
+| `retreat` | Falls back to the nearest cover spot (`MapDef::cover_from`) out of sight of where it last knew the player to be, holding its fire while it runs, and stays hidden there until it sees the player. With no cover within `RETREAT_MAX_ROUTE_M` it holds its ground. |
+
+A rule without `behavior` only changes the speed. When no rule holds, the bot behaves as described in the bot model below. Rules only read what the bot could know (its health, its own sight, the last place it saw the player), never the player's position through walls; distance and player speed are a simplification, read directly. Evaluating rules draws no random numbers.
+
 `ArenaDef::validate` checks the definition alone; `ArenaDef::validate_with_map` also checks that the map id matches, that a deathmatch map has bot spawns and that every angle id exists. `ArenaSession::new(def, map, seed)` runs both and returns `ArenaError::Invalid` on failure. `arena::builtin::load(id)` returns a built-in arena together with its built-in map.
+
+Both modes also accept a shoot-back deadline (optional, off by default):
+
+```toml
+[mode.deadline]               # duel pressure: kill each bot within `secs` of first seeing it
+secs = 1.5                    # > 0
+damage = 40.0                 # damage of the bot's sure shot (>= 0, default 0)
+penalty_points = 25.0         # score lost per sure shot (>= 0, default 0); damage or points must be > 0
+```
+
+Once the player first sees a bot life, a clock starts. If the bot is still alive after `secs`, it lands one sure shot the first moment it has line of sight to the player (`visible_head` from its eye) and the spawn grace is over: the player takes `damage` and the run loses `penalty_points`. It happens once per bot life, needs no aim and draws no random number, works whether or not `bots_shoot_back` is set, and never happens in practice. `ArenaStats::deadline_kills` counts bot lives killed before their deadline and `ArenaStats::deadline_hits` the sure shots; the results notes show both. The deadline is a design choice for duel pressure, not a VALORANT rule.
 
 ### Modes
 
@@ -223,8 +268,10 @@ attackers = 6                 # attackers sent in the run (1..=64), at most `bot
 | Weapon | Vandal (`BOT_WEAPON`) for damage, fire rate and spread. |
 | Movement | `movement::step` with the rifle profile; bots walk toward their next route point and brake with the stop curve when they stop to fight. Angle bots stop exactly on the peek position (a perfect counter-strafe). |
 | Strafe | Only with `bot_strafe = true`. While a roaming or attacking bot fights, it holds one strafe key for 0.2–0.45 s (`STRAFE_SECS`, a design choice), then the other (ADAD). Pressing the opposite key makes `movement::step` counter-strafe, so the bot passes through the accurate speed window at each switch. It fires only when its speed is at or below the accuracy limit (27.5% of run speed, the movement module's VALORANT value), so its shots carry first-shot spread only. |
+| Reactions | Only with `[mode.reactive]` (deathmatch). Reactive bots strafe while they fight, as with `bot_strafe`, and react to the player in three ways. **Copy or oppose:** at each strafe-key decision (the start of a strafe and each switch), one random roll makes the bot strafe the same world direction as the player (`mirror_strafe_chance`), against it (`oppose_strafe_chance`) or as the plain ADAD would. The player counts as strafing when their speed across the bot's view is at least `PLAYER_STRAFE_MIN_SPEED` (0.5 m/s, a design choice). **Dodge:** when the player's crosshair comes within `dodge_within_deg` of the bot's head while it fights, the bot jukes with `dodge_chance`: one bot reaction time later (the `bot_skill` preset's reaction time) it switches strafe keys at once. **Shots:** with `react_to_shots`, a bot that sees the player fire jukes one reaction time later. A bot has at most one pending juke and drops it when it stops fighting. The rolls only happen in arenas that set these options, so other arenas keep their random sequence. |
 | Behavior | The angle peek cycle (hidden, peek, hold, hide), the strafe (ADAD) and the attacker push (duel, press on) are small state machines in `arena/behavior.rs`, unit-tested on their own. They only draw random numbers on the transitions that need them, so an arena that does not use a machine keeps its random sequence. |
 | Cover | A roaming deathmatch bot that is shot and survives falls back: it runs to the nearest cover spot (`MapDef::cover_from`) that hides its head from the eye the shot came from and is at most `RETREAT_MAX_ROUTE_M` (8 m) away along its route, holding its fire while it runs. It hides there for 0.6–1.4 s (`COVER_HOLD_SECS`), then walks back to where it was hit to re-peek; if it sees the player while hiding or re-peeking, it stops to fight. With no cover in reach it holds its ground. The bot only learns the shooter's position at the moment of the shot, never later (no wallhack). Durations and distance are design choices, not VALORANT values. Angle bots and site attackers do not fall back. The state machine is `Retreat` in `arena/behavior.rs`. |
+| Rules | Only with `[[mode.rules]]` (roaming deathmatch bots). Every frame the first rule whose conditions all hold switches the bot to its behavior (`hold`, `peek`, `strafe` or `retreat`, above) and speed multiplier; any behavior other than `retreat` also cancels the cover fall-back below. A bot remembers the player's eye where it last noticed them or was shot from; `peek` walks there and `retreat` hides from it. Logic in `Bot::active_rule` and `Bot::move_goal` (`arena/bot.rs`). |
 | Sight | Line of sight from the bot's eye to any part of the player's head (`visible_head`). Roaming bots only notice the player within 60° of where they face (`BOT_NOTICE_HALF_ANGLE_DEG`, an estimate from VALORANT's 103° horizontal field of view); once engaged they track at any angle. |
 | Aim | The `sim::AimerProfile` model: a reaction delay, then a minimum-jerk flick to the player's head whose duration follows Fitts' law (`fitts_a + fitts_b · log2(d / 2r + 1)`) and whose endpoint misses by a Gaussian error of `endpoint_noise · r`, where `r` is the head's angular radius. After each shot the bot plans a corrective flick after half its reaction time. Deathmatch bots use the `bot_skill` preset; angle bots use the contender flick constants with `bot_reaction_secs` as their reaction time. |
 | Fire | When the flick has landed, at the Vandal fire rate, only if `bots_shoot_back`. Bot shots are occluded by the map like the player's. |
@@ -233,9 +280,19 @@ attackers = 6                 # attackers sent in the run (1..=64), at most `bot
 
 At the first frame each bot life becomes visible to the player, the arena records the angle in degrees between the player's view direction and the bot's head (`ArenaStats::crosshair_errors_deg`); `ArenaStats::median_crosshair_error_deg` summarizes it. A player who pre-aims where the head appears scores close to 0°; one who looks elsewhere scores tens of degrees. It trains pre-aim and head-level placement (roadmap Phase 7). The vertical part of the same error, how far the crosshair was above or below head level in degrees of pitch, is recorded in `ArenaStats::head_level_errors_deg` (`median_head_level_error_deg`). In an angle clear with `pre_aim_tolerance_deg`, each bot life first seen within that many degrees counts in `ArenaStats::pre_aimed`. A perfectly pre-aimed angle still measures a few degrees, because the head is first seen while only partly out of cover (about 3° on the `angles-lab` doorway), so 5° is a sensible tolerance.
 
+### Live coaching overlay
+
+The **Live coaching overlay** checkbox on the Arenas tab (off by default, saved in settings as `arena_coaching`) shows, while an arena runs, what the post-run crosshair placement metric measures, live. `ArenaSession::coaching()` computes the values each frame as a pure read (it changes nothing and draws no random number); the app only draws them:
+
+- **Nearest corner:** among the map's exposed corners (`MapDef::exposed_corners` from the player's eye), the one at the smallest angle from the crosshair, and that angle. Within `COACH_CORNER_TOLERANCE_DEG` (5°, the pre-aim tolerance above) the player counts as holding it.
+- **Head level:** the crosshair's pitch minus the pitch of that corner's head point, signed (positive is above head level). Within `COACH_HEAD_LEVEL_TOLERANCE_DEG` (1°, an estimate: about a head's angular height at 15 m) it shows as on head level. A small gauge draws the crosshair dot against the head line.
+- **Movement:** "ACCURATE" when the player is at or below the weapon's accuracy speed limit, otherwise "MOVING" and the speed.
+
+Corners come from the box geometry only, so a corner counts even if no bot would ever use it, and the world is flat, so head height is the same everywhere. The overlay drawing has no automated test.
+
 ### Result
 
-`ArenaSession::result()` returns an `aim_core::scenario::RunResult` so arenas share history and the results UI with scenarios: `scenario_id` is the arena id, `score = kills × 100 − deaths × 50 + headshot hits × 25 + pre-aimed sightings × 50 (PRE_AIM_POINTS) + 500 if the site was held (SITE_HELD_BONUS)` (the last two only in arenas that use them), `accuracy = hits / shots`, `expired` is the number of player deaths, and kills per minute, average time to kill (from first sight) and headshot rate (headshot hits / hits) are as in scenarios.
+`ArenaSession::result()` returns an `aim_core::scenario::RunResult` so arenas share history and the results UI with scenarios: `scenario_id` is the arena id, `score = kills × 100 − deaths × 50 + headshot hits × 25 + pre-aimed sightings × 50 (PRE_AIM_POINTS) + 500 if the site was held (SITE_HELD_BONUS) − deadline hits × penalty_points` (the last three only in arenas that use them), `accuracy = hits / shots`, `expired` is the number of player deaths, and kills per minute, average time to kill (from first sight) and headshot rate (headshot hits / hits) are as in scenarios.
 
 ### Simplifications
 
@@ -255,3 +312,4 @@ At the first frame each bot life becomes visible to the player, the arena record
 | `corridor-jiggle` | `duel-corridor` | Jiggle-peek drill: eight peeks alternating `north-jiggle` and `south-jiggle`, hold 0.15 s, peek delay 0.3–0.9 s, bots do not shoot back, 60 s. |
 | `outpost-site-hold` | `signal-outpost` | Site hold: 6 contender attackers, 2 at a time, strafing and shooting back; capture 3 s within 2.5 m; 90 s. |
 | `lanes-deathmatch` | `freight-lanes` | Deathmatch, 3 contender bots that strafe and shoot back, 120 s. |
+| `corridor-reactive` | `duel-corridor` | Reactive duels: 2 contender bots that shoot back. They copy (35%) or oppose (35%) the player's strafe, juke when the crosshair is within 4° (50%) or the player fires; they hold long angles beyond 20 m, strafe for 1.5 s after a hit and retreat under half health. Shoot-back deadline 1.5 s (40 damage, −25 points). 90 s. |

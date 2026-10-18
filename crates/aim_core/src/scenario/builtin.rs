@@ -66,12 +66,44 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/peek-reaction.toml"),
     ),
     (
+        "phase-kill-race.toml",
+        include_str!("../../../../content/scenarios/phase-kill-race.toml"),
+    ),
+    (
+        "phase-peek-ladder.toml",
+        include_str!("../../../../content/scenarios/phase-peek-ladder.toml"),
+    ),
+    (
+        "peripheral-detect.toml",
+        include_str!("../../../../content/scenarios/peripheral-detect.toml"),
+    ),
+    (
         "precision-rings.toml",
         include_str!("../../../../content/scenarios/precision-rings.toml"),
     ),
     (
+        "radar-recall.toml",
+        include_str!("../../../../content/scenarios/radar-recall.toml"),
+    ),
+    (
+        "react-duel.toml",
+        include_str!("../../../../content/scenarios/react-duel.toml"),
+    ),
+    (
+        "regen-track.toml",
+        include_str!("../../../../content/scenarios/regen-track.toml"),
+    ),
+    (
+        "sound-turn.toml",
+        include_str!("../../../../content/scenarios/sound-turn.toml"),
+    ),
+    (
         "spray-transfer.toml",
         include_str!("../../../../content/scenarios/spray-transfer.toml"),
+    ),
+    (
+        "spread-flicks.toml",
+        include_str!("../../../../content/scenarios/spread-flicks.toml"),
     ),
     (
         "static-headline.toml",
