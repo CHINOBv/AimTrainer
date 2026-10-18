@@ -18,3 +18,40 @@ pub fn big(text: impl Into<String>, size: f32) -> RichText {
         .font(FontId::proportional(size))
         .strong()
 }
+
+/// Growth of a pop at its first frame (0.6 = 160% size), and how long it takes to settle
+/// back to full size, seconds.
+const POP_GROWTH: f32 = 0.6;
+const POP_SETTLE_SECS: f32 = 0.18;
+/// Share of a pop's life spent fading out at its end.
+const POP_FADE_SHARE: f32 = 0.3;
+
+/// Scale and opacity of something that pops in and lasts `secs`, `age` seconds after it
+/// appeared: it starts large, settles to scale 1, and fades out over the last part of its
+/// life. `None` before it appears and once it is over.
+pub fn pop(age: f32, secs: f32) -> Option<(f32, f32)> {
+    if !(0.0..secs).contains(&age) {
+        return None;
+    }
+    let settle = (1.0 - age / POP_SETTLE_SECS).max(0.0);
+    let scale = 1.0 + POP_GROWTH * settle * settle;
+    let alpha = ((secs - age) / (POP_FADE_SHARE * secs)).min(1.0);
+    Some((scale, alpha))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pop_starts_big_settles_and_fades_out() {
+        let (s0, a0) = pop(0.0, 1.0).unwrap();
+        assert!((s0 - 1.0 - POP_GROWTH).abs() < 1e-4 && (a0 - 1.0).abs() < 1e-4);
+        let (s1, a1) = pop(0.5, 1.0).unwrap();
+        assert!((s1 - 1.0).abs() < 1e-4 && (a1 - 1.0).abs() < 1e-4);
+        let (_, late) = pop(0.9, 1.0).unwrap();
+        assert!(late > 0.0 && late < 0.5);
+        assert_eq!(pop(1.0, 1.0), None);
+        assert_eq!(pop(-0.1, 1.0), None);
+    }
+}

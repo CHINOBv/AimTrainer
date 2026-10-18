@@ -172,7 +172,7 @@ Game-feel effects live in the `[feel]` table of `settings.toml`. Missing keys ta
 | `health_bar` | `true` | Arena: health bar with a ghost of the damage just taken |
 | `low_hp_pulse` | `true` | Arena: health bar pulse at low health |
 | `death_screen` | `true` | Arena: killing-shot direction and respawn timer after a death |
-| `round_transitions` | `true` | Animated countdown, "GO" pop and end-of-round banner |
+| `round_transitions` | `true` | Animated countdown, "GO" pop and an end-of-round banner that holds the results for 0.8 s |
 | `screen_punch` | off, 100 | Arena: screen-space jolt on damage; never moves the camera |
 | `crosshair_bloom` | `false` | Crosshair opens with recoil and movement inaccuracy |
 | `arena_arrows` | `true` | Arena: edge arrows towards enemies in sight but outside the view |
@@ -181,7 +181,7 @@ Game-feel effects live in the `[feel]` table of `settings.toml`. Missing keys ta
 
 Minimal keeps only the damage indicator (at 60%), health bar and death screen. Juicy adds screen punch and crosshair bloom to Standard.
 
-The game-feel effects are still being built: every key above is already read and saved, but only `damage_vignette.enabled` has an effect today.
+The game-feel effects are still being built: every key above is already read and saved. The arena HUD keys (`damage_indicator`, `damage_vignette`, `kill_feed`, `streak_banner`, `health_bar`, `low_hp_pulse`, `death_screen`, `round_transitions` and `screen_punch`) take effect, and their intensities scale opacity and size. The animated countdown also plays before scenario runs.
 
 The `[sound]` table adds per-category volumes, each a percent of `volume_percent`: `shots_percent`, `world_percent`, `ui_percent` and `cues_percent` (all 100). Sound toggles: `bot_gunfire`, `footsteps`, `damage_taken`, `death`, `streak`, `round_cues` and `low_time_warning` are on; `ui_clicks` is off.
 
