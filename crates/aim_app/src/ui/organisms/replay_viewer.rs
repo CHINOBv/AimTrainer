@@ -293,6 +293,7 @@ mod tests {
             radius_deg: radius,
             start_secs: 0.0,
             end_secs: 0.5,
+            speed_deg_per_sec: vec![0.0; path.len()],
             path_deg: path,
             shots: shots
                 .into_iter()

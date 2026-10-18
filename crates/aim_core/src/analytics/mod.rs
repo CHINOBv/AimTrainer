@@ -18,7 +18,7 @@ pub mod trace;
 pub mod tracking;
 
 pub use flick::{Flick, FlickSummary};
-pub use path::{Engagement, ReplayPath, ShotPoint};
+pub use path::{Engagement, PathSummary, ReplayPath, ShotHeatmap, ShotPoint, SpeedBand};
 pub use profile::{Finding, SkillProfile};
 pub use skills::BenchmarkProfile;
 pub use tracking::{TrackingAnalysis, TrackingSummary};
