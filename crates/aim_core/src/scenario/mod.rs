@@ -1,5 +1,6 @@
 //! Scenarios: data definitions, the runtime session, and the built-in library.
 
+mod behavior;
 pub mod builtin;
 pub mod def;
 pub mod difficulty;

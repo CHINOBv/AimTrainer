@@ -225,7 +225,7 @@ fn crosshair_sphere_point(
 }
 
 /// Where the player aims to separate targets: a humanoid's head, a sphere's center.
-fn aim_point(shape: &Shape, dims: &HumanoidDims, p: Vec3) -> Vec3 {
+pub(super) fn aim_point(shape: &Shape, dims: &HumanoidDims, p: Vec3) -> Vec3 {
     match shape {
         Shape::Humanoid { .. } => p + Vec3::new(0.0, dims.head_center_height(), 0.0),
         Shape::Sphere { .. } => p,

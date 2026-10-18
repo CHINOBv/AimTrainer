@@ -167,6 +167,56 @@ The built-in `dodge-*` scenarios are dynamic clicking drills against evasive ene
 | `dodge-peek` | jiggle peek, appears after a delay | Reacting to a peek without firing while the agent crosses at full speed |
 | `dodge-micro-spheres` | jukes on a head-sized sphere | Small corrections that do not overshoot into a reversal |
 
+### Reactive targets
+
+`targets.reactions` (optional) makes a `strafe` or `dodge` target answer the player. Each reaction sets the target's strafe direction and holds it for a `react_secs` draw before the motion decides again. Airborne `dodge` targets react only after they land.
+
+```toml
+[targets]
+motion = { kind = "strafe", change_secs = [0.5, 1.0], stop_chance = 0.8 }
+reactions = { mirror_strafe_chance = 0.3, oppose_strafe_chance = 0.3, dodge_within_deg = 2.5, shot_juke_chance = 0.35 }
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `mirror_strafe_chance` | `0` | When the player starts a strafe, the chance that the target strafes the same way. A new strafe is noticed when the player's speed along the target's side-to-side axis reaches 1 m/s in a new direction (an estimate, see `training-science.md`), so it needs `player.movement = true`. |
+| `oppose_strafe_chance` | `0` | The chance that it strafes the other way instead. Both share one roll, so their sum must be ≤ 1. |
+| `dodge_within_deg` | `0` (off) | When the crosshair comes within this angle of the target's aim point (head or sphere center), in [0, 90), the target moves away from the crosshair. It triggers again only after the crosshair has left that circle. |
+| `shot_juke_chance` | `0` | Whenever the player fires (click mode), the chance that every visible target jukes: it reverses, or, when standing still, moves away from the crosshair. |
+| `react_secs` | `[0.2, 0.4]` | How long a reaction holds, seconds (a positive range). |
+
+### Behaviour rules
+
+`[[targets.behaviors]]` (optional, at most 8) switches a target's behaviour on conditions. Every frame the first rule whose conditions all hold is in force; with none, the target uses `targets.motion`. The built-in `react-duel` "holds the angle, strafes when hit, retreats under 50% health":
+
+```toml
+[[targets.behaviors]]
+when = { health_below = 0.5 }
+retreat_m = 4
+
+[[targets.behaviors]]
+when = { damaged_within_secs = 1.5 }
+motion = { kind = "dodge", change_secs = [0.2, 0.45], juke_chance = 0.4 }
+```
+
+| Condition (`when`) | Holds when |
+|---|---|
+| `health_below` | Remaining health is below this fraction of the starting health, in (0, 1]. Never holds for `inf` health. |
+| `damaged_within_secs` | The target took damage within the last this many seconds (> 0). |
+| `alive_for_secs` | The target has been visible for at least this many seconds (≥ 0). |
+| `crosshair_within_deg` | The crosshair is within this angle of the target's aim point, in (0, 180). |
+| `speed_above` | The target moves faster than this many m/s (≥ 0). |
+
+A rule needs at least one condition and at least one override:
+
+| Override | Meaning |
+|---|---|
+| `motion` | A motion to use instead of `targets.motion`, written and validated like it. When a rule switch changes the motion, the new motion decides at once and movement it has no part in stops (for example a `static` override stops a strafe). |
+| `speed_scale` | Multiplier on movement speed, in [0.25, 4] (default 1), on top of in-run tuning. |
+| `retreat_m` | Move straight away from the player, with the motion's weapon movement physics (the Vandal's for `static` and `drift`), until the target has retreated this many meters in total, in [0, 20]. Its strafe lane moves back with it. |
+
+There is no line-of-sight condition: scenario targets always stand in the open. Arena bots, which can hide behind walls, live in `aim_world`. An airborne `dodge` target keeps its rule until it lands. Reactions and rules draw random numbers only when they are used, so other scenarios replay exactly as before.
+
 Clicking on the stop or reversal works because the target's lateral speed passes through zero there (inference from the movement model, not a measured training effect). The simulated aimer re-aims at the target every frame, so calibrate scores understate how much harder the motion makes these drills for a human.
 
 ### Difficulty

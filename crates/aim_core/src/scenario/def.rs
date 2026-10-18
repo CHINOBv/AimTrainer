@@ -255,7 +255,91 @@ pub struct TargetsDef {
     /// sustained effort beats chipping at them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub regen: Option<RegenDef>,
+    /// Reactive behaviour: the target answers the player's strafes, crosshair and shots.
+    /// Needs a `strafe` or `dodge` motion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reactions: Option<ReactionsDef>,
+    /// Conditional behaviour switching: an ordered list of rules; each frame the first
+    /// rule whose conditions all hold overrides the target's motion.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub behaviors: Vec<BehaviorRule>,
 }
+
+/// How a target reacts to the player (`targets.reactions`). A reaction sets the target's
+/// strafe direction and holds it for `react_secs`, overriding the motion's own decisions
+/// for that long. Airborne `dodge` targets do not react until they land.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReactionsDef {
+    /// Chance that a new player strafe makes the target strafe the same way (mirror).
+    #[serde(default)]
+    pub mirror_strafe_chance: f32,
+    /// Chance that a new player strafe makes the target strafe the other way (oppose).
+    /// `mirror_strafe_chance + oppose_strafe_chance` must be <= 1.
+    #[serde(default)]
+    pub oppose_strafe_chance: f32,
+    /// Dodge away from the crosshair when it comes within this angle of the target's aim
+    /// point, degrees (0 = off).
+    #[serde(default)]
+    pub dodge_within_deg: f32,
+    /// Chance that the target jukes (reverses, or starts moving away from the crosshair)
+    /// whenever the player fires.
+    #[serde(default)]
+    pub shot_juke_chance: f32,
+    /// How long a reaction holds before the motion decides again, seconds.
+    #[serde(default = "default_react_secs")]
+    pub react_secs: Range,
+}
+
+fn default_react_secs() -> Range {
+    Range::new(0.2, 0.4)
+}
+
+/// One conditional behaviour rule (`[[targets.behaviors]]`): when every condition in
+/// `when` holds, the rule's overrides apply.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BehaviorRule {
+    /// Conditions; every one that is set must hold.
+    pub when: BehaviorWhen,
+    /// Motion to use instead of `targets.motion`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub motion: Option<Motion>,
+    /// Multiplier on the target's movement speed, in [0.25, 4].
+    #[serde(default = "one_f", skip_serializing_if = "is_one")]
+    pub speed_scale: f32,
+    /// Move straight away from the player, up to this many meters from where the target
+    /// started retreating in total (0 = off).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub retreat_m: f32,
+}
+
+/// Conditions of a [`BehaviorRule`]. At least one must be set.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BehaviorWhen {
+    /// Remaining health is below this fraction of the starting health, in (0, 1].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health_below: Option<f32>,
+    /// The target took damage within the last this many seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub damaged_within_secs: Option<f32>,
+    /// The target has been visible for at least this many seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alive_for_secs: Option<f32>,
+    /// The crosshair is within this angle of the target's aim point, degrees.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crosshair_within_deg: Option<f32>,
+    /// The target moves faster than this, m/s.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed_above: Option<f32>,
+}
+
+/// Most behaviour rules a scenario may list.
+pub const MAX_BEHAVIOR_RULES: usize = 8;
+
+/// Farthest a behaviour rule may make a target retreat, meters.
+pub const MAX_RETREAT_M: f32 = 20.0;
 
 /// Health regeneration of targets (`targets.regen`). Every `interval_secs` after a target
 /// appears it heals `amount` of health (hits in click mode, seconds in hold mode), never
@@ -844,97 +928,200 @@ impl ScenarioDef {
             );
         }
 
-        match &t.motion {
-            Motion::Static => {}
-            Motion::Strafe {
-                change_secs,
-                stop_chance,
-                max_offset,
-                ..
-            } => {
-                check(
-                    change_secs.is_valid() && change_secs.min > 0.0,
-                    "targets.motion.change_secs",
-                    "must be a positive [min, max]",
-                );
-                check(
-                    (0.0..=1.0).contains(stop_chance),
-                    "targets.motion.stop_chance",
-                    "must be in [0, 1]",
-                );
-                check(
-                    *max_offset > 0.0,
-                    "targets.motion.max_offset",
-                    "must be > 0",
-                );
+        for (field, msg) in motion_problems(&t.motion) {
+            check(false, field, msg);
+        }
+        if let Some(r) = &t.reactions {
+            for (chance, field) in [
+                (
+                    r.mirror_strafe_chance,
+                    "targets.reactions.mirror_strafe_chance",
+                ),
+                (
+                    r.oppose_strafe_chance,
+                    "targets.reactions.oppose_strafe_chance",
+                ),
+                (r.shot_juke_chance, "targets.reactions.shot_juke_chance"),
+            ] {
+                check((0.0..=1.0).contains(&chance), field, "must be in [0, 1]");
             }
-            Motion::Dodge {
-                change_secs,
-                juke_secs,
-                juke_chance,
-                stop_chance,
-                crouch_chance,
-                jump_chance,
-                max_offset,
-                ..
-            } => {
-                check(
-                    change_secs.is_valid() && change_secs.min > 0.0,
-                    "targets.motion.change_secs",
-                    "must be a positive [min, max]",
-                );
-                check(
-                    juke_secs.is_valid() && juke_secs.min > 0.0,
-                    "targets.motion.juke_secs",
-                    "must be a positive [min, max]",
-                );
-                for (chance, field) in [
-                    (juke_chance, "targets.motion.juke_chance"),
-                    (stop_chance, "targets.motion.stop_chance"),
-                    (crouch_chance, "targets.motion.crouch_chance"),
-                    (jump_chance, "targets.motion.jump_chance"),
-                ] {
-                    check((0.0..=1.0).contains(chance), field, "must be in [0, 1]");
-                }
-                let shared = stop_chance + crouch_chance + jump_chance;
-                check(
-                    [stop_chance, crouch_chance, jump_chance]
-                        .iter()
-                        .any(|c| !(0.0..=1.0).contains(*c))
-                        || shared <= 1.0 + 1e-6,
-                    "targets.motion",
-                    "stop_chance + crouch_chance + jump_chance must be <= 1",
-                );
-                check(
-                    *max_offset > 0.0,
-                    "targets.motion.max_offset",
-                    "must be > 0",
-                );
-            }
-            Motion::Drift {
-                speed,
-                change_secs,
-                max_offset,
-            } => {
-                check(
-                    speed.is_valid() && speed.min >= 0.0,
-                    "targets.motion.speed",
-                    "must be a non-negative [min, max]",
-                );
-                check(
-                    change_secs.is_valid() && change_secs.min > 0.0,
-                    "targets.motion.change_secs",
-                    "must be a positive [min, max]",
-                );
-                check(
-                    *max_offset > 0.0,
-                    "targets.motion.max_offset",
-                    "must be > 0",
-                );
+            // Reported only when both chances are in range, so one bad value is one error.
+            let (mirror, oppose) = (r.mirror_strafe_chance, r.oppose_strafe_chance);
+            let in_range = |c: f32| (0.0..=1.0).contains(&c);
+            check(
+                !(in_range(mirror) && in_range(oppose)) || mirror + oppose <= 1.0 + 1e-6,
+                "targets.reactions",
+                "mirror_strafe_chance + oppose_strafe_chance must be <= 1",
+            );
+            check(
+                (0.0..90.0).contains(&r.dodge_within_deg),
+                "targets.reactions.dodge_within_deg",
+                "must be in [0, 90)",
+            );
+            check(
+                r.react_secs.is_valid() && r.react_secs.min > 0.0,
+                "targets.reactions.react_secs",
+                "must be a positive [min, max]",
+            );
+            check(
+                matches!(t.motion, Motion::Strafe { .. } | Motion::Dodge { .. }),
+                "targets.reactions",
+                "needs motion kind = \"strafe\" or \"dodge\"",
+            );
+        }
+        check(
+            t.behaviors.len() <= MAX_BEHAVIOR_RULES,
+            "targets.behaviors",
+            &format!("at most {MAX_BEHAVIOR_RULES} rules"),
+        );
+        for rule in &t.behaviors {
+            check(
+                behavior_when_is_valid(&rule.when),
+                "targets.behaviors.when",
+                "needs at least one condition: health_below in (0, 1], damaged_within_secs > 0, \
+                 alive_for_secs >= 0, crosshair_within_deg in (0, 180) or speed_above >= 0",
+            );
+            check(
+                rule.motion.is_some() || rule.speed_scale != 1.0 || rule.retreat_m != 0.0,
+                "targets.behaviors",
+                "each rule needs motion, speed_scale or retreat_m",
+            );
+            check(
+                (0.25..=4.0).contains(&rule.speed_scale),
+                "targets.behaviors.speed_scale",
+                "must be in [0.25, 4]",
+            );
+            check(
+                (0.0..=MAX_RETREAT_M).contains(&rule.retreat_m),
+                "targets.behaviors.retreat_m",
+                &format!("must be in [0, {MAX_RETREAT_M}] m"),
+            );
+            for (field, msg) in rule.motion.iter().flat_map(motion_problems) {
+                let name = field.strip_prefix("targets.motion.").unwrap_or("chances");
+                check(false, "targets.behaviors.motion", &format!("{name}: {msg}"));
             }
         }
         errs
     }
+}
+
+/// Whether a behaviour rule sets at least one condition and every set condition is in range.
+fn behavior_when_is_valid(w: &BehaviorWhen) -> bool {
+    let set = [
+        w.health_below,
+        w.damaged_within_secs,
+        w.alive_for_secs,
+        w.crosshair_within_deg,
+        w.speed_above,
+    ];
+    set.iter().any(Option::is_some)
+        && w.health_below.is_none_or(|h| h > 0.0 && h <= 1.0)
+        && w.damaged_within_secs
+            .is_none_or(|s| s.is_finite() && s > 0.0)
+        && w.alive_for_secs.is_none_or(|s| s.is_finite() && s >= 0.0)
+        && w.crosshair_within_deg.is_none_or(|a| a > 0.0 && a < 180.0)
+        && w.speed_above.is_none_or(|v| v.is_finite() && v >= 0.0)
+}
+
+/// Problems with a motion's parameters, as `(field, message)`; the fields are named as
+/// under `targets.motion`.
+fn motion_problems(m: &Motion) -> Vec<(&'static str, &'static str)> {
+    let mut out = Vec::new();
+    let mut check = |ok: bool, field: &'static str, msg: &'static str| {
+        if !ok {
+            out.push((field, msg));
+        }
+    };
+    match m {
+        Motion::Static => {}
+        Motion::Strafe {
+            change_secs,
+            stop_chance,
+            max_offset,
+            ..
+        } => {
+            check(
+                change_secs.is_valid() && change_secs.min > 0.0,
+                "targets.motion.change_secs",
+                "must be a positive [min, max]",
+            );
+            check(
+                (0.0..=1.0).contains(stop_chance),
+                "targets.motion.stop_chance",
+                "must be in [0, 1]",
+            );
+            check(
+                *max_offset > 0.0,
+                "targets.motion.max_offset",
+                "must be > 0",
+            );
+        }
+        Motion::Dodge {
+            change_secs,
+            juke_secs,
+            juke_chance,
+            stop_chance,
+            crouch_chance,
+            jump_chance,
+            max_offset,
+            ..
+        } => {
+            check(
+                change_secs.is_valid() && change_secs.min > 0.0,
+                "targets.motion.change_secs",
+                "must be a positive [min, max]",
+            );
+            check(
+                juke_secs.is_valid() && juke_secs.min > 0.0,
+                "targets.motion.juke_secs",
+                "must be a positive [min, max]",
+            );
+            for (chance, field) in [
+                (juke_chance, "targets.motion.juke_chance"),
+                (stop_chance, "targets.motion.stop_chance"),
+                (crouch_chance, "targets.motion.crouch_chance"),
+                (jump_chance, "targets.motion.jump_chance"),
+            ] {
+                check((0.0..=1.0).contains(chance), field, "must be in [0, 1]");
+            }
+            let shared = stop_chance + crouch_chance + jump_chance;
+            check(
+                [stop_chance, crouch_chance, jump_chance]
+                    .iter()
+                    .any(|c| !(0.0..=1.0).contains(*c))
+                    || shared <= 1.0 + 1e-6,
+                "targets.motion",
+                "stop_chance + crouch_chance + jump_chance must be <= 1",
+            );
+            check(
+                *max_offset > 0.0,
+                "targets.motion.max_offset",
+                "must be > 0",
+            );
+        }
+        Motion::Drift {
+            speed,
+            change_secs,
+            max_offset,
+        } => {
+            check(
+                speed.is_valid() && speed.min >= 0.0,
+                "targets.motion.speed",
+                "must be a non-negative [min, max]",
+            );
+            check(
+                change_secs.is_valid() && change_secs.min > 0.0,
+                "targets.motion.change_secs",
+                "must be a positive [min, max]",
+            );
+            check(
+                *max_offset > 0.0,
+                "targets.motion.max_offset",
+                "must be > 0",
+            );
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -1286,6 +1473,221 @@ mod tests {
             });
             assert_eq!(fields_of(&b), ["scoring.decay"], "{window} {floor}");
         }
+    }
+
+    /// `MINIMAL` with a strafe motion, which reactions need.
+    fn strafing_minimal() -> String {
+        format!("{MINIMAL}motion = {{ kind = \"strafe\", change_secs = [0.3, 0.6] }}\n")
+    }
+
+    #[test]
+    fn reactions_default_off_stay_out_of_saved_files_parse_and_are_validated() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!(d.targets.reactions, None);
+        assert!(!toml::to_string(&d).unwrap().contains("reactions"));
+
+        let src = format!(
+            "{}reactions = {{ mirror_strafe_chance = 0.3, oppose_strafe_chance = 0.2, dodge_within_deg = 3, shot_juke_chance = 0.5 }}\n",
+            strafing_minimal()
+        );
+        let r = ScenarioDef::from_toml(&src).unwrap();
+        assert_eq!(
+            r.targets.reactions,
+            Some(ReactionsDef {
+                mirror_strafe_chance: 0.3,
+                oppose_strafe_chance: 0.2,
+                dodge_within_deg: 3.0,
+                shot_juke_chance: 0.5,
+                react_secs: Range::new(0.2, 0.4),
+            })
+        );
+        assert!(r.validate().is_empty(), "{:?}", r.validate());
+        assert!(ScenarioDef::from_toml(&src.replace("shot_juke_chance", "shot_juke")).is_err());
+
+        let with = |f: &dyn Fn(&mut ReactionsDef)| {
+            let mut b = r.clone();
+            f(b.targets.reactions.as_mut().unwrap());
+            fields_of(&b)
+        };
+        for bad in [-0.1, 1.1, f32::NAN] {
+            assert_eq!(
+                with(&|x| x.mirror_strafe_chance = bad),
+                ["targets.reactions.mirror_strafe_chance"],
+                "{bad}"
+            );
+            assert_eq!(
+                with(&|x| x.oppose_strafe_chance = bad),
+                ["targets.reactions.oppose_strafe_chance"],
+                "{bad}"
+            );
+            assert_eq!(
+                with(&|x| x.shot_juke_chance = bad),
+                ["targets.reactions.shot_juke_chance"],
+                "{bad}"
+            );
+        }
+        assert_eq!(
+            with(&|x| {
+                x.mirror_strafe_chance = 0.6;
+                x.oppose_strafe_chance = 0.6;
+            }),
+            ["targets.reactions"],
+            "mirror and oppose share one roll"
+        );
+        for bad in [-1.0, 90.0, f32::NAN] {
+            assert_eq!(
+                with(&|x| x.dodge_within_deg = bad),
+                ["targets.reactions.dodge_within_deg"],
+                "{bad}"
+            );
+        }
+        assert_eq!(
+            with(&|x| x.react_secs = Range::new(0.0, 0.3)),
+            ["targets.reactions.react_secs"]
+        );
+
+        let mut still = r.clone();
+        still.targets.motion = Motion::Static;
+        assert_eq!(
+            fields_of(&still),
+            ["targets.reactions"],
+            "a reaction steers a strafe"
+        );
+    }
+
+    #[test]
+    fn behavior_rules_default_empty_stay_out_of_saved_files_parse_and_are_validated() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert!(d.targets.behaviors.is_empty());
+        assert!(!toml::to_string(&d).unwrap().contains("behaviors"));
+
+        let src = format!(
+            "{MINIMAL}health = 4\n\
+             [[targets.behaviors]]\n\
+             when = {{ health_below = 0.5 }}\n\
+             retreat_m = 4\n\
+             [[targets.behaviors]]\n\
+             when = {{ damaged_within_secs = 1.2, crosshair_within_deg = 5 }}\n\
+             motion = {{ kind = \"strafe\", change_secs = [0.2, 0.4] }}\n\
+             speed_scale = 1.3\n\
+             [[targets.behaviors]]\n\
+             when = {{ alive_for_secs = 2, speed_above = 1.5 }}\n\
+             speed_scale = 0.5\n"
+        );
+        let b = ScenarioDef::from_toml(&src).unwrap();
+        let rules = &b.targets.behaviors;
+        assert_eq!(rules.len(), 3);
+        assert_eq!(
+            rules[0],
+            BehaviorRule {
+                when: BehaviorWhen {
+                    health_below: Some(0.5),
+                    ..Default::default()
+                },
+                motion: None,
+                speed_scale: 1.0,
+                retreat_m: 4.0,
+            }
+        );
+        assert_eq!(rules[1].when.damaged_within_secs, Some(1.2));
+        assert_eq!(rules[1].when.crosshair_within_deg, Some(5.0));
+        assert!(matches!(rules[1].motion, Some(Motion::Strafe { .. })));
+        assert_eq!(rules[1].speed_scale, 1.3);
+        assert_eq!(
+            (rules[2].when.alive_for_secs, rules[2].when.speed_above),
+            (Some(2.0), Some(1.5))
+        );
+        assert!(b.validate().is_empty(), "{:?}", b.validate());
+        assert_eq!(
+            ScenarioDef::from_toml(&toml::to_string(&b).unwrap()).unwrap(),
+            b
+        );
+        assert!(ScenarioDef::from_toml(&src.replace("health_below", "health_under")).is_err());
+        assert!(ScenarioDef::from_toml(&src.replace("retreat_m", "retreat")).is_err());
+
+        let with = |f: &dyn Fn(&mut BehaviorRule)| {
+            let mut c = b.clone();
+            f(&mut c.targets.behaviors[0]);
+            fields_of(&c)
+        };
+        assert_eq!(
+            with(&|r| r.when = BehaviorWhen::default()),
+            ["targets.behaviors.when"],
+            "a rule needs a condition"
+        );
+        for when in [
+            BehaviorWhen {
+                health_below: Some(0.0),
+                ..Default::default()
+            },
+            BehaviorWhen {
+                health_below: Some(1.5),
+                ..Default::default()
+            },
+            BehaviorWhen {
+                damaged_within_secs: Some(0.0),
+                ..Default::default()
+            },
+            BehaviorWhen {
+                alive_for_secs: Some(-1.0),
+                ..Default::default()
+            },
+            BehaviorWhen {
+                crosshair_within_deg: Some(180.0),
+                ..Default::default()
+            },
+            BehaviorWhen {
+                speed_above: Some(f32::NAN),
+                ..Default::default()
+            },
+        ] {
+            assert_eq!(
+                with(&|r| r.when = when.clone()),
+                ["targets.behaviors.when"],
+                "{when:?}"
+            );
+        }
+        assert_eq!(
+            with(&|r| r.retreat_m = 0.0),
+            ["targets.behaviors"],
+            "a rule needs an override"
+        );
+        for bad in [-1.0, 25.0, f32::NAN] {
+            assert_eq!(
+                with(&|r| r.retreat_m = bad),
+                ["targets.behaviors.retreat_m"],
+                "{bad}"
+            );
+        }
+        for bad in [0.2, 4.5] {
+            assert_eq!(
+                with(&|r| r.speed_scale = bad),
+                ["targets.behaviors.speed_scale"],
+                "{bad}"
+            );
+        }
+        let broken = Motion::Strafe {
+            weapon: Weapon::Vandal,
+            change_secs: Range::new(0.0, 0.3),
+            stop_chance: 0.0,
+            max_offset: 3.0,
+        };
+        let problems: Vec<ValidationError> = {
+            let mut c = b.clone();
+            c.targets.behaviors[0].motion = Some(broken);
+            c.validate()
+        };
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert_eq!(problems[0].field, "targets.behaviors.motion");
+        assert!(
+            problems[0].message.contains("change_secs"),
+            "{}",
+            problems[0].message
+        );
+
+        let mut many = b.clone();
+        many.targets.behaviors = vec![b.targets.behaviors[0].clone(); MAX_BEHAVIOR_RULES + 1];
+        assert_eq!(fields_of(&many), ["targets.behaviors"]);
     }
 
     #[test]

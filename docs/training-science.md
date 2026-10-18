@@ -312,6 +312,18 @@ Why 15 flicks and 30% (estimates): the simulated aimer has no directional bias, 
 
 ## Target behaviour and spawn patterns
 
+### Reactive targets and behaviour rules
+
+Scripted strafes are predictable: after a few runs the player learns the rhythm instead of reacting. Targets that answer the player's own strafe, crosshair and shots put the decision back on what the target does in response, which is closer to a real duel. Rules such as "strafes when hit, retreats under 50% health" give each engagement phases the player must read. This is a design choice inspired by Aim Lab's Creator Studio behaviours (`docs/feature-analysis.md`); no study measures its training effect (inference).
+
+Estimates, not sourced values:
+
+- **Strafe notice speed, 1 m/s.** About a fifth of the Vandal's 5.4 m/s run speed (`valorant-mechanics.md`), reached within a few hundredths of a second of pressing A or D. It ignores slow drifting but reacts almost at the key press, so mirroring targets are faster than a human opponent would be.
+- **Reaction hold, 0.2–0.4 s.** Long enough for a juke to cover visible distance at VALORANT acceleration, short enough that the motion takes over again within about one strafe.
+- **`react-duel` numbers** (chances 0.3/0.3/0.35, a 2.5° dodge circle, 1.5 s "recently hit", a 4 m retreat) were set by calibration.
+
+**Calibration caveat.** The simulated aimer re-aims at the target's current position every frame and never moves, so it neither triggers strafe mirroring nor suffers from jukes the way a human does. `react-duel` therefore calibrates at about 79% contender accuracy, near the top of the challenge-point band; expect a human to find it harder than that number suggests. A playtest should confirm the difficulty.
+
 ### Spawn patterns (`spawn_rules`)
 
 Random spawns repeat by chance: in `spread-flicks` without rules, consecutive targets regularly land within a few degrees of each other or of the crosshair, so some "flicks" are no movement at all. Blocking recent spawn points, enforcing a minimum flick and emptying the middle of the area make every rep a real flick in a new direction. The rationale is variable practice: varying the movement within a session builds a more general skill than repeating one movement (schema theory, Schmidt 1975, *Psychological Review* 82(4), 225–260; the related interleaving evidence is cited under Routine design above). Applying it to spawn placement is inference, not a measured aim-training effect.

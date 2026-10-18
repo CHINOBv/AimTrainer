@@ -11,7 +11,28 @@ use crate::movement::{self, LocalVelocity, MoveInput};
 use crate::rng::Rng;
 
 /// Area under VALORANT's counter-strafe curve: braking distance ≈ speed × this.
-const STRAFE_BRAKE_SECS: f32 = 0.075;
+pub(super) const STRAFE_BRAKE_SECS: f32 = 0.075;
+
+/// What drives a target's motion this frame: the motion (the scenario's, or a behaviour
+/// rule's override), whether the target is a humanoid, and the speed multiplier.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Drive<'a> {
+    pub(super) motion: &'a Motion,
+    pub(super) humanoid: bool,
+    /// In-run speed tuning (`targets.speed_scale`) times any behaviour rule's multiplier.
+    pub(super) speed_k: f32,
+}
+
+impl<'a> Drive<'a> {
+    /// The scenario's own motion at its own speed.
+    pub(super) fn of(targets: &'a TargetsDef) -> Self {
+        Self {
+            motion: &targets.motion,
+            humanoid: matches!(targets.shape, Shape::Humanoid { .. }),
+            speed_k: targets.speed_scale,
+        }
+    }
+}
 
 /// Per-target motion state, owned by the target and advanced by [`MotionState::step`].
 #[derive(Debug, Clone, PartialEq)]
@@ -70,19 +91,50 @@ impl MotionState {
         self.lateral * self.strafe.right + self.drift + Vec3::UP * self.rise
     }
 
+    /// Points the target in strafe direction `dir` (-1, 0 or 1) and holds it, standing,
+    /// until `until`, when the motion decides again: a reaction to the player.
+    pub(super) fn react(&mut self, dir: f32, until: f32) {
+        self.intent = dir;
+        self.crouching = false;
+        self.next_change_at = until;
+    }
+
+    /// Hands the target over to `motion` (a behaviour rule switched it) at `now`: the new
+    /// motion decides at once, and movement it has no part in stops.
+    pub(super) fn switch_to(&mut self, motion: &Motion, now: f32) {
+        self.next_change_at = now;
+        self.crouching = false;
+        self.crouch = 0.0;
+        match motion {
+            Motion::Static => {
+                self.intent = 0.0;
+                self.strafe = LocalVelocity::default();
+                self.drift = Vec3::ZERO;
+            }
+            Motion::Strafe { .. } | Motion::Dodge { .. } => self.drift = Vec3::ZERO,
+            Motion::Drift { .. } => {
+                self.intent = 0.0;
+                self.strafe = LocalVelocity::default();
+            }
+        }
+    }
+
     /// Advances one visible target by `dt` seconds at time `now`, moving `position`. Every
-    /// motion honors `targets.speed_scale` (in-run speed tuning) by scaling its speed.
+    /// motion honors `drive.speed_k` (in-run speed tuning, times any behaviour rule's
+    /// multiplier) by scaling its speed.
     pub(super) fn step(
         &mut self,
         position: &mut Vec3,
-        targets: &TargetsDef,
+        drive: Drive<'_>,
         rng: &mut Rng,
         now: f32,
         dt: f32,
     ) {
-        let motion = &targets.motion;
-        let humanoid = matches!(targets.shape, Shape::Humanoid { .. });
-        let speed_k = targets.speed_scale;
+        let Drive {
+            motion,
+            humanoid,
+            speed_k,
+        } = drive;
         match motion {
             Motion::Static => {}
             Motion::Strafe {
@@ -151,12 +203,12 @@ impl MotionState {
         }
     }
 
-    fn is_airborne(&self) -> bool {
+    pub(super) fn is_airborne(&self) -> bool {
         self.rise != 0.0 || self.lift > 0.0
     }
 
     /// The direction a moving decision picks: a reversal, or a random side from a stop.
-    fn reversed(&self, rng: &mut Rng) -> f32 {
+    pub(super) fn reversed(&self, rng: &mut Rng) -> f32 {
         if self.intent == 0.0 {
             rng.sign()
         } else {
