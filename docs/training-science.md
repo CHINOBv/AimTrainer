@@ -324,6 +324,24 @@ Why 15 flicks and 30% (estimates): the simulated aimer has no directional bias, 
 
 Why 10 misses and 65% (estimates, not calibrated): with no bias, 3 of the 8 sectors are "below", so about 37.5% of misses land there by chance. The simulated aimer has no vertical bias. Over seeds 1–3, four presets and seven click scenarios (`flick-wide`, `flick-headshot`, `micro-adjust`, `static-headline`, `switch-wide`, `peek-reaction`, `long-range-heads`), its largest share among runs with at least 10 misses was 60%, both above and below. A 65% threshold therefore never fires on it. With fewer than 10 misses, chance shares swing too much to judge. The skill profile pools a category's recent runs. No published source gives these values; replace them once real player data exists.
 
+### Potential score (one tip)
+
+`aim_core::analytics::potential` estimates the score a click run would have reached if its single costliest weakness were fixed. The results card shows only that one fix, above the advice list, as "Fix X → about Y points (+Z%)", followed by the assumption behind it. Hold runs get no tip.
+
+**Model.** Every scenario ends on time, so wasted seconds are converted into points at the run's own pace: `points per second = final score ÷ elapsed time`. The final score already includes penalties, so this pace is conservative. Each fix is priced on its own, and only the largest gain is shown:
+
+| Fix | Events | Saved time | Points won back | Assumption shown |
+|---|---|---|---|---|
+| Overshoot | Flicks whose primary movement overshot (see the overshoot metric) | Σ max(0, settle time − median settle of clean flicks) | — | "if your N overshoots settled like your clean flicks (median X ms)" |
+| Misses | Flicks that missed | ½ × the summed duration of correction flicks (miss → retry shot) | ½ × misses × `miss_penalty` | "if half of your N misses had hit the first time" |
+| Click hesitation | Flicks with a click delay above 200 ms | Σ (click delay − 200 ms) | — | "if your N slow clicks came within 200 ms of reaching the target" |
+
+- **Clean flicks** hit and landed within one radius (neither an overshoot nor an undershoot). The overshoot fix needs at least 3 of them as its reference.
+- **Guards (provisional):** a fix needs at least 3 events. A tip is shown only when its gain is at least 3% of the score, and never for a run that scored 0 or less. Ties go to the first fix in the table.
+- **Overlaps:** click delay counts from the first entry into the target, so it includes the correction after an overshoot. The fixes therefore overlap and are never added together; showing only the largest avoids double counting.
+
+Why these values (estimates, not calibrated): fixing half the misses, rather than all of them, keeps the projection reachable. The 200 ms reference is the click-delay weakness threshold above. The 3% floor stops tips on runs with nothing to fix. For the simulated aimer (seed 2, six click scenarios), the elite gets no tip, and the other presets get a misses tip worth about +4% to +35%, largest for the recruit. Its movements rarely overshoot by design, so the overshoot fix rarely shows for it. **Limits:** the model assumes saved time turns into points at the average pace. That holds when targets respawn on a kill, and overstates the gain when targets appear on a fixed schedule. No published source gives these assumptions; they are provisional until real player data exists.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

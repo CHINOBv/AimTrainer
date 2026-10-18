@@ -254,6 +254,7 @@ mod tests {
             priority: None,
             distance_split: None,
             miss_compass: None,
+            potential: None,
         }
     }
 
@@ -439,6 +440,7 @@ mod tests {
             priority: None,
             distance_split: None,
             miss_compass: None,
+            potential: None,
         }
     }
 

@@ -10,6 +10,7 @@ use crate::ui::organisms::decision_panel::DecisionReport;
 use crate::ui::organisms::flick_directions::{DirectionGrid, flick_directions};
 use crate::ui::organisms::miss_compass::MissCompassGrid;
 use crate::ui::organisms::moving_panel::MovingReport;
+use crate::ui::organisms::potential_tip::PotentialLine;
 use aim_core::analytics::{RunAnalysis, SkillProfile};
 use bevy_egui::egui;
 
@@ -44,6 +45,8 @@ pub struct RunReport {
     pub directions: Option<DirectionGrid>,
     /// Where missed shots went around the aim point, when any shot missed a target.
     pub miss_compass: Option<MissCompassGrid>,
+    /// The one fix with the largest estimated gain, shown above the advice.
+    pub potential: Option<PotentialLine>,
 }
 
 pub(crate) fn ms(secs: f32) -> String {
@@ -164,6 +167,7 @@ impl RunReport {
                 .map(|p| PriorityReport::new(p, profile.findings())),
             directions: DirectionGrid::new(analysis),
             miss_compass: analysis.miss_compass.as_ref().map(MissCompassGrid::new),
+            potential: analysis.potential.as_ref().map(PotentialLine::new),
         }
     }
 }
@@ -318,6 +322,16 @@ mod tests {
         let grid = r.miss_compass.expect("the recruit misses");
         assert!(grid.split_note.ends_with(" misses"), "{grid:?}");
         assert_eq!(report("track-precise", 2).miss_compass, None);
+    }
+
+    #[test]
+    fn a_click_run_with_a_costly_weakness_shows_one_potential_score_tip() {
+        let line = report("flick-wide", 0)
+            .potential
+            .expect("the recruit's misses are worth a tip");
+        assert!(line.headline.starts_with("Fix "), "{line:?}");
+        assert!(line.assumption.starts_with("Estimate: if "), "{line:?}");
+        assert_eq!(report("track-precise", 2).potential, None);
     }
 
     #[test]

@@ -12,6 +12,7 @@ pub mod hud_panels;
 pub mod miss_compass;
 pub mod moving_panel;
 pub mod pace_panel;
+pub mod potential_tip;
 pub mod priority_panel;
 pub mod profile_code;
 pub mod progress_panel;

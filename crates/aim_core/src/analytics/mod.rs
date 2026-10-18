@@ -15,6 +15,7 @@ pub mod miss_compass;
 pub mod moving;
 pub mod pace;
 pub mod path;
+pub mod potential;
 pub mod priority;
 pub mod profile;
 pub mod rules;
@@ -64,6 +65,8 @@ pub struct RunAnalysis {
     pub distance_split: Option<DistanceSplit>,
     /// Where missed shots went relative to the aim point, if any shot missed a target.
     pub miss_compass: Option<miss_compass::MissCompass>,
+    /// The score with the costliest weakness fixed, for click runs where one is worth a tip.
+    pub potential: Option<potential::PotentialTip>,
 }
 
 impl RunAnalysis {
@@ -113,6 +116,10 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         AnalysisKind::Flick(f) => DistanceSplit::for_run(&recording.def, f),
         AnalysisKind::Tracking(_) => None,
     };
+    let potential = match &kind {
+        AnalysisKind::Flick(f) => potential::potential(f, run_totals(recording, &samples)),
+        AnalysisKind::Tracking(_) => None,
+    };
     RunAnalysis {
         scenario_id: recording.def.id.clone(),
         category: recording.def.category,
@@ -126,6 +133,17 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         priority: priority::analyze(&samples),
         distance_split,
         miss_compass: miss_compass::analyze(&samples),
+        potential,
+    }
+}
+
+/// Final score, elapsed time and miss penalty of a traced run.
+fn run_totals(recording: &Recording, samples: &[trace::Sample]) -> potential::RunTotals {
+    let last = samples.last();
+    potential::RunTotals {
+        score: last.map_or(0.0, |s| s.score),
+        elapsed_secs: last.map_or(0.0, |s| s.time_secs),
+        miss_penalty: recording.def.scoring.miss_penalty,
     }
 }
 
