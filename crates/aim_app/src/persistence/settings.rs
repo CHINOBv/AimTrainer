@@ -90,6 +90,8 @@ pub struct Settings {
     pub sens_randomizer: RandomizerConfig,
     /// Live coaching overlay in arenas (crosshair placement and movement accuracy).
     pub arena_coaching: bool,
+    /// Game-feel effects (HUD indicators, transitions, crosshair extras).
+    pub feel: FeelSettings,
 }
 
 /// VALORANT's "Enemy Highlight Color" options (General → Accessibility), applied to
@@ -218,6 +220,31 @@ pub struct SoundSettings {
     pub kill: KillSound,
     /// A soft sound on missed shots.
     pub miss: bool,
+    /// Volume of the player's shot sounds (hit, kill, miss), percent of the master volume.
+    pub shots_percent: u8,
+    /// Volume of world sounds in arenas (bot gunfire, footsteps), percent of the master volume.
+    pub world_percent: u8,
+    /// Volume of menu sounds (UI clicks), percent of the master volume.
+    pub ui_percent: u8,
+    /// Volume of cues (damage taken, death, streaks, round and timer cues), percent of the
+    /// master volume.
+    pub cues_percent: u8,
+    /// Positional bot gunfire in arenas.
+    pub bot_gunfire: bool,
+    /// Positional bot footsteps in arenas.
+    pub footsteps: bool,
+    /// A sound when the player takes damage.
+    pub damage_taken: bool,
+    /// A sound when the player dies.
+    pub death: bool,
+    /// Multi-kill and kill-streak sounds.
+    pub streak: bool,
+    /// Countdown beeps and round start and end stings.
+    pub round_cues: bool,
+    /// Ticks in the last seconds of a timed run.
+    pub low_time_warning: bool,
+    /// Click sounds in the menus (off by default).
+    pub ui_clicks: bool,
 }
 
 impl Default for SoundSettings {
@@ -228,7 +255,164 @@ impl Default for SoundSettings {
             hit: HitSound::default(),
             kill: KillSound::default(),
             miss: false,
+            shots_percent: 100,
+            world_percent: 100,
+            ui_percent: 100,
+            cues_percent: 100,
+            bot_gunfire: true,
+            footsteps: true,
+            damage_taken: true,
+            death: true,
+            streak: true,
+            round_cues: true,
+            low_time_warning: true,
+            ui_clicks: false,
         }
+    }
+}
+
+/// An effect that can be switched off and scaled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Toggle {
+    pub enabled: bool,
+    /// Strength of the effect, percent (100 = the designed strength).
+    pub intensity_percent: u8,
+}
+
+impl Toggle {
+    /// On at `intensity_percent`.
+    pub const fn on(intensity_percent: u8) -> Self {
+        Self {
+            enabled: true,
+            intensity_percent,
+        }
+    }
+
+    /// Off; switching it on uses `intensity_percent`.
+    pub const fn off(intensity_percent: u8) -> Self {
+        Self {
+            enabled: false,
+            intensity_percent,
+        }
+    }
+}
+
+/// A missing key in a toggle table takes this value, so a table that only sets
+/// `intensity_percent` turns the effect on.
+impl Default for Toggle {
+    fn default() -> Self {
+        Self::on(100)
+    }
+}
+
+/// A named set of feel toggles, offered in the first-run wizard and the settings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FeelPreset {
+    /// Information only: damage direction, health bar and death screen.
+    Minimal,
+    /// The defaults.
+    #[default]
+    Standard,
+    /// Every effect, including screen punch and crosshair bloom.
+    Juicy,
+}
+
+/// Game-feel effects: HUD indicators, transitions and crosshair extras. Missing keys
+/// (older files) take the Standard preset, which keeps today's look for the effects that
+/// already existed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FeelSettings {
+    /// Arena: an arrow around the crosshair pointing to where damage came from, sized by
+    /// the damage.
+    pub damage_indicator: Toggle,
+    /// Arena: the red screen-edge flash when the player takes damage.
+    pub damage_vignette: Toggle,
+    /// Arena: a list of recent kills.
+    pub kill_feed: bool,
+    /// Arena: a banner for multi-kills and kill streaks.
+    pub streak_banner: bool,
+    /// Arena: the player's health bar, with a ghost of the damage just taken.
+    pub health_bar: bool,
+    /// Arena: the health bar pulses at low health.
+    pub low_hp_pulse: bool,
+    /// Arena: after a death, the direction of the killing shot and the respawn timer.
+    pub death_screen: bool,
+    /// Animated countdown, a "GO" pop and an end-of-round banner.
+    pub round_transitions: bool,
+    /// Arena: a short screen-space jolt on damage. It never moves the camera. Off by default.
+    pub screen_punch: Toggle,
+    /// The crosshair opens up with recoil and movement inaccuracy. Off by default.
+    pub crosshair_bloom: bool,
+    /// Arena: arrows at the screen edge towards enemies in sight but outside the view.
+    pub arena_arrows: bool,
+    /// Arena: a brief flash on a kill.
+    pub kill_flash_arena: bool,
+    /// Different hit markers for head, body and kill.
+    pub distinct_markers: bool,
+    /// The preset last applied. Changing a single key afterwards does not change it.
+    pub preset: FeelPreset,
+}
+
+impl FeelSettings {
+    /// The toggles of `preset`.
+    pub fn for_preset(preset: FeelPreset) -> Self {
+        let standard = Self {
+            damage_indicator: Toggle::on(100),
+            damage_vignette: Toggle::on(100),
+            kill_feed: true,
+            streak_banner: true,
+            health_bar: true,
+            low_hp_pulse: true,
+            death_screen: true,
+            round_transitions: true,
+            screen_punch: Toggle::off(100),
+            crosshair_bloom: false,
+            arena_arrows: true,
+            kill_flash_arena: true,
+            distinct_markers: true,
+            preset,
+        };
+        match preset {
+            FeelPreset::Standard => standard,
+            FeelPreset::Minimal => Self {
+                damage_indicator: Toggle::on(60),
+                damage_vignette: Toggle::off(100),
+                kill_feed: false,
+                streak_banner: false,
+                low_hp_pulse: false,
+                round_transitions: false,
+                arena_arrows: false,
+                kill_flash_arena: false,
+                distinct_markers: false,
+                ..standard
+            },
+            FeelPreset::Juicy => Self {
+                screen_punch: Toggle::on(100),
+                crosshair_bloom: true,
+                ..standard
+            },
+        }
+    }
+
+    /// Set every toggle to `preset`'s values.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the settings UI and first-run wizard will apply presets"
+        )
+    )]
+    pub fn apply_preset(&mut self, preset: FeelPreset) {
+        *self = Self::for_preset(preset);
+    }
+}
+
+impl Default for FeelSettings {
+    fn default() -> Self {
+        Self::for_preset(FeelPreset::Standard)
     }
 }
 
@@ -255,6 +439,7 @@ impl Default for Settings {
             target_visibility: TargetVisibility::default(),
             sens_randomizer: RandomizerConfig::default(),
             arena_coaching: false,
+            feel: FeelSettings::default(),
         }
     }
 }
@@ -540,6 +725,101 @@ mod tests {
         assert_eq!(settings.target_visibility.outline_scale(), Some(1.3));
         let partial: Settings = toml::from_str("[target_visibility]\noutline = true\n").unwrap();
         assert_eq!(partial.target_visibility.outline_scale(), Some(1.08));
+    }
+
+    #[test]
+    fn feel_defaults_to_standard_and_keeps_todays_damage_vignette_for_old_files() {
+        let feel = toml::from_str::<Settings>("fullscreen = false")
+            .unwrap()
+            .feel;
+        assert_eq!(feel, FeelSettings::default());
+        assert_eq!(feel.preset, FeelPreset::Standard);
+        assert_eq!(
+            feel.damage_vignette,
+            Toggle {
+                enabled: true,
+                intensity_percent: 100
+            },
+            "today's 0.25 s vignette at its current strength"
+        );
+        assert!(!feel.screen_punch.enabled, "screen punch is opt-in");
+        assert!(!feel.crosshair_bloom, "crosshair bloom is opt-in");
+        assert!(feel.damage_indicator.enabled && feel.health_bar && feel.death_screen);
+    }
+
+    #[test]
+    fn partial_feel_tables_keep_the_other_defaults_and_round_trip() {
+        let src = "[feel]\nkill_feed = false\npreset = \"juicy\"\n[feel.screen_punch]\nintensity_percent = 40\n";
+        let settings: Settings = toml::from_str(src).unwrap();
+        let feel = &settings.feel;
+        assert!(!feel.kill_feed);
+        assert_eq!(feel.preset, FeelPreset::Juicy);
+        assert_eq!(
+            feel.screen_punch,
+            Toggle {
+                enabled: true,
+                intensity_percent: 40
+            },
+            "a toggle table without `enabled` turns the effect on"
+        );
+        assert!(feel.streak_banner && feel.arena_arrows);
+        let text = toml::to_string_pretty(&settings).unwrap();
+        assert_eq!(toml::from_str::<Settings>(&text).unwrap(), settings);
+    }
+
+    #[test]
+    fn feel_presets_set_every_toggle() {
+        let mut feel = FeelSettings::default();
+        feel.apply_preset(FeelPreset::Minimal);
+        assert_eq!(feel.preset, FeelPreset::Minimal);
+        assert!(!feel.damage_vignette.enabled && !feel.screen_punch.enabled);
+        assert!(!feel.kill_feed && !feel.streak_banner && !feel.low_hp_pulse);
+        assert!(!feel.round_transitions && !feel.crosshair_bloom && !feel.arena_arrows);
+        assert!(!feel.kill_flash_arena && !feel.distinct_markers);
+        assert!(
+            feel.damage_indicator.enabled && feel.health_bar && feel.death_screen,
+            "minimal keeps the information, drops the decoration"
+        );
+
+        feel.apply_preset(FeelPreset::Juicy);
+        assert_eq!(feel.preset, FeelPreset::Juicy);
+        assert!(feel.screen_punch.enabled && feel.crosshair_bloom);
+        assert!(feel.damage_vignette.enabled && feel.kill_feed && feel.distinct_markers);
+
+        feel.kill_feed = false;
+        feel.apply_preset(FeelPreset::Standard);
+        assert_eq!(feel, FeelSettings::default());
+    }
+
+    #[test]
+    fn sound_categories_default_to_full_volume_and_ui_clicks_off_for_old_files() {
+        let sound = toml::from_str::<Settings>("fullscreen = false")
+            .unwrap()
+            .sound;
+        assert_eq!(
+            [
+                sound.shots_percent,
+                sound.world_percent,
+                sound.ui_percent,
+                sound.cues_percent
+            ],
+            [100; 4]
+        );
+        assert!(sound.bot_gunfire && sound.footsteps && sound.damage_taken && sound.death);
+        assert!(sound.streak && sound.round_cues && sound.low_time_warning);
+        assert!(!sound.ui_clicks, "UI clicks are opt-in");
+    }
+
+    #[test]
+    fn sound_categories_round_trip_and_partial_tables_keep_defaults() {
+        let src = "[sound]\nworld_percent = 30\nfootsteps = false\nui_clicks = true\n";
+        let settings: Settings = toml::from_str(src).unwrap();
+        let sound = &settings.sound;
+        assert_eq!((sound.world_percent, sound.shots_percent), (30, 100));
+        assert!(!sound.footsteps && sound.ui_clicks && sound.bot_gunfire);
+        assert_eq!(sound.volume_percent, 50);
+        let text = toml::to_string_pretty(&settings).unwrap();
+        assert_eq!(toml::from_str::<Settings>(&text).unwrap(), settings);
     }
 
     #[test]
