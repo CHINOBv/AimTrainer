@@ -1,5 +1,6 @@
 # Original geometry: a start room, a 1.8 m doorway, a 6 m wide corridor with a wall stub,
-# and a long hall with a tall box and a far block. Each drill angle has a marker.
+# and a long hall with a tall box, a far block and scattered crates. Each drill angle has
+# a marker.
 # Not modeled on any game map. Coordinates in meters, +Y up, -Z forward.
 id = "angles-lab"
 name = "Angles Lab"
@@ -63,6 +64,82 @@ max = [3.0, 1.0, -29.0]
 kind = "wall"
 min = [1.5, 0.0, -58.0]
 max = [10.0, 3.5, -56.0]
+
+# Start room: stacked crates in the west corner and beside the start, and a crate in the
+# east, so the room is not an empty box.
+[[boxes]]
+kind = "cover"
+min = [-8.0, 0.0, -3.0]
+max = [-6.8, 2.2, -1.8]
+
+[[boxes]]
+kind = "low_cover"
+min = [6.0, 0.0, 0.0]
+max = [7.0, 1.0, 1.0]
+
+[[boxes]]
+kind = "cover"
+min = [3.0, 0.0, 1.4]
+max = [4.2, 2.2, 2.6]
+
+# Corridor, hall end: a crate against the west wall and stacked crates against the east
+# wall, clear of every drill's line of sight.
+[[boxes]]
+kind = "low_cover"
+min = [-3.0, 0.0, -17.0]
+max = [-2.0, 1.0, -16.0]
+
+[[boxes]]
+kind = "cover"
+min = [2.0, 0.0, -20.0]
+max = [3.0, 2.2, -19.0]
+
+# Hall: cover on both sides and in the far west, kept out of the lines from the "hall"
+# spawn to the box and long-angle peeks so the drills are unchanged.
+[[boxes]]
+kind = "low_cover"
+min = [-9.0, 0.0, -28.0]
+max = [-8.0, 1.0, -27.0]
+
+[[boxes]]
+kind = "cover"
+min = [6.5, 0.0, -33.0]
+max = [7.7, 2.2, -31.8]
+
+[[boxes]]
+kind = "low_cover"
+min = [4.5, 0.0, -42.0]
+max = [5.5, 1.0, -41.0]
+
+[[boxes]]
+kind = "cover"
+min = [-9.5, 0.0, -46.0]
+max = [-8.3, 2.2, -44.8]
+
+[[boxes]]
+kind = "cover"
+min = [-4.2, 0.0, -47.0]
+max = [-3.0, 2.2, -45.8]
+
+[[boxes]]
+kind = "cover"
+min = [7.0, 0.0, -49.0]
+max = [8.2, 2.2, -47.8]
+
+[[boxes]]
+kind = "wall"
+min = [-10.0, 0.0, -52.2]
+max = [-6.5, 3.5, -51.8]
+
+[[boxes]]
+kind = "low_cover"
+min = [5.0, 0.0, -55.0]
+max = [6.0, 1.0, -54.0]
+
+[[boxes]]
+kind = "cover"
+min = [-3.0, 0.0, -41.0]
+max = [-1.8, 2.2, -39.8]
 
 [[spawns]]
 id = "start"

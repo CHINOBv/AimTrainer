@@ -1,0 +1,268 @@
+# Original geometry: a 30 x 36 m block of three parallel lanes (west, mid, east) split by
+# two long walls with a connector gap in the middle, and an open plaza at each end. Every
+# lane has cover every few meters: stacked crates, single crates and wall stubs. The layout
+# is the same when turned 180 degrees, so both ends play alike. Not modeled on any game map.
+# Coordinates in meters, +Y up, -Z forward.
+id = "freight-lanes"
+name = "Freight Lanes"
+description = "Three parallel lanes between two plazas, joined by a gap in the middle of each lane wall. Crates and wall stubs every few meters. For mid-range deathmatch with rotations."
+floor_x = [-15.0, 15.0]
+floor_z = [-18.0, 18.0]
+
+# Lane walls at x = -5 and x = 5, z in [-12, 12], with a 4 m connector gap at z in [-2, 2].
+[[boxes]]
+kind = "wall"
+min = [-5.2, 0.0, -12.0]
+max = [-4.8, 3.5, -2.0]
+
+[[boxes]]
+kind = "wall"
+min = [-5.2, 0.0, 2.0]
+max = [-4.8, 3.5, 12.0]
+
+[[boxes]]
+kind = "wall"
+min = [4.8, 0.0, -12.0]
+max = [5.2, 3.5, -2.0]
+
+[[boxes]]
+kind = "wall"
+min = [4.8, 0.0, 2.0]
+max = [5.2, 3.5, 12.0]
+
+# A crate at one side of each connector gap.
+[[boxes]]
+kind = "low_cover"
+min = [-5.5, 0.0, 1.0]
+max = [-4.5, 1.0, 2.0]
+
+[[boxes]]
+kind = "low_cover"
+min = [4.5, 0.0, -2.0]
+max = [5.5, 1.0, -1.0]
+
+# Mid lane: stacked crates off-center on each half and a crate near each end.
+[[boxes]]
+kind = "cover"
+min = [1.5, 0.0, -4.6]
+max = [2.7, 2.2, -3.4]
+
+[[boxes]]
+kind = "cover"
+min = [-2.7, 0.0, 3.4]
+max = [-1.5, 2.2, 4.6]
+
+[[boxes]]
+kind = "low_cover"
+min = [-3.5, 0.0, -9.0]
+max = [-2.5, 1.0, -8.0]
+
+[[boxes]]
+kind = "low_cover"
+min = [2.5, 0.0, 8.0]
+max = [3.5, 1.0, 9.0]
+
+# West lane: stacked crates on the outer side, a crate and stacked crates by the lane wall,
+# and a wall stub off the outer edge.
+[[boxes]]
+kind = "cover"
+min = [-13.5, 0.0, -7.0]
+max = [-12.3, 2.2, -5.8]
+
+[[boxes]]
+kind = "low_cover"
+min = [-8.0, 0.0, -4.0]
+max = [-7.0, 1.0, -3.0]
+
+[[boxes]]
+kind = "cover"
+min = [-8.2, 0.0, 6.0]
+max = [-7.0, 2.2, 7.2]
+
+[[boxes]]
+kind = "wall"
+min = [-15.0, 0.0, 2.8]
+max = [-12.5, 3.5, 3.2]
+
+# East lane, the west lane turned 180 degrees.
+[[boxes]]
+kind = "cover"
+min = [12.3, 0.0, 5.8]
+max = [13.5, 2.2, 7.0]
+
+[[boxes]]
+kind = "low_cover"
+min = [7.0, 0.0, 3.0]
+max = [8.0, 1.0, 4.0]
+
+[[boxes]]
+kind = "cover"
+min = [7.0, 0.0, -7.2]
+max = [8.2, 2.2, -6.0]
+
+[[boxes]]
+kind = "wall"
+min = [12.5, 0.0, -3.2]
+max = [15.0, 3.5, -2.8]
+
+# Plazas: stacked crates behind each player spawn and a crate at each lane mouth.
+[[boxes]]
+kind = "cover"
+min = [-4.5, 0.0, 16.4]
+max = [-3.3, 2.2, 17.6]
+
+[[boxes]]
+kind = "cover"
+min = [3.3, 0.0, 16.4]
+max = [4.5, 2.2, 17.6]
+
+[[boxes]]
+kind = "low_cover"
+min = [-7.0, 0.0, 12.5]
+max = [-6.0, 1.0, 13.5]
+
+[[boxes]]
+kind = "low_cover"
+min = [6.0, 0.0, 12.5]
+max = [7.0, 1.0, 13.5]
+
+[[boxes]]
+kind = "cover"
+min = [-4.5, 0.0, -17.6]
+max = [-3.3, 2.2, -16.4]
+
+[[boxes]]
+kind = "cover"
+min = [3.3, 0.0, -17.6]
+max = [4.5, 2.2, -16.4]
+
+[[boxes]]
+kind = "low_cover"
+min = [-7.0, 0.0, -13.5]
+max = [-6.0, 1.0, -12.5]
+
+[[boxes]]
+kind = "low_cover"
+min = [6.0, 0.0, -13.5]
+max = [7.0, 1.0, -12.5]
+
+[[spawns]]
+id = "player-south"
+kind = "player"
+position = [0.0, 0.0, 16.0]
+yaw_deg = 0.0
+
+[[spawns]]
+id = "player-north"
+kind = "player"
+position = [0.0, 0.0, -16.0]
+yaw_deg = 180.0
+
+[[spawns]]
+id = "bot-sw"
+kind = "bot"
+position = [-12.0, 0.0, 16.0]
+yaw_deg = 0.0
+
+[[spawns]]
+id = "bot-se"
+kind = "bot"
+position = [12.0, 0.0, 16.0]
+yaw_deg = 0.0
+
+[[spawns]]
+id = "bot-nw"
+kind = "bot"
+position = [-12.0, 0.0, -16.0]
+yaw_deg = 180.0
+
+[[spawns]]
+id = "bot-ne"
+kind = "bot"
+position = [12.0, 0.0, -16.0]
+yaw_deg = 180.0
+
+[[spawns]]
+id = "bot-west"
+kind = "bot"
+position = [-11.0, 0.0, 0.0]
+yaw_deg = 90.0
+
+[[spawns]]
+id = "bot-east"
+kind = "bot"
+position = [11.0, 0.0, 0.0]
+yaw_deg = -90.0
+
+# Seen from "player-south": the enemy steps out from behind the stacked crates in the north
+# half of the mid lane.
+[[angles]]
+id = "mid-north"
+label = "Mid north crates"
+position = [0.5, 0.0, -5.4]
+peek_dir = [-1.0, 0.0]
+peek_distance = 1.6
+
+# Seen from "player-north": the same crates in the south half.
+[[angles]]
+id = "mid-south"
+label = "Mid south crates"
+position = [-0.5, 0.0, 5.4]
+peek_dir = [1.0, 0.0]
+peek_distance = 1.6
+
+# Navigation: a waypoint in each plaza and at each lane mouth, down each lane, and across
+# the connector gaps in the middle.
+[[waypoints]]
+id = "plaza-south"
+position = [0.0, 0.0, 15.0]
+links = ["south-west", "south-east", "mid-south"]
+
+[[waypoints]]
+id = "south-west"
+position = [-10.0, 0.0, 14.0]
+links = ["west"]
+
+[[waypoints]]
+id = "south-east"
+position = [10.0, 0.0, 14.0]
+links = ["east"]
+
+[[waypoints]]
+id = "mid-south"
+position = [0.0, 0.0, 8.0]
+links = ["mid"]
+
+[[waypoints]]
+id = "west"
+position = [-10.0, 0.0, 0.0]
+links = ["mid", "north-west"]
+
+[[waypoints]]
+id = "mid"
+position = [0.0, 0.0, 0.0]
+links = ["east", "mid-north"]
+
+[[waypoints]]
+id = "east"
+position = [10.0, 0.0, 0.0]
+links = ["north-east"]
+
+[[waypoints]]
+id = "mid-north"
+position = [0.0, 0.0, -8.0]
+links = ["plaza-north"]
+
+[[waypoints]]
+id = "north-west"
+position = [-10.0, 0.0, -14.0]
+links = ["plaza-north"]
+
+[[waypoints]]
+id = "north-east"
+position = [10.0, 0.0, -14.0]
+links = ["plaza-north"]
+
+[[waypoints]]
+id = "plaza-north"
+position = [0.0, 0.0, -15.0]

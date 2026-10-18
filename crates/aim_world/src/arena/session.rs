@@ -1,6 +1,6 @@
 //! A running arena: the player, the bots, shooting with occlusion and the run statistics.
 
-use super::behavior::{Phase, Push};
+use super::behavior::{Phase, Push, Retreat};
 use super::bot::{Bot, Brain, Ctx, PEEK_DELAY_SECS, head_of, yaw_of};
 use super::def::{ArenaDef, ArenaError, ArenaMode, PRACTICE_SUFFIX, SiteObjective, bot_profile};
 use crate::map::{DEFAULT_PLAYER_RADIUS, MapDef, SpawnKind};
@@ -175,6 +175,8 @@ pub struct ArenaSession {
     pending: Vec<ArenaEvent>,
     stats: ArenaStats,
     roam_points: Vec<Vec3>,
+    /// The map's cover spots, computed once.
+    cover_spots: Vec<Vec3>,
     /// Angle clear: index into the mode's angle list of the angle being cleared.
     angle_index: usize,
     /// Bots ignore the player until this time (spawn grace).
@@ -230,6 +232,7 @@ impl ArenaSession {
             pending: Vec::new(),
             stats: ArenaStats::default(),
             roam_points,
+            cover_spots: map.cover_spots(),
             angle_index: 0,
             // Entering the arena is a spawn too.
             grace_until: RESPAWN_GRACE_SECS,
@@ -553,6 +556,8 @@ impl ArenaSession {
             moving,
         });
         bot.health -= dmg;
+        // A bot that survives knows where the shot came from (roaming bots fall back).
+        bot.shot_from = Some(ray.origin);
         if bot.health <= 0.0 {
             bot.alive = false;
             bot.died_at = now;
@@ -604,6 +609,7 @@ impl ArenaSession {
                 hold_secs,
                 peek_delay,
                 roam_points: &self.roam_points,
+                cover_spots: &self.cover_spots,
                 bot_strafe,
                 site,
             };
@@ -816,6 +822,7 @@ impl ArenaSession {
                 route: Vec::new(),
                 next: 0,
                 pause_until: 0.0,
+                retreat: Retreat::default(),
             },
         };
         let bot = Bot::new(id, feet, yaw, brain);

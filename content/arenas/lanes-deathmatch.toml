@@ -1,0 +1,16 @@
+# Deathmatch on the original Freight Lanes against three contender bots that strafe and
+# shoot back. Lane fights at 10-25 m with cover every few meters.
+id = "lanes-deathmatch"
+name = "Lanes Deathmatch"
+description = "Three contender bots roam the Freight Lanes, strafe when they fight and fall back to cover when shot. Clear the lanes crate by crate and catch them on the re-peek."
+map = "freight-lanes"
+duration_secs = 120.0
+weapon = "vandal"
+
+[mode]
+kind = "deathmatch"
+bots = 3
+bot_skill = "contender"
+respawn_secs = 3.0
+bots_shoot_back = true
+bot_strafe = true
