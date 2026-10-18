@@ -44,6 +44,8 @@ lifetime_secs = 3.0          # optional; the target leaves if not killed
 appear_delay_secs = [0.0, 0.0]
 min_separation_deg = 0
 decoy_chance = 0             # go/no-go: share of spawns that are decoys, in [0, 1); needs lifetime_secs and fire = "click"
+regen = { interval_secs = 0.5, amount = 1, reset_on_hit = false }   # optional health regeneration
+spawn_rules = { avoid_last_deg = 10, min_flick_deg = 15 }          # optional spawn-pattern controls
 
 [scoring]                    # all optional
 head = 100                   # per hit (click) or per second (hold)
@@ -56,6 +58,7 @@ expire_penalty = 0
 burst_bonus = 0              # per hit within the weapon's protected bullets; needs weapon.recoil
 rings = { radius = [0.25, 0.5, 1.0], multiplier = [3.0, 2.0, 1.0] }   # optional score-zone rings
 decoy_penalty = 0            # per shot on a go/no-go decoy
+decay = { window_secs = 2.0, floor = 0.3 }   # optional: a target's value fades after it appears
 ```
 
 ### Go/no-go decoys
@@ -76,6 +79,29 @@ Decoys need `lifetime_secs`, so that they leave, and `fire = "click"`. Adaptive 
 `rings` makes a hit worth more the closer it lands to the center of a sphere or a humanoid head. The distance is the shot's perpendicular distance from the zone center, as a fraction of the zone radius (the sphere radius, or half the head size). A hit takes the multiplier of the innermost ring it falls in, so with the example above a dead-center sphere hit scores `sphere × 3`. A hit outside every ring, and every body or leg hit, scores the zone's flat points. In hold mode the multiplier scales the points per second.
 
 `radius` must be ascending fractions in (0, 1], with one `multiplier` (> 0) per radius. The built-in `precision-rings` uses them.
+
+### Health regeneration and score decay
+
+`targets.regen` heals damaged targets; `scoring.decay` makes a target worth less the longer it lives. Both are optional and off by default.
+
+```toml
+[targets]
+health = 1.5
+regen = { interval_secs = 0.3, amount = 0.2, reset_on_hit = true }
+
+[scoring]
+decay = { window_secs = 3.0, floor = 0.4 }
+```
+
+| Field | Meaning |
+|---|---|
+| `regen.interval_secs` | Seconds between heals, > 0. The first heal comes one interval after the target appears. |
+| `regen.amount` | Health restored per heal, > 0: hits in click mode, seconds in hold mode. A target never heals above its starting `health`, which must be finite. |
+| `regen.reset_on_hit` | Default `false`. When `true`, every bit of damage restarts the interval, so the target only heals after going `interval_secs` without being hit. In hold mode that means after the crosshair has been off it (or fire released) for that long. |
+| `decay.window_secs` | Seconds from the target appearing until its value reaches the floor, > 0. |
+| `decay.floor` | Fraction of the value left after the window, in [0, 1]. |
+
+The value falls linearly: a hit `age` seconds after the target appeared scores its points × `1 − (1 − floor) × min(age / window_secs, 1)`. It multiplies the score-ring multiplier, and in hold mode it scales the points per second. The built-in `regen-track` combines both: breaking off lets the sphere heal, and a slow kill earns less, so steady tracking pays twice.
 
 ### Play area and floor height
 

@@ -91,6 +91,10 @@ pub struct Target {
     pub decoy: bool,
     expires_at: Option<f32>,
     motion: MotionState,
+    /// Session time of the last damage taken (`-inf` before the first).
+    last_hit_at: f32,
+    /// Session time of the next `targets.regen` heal (`inf` without regeneration).
+    regen_at: f32,
 }
 
 impl Target {
@@ -367,6 +371,7 @@ impl Session {
             FireMode::Hold if input.fire_held => self.hold_fire(dt, &mut events),
             _ => {}
         }
+        self.regenerate();
         self.expire(&mut events);
         self.refill(&mut events);
 
@@ -456,6 +461,41 @@ impl Session {
             .map_or(1.0, |f| rings.multiplier_at(f))
     }
 
+    /// Points multiplier of a hit on `zone` of target `idx` along `dir`: the score ring,
+    /// times the `scoring.decay` of the target's value since it appeared.
+    fn points_multiplier(&self, dir: Vec3, idx: usize, zone: HitZone) -> f32 {
+        let ring = self.ring_multiplier(dir, idx, zone);
+        match self.def.scoring.decay {
+            Some(decay) => ring * decay.multiplier_at(self.time - self.targets[idx].visible_at),
+            None => ring,
+        }
+    }
+
+    /// Bookkeeping when target `idx` takes damage: remember when, and restart its
+    /// regeneration interval when `targets.regen.reset_on_hit` is set.
+    fn on_damage(&mut self, idx: usize) {
+        let t = &mut self.targets[idx];
+        t.last_hit_at = self.time;
+        if let Some(r) = self.def.targets.regen.filter(|r| r.reset_on_hit) {
+            t.regen_at = self.time + r.interval_secs;
+        }
+    }
+
+    /// Heals every target whose `targets.regen` interval has elapsed, never above its
+    /// starting health.
+    fn regenerate(&mut self) {
+        let Some(r) = self.def.targets.regen else {
+            return;
+        };
+        let now = self.time;
+        for t in &mut self.targets {
+            while now >= t.regen_at {
+                t.health = (t.health + r.amount).min(t.max_health);
+                t.regen_at += r.interval_secs;
+            }
+        }
+    }
+
     fn shoot(&mut self, events: &mut Vec<SessionEvent>) {
         if !weapon::can_fire(&self.weapon, self.time, self.last_shot_at) || self.is_reloading() {
             return;
@@ -484,7 +524,7 @@ impl Session {
             self.reload_if_dry(events);
             return;
         }
-        let multiplier = self.ring_multiplier(dir, idx, zone);
+        let multiplier = self.points_multiplier(dir, idx, zone);
         scoring::record_hit(&mut self.stats, &self.def.scoring, zone, multiplier);
         if let (Some(b), Some(r)) = (bullet, &self.recoil) {
             let protected = r.profile().protected_bullets;
@@ -500,6 +540,7 @@ impl Session {
             moving,
         });
         self.targets[idx].health -= 1.0;
+        self.on_damage(idx);
         if self.targets[idx].health <= 0.0 {
             self.kill(idx, events);
         }
@@ -613,9 +654,10 @@ impl Session {
         let Some((idx, zone)) = self.hit_along(dir) else {
             return;
         };
-        let multiplier = self.ring_multiplier(dir, idx, zone);
+        let multiplier = self.points_multiplier(dir, idx, zone);
         scoring::record_on_target(&mut self.stats, &self.def.scoring, zone, dt, multiplier);
         self.targets[idx].health -= dt;
+        self.on_damage(idx);
         if self.targets[idx].health <= 0.0 {
             self.kill(idx, events);
         }
@@ -692,6 +734,12 @@ impl Session {
             decoy,
             expires_at: self.def.targets.lifetime_secs.map(|l| visible_at + l),
             motion: MotionState::new(point, lateral, visible_at),
+            last_hit_at: f32::NEG_INFINITY,
+            regen_at: self
+                .def
+                .targets
+                .regen
+                .map_or(f32::INFINITY, |r| visible_at + r.interval_secs),
         }
     }
 }
@@ -731,6 +779,7 @@ mod tests {
                 speed_scale: 1.0,
                 decoy_chance: 0.0,
                 spawn_rules: None,
+                regen: None,
             },
             scoring: ScoringDef::default(),
             difficulty: Default::default(),
@@ -1721,6 +1770,166 @@ mod tests {
         assert_eq!((st.decoy_waits, st.decoy_hits, st.expired), (1, 0, 0));
         assert_eq!(st.score, 0.0, "no expire penalty for a decoy");
         assert_eq!(s.success_rate(), 1.0, "waiting was the right call");
+    }
+
+    /// One frame of `dt` seconds looking along `view`, clicking when `fire` is set.
+    fn tick(s: &mut Session, dt: f32, view: ViewAngles, fire: bool) -> Vec<SessionEvent> {
+        s.update(FrameInput {
+            dt,
+            view,
+            fire_pressed: fire,
+            fire_held: fire,
+            ..Default::default()
+        })
+    }
+
+    /// A single static sphere of `health`, the only target alive.
+    fn lone_sphere(fire: FireMode, health: f32) -> ScenarioDef {
+        let mut def = sphere_def(fire, health);
+        def.targets.max_alive = 1;
+        def
+    }
+
+    fn regen(interval_secs: f32, amount: f32, reset_on_hit: bool) -> Option<RegenDef> {
+        Some(RegenDef {
+            interval_secs,
+            amount,
+            reset_on_hit,
+        })
+    }
+
+    const AWAY: ViewAngles = ViewAngles {
+        yaw_deg: 180.0,
+        pitch_deg: 0.0,
+    };
+
+    #[test]
+    fn regen_heals_a_target_every_interval_up_to_its_starting_health() {
+        let mut def = lone_sphere(FireMode::Click, 3.0);
+        def.targets.regen = regen(0.5, 1.0, false);
+        let mut s = Session::new(def, 2);
+        let t = s.targets().next().unwrap().clone();
+        let health = |s: &Session| s.targets().next().map(|t| t.health);
+        let on = aim_at(&s, t.position);
+        tick(&mut s, 0.1, on, true);
+        assert_eq!(health(&s), Some(2.0), "one hit");
+        tick(&mut s, 0.2, AWAY, false); // t = 0.3
+        assert_eq!(health(&s), Some(2.0));
+        tick(&mut s, 0.25, AWAY, false); // t = 0.55: the 0.5 s heal
+        assert_eq!(health(&s), Some(3.0));
+        for _ in 0..10 {
+            tick(&mut s, 0.2, AWAY, false);
+        }
+        assert_eq!(health(&s), Some(3.0), "never above the starting health");
+        let st = s.stats();
+        assert_eq!((st.shots, st.hits, st.kills), (1, 1, 0));
+        assert_eq!(st.score, 100.0);
+    }
+
+    #[test]
+    fn regen_with_reset_on_hit_waits_a_full_interval_after_the_last_hit() {
+        let mut def = lone_sphere(FireMode::Click, 3.0);
+        def.targets.regen = regen(0.5, 1.0, true);
+        let mut s = Session::new(def, 2);
+        let t = s.targets().next().unwrap().clone();
+        let health = |s: &Session| s.targets().next().map(|t| t.health);
+        let on = aim_at(&s, t.position);
+        tick(&mut s, 0.1, on, true);
+        tick(&mut s, 0.225, AWAY, false);
+        tick(&mut s, 0.225, AWAY, false); // t = 0.55: past the interval from spawn only
+        assert_eq!(
+            health(&s),
+            Some(2.0),
+            "the hit at 0.1 s restarted the interval"
+        );
+        tick(&mut s, 0.1, AWAY, false); // t = 0.65: 0.55 s after the hit
+        assert_eq!(health(&s), Some(3.0));
+    }
+
+    #[test]
+    fn regen_in_hold_mode_restores_seconds_of_health_off_target() {
+        let run = |regen_def| {
+            let mut def = lone_sphere(FireMode::Hold, 1.0);
+            def.targets.regen = regen_def;
+            let mut s = Session::new(def, 3);
+            let t = s.targets().next().unwrap().clone();
+            let on = aim_at(&s, t.position);
+            for _ in 0..50 {
+                tick(&mut s, 0.01, on, true);
+            }
+            let after_hold = s.targets().next().unwrap().health;
+            tick(&mut s, 0.25, AWAY, false);
+            let early = s.targets().next().unwrap().health;
+            tick(&mut s, 0.1, AWAY, false);
+            let late = s.targets().next().unwrap().health;
+            (after_hold, early, late, s.stats().on_target_secs)
+        };
+        let (held, early, late, on_target) = run(regen(0.3, 0.2, true));
+        assert!((held - 0.5).abs() < 1e-3, "{held}");
+        assert!(
+            (early - held).abs() < 1e-6,
+            "{early}: 0.25 s off target is not enough"
+        );
+        assert!((late - (held + 0.2)).abs() < 1e-3, "{late}");
+        assert!((on_target - 0.5).abs() < 1e-3);
+        let (held, early, late, _) = run(None);
+        assert_eq!((early, late), (held, held), "no regen without the block");
+    }
+
+    #[test]
+    fn score_decay_rewards_fast_click_kills() {
+        let mut def = lone_sphere(FireMode::Click, 1.0);
+        def.scoring.decay = Some(ScoreDecay {
+            window_secs: 1.0,
+            floor: 0.25,
+        });
+        let mut s = Session::new(def, 5);
+        let kill = |s: &mut Session, dt: f32| {
+            let t = s.targets().next().unwrap().clone();
+            let view = aim_at(s, t.position);
+            let ev = tick(s, dt, view, true);
+            assert!(
+                ev.iter()
+                    .any(|e| matches!(e, SessionEvent::Killed { id, .. } if *id == t.id))
+            );
+        };
+        for _ in 0..10 {
+            tick(&mut s, 0.05, AWAY, false);
+        }
+        kill(&mut s, 0.05); // age 0.55 s: 100 × (1 − 0.75 × 0.55) = 58.75
+        kill(&mut s, 0.2); // age 0.2 s: 85
+        tick(&mut s, 0.2, AWAY, false);
+        for _ in 0..9 {
+            tick(&mut s, 0.2, AWAY, false);
+        }
+        kill(&mut s, 0.1); // age 2.1 s: the floor, 25
+        let st = s.stats();
+        assert_eq!((st.shots, st.hits, st.kills), (3, 3, 3));
+        assert!((st.score - 168.75).abs() < 1e-2, "{}", st.score);
+    }
+
+    #[test]
+    fn score_decay_scales_hold_points_per_second() {
+        let run = |decay| {
+            let mut def = lone_sphere(FireMode::Hold, f32::INFINITY);
+            def.scoring.decay = decay;
+            let mut s = Session::new(def, 3);
+            let t = s.targets().next().unwrap().clone();
+            let on = aim_at(&s, t.position);
+            for _ in 0..100 {
+                tick(&mut s, 0.01, on, true);
+            }
+            s.stats().clone()
+        };
+        let decayed = run(Some(ScoreDecay {
+            window_secs: 1.0,
+            floor: 0.5,
+        }));
+        // The integral of 100 × (1 − 0.5 t) over one second.
+        assert!((decayed.score - 75.0).abs() < 0.5, "{}", decayed.score);
+        assert!((decayed.on_target_secs - 1.0).abs() < 1e-3);
+        let flat = run(None);
+        assert!((flat.score - 100.0).abs() < 1e-2, "{}", flat.score);
     }
 
     #[test]

@@ -318,6 +318,12 @@ Random spawns repeat by chance: in `spread-flicks` without rules, consecutive ta
 
 The defaults in `spread-flicks` are estimates chosen by calibration, not sourced values: `avoid_last_deg = 15` with `avoid_recent = 2`, `min_flick_deg = 12` and `exclude_center = 0.25`. They keep contender accuracy at about 66%, the same as `flick-wide` (inside the challenge-point band, see Difficulty).
 
+### Health regeneration and score decay
+
+Plain hold scenarios pay the same per second whether time on target comes in one stretch or in many short touches. Regeneration with `reset_on_hit` changes that: damage only sticks if the crosshair returns within the interval, so the kill rate rewards unbroken contact, which is the tracking quality the drill is meant to build. Score decay adds a speed incentive on top of accuracy: every scenario already trades speed against accuracy (Fitts' law, above), and decay moves the scoring point towards speed. Neither effect has been measured as a training benefit; both are design choices (inference), and the idea comes from Aim Lab's scenario options (`docs/feature-analysis.md`).
+
+The numbers in `regen-track` are estimates set by calibration, not sourced values: health 1.5 s, a heal of 0.2 s every 0.3 s off target, and a value that fades to 40% over 3 s. A 0.35 m sphere at 10 m keeps contender accuracy at about 58%; with a 0.3 m sphere it fell to 48%, at the bottom of the challenge-point band.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

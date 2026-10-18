@@ -856,7 +856,7 @@ mod tests {
 
     #[test]
     fn difficulty_and_tuning_keep_the_target_behaviour_blocks() {
-        for id in ["spread-flicks"] {
+        for id in ["spread-flicks", "regen-track"] {
             let d = find(id);
             let tuned = Tuning {
                 size_pct: 150,
@@ -869,6 +869,8 @@ mod tests {
                 d.with_tuning(tuned),
             ] {
                 assert_eq!(v.targets.spawn_rules, d.targets.spawn_rules, "{id}");
+                assert_eq!(v.targets.regen, d.targets.regen, "{id}");
+                assert_eq!(v.scoring.decay, d.scoring.decay, "{id}");
                 let errs: Vec<_> = v
                     .validate()
                     .into_iter()

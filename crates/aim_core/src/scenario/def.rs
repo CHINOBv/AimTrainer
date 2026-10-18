@@ -251,6 +251,26 @@ pub struct TargetsDef {
     /// crosshair, or out of the middle of the spawn area.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spawn_rules: Option<SpawnRules>,
+    /// Health regeneration: damaged targets heal over time, so landing damage in one
+    /// sustained effort beats chipping at them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regen: Option<RegenDef>,
+}
+
+/// Health regeneration of targets (`targets.regen`). Every `interval_secs` after a target
+/// appears it heals `amount` of health (hits in click mode, seconds in hold mode), never
+/// above its starting health.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RegenDef {
+    /// Seconds between heals.
+    pub interval_secs: f32,
+    /// Health restored per heal.
+    pub amount: f32,
+    /// Restart the interval whenever the target takes damage, so it only heals once it has
+    /// gone `interval_secs` without being hit.
+    #[serde(default)]
+    pub reset_on_hit: bool,
 }
 
 /// Spawn-pattern controls (`[targets.spawn_rules]`). A candidate spawn point that breaks a
@@ -476,6 +496,30 @@ pub struct ScoringDef {
     /// Points subtracted per shot on a go/no-go decoy (see `targets.decoy_chance`).
     #[serde(default, skip_serializing_if = "is_zero")]
     pub decoy_penalty: f32,
+    /// Score decay: a target's points shrink the longer it has been visible, rewarding
+    /// fast kills.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decay: Option<ScoreDecay>,
+}
+
+/// Score decay (`scoring.decay`). Points for hitting a target fall linearly from full value
+/// when it appears to `floor` × full value after `window_secs`, and stay at the floor after
+/// that. In hold mode the points per second decay the same way.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScoreDecay {
+    /// Seconds from the target appearing until its value reaches the floor.
+    pub window_secs: f32,
+    /// Remaining fraction of the value after the window, in [0, 1].
+    pub floor: f32,
+}
+
+impl ScoreDecay {
+    /// Value multiplier of a hit on a target visible for `age_secs`.
+    pub fn multiplier_at(&self, age_secs: f32) -> f32 {
+        let progress = (age_secs / self.window_secs).clamp(0.0, 1.0);
+        1.0 - (1.0 - self.floor) * progress
+    }
 }
 
 /// Score-zone rings around the center of a sphere or a humanoid head. A hit's points are
@@ -533,6 +577,7 @@ impl Default for ScoringDef {
             burst_bonus: 0.0,
             rings: None,
             decoy_penalty: 0.0,
+            decay: None,
         }
     }
 }
@@ -755,6 +800,24 @@ impl ScenarioDef {
                     "ranges must be [min, max]",
                 );
             }
+        }
+        if let Some(r) = t.regen {
+            check(
+                r.interval_secs.is_finite()
+                    && r.interval_secs > 0.0
+                    && r.amount.is_finite()
+                    && r.amount > 0.0
+                    && t.health.is_finite(),
+                "targets.regen",
+                "needs interval_secs > 0, a finite amount > 0 and a finite targets.health",
+            );
+        }
+        if let Some(d) = self.scoring.decay {
+            check(
+                d.window_secs.is_finite() && d.window_secs > 0.0 && (0.0..=1.0).contains(&d.floor),
+                "scoring.decay",
+                "needs window_secs > 0 and floor in [0, 1]",
+            );
         }
         if let Some(r) = &t.spawn_rules {
             check(
@@ -1153,6 +1216,93 @@ mod tests {
         );
         around.targets.spawn_rules.as_mut().unwrap().exclude_center = 0.0;
         assert!(fields_of(&around).is_empty());
+    }
+
+    #[test]
+    fn regen_and_score_decay_default_off_stay_out_of_saved_files_parse_and_are_validated() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!((d.targets.regen, d.scoring.decay), (None, None));
+        let saved = toml::to_string(&d).unwrap();
+        assert!(
+            !saved.contains("regen") && !saved.contains("decay"),
+            "{saved}"
+        );
+
+        let src = MINIMAL.replace(
+            "distance = [10, 10] }",
+            "distance = [10, 10] }\nhealth = 3\nregen = { interval_secs = 0.5, amount = 1, reset_on_hit = true }\n[scoring]\ndecay = { window_secs = 1.5, floor = 0.3 }",
+        );
+        let r = ScenarioDef::from_toml(&src).unwrap();
+        assert_eq!(
+            r.targets.regen,
+            Some(RegenDef {
+                interval_secs: 0.5,
+                amount: 1.0,
+                reset_on_hit: true,
+            })
+        );
+        assert_eq!(
+            r.scoring.decay,
+            Some(ScoreDecay {
+                window_secs: 1.5,
+                floor: 0.3,
+            })
+        );
+        assert!(r.validate().is_empty(), "{:?}", r.validate());
+        assert!(ScenarioDef::from_toml(&src.replace("reset_on_hit", "reset_on_hits")).is_err());
+        assert!(ScenarioDef::from_toml(&src.replace("floor = 0.3", "flor = 0.3")).is_err());
+        let no_reset = src.replace(", reset_on_hit = true", "");
+        let defaulted = ScenarioDef::from_toml(&no_reset).unwrap();
+        assert!(!defaulted.targets.regen.unwrap().reset_on_hit);
+
+        for (interval, amount) in [
+            (0.0, 1.0),
+            (f32::NAN, 1.0),
+            (0.5, 0.0),
+            (0.5, f32::INFINITY),
+        ] {
+            let mut b = r.clone();
+            b.targets.regen = Some(RegenDef {
+                interval_secs: interval,
+                amount,
+                reset_on_hit: false,
+            });
+            assert_eq!(fields_of(&b), ["targets.regen"], "{interval} {amount}");
+        }
+        let mut immortal = r.clone();
+        immortal.weapon.fire = FireMode::Hold;
+        immortal.targets.health = f32::INFINITY;
+        assert_eq!(
+            fields_of(&immortal),
+            ["targets.regen"],
+            "an unkillable target has nothing to heal"
+        );
+
+        for (window, floor) in [(0.0, 0.3), (f32::NAN, 0.3), (1.0, -0.1), (1.0, 1.1)] {
+            let mut b = r.clone();
+            b.scoring.decay = Some(ScoreDecay {
+                window_secs: window,
+                floor,
+            });
+            assert_eq!(fields_of(&b), ["scoring.decay"], "{window} {floor}");
+        }
+    }
+
+    #[test]
+    fn score_decay_falls_linearly_from_full_value_to_the_floor() {
+        let d = ScoreDecay {
+            window_secs: 2.0,
+            floor: 0.25,
+        };
+        for (age, expected) in [
+            (-1.0, 1.0),
+            (0.0, 1.0),
+            (1.0, 0.625),
+            (2.0, 0.25),
+            (9.0, 0.25),
+        ] {
+            assert!((d.multiplier_at(age) - expected).abs() < 1e-6, "{age}");
+        }
     }
 
     #[test]
