@@ -1,0 +1,23 @@
+[package]
+name = "aim_ai"
+description = "AI coach adapters: chat model providers, API key storage and the local coach memory."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+aim_core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+reqwest.workspace = true
+keyring.workspace = true
+rusqlite.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

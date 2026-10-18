@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/aim_core", "crates/aim_app", "crates/aim_world", "crates/aim_integrations"]
+members = ["crates/aim_core", "crates/aim_app", "crates/aim_world", "crates/aim_integrations", "crates/aim_ai"]
 
 [workspace.package]
 edition = "2024"
@@ -22,6 +22,11 @@ directories = "6.0"
 global-hotkey = "0.9"
 # Map loading only: JSON and GLB parsing, no image or buffer import.
 gltf = { version = "1.4.1", default-features = false, features = ["names"] }
+# AI coach adapters (aim_ai only): blocking HTTP over rustls, the OS keyring, SQLite with FTS5.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls"] }
+keyring = "4.2"
+rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+tempfile = "3.27"
 
 # Part of the coding standard (docs/coding-standards.md): enforced in every crate.
 [workspace.lints.rust]
