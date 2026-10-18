@@ -1,5 +1,6 @@
 //! Persistent user settings and the folders the app reads and writes.
 
+use crate::audio::synth::{HitSound, KillSound};
 use aim_core::crosshair::{CUSTOM_COLOR_INDEX, Crosshair, PRESET_COLORS, Rgba};
 use aim_core::sensitivity::Sensitivity;
 use bevy::prelude::Resource;
@@ -74,6 +75,32 @@ pub struct Settings {
     pub target_color: [f32; 3],
     /// Draw an arrow at the screen edge towards each target outside the view (scenarios only).
     pub offscreen_arrows: bool,
+    pub sound: SoundSettings,
+}
+
+/// Sound effects for shots. Missing keys (older files) take the defaults.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SoundSettings {
+    pub enabled: bool,
+    /// Master volume of the effects, percent (0–100).
+    pub volume_percent: u8,
+    pub hit: HitSound,
+    pub kill: KillSound,
+    /// A soft sound on missed shots.
+    pub miss: bool,
+}
+
+impl Default for SoundSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            volume_percent: 50,
+            hit: HitSound::default(),
+            kill: KillSound::default(),
+            miss: false,
+        }
+    }
 }
 
 impl Default for Settings {
@@ -92,6 +119,7 @@ impl Default for Settings {
             daily_goal_minutes: 30.0,
             target_color: [1.0, 0.27, 0.33],
             offscreen_arrows: true,
+            sound: SoundSettings::default(),
         }
     }
 }
@@ -221,6 +249,26 @@ mod tests {
         assert!(settings.offscreen_arrows);
         let off: Settings = toml::from_str("offscreen_arrows = false").unwrap();
         assert!(!off.offscreen_arrows);
+    }
+
+    #[test]
+    fn sound_defaults_on_at_half_volume_for_old_settings_files() {
+        let sound = toml::from_str::<Settings>("fullscreen = false")
+            .unwrap()
+            .sound;
+        assert!(sound.enabled);
+        assert_eq!(sound.volume_percent, 50);
+        assert_eq!((sound.hit, sound.kill), (HitSound::Click, KillSound::Chime));
+        assert!(!sound.miss, "miss sounds are opt-in");
+    }
+
+    #[test]
+    fn partial_sound_tables_keep_the_other_defaults() {
+        let src = "[sound]\nhit = \"ding\"\nmiss = true\n";
+        let sound = toml::from_str::<Settings>(src).unwrap().sound;
+        assert_eq!(sound.hit, HitSound::Ding);
+        assert!(sound.miss && sound.enabled);
+        assert_eq!(sound.kill, KillSound::Chime);
     }
 
     #[test]

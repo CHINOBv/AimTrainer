@@ -2,6 +2,7 @@
 //!
 //! Usage: see `cli::USAGE` (`aimtrainer --help`).
 
+mod audio;
 mod cli;
 mod game;
 mod overlay;
@@ -83,6 +84,7 @@ fn main() -> AppExit {
         .add_plugins((
             overlay::OverlayPlugin,
             game::GamePlugin,
+            audio::SoundPlugin,
             persistence::method_progress::MethodProgressPlugin,
             ui::UiPlugin,
         ))

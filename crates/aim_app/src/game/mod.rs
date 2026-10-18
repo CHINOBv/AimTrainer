@@ -3,6 +3,7 @@
 //! (maps with bots) are in `arena`.
 
 pub mod arena;
+pub mod feedback;
 
 use crate::overlay::Overlay;
 use crate::persistence::adaptive::AdaptiveLevels;
@@ -24,6 +25,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
+use feedback::{ShotFeedback, ShotOutcome};
 use std::collections::HashMap;
 
 const COUNTDOWN_SECS: f32 = 3.0;
@@ -181,6 +183,7 @@ impl Plugin for GamePlugin {
         app.init_state::<AppState>()
             .init_resource::<ActiveRoutine>()
             .init_resource::<FinderState>()
+            .add_message::<ShotFeedback>()
             .add_systems(Startup, setup_world)
             .add_systems(
                 Update,
@@ -522,7 +525,12 @@ pub(crate) fn progress_notes(history: &History, goal_minutes: f32) -> Vec<String
     notes
 }
 
-fn tick(input: PlayerInput, mut run: ResMut<Run>, mut finisher: RunFinisher) {
+fn tick(
+    input: PlayerInput,
+    mut run: ResMut<Run>,
+    mut finisher: RunFinisher,
+    mut feedback: MessageWriter<ShotFeedback>,
+) {
     let PlayerInput {
         time,
         keys,
@@ -541,6 +549,9 @@ fn tick(input: PlayerInput, mut run: ResMut<Run>, mut finisher: RunFinisher) {
     let input = frame_input(dt, run.view, &keys, &buttons);
     run.recording.inputs.push(input);
     for event in run.session.update(input) {
+        if let Some(outcome) = ShotOutcome::from_session(&event) {
+            feedback.write(ShotFeedback(outcome));
+        }
         match event {
             SessionEvent::Shot { hit: Some(_), .. } => run.hit_flash = 0.08,
             SessionEvent::Killed { .. } => run.kill_flash = 0.12,

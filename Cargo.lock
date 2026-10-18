@@ -1218,6 +1218,7 @@ dependencies = [
  "bevy_anti_alias",
  "bevy_app",
  "bevy_asset",
+ "bevy_audio",
  "bevy_camera",
  "bevy_clipboard",
  "bevy_color",

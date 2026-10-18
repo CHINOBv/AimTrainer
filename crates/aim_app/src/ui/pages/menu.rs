@@ -1,5 +1,6 @@
 //! Main menu: scenarios, routines, benchmark and settings tabs.
 
+use crate::audio::SoundPreview;
 use crate::game::AppState;
 use crate::game::FinderState;
 use crate::overlay::{Overlay, background};
@@ -25,7 +26,9 @@ use crate::ui::organisms::system_check::{self, SystemModel};
 use crate::ui::organisms::today_panel::{
     self, ChallengeModel, DayModel, RoutineModel, TodayAction, TodayModel,
 };
-use crate::ui::organisms::{arena_list, benchmark_panel, routine_list, scenario_browser};
+use crate::ui::organisms::{
+    arena_list, benchmark_panel, feedback_settings, routine_list, scenario_browser,
+};
 use aim_core::fov;
 use aim_core::training::method::{MethodDef, Weekday};
 use aim_core::training::playlist;
@@ -121,6 +124,7 @@ struct SettingsAccess<'w> {
     paths: Res<'w, Paths>,
     clear: ResMut<'w, ClearColor>,
     hotkey_capture: ResMut<'w, HotkeyCapture>,
+    sound_previews: MessageWriter<'w, SoundPreview>,
 }
 
 fn menu(
@@ -335,6 +339,11 @@ fn menu(
                         &mut cfg.settings,
                         &mut cfg.hotkey_capture.recording,
                     );
+                    ui.separator();
+                    if let Some(clip) = feedback_settings::sound_panel(ui, &mut cfg.settings.sound)
+                    {
+                        cfg.sound_previews.write(SoundPreview(clip));
+                    }
                     ui.separator();
                     profile_code::profile_code(ui, &mut cfg.settings, &mut state.profile_import);
                     ui.add_space(8.0);

@@ -175,6 +175,16 @@ Full citations are in `docs/training-science.md`.
   - Difficulty scaling clamps the offset to the on-screen limit.
 - **Backup:** a semi-transparent chevron at the screen edge points to every target outside the current view (including the ADS zoom), for scenarios that can still leave the screen. It is on by default (`offscreen_arrows`) and does not show in arenas.
 
+### D16 Procedural sound effects
+
+- **The request:** configurable hit, kill and miss sounds with several presets.
+- **Decision:** synthesize every clip in code (`aim_app::audio::synth`: oscillators, filtered noise, envelopes) once at startup, and play the samples through a custom Bevy `Decodable` source.
+- **Why:**
+  - No audio files to license or ship, and nothing that could be mistaken for Riot sounds (D13).
+  - No decoder dependency: only Bevy's `bevy_audio` feature (rodio and cpal, MIT/Apache-2.0). Bevy's `wav`/`vorbis` decoders are not enabled.
+  - Clips are pure functions of their recipe, so they are unit-tested (length, silent start and end, peak, determinism).
+- **Latency:** a shot spawns a player for a pre-built clip in the same frame; nothing is synthesized or decoded while playing. Linux builds need the ALSA headers (`libasound2-dev`, `alsa-lib` on Arch).
+
 ## Known limitations
 
 | Limitation | Impact |

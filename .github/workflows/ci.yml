@@ -35,13 +35,13 @@ jobs:
           toolchain: stable
           components: clippy, rustfmt
 
-      # Bevy's windowing and gamepad backends need these headers to build on Linux.
+      # Bevy's windowing, gamepad and audio (ALSA) backends need these headers to build on Linux.
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            pkg-config libudev-dev libwayland-dev libxkbcommon-dev libx11-dev
+            pkg-config libudev-dev libwayland-dev libxkbcommon-dev libx11-dev libasound2-dev
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 

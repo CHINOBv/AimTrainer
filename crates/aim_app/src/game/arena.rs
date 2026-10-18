@@ -2,6 +2,7 @@
 //! look and input as scenarios, feeding `aim_world::arena::ArenaSession`, with the map's
 //! boxes and the bots mirrored as meshes. All rules live in `aim_world`.
 
+use super::feedback::{ShotFeedback, ShotOutcome};
 use super::{
     AppState, LastResult, MainCamera, PlayerInput, TargetVisual, WorldAssets, apply_look,
     frame_input, place_camera, spawn_visual, unlit,
@@ -226,7 +227,12 @@ impl ArenaFinisher<'_, '_> {
     }
 }
 
-fn tick(input: PlayerInput, mut run: ResMut<ArenaRun>, mut finisher: ArenaFinisher) {
+fn tick(
+    input: PlayerInput,
+    mut run: ResMut<ArenaRun>,
+    mut finisher: ArenaFinisher,
+    mut feedback: MessageWriter<ShotFeedback>,
+) {
     if run.paused {
         return;
     }
@@ -239,6 +245,9 @@ fn tick(input: PlayerInput, mut run: ResMut<ArenaRun>, mut finisher: ArenaFinish
     }
     let frame = frame_input(dt, run.view, &input.keys, &input.buttons);
     for event in run.session.update(frame) {
+        if let Some(outcome) = ShotOutcome::from_arena(&event) {
+            feedback.write(ShotFeedback(outcome));
+        }
         match event {
             ArenaEvent::Shot { hit: Some(_), .. } => run.hit_flash = 0.08,
             ArenaEvent::PlayerHit { .. } => run.damage_flash = 0.25,
