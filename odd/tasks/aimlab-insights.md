@@ -33,7 +33,7 @@ Each analytics item explains itself: it shows the metric and the threshold behin
 
 | ID | Specs | Route | Status | Commit |
 |---|---|---|---|---|
-| T1 | S11 | inline | done | 516f9a8, docs commit below |
+| T1 | S11 | inline | done | 516f9a8, fde78d9 |
 | T1b | foundation for S1–S10 | inline (`MetricSources` refactor) | done | 8afb9f7 |
 | T2 | S1, S4, S6 | delegated (parallel writer, worktree `ai-flicks`, branch `feat/ai-flicks`) | done (playtest pending) | 81424bd, 22561d6, 1aaebe8, merge 0b3b974 |
 | T3 | S2, S5 | delegated (parallel writer, worktree `ai-pace`) | done (playtest pending) | 34fbb19, 947cd5c, merge 18d5f83 |
@@ -41,7 +41,7 @@ Each analytics item explains itself: it shows the metric and the threshold behin
 | T5 | S7 | delegated (parallel writer, worktree `ai-replay`) | done (playtest pending) | f0f2d30, 27ce3d6, a0278b7, merge 3f31fb0 |
 | T6 | S8 | delegated (parallel writer, worktree `ai-moving`) | done (playtest pending) | 54a98a3, 8e8ab96, beb1382, merge adf3fde |
 | T7 | S9, S10 | delegated (parallel writer, worktree `ai-drills`) | done (playtest pending) | ed84148, 042faf3, 150b73c, merge 9724533 |
-| T8 | S1–S10 seam: merge, docs, full suite, calibrate, build and launch | inline | pending | |
+| T8 | S1–S10 seam: merge, docs, full suite, calibrate, build and launch | inline | done (playtest pending) | merges 6733cd8..0b3b974, fde78d9 |
 
 ## Log
 
@@ -78,3 +78,13 @@ Each analytics item explains itself: it shows the metric and the threshold behin
     - a decoy shot plays miss feedback;
     - decoys are told apart by brightness, not hue.
   - Risk: item 6 (UI drawing in aim_app has no automated tests: results sections, replay viewer, decoy material, sensitivity panel). An independent verifier runs once at the feature end; playtest pending.
+- L8 (2026-10-18) Independent verifier (Risk item 6) found no blockers.
+  - S1–S7, S9, S10: pass. S11 was partial only because the T8 row was open (closed here). S8 was partial on scope.
+  - S8 interpretation: peek efficiency is measured where the player peeks, i.e. the `aim_world` arena peek drills (jiggle-peek, angle clearing). In core scenarios such as `peek-reaction` or `dodge-peek`, the target peeks and the player never is exposed.
+  - Invariants: calibrate is identical for all 28 pre-existing rows. A 9-scenario × 2-preset probe of the pre-existing Flick, FlickSummary, TrackingAnalysis, TrackingSummary, Stats and findings outputs matched the baseline (1181 lines); the only additions are the new-rule findings.
+  - Follow-ups (advisories, not fixed):
+    - the S1 weak axis and the S10 impulsive/hesitant verdicts are panel-only (no rules);
+    - `decoy_penalty` without `decoy_chance` is accepted silently;
+    - the Progress tab calls `replays::list` twice per frame;
+    - the go/no-go nearest-target logic can pick a decoy;
+    - L7's known gaps still apply.
