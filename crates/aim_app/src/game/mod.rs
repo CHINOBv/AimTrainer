@@ -6,6 +6,7 @@ pub mod arena;
 pub mod feedback;
 pub mod hit_effect;
 
+use crate::audio::CueHeard;
 use crate::overlay::Overlay;
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::history::History;
@@ -229,6 +230,7 @@ impl Plugin for GamePlugin {
             .init_resource::<ActiveRoutine>()
             .init_resource::<FinderState>()
             .add_message::<ShotFeedback>()
+            .add_message::<CueHeard>()
             .add_systems(Startup, setup_world)
             .add_systems(
                 Update,
@@ -704,6 +706,7 @@ fn tick(
     mut run: ResMut<Run>,
     mut finisher: RunFinisher,
     mut feedback: MessageWriter<ShotFeedback>,
+    mut cues: MessageWriter<CueHeard>,
 ) {
     let PlayerInput {
         time,
@@ -739,6 +742,12 @@ fn tick(
                 hit_effect::record(&mut run.struck, id, None, true);
             }
             SessionEvent::Finished => finisher.finish(&run),
+            SessionEvent::Cue {
+                position, sound, ..
+            } => {
+                let eye = run.session.eye_position();
+                cues.write(CueHeard::new(sound, eye, run.view, position));
+            }
             _ => {}
         }
     }
@@ -895,10 +904,18 @@ fn sync_targets(
         &transforms,
         &shape,
     );
+    // Radar decoys look like every other target: only the radar tells them apart.
+    let disguised = run
+        .session
+        .def()
+        .targets
+        .perception
+        .as_ref()
+        .is_some_and(|p| p.disguises_decoys());
     let decoys: Vec<u64> = run
         .session
         .targets()
-        .filter(|t| t.decoy)
+        .filter(|t| t.decoy && !disguised)
         .map(|t| t.id)
         .collect();
     let alive: HashMap<u64, (Vec3, f32)> = run

@@ -46,6 +46,7 @@ min_separation_deg = 0
 decoy_chance = 0             # go/no-go: share of spawns that are decoys, in [0, 1); needs lifetime_secs and fire = "click"
 regen = { interval_secs = 0.5, amount = 1, reset_on_hit = false }   # optional health regeneration
 spawn_rules = { avoid_last_deg = 10, min_flick_deg = 15 }          # optional spawn-pattern controls
+perception = { kind = "sound_cue", sound = "footsteps", reveal_after_secs = 0.8 }   # optional perception drill
 
 [scoring]                    # all optional
 head = 100                   # per hit (click) or per second (hold)
@@ -274,6 +275,82 @@ targets = { max_alive = 1, lifetime_secs = 2.0 }
 Each frame the session checks, in order: the phase trigger, the phase time limit, the fail conditions, and a kills goal. So a trigger reached on the frame its phase times out still advances. When a phase starts, the previous phase's targets disappear (they do not count as expired) and the new phase's targets spawn at once. Difficulty levels and in-run tuning scale each phase's overrides exactly as they scale `[targets]`.
 
 Score, accuracy and kills per minute use the time actually played. Pace and stamina are not analysed for phased runs, because the phases change the rate on purpose. For runs that do not end on time, the potential-score tip converts no saved seconds into points, because finishing faster does not add kills there; only miss penalties count.
+
+### Perception drills
+
+`[targets.perception]` (optional) changes how targets are announced and revealed. It has a `kind` (`sound_cue`, `detection` or `radar`); only one perception drill fits in a scenario.
+
+**`kind = "sound_cue"`: sound localisation.** Each target is first only heard: a synthesized sound plays from its position when it would have appeared, and the target itself appears `reveal_after_secs` later, or as soon as the crosshair comes within `reveal_within_deg` of it. A hidden target cannot be shot. When the crosshair reveals it early, its `lifetime_secs` starts then. The built-in `sound-turn` spawns agents 60–180° away from the crosshair, so every sound comes from the side or from behind:
+
+```toml
+[targets]
+shape = { kind = "humanoid" }
+spawn = { kind = "around_crosshair", offset_deg = [60.0, 180.0], distance = [8.0, 16.0] }
+lifetime_secs = 3.0
+
+[targets.perception]
+kind = "sound_cue"
+sound = "footsteps"
+reveal_after_secs = 0.8
+reveal_within_deg = 25
+```
+
+| Field | Meaning |
+|---|---|
+| `sound` | `"footsteps"` (three quick steps) or `"gunshot"` (one crack). Both are made up from tones and noise; no game sound is used. |
+| `reveal_after_secs` | Seconds from the sound to the target appearing, in (0, 10]. |
+| `reveal_within_deg` | Default 0 (off). Reveal the target early once the crosshair is within this angle of its aim point, in [0, 180). |
+
+The sound is panned to where it comes from when it plays: left/right by its angle from your view, duller and quieter when it is behind you, quieter when it is far. Bevy's spatial audio is not used because it cannot tell front from back. Cue sounds play even with shot sound effects off; the volume slider still applies. Use headphones. The results card shows, for each of eight directions around you, the median angular error 1 s after each sound (or at your first shot) and the median turn reaction time (see "Sound localisation" in `training-science.md`).
+
+**`kind = "detection"`: peripheral detection.** Each trial is a target slot: after `appear_delay_secs` (the wait before a flash), a target flashes for `lifetime_secs` in one of eight screen areas around the crosshair (up, up-right, right and so on), `spawn.offset_deg` away from where the crosshair points when the trial starts and `spawn.distance` from the eye. With `blank_chance` a trial stays blank: nothing shows. A click anywhere while a flash shows detects it (it scores like a hit on it, so `scoring.decay` rewards fast clicks); a click with nothing showing is a false alarm (a missed shot, `miss_penalty`); a flash nobody clicks expires (`expire_penalty`). The built-in `peripheral-detect`:
+
+```toml
+[player]
+elevation = 2.0   # raised floor, so flashes below the crosshair stay above the ground
+
+[targets]
+shape = { kind = "sphere", radius = 0.06 }
+spawn = { kind = "around_crosshair", offset_deg = [6.0, 18.0], distance = [6.0, 6.0] }
+lifetime_secs = 0.5
+appear_delay_secs = [0.8, 2.2]
+
+[targets.perception]
+kind = "detection"
+blank_chance = 0.25
+```
+
+| Field | Meaning |
+|---|---|
+| `blank_chance` | Default 0. Share of trials with no flash, in [0, 0.9]. |
+
+Detection needs a sphere, `spawn.kind = "around_crosshair"` with `offset_deg.max` inside the screen's height (so flashes above and below stay on screen), `max_alive = 1`, `lifetime_secs`, click fire, no `decoy_chance` and no `scoring.rings`. The results card shows flashes seen, false alarms, blank trials and, for each screen area, the hit rate and median reaction time.
+
+**`kind = "radar"`: minimap-glance recall.** Each round, a radar in the top-left corner shows for `show_secs` where `dots` enemies stand (top-down, turning with your view, forward up). Then all `max_alive` targets of the round appear together, `appear_delay_secs` after the radar is gone, and they look alike. Shoot the ones the radar showed; the others are decoys to leave alone until they expire, scored like go/no-go decoys (`decoy_penalty`). The next round starts when every target of this one is gone. The built-in `radar-recall`:
+
+```toml
+[targets]
+shape = { kind = "humanoid" }
+spawn = { kind = "angular", yaw_deg = [-70.0, 70.0], pitch_deg = [0.0, 0.0], distance = [8.0, 22.0] }
+max_alive = 4
+min_separation_deg = 15
+lifetime_secs = 3.0
+appear_delay_secs = [0.4, 0.8]
+
+[targets.perception]
+kind = "radar"
+show_secs = 1.5
+dots = 2
+```
+
+| Field | Meaning |
+|---|---|
+| `show_secs` | Seconds the radar stays on screen, in (0, 10]. It is hidden during the countdown and the pause. |
+| `dots` | Enemies per round the radar shows, from 1 to `max_alive - 1`; the rest are decoys. |
+
+Radar needs `lifetime_secs`, click fire and no `decoy_chance`. Keep `min_separation_deg` large enough that the radar's dots and the decoys are easy to tell apart. The results card shows correct picks (radar enemies shot), incorrect picks (others shot), radar enemies missed and others left alone, next to the go/no-go section.
+
+Perception drills draw random numbers only when they are used, so other scenarios replay exactly as before.
 
 ### Difficulty
 

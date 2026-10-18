@@ -2,6 +2,7 @@
 
 pub mod analysis_panel;
 pub mod arena_list;
+pub mod audio_cue_panel;
 pub mod benchmark_panel;
 pub mod coaching_overlay;
 pub mod decision_panel;
@@ -13,10 +14,12 @@ pub mod hud_panels;
 pub mod miss_compass;
 pub mod moving_panel;
 pub mod pace_panel;
+pub mod perception_panel;
 pub mod potential_tip;
 pub mod priority_panel;
 pub mod profile_code;
 pub mod progress_panel;
+pub mod radar_overlay;
 pub mod replay_compare;
 pub mod replay_viewer;
 pub mod restart_key_setting;

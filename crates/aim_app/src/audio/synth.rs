@@ -3,6 +3,7 @@
 //! the app ships no audio files (see `docs/decisions.md`).
 
 use aim_core::rng::Rng;
+use aim_core::scenario::cue::CueSound;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::TAU;
 
@@ -237,6 +238,42 @@ pub fn miss_recipe() -> Recipe {
     }
 }
 
+/// The sound a sound-cue drill target makes: made up from tones and filtered noise, never a
+/// recording of a game sound.
+pub fn cue_recipe(sound: CueSound) -> Recipe {
+    match sound {
+        // Three heel strikes, each a low thump plus a short scuff.
+        CueSound::Footsteps => Recipe {
+            voices: const {
+                &[
+                    Voice::new(Sine, 110.0, 1.0, 0.003, 0.035).glide_to(60.0),
+                    Voice::new(Noise, 2200.0, 0.5, 0.002, 0.02),
+                    Voice::new(Sine, 110.0, 1.0, 0.003, 0.035)
+                        .glide_to(60.0)
+                        .delayed(0.24),
+                    Voice::new(Noise, 2200.0, 0.5, 0.002, 0.02).delayed(0.24),
+                    Voice::new(Sine, 110.0, 1.0, 0.003, 0.035)
+                        .glide_to(60.0)
+                        .delayed(0.48),
+                    Voice::new(Noise, 2200.0, 0.5, 0.002, 0.02).delayed(0.48),
+                ]
+            },
+            peak: 0.8,
+        },
+        // A bright crack over a low boom.
+        CueSound::Gunshot => Recipe {
+            voices: const {
+                &[
+                    Voice::new(Noise, 5000.0, 1.0, 0.001, 0.03),
+                    Voice::new(Noise, 400.0, 0.8, 0.002, 0.09),
+                    Voice::new(Sine, 140.0, 0.7, 0.002, 0.06).glide_to(45.0),
+                ]
+            },
+            peak: 0.85,
+        },
+    }
+}
+
 /// Render `recipe` with every frequency scaled by `pitch`: mono samples at [`SAMPLE_RATE`],
 /// normalized to the recipe's peak, starting and ending at silence.
 pub fn render(recipe: &Recipe, pitch: f32) -> Vec<f32> {
@@ -354,6 +391,23 @@ mod tests {
                 assert_ne!(ca, cb, "{a} and {b} are the same sound");
             }
         }
+    }
+
+    #[test]
+    fn cue_sounds_are_distinct_clips_that_start_and_end_silent() {
+        let footsteps = render(&cue_recipe(CueSound::Footsteps), 1.0);
+        let gunshot = render(&cue_recipe(CueSound::Gunshot), 1.0);
+        assert_ne!(footsteps, gunshot);
+        for (name, clip) in [("footsteps", &footsteps), ("gunshot", &gunshot)] {
+            let secs = clip.len() as f32 / SAMPLE_RATE as f32;
+            assert!(secs > 0.1 && secs < 1.0, "{name}: {secs} s");
+            assert!(
+                clip[0].abs() < 0.01 && clip[clip.len() - 1].abs() < 0.01,
+                "{name}"
+            );
+        }
+        // Three steps: the footsteps outlast a single gunshot.
+        assert!(footsteps.len() > gunshot.len());
     }
 
     #[test]

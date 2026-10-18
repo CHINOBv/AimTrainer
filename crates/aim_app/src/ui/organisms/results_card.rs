@@ -6,9 +6,11 @@ use crate::ui::UiAction;
 use crate::ui::atoms::{GOOD, big};
 use crate::ui::molecules::stat_row;
 use crate::ui::organisms::analysis_panel::{RunReport, analysis_panel};
+use crate::ui::organisms::audio_cue_panel::audio_cue_panel;
 use crate::ui::organisms::decision_panel::decision_panel;
 use crate::ui::organisms::miss_compass::miss_compass;
 use crate::ui::organisms::moving_panel::moving_panel;
+use crate::ui::organisms::perception_panel::{detection_panel, radar_recall_panel};
 use crate::ui::organisms::potential_tip::potential_tip;
 use bevy_egui::egui::{self, Align2};
 
@@ -94,6 +96,15 @@ pub fn results_card(
                         }
                         if let Some(m) = &report.moving {
                             moving_panel(ui, m);
+                        }
+                        if let Some(cues) = &report.audio_cue {
+                            audio_cue_panel(ui, cues);
+                        }
+                        if let Some(d) = &report.detection {
+                            detection_panel(ui, d);
+                        }
+                        if let Some(r) = &report.radar_recall {
+                            radar_recall_panel(ui, r);
                         }
                     });
             }

@@ -61,6 +61,19 @@ pub struct Sample {
     pub score: f32,
     /// Targets killed from the start of the run to the end of this frame.
     pub kills: u32,
+    /// Sound cues that played this frame (sound-cue drills only).
+    pub cues: Vec<CueSample>,
+    /// Blank trials that ended this frame (detection drills only).
+    pub blank_trials: u32,
+}
+
+/// A sound cue as heard from the eye in the frame it played.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CueSample {
+    /// Id of the target that made the sound.
+    pub id: u64,
+    /// Angles that look at the sound's source (the target's aim point).
+    pub source: ViewAngles,
 }
 
 impl Sample {
@@ -154,6 +167,24 @@ fn decision_since(stats: &Stats, before: DecisionCounts) -> DecisionCounts {
     }
 }
 
+/// The sound cues heard for the first time this frame. `heard` keeps the ids of live
+/// targets already reported; ids are never reused, so dead ones are dropped from it.
+fn new_cues(session: &Session, heard: &mut Vec<u64>) -> Vec<CueSample> {
+    heard.retain(|id| session.heard_targets().any(|t| t.id == *id));
+    let eye = session.eye_position();
+    let mut cues = Vec::new();
+    for t in session.heard_targets() {
+        if !heard.contains(&t.id) {
+            heard.push(t.id);
+            cues.push(CueSample {
+                id: t.id,
+                source: ViewAngles::from_direction(aim_zone(session, t).0 - eye),
+            });
+        }
+    }
+    cues
+}
+
 /// Re-simulate `recording` and return one sample per input frame.
 pub fn trace(recording: &Recording) -> Vec<Sample> {
     let mut samples = Vec::with_capacity(recording.inputs.len());
@@ -165,6 +196,8 @@ pub fn trace(recording: &Recording) -> Vec<Sample> {
     let mut previous_on_target_secs = initial.stats().on_target_secs;
     let mut previous_kills = initial.stats().kills;
     let mut previous_decision = decision_totals(initial.stats());
+    let mut heard: Vec<u64> = Vec::new();
+    let mut previous_blanks = initial.stats().blank_trials;
 
     recording.replay(|session, input| {
         let stats = session.stats();
@@ -204,6 +237,8 @@ pub fn trace(recording: &Recording) -> Vec<Sample> {
             accurate: session.is_accurate(),
             score: stats.score,
             kills: stats.kills,
+            cues: new_cues(session, &mut heard),
+            blank_trials: stats.blank_trials - previous_blanks,
         });
         previous_targets = snapshot(session);
         previous_view = input.view;
@@ -212,6 +247,7 @@ pub fn trace(recording: &Recording) -> Vec<Sample> {
         previous_on_target_secs = stats.on_target_secs;
         previous_kills = stats.kills;
         previous_decision = decision_totals(stats);
+        previous_blanks = stats.blank_trials;
     });
     samples
 }

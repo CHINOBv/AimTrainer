@@ -2,6 +2,7 @@
 
 mod behavior;
 pub mod builtin;
+pub mod cue;
 pub mod def;
 pub mod difficulty;
 pub mod hit;

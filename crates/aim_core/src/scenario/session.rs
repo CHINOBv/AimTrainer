@@ -6,6 +6,7 @@
 //! and `scoring` modules.
 
 use super::behavior::{self, BehaviorState, Situation};
+use super::cue::{self, CueSound, Perception, RadarView};
 use super::def::{FireMode, ScenarioDef, Shape, TargetsDef};
 use super::hit::{HitZone, Ray};
 use super::motion::{Drive, MotionState};
@@ -83,6 +84,16 @@ pub enum SessionEvent {
         /// The condition that was reached.
         reason: FailReason,
     },
+    /// A sound-cue target made its sound (`targets.perception`, kind `sound_cue`). It is
+    /// heard before it is seen.
+    Cue {
+        /// Id of the target that is heard.
+        id: u64,
+        /// Where the sound comes from (the target's position), meters.
+        position: Vec3,
+        /// Which sound to play.
+        sound: CueSound,
+    },
 }
 
 /// A live target.
@@ -109,12 +120,18 @@ pub struct Target {
     /// Session time of the next `targets.regen` heal (`inf` without regeneration).
     regen_at: f32,
     behavior: BehaviorState,
+    /// Sound-cue drills: session time when the target's sound plays (`None` without a cue).
+    pub cue_at: Option<f32>,
+    /// The sound has been played.
+    cue_played: bool,
+    /// Detection drills: a blank trial, a slot in the trial sequence that never shows.
+    blank: bool,
 }
 
 impl Target {
     /// Whether the target is visible at session time `now` (seconds).
     pub fn is_visible(&self, now: f32) -> bool {
-        now >= self.visible_at
+        now >= self.visible_at && !self.blank
     }
 
     /// Current velocity in m/s.
@@ -126,6 +143,11 @@ impl Target {
     /// [`super::Motion::Dodge`] targets crouch.
     pub fn crouch(&self) -> f32 {
         self.motion.crouch
+    }
+
+    /// Whether the target's sound cue has played (always false without a cue).
+    pub fn is_heard(&self) -> bool {
+        self.cue_played
     }
 }
 
@@ -182,6 +204,12 @@ pub struct Stats {
     /// count in `expired`, which holds only match targets that were missed.
     #[serde(default)]
     pub decoy_waits: u32,
+    /// Detection drills only: clicks while no flash was showing. They count as missed shots.
+    #[serde(default)]
+    pub false_alarms: u32,
+    /// Detection drills only: blank trials (no flash) that ran their course.
+    #[serde(default)]
+    pub blank_trials: u32,
 }
 
 impl Stats {
@@ -276,6 +304,10 @@ pub struct Session {
     phase: Option<PhaseRun>,
     /// How the run ended, once it has.
     outcome: Option<RunOutcome>,
+    /// Radar drills: where the current round's matching targets stand.
+    radar_dots: Vec<Vec3>,
+    /// Radar drills: session time when the current round's radar disappears.
+    radar_until: f32,
 }
 
 impl Session {
@@ -312,6 +344,8 @@ impl Session {
             source: None,
             phase: None,
             outcome: None,
+            radar_dots: Vec::new(),
+            radar_until: f32::NEG_INFINITY,
         };
         s.ammo = s.def.weapon.ammo.map_or(0.0, |a| a.clip);
         if let Some(first) = s.def.phases.as_ref().and_then(|p| p.first()) {
@@ -397,6 +431,24 @@ impl Session {
         self.targets.iter().filter(move |t| t.is_visible(now))
     }
 
+    /// Sound-cue drills: every live target whose sound has played, visible or not yet.
+    pub fn heard_targets(&self) -> impl Iterator<Item = &Target> {
+        self.targets.iter().filter(|t| t.cue_played)
+    }
+
+    /// Radar drills: what the radar shows, while it is on screen.
+    pub fn radar(&self) -> Option<RadarView> {
+        (self.time < self.radar_until).then(|| RadarView {
+            dots: self.radar_dots.clone(),
+            player: self.player_pos,
+            remaining_secs: self.radar_until - self.time,
+        })
+    }
+
+    fn perception(&self) -> Option<&Perception> {
+        self.def.targets.perception.as_ref()
+    }
+
     /// Advances the session by one frame and returns what happened.
     pub fn update(&mut self, input: FrameInput) -> Vec<SessionEvent> {
         let mut events = Vec::new();
@@ -409,6 +461,7 @@ impl Session {
 
         self.move_player(input.movement, dt);
         self.move_targets(dt);
+        self.reveal_cued();
         let shots_before = self.stats.shots;
         match self.def.weapon.fire {
             FireMode::Click if input.fire_pressed => self.shoot(&mut events),
@@ -426,6 +479,7 @@ impl Session {
         if !self.finished {
             self.refill(&mut events);
         }
+        self.play_cues(&mut events);
 
         if !self.finished && self.time >= self.def.duration_secs {
             let outcome = match self.def.end {
@@ -672,8 +726,18 @@ impl Session {
             scoring::record_bullet(&mut self.stats, b);
         }
 
-        let Some((idx, zone)) = self.hit_along(dir) else {
+        // In a detection drill a click anywhere answers the flash showing, if any.
+        let detection = self.perception().is_some_and(Perception::is_detection);
+        let hit = if detection {
+            self.showing_flash()
+        } else {
+            self.hit_along(dir)
+        };
+        let Some((idx, zone)) = hit else {
             scoring::record_miss(&mut self.stats, &self.def.scoring);
+            if detection {
+                self.stats.false_alarms += 1;
+            }
             events.push(SessionEvent::Shot { hit: None, moving });
             self.reload_if_dry(events);
             return;
@@ -841,7 +905,9 @@ impl Session {
         let stats = &mut self.stats;
         self.targets.retain(|t| {
             let alive = t.expires_at.is_none_or(|e| now < e);
-            if !alive && t.decoy {
+            if !alive && t.blank {
+                stats.blank_trials += 1;
+            } else if !alive && t.decoy {
                 scoring::record_decoy_wait(stats);
                 events.push(SessionEvent::DecoyAvoided { id: t.id });
             } else if !alive {
@@ -853,11 +919,17 @@ impl Session {
     }
 
     fn refill(&mut self, events: &mut Vec<SessionEvent>) {
+        if let Some(&Perception::Radar { show_secs, dots }) = self.perception() {
+            if self.targets.is_empty() {
+                self.start_radar_round(show_secs, dots, events);
+            }
+            return;
+        }
         while self.targets.len() < self.def.targets.max_alive as usize && self.wave_has_room() {
             if let Some(run) = &mut self.phase {
                 run.spawned += 1;
             }
-            let t = self.spawn_target();
+            let t = self.spawn_target(None);
             events.push(SessionEvent::Spawned { id: t.id });
             self.targets.push(t);
         }
@@ -872,16 +944,108 @@ impl Session {
         }
     }
 
-    fn spawn_target(&mut self) -> Target {
-        let point = spawn::separated_point(
-            &self.def.targets,
-            &self.targets,
-            &self.recent_spawns,
-            self.eye_position(),
-            self.view,
-            &self.dims,
-            &mut self.rng,
-        );
+    /// Radar drills: once every target of a round is gone, shows the radar with the
+    /// positions of the first `dots` new targets and spawns the whole round, which appears
+    /// together after the radar plus one `appear_delay_secs` draw. The rest are decoys.
+    fn start_radar_round(&mut self, show_secs: f32, dots: u32, events: &mut Vec<SessionEvent>) {
+        let delay = self.rng.in_range(self.def.targets.appear_delay_secs);
+        let reveal_at = self.time + show_secs + delay;
+        self.radar_until = self.time + show_secs;
+        self.radar_dots.clear();
+        for i in 0..self.def.targets.max_alive {
+            let mut t = self.spawn_target(Some(reveal_at));
+            t.decoy = i >= dots;
+            if !t.decoy {
+                self.radar_dots.push(t.position);
+            }
+            events.push(SessionEvent::Spawned { id: t.id });
+            self.targets.push(t);
+        }
+    }
+
+    /// Detection drills: the flash showing now, as a hit on it.
+    fn showing_flash(&self) -> Option<(usize, HitZone)> {
+        let now = self.time;
+        self.targets
+            .iter()
+            .position(|t| t.is_visible(now))
+            .map(|i| (i, HitZone::Sphere))
+    }
+
+    /// Sound-cue drills: plays the sound of every target whose cue time has come.
+    fn play_cues(&mut self, events: &mut Vec<SessionEvent>) {
+        let Some(sound) = self
+            .def
+            .targets
+            .perception
+            .as_ref()
+            .and_then(|p| p.cue_sound())
+        else {
+            return;
+        };
+        let now = self.time;
+        for t in &mut self.targets {
+            if !t.cue_played && t.cue_at.is_some_and(|at| now >= at) {
+                t.cue_played = true;
+                events.push(SessionEvent::Cue {
+                    id: t.id,
+                    position: t.position,
+                    sound,
+                });
+            }
+        }
+    }
+
+    /// Sound-cue drills: reveals a heard target early once the crosshair comes within
+    /// `reveal_within_deg` of its aim point. Its lifetime then starts from the reveal.
+    fn reveal_cued(&mut self) {
+        let Some(within) = self
+            .def
+            .targets
+            .perception
+            .as_ref()
+            .and_then(|p| p.reveal_within_deg())
+        else {
+            return;
+        };
+        let now = self.time;
+        let eye = self.eye_position();
+        let dir = self.view.direction();
+        let (shape, lifetime) = (&self.def.targets.shape, self.def.targets.lifetime_secs);
+        for t in &mut self.targets {
+            if !t.cue_played || t.is_visible(now) {
+                continue;
+            }
+            let aim = spawn::aim_point(shape, &self.dims, t.position);
+            if angle_between_deg(dir, aim - eye) <= within {
+                t.visible_at = now;
+                t.expires_at = lifetime.map(|l| now + l);
+            }
+        }
+    }
+
+    /// A new target. `reveal_at` fixes when it appears (radar rounds); otherwise it appears
+    /// after a random `appear_delay_secs`.
+    fn spawn_target(&mut self, reveal_at: Option<f32>) -> Target {
+        let detection = self.perception().is_some_and(Perception::is_detection);
+        let point = if detection {
+            cue::flash_point(
+                &self.def.targets.spawn,
+                self.eye_position(),
+                self.view,
+                &mut self.rng,
+            )
+        } else {
+            spawn::separated_point(
+                &self.def.targets,
+                &self.targets,
+                &self.recent_spawns,
+                self.eye_position(),
+                self.view,
+                &self.dims,
+                &mut self.rng,
+            )
+        };
         if let Some(rules) = &self.def.targets.spawn_rules {
             self.recent_spawns.push(point);
             let excess = self
@@ -891,11 +1055,32 @@ impl Session {
             self.recent_spawns.drain(..excess);
         }
         let (facing_yaw_deg, lateral) = spawn::face_player(point, self.player_pos);
-        let delay = self.rng.in_range(self.def.targets.appear_delay_secs);
-        let visible_at = self.time + delay;
+        let mut visible_at = match reveal_at {
+            Some(at) => at,
+            None => self.time + self.rng.in_range(self.def.targets.appear_delay_secs),
+        };
+        // A sound cue plays when the target would have appeared; the target itself shows up
+        // `reveal_after_secs` later. No random draw, so other scenarios are unchanged.
+        let reveal_after = self
+            .def
+            .targets
+            .perception
+            .as_ref()
+            .and_then(|p| p.reveal_after_secs());
+        let cue_at = reveal_after.map(|after| {
+            let heard_at = visible_at;
+            visible_at += after;
+            heard_at
+        });
         // Draw only when decoys are on, so other scenarios keep their random sequences.
         let chance = self.def.targets.decoy_chance;
         let decoy = chance > 0.0 && self.rng.next_f32() < chance;
+        let blank = match self.perception() {
+            Some(&Perception::Detection { blank_chance }) if blank_chance > 0.0 => {
+                self.rng.next_f32() < blank_chance
+            }
+            _ => false,
+        };
         let id = self.next_id;
         self.next_id += 1;
         Target {
@@ -910,6 +1095,9 @@ impl Session {
             motion: MotionState::new(point, lateral, visible_at),
             last_hit_at: f32::NEG_INFINITY,
             behavior: BehaviorState::new(lateral),
+            cue_at,
+            cue_played: false,
+            blank,
             regen_at: self
                 .def
                 .targets
@@ -987,6 +1175,7 @@ mod tests {
                 regen: None,
                 reactions: None,
                 behaviors: Vec::new(),
+                perception: None,
             },
             scoring: ScoringDef::default(),
             difficulty: Default::default(),

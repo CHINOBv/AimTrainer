@@ -274,6 +274,10 @@ pub struct TargetsDef {
     /// rule whose conditions all hold overrides the target's motion.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub behaviors: Vec<BehaviorRule>,
+    /// Perception drill: how targets are announced and revealed (see
+    /// [`super::cue::Perception`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub perception: Option<super::cue::Perception>,
 }
 
 /// How a target reacts to the player (`targets.reactions`). A reaction sets the target's
@@ -1010,6 +1014,11 @@ impl ScenarioDef {
             for (field, msg) in rule.motion.iter().flat_map(motion_problems) {
                 let name = field.strip_prefix("targets.motion.").unwrap_or("chances");
                 check(false, "targets.behaviors.motion", &format!("{name}: {msg}"));
+            }
+        }
+        if let Some(p) = &t.perception {
+            for (field, msg) in p.problems(self) {
+                check(false, field, msg);
             }
         }
         errs.extend(self.run_rule_problems());

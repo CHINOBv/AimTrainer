@@ -12,6 +12,7 @@ use crate::platform::game_key;
 use crate::ui::UiAction;
 use crate::ui::atoms::{crosshair, hit_marker};
 use crate::ui::navigation::Navigator;
+use crate::ui::organisms::radar_overlay::{self, RadarPanel};
 use crate::ui::organisms::{coaching_overlay, hud_panels};
 use aim_core::scenario::{RunKey, Tuning};
 use bevy::prelude::*;
@@ -93,6 +94,12 @@ fn hud(
     }
     hit_feedback(ctx, &settings, run.hit_flash);
     hud_panels::run_status(ctx, &run.session);
+    // The session stands still during the countdown and the pause: hide the radar then, so
+    // it is never on screen longer than `show_secs`.
+    let radar_live = run.countdown <= 0.0 && !run.paused;
+    if let Some(radar) = run.session.radar().filter(|_| radar_live) {
+        radar_overlay::radar_overlay(ctx, &RadarPanel::new(&radar, run.view.yaw_deg));
+    }
     if run.session.def().player.movement {
         hud_panels::movement_meter(ctx, &run.session);
     }

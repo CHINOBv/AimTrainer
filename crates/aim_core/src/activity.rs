@@ -68,7 +68,8 @@ impl Activity for Session {
                 | SessionEvent::DecoyAvoided { .. }
                 | SessionEvent::Reload { .. }
                 | SessionEvent::PhaseStarted { .. }
-                | SessionEvent::RunFailed { .. } => None,
+                | SessionEvent::RunFailed { .. }
+                | SessionEvent::Cue { .. } => None,
             })
             .collect()
     }
