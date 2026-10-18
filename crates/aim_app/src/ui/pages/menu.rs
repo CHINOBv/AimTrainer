@@ -14,7 +14,7 @@ use crate::persistence::settings::{Paths, Settings};
 use crate::platform::frame_stats::FrameStats;
 use crate::platform::hotkey::HotkeyCapture;
 use crate::ui::UiAction;
-use crate::ui::atoms::ERROR;
+use crate::ui::atoms::{ERROR, GOOD};
 use crate::ui::molecules::tab_bar;
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::profile_code::{self, ProfileImport};
@@ -48,7 +48,9 @@ pub struct MenuPage;
 impl Plugin for MenuPage {
     fn build(&self, app: &mut App) {
         app.init_resource::<MenuState>()
-            .add_systems(Update, count_dpi_meter)
+            .init_resource::<SettingsSaver>()
+            .add_systems(Update, (count_dpi_meter, save_settings))
+            .add_systems(Last, flush_settings_on_exit)
             .add_systems(OnExit(AppState::Menu), stop_recording_on_exit)
             .add_systems(
                 EguiPrimaryContextPass,
@@ -130,6 +132,8 @@ struct SettingsAccess<'w> {
     clear: ResMut<'w, ClearColor>,
     hotkey_capture: ResMut<'w, HotkeyCapture>,
     sound_previews: MessageWriter<'w, SoundPreview>,
+    saver: ResMut<'w, SettingsSaver>,
+    time: Res<'w, Time<Real>>,
 }
 
 fn menu(
@@ -155,6 +159,8 @@ fn menu(
             .max_rect(ctx.viewport_rect()),
     );
     let before = cfg.settings.clone();
+    let now = cfg.time.elapsed_secs_f64();
+    let saved = cfg.saver.debounce.show_saved(now);
     let state = &mut *state;
     let lib = nav.library();
     let mut action: Option<UiAction> = None;
@@ -167,6 +173,12 @@ fn menu(
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Quit").clicked() {
                     action = Some(UiAction::Quit);
+                }
+                if saved {
+                    ui.colored_label(GOOD, "Saved ✔");
+                    // Repaint so the message disappears without waiting for input.
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_millis(250));
                 }
                 let s = cfg.settings.sensitivity;
                 ui.label(format!(
@@ -400,7 +412,8 @@ fn menu(
         stop_recording(&mut cfg.hotkey_capture);
     }
     if *cfg.settings != before && cfg.settings.sensitivity.is_valid() {
-        cfg.settings.save(&cfg.paths);
+        // The file is written later by `save_settings`; the background updates now.
+        cfg.saver.debounce.changed(now);
         *cfg.clear = background(&cfg.settings, overlay.visible);
     }
     if let Some(t) = today_action {
@@ -411,6 +424,113 @@ fn menu(
         nav.apply(action);
     }
     Ok(())
+}
+
+/// Seconds without a further change before the settings file is written.
+const SAVE_DELAY_SECS: f64 = 0.5;
+/// How long the "Saved" message stays after a write, seconds.
+const SAVED_SHOWN_SECS: f64 = 2.0;
+
+/// When to write the settings file: once changes have settled for [`SAVE_DELAY_SECS`], and
+/// never while an earlier write is still running (writes then land in order).
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+struct SaveDebounce {
+    /// Time of the newest change not yet written.
+    last_change: Option<f64>,
+    /// Time the newest write finished.
+    saved_at: Option<f64>,
+}
+
+impl SaveDebounce {
+    fn changed(&mut self, now: f64) {
+        self.last_change = Some(now);
+    }
+
+    fn pending(&self) -> bool {
+        self.last_change.is_some()
+    }
+
+    /// True when a write should start now; the change then counts as written.
+    fn should_write(&mut self, now: f64, writing: bool) -> bool {
+        match self.last_change {
+            Some(t) if !writing && now - t >= SAVE_DELAY_SECS => {
+                self.last_change = None;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn finished(&mut self, now: f64) {
+        self.saved_at = Some(now);
+    }
+
+    /// Whether to show the "Saved" message.
+    fn show_saved(&self, now: f64) -> bool {
+        !self.pending() && self.saved_at.is_some_and(|t| now - t < SAVED_SHOWN_SECS)
+    }
+}
+
+/// Writes the settings file off the frame: debounced, on a background thread.
+#[derive(Resource, Default)]
+struct SettingsSaver {
+    debounce: SaveDebounce,
+    writing: Option<std::thread::JoinHandle<()>>,
+}
+
+impl SettingsSaver {
+    /// Collect a finished write and start the next one when it is due.
+    fn update(&mut self, settings: &Settings, paths: &Paths, now: f64) {
+        if self.writing.as_ref().is_some_and(|h| h.is_finished()) {
+            self.writing = None;
+            self.debounce.finished(now);
+        }
+        // An invalid sensitivity is never written; the change stays pending until fixed.
+        if !settings.sensitivity.is_valid() {
+            return;
+        }
+        if self.debounce.should_write(now, self.writing.is_some()) {
+            let (settings, paths) = (settings.clone(), paths.clone());
+            let spawned = std::thread::Builder::new()
+                .name("settings-save".into())
+                .spawn(move || settings.save(&paths));
+            match spawned {
+                Ok(handle) => self.writing = Some(handle),
+                Err(e) => bevy::log::error!("could not start the settings writer: {e}"),
+            }
+        }
+    }
+
+    /// Finish every write before the app exits.
+    fn flush(&mut self, settings: &Settings, paths: &Paths) {
+        if let Some(handle) = self.writing.take() {
+            let _ = handle.join();
+        }
+        if self.debounce.pending() && settings.sensitivity.is_valid() {
+            settings.save(paths);
+            self.debounce = SaveDebounce::default();
+        }
+    }
+}
+
+fn save_settings(
+    mut saver: ResMut<SettingsSaver>,
+    settings: Res<Settings>,
+    paths: Res<Paths>,
+    time: Res<Time<Real>>,
+) {
+    saver.update(&settings, &paths, time.elapsed_secs_f64());
+}
+
+fn flush_settings_on_exit(
+    mut exits: MessageReader<AppExit>,
+    mut saver: ResMut<SettingsSaver>,
+    settings: Res<Settings>,
+    paths: Res<Paths>,
+) {
+    if exits.read().next().is_some() {
+        saver.flush(&settings, &paths);
+    }
 }
 
 /// Analyses of the newest [`RECENT_RUNS`] click-run replays (`entries` is newest first),
@@ -683,6 +803,7 @@ fn apply_today(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use bevy::ecs::system::assert_is_system;
     use bevy::prelude::Result;
 
@@ -691,5 +812,43 @@ mod tests {
         assert_is_system::<(), Result, _>(super::menu);
         assert_is_system(super::count_dpi_meter);
         assert_is_system(super::stop_recording_on_exit);
+        assert_is_system(super::save_settings);
+        assert_is_system(super::flush_settings_on_exit);
+    }
+
+    #[test]
+    fn settings_are_written_once_after_the_last_change_settles() {
+        let mut d = SaveDebounce::default();
+        assert!(!d.should_write(10.0, false), "nothing changed yet");
+        d.changed(1.0);
+        d.changed(1.3);
+        assert!(!d.should_write(1.6, false), "0.3 s after the last change");
+        assert!(d.pending());
+        assert!(d.should_write(1.3 + SAVE_DELAY_SECS, false));
+        assert!(!d.pending());
+        assert!(!d.should_write(5.0, false), "one write per settled change");
+    }
+
+    #[test]
+    fn a_write_in_flight_delays_the_next_one() {
+        let mut d = SaveDebounce::default();
+        d.changed(0.0);
+        assert!(
+            !d.should_write(2.0, true),
+            "the previous write is still running"
+        );
+        assert!(d.pending());
+        assert!(d.should_write(2.1, false));
+    }
+
+    #[test]
+    fn saved_shows_briefly_after_a_write_and_hides_on_a_new_change() {
+        let mut d = SaveDebounce::default();
+        assert!(!d.show_saved(0.0));
+        d.finished(3.0);
+        assert!(d.show_saved(3.5));
+        assert!(!d.show_saved(3.0 + SAVED_SHOWN_SECS));
+        d.changed(3.6);
+        assert!(!d.show_saved(3.7), "a newer change is not saved yet");
     }
 }
