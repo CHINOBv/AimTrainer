@@ -37,8 +37,8 @@ Each analytics item explains itself: it shows the metric and the threshold behin
 | T1b | foundation for S1–S10 | inline (`MetricSources` refactor) | done | 8afb9f7 |
 | T2 | S1, S4, S6 | delegated (parallel writer, worktree `ai-flicks`, branch `feat/ai-flicks`) | in progress | |
 | T3 | S2, S5 | delegated (parallel writer, worktree `ai-pace`) | in progress | |
-| T4 | S3 | delegated (parallel writer, worktree `ai-tracking`) | in progress | |
-| T5 | S7 | delegated (parallel writer, worktree `ai-replay`) | in progress | |
+| T4 | S3 | delegated (parallel writer, worktree `ai-tracking`) | done (playtest pending) | 3d082d6, merge 6733cd8 |
+| T5 | S7 | delegated (parallel writer, worktree `ai-replay`) | done (playtest pending) | f0f2d30, 27ce3d6, a0278b7, merge 3f31fb0 |
 | T6 | S8 | delegated (parallel writer, worktree `ai-moving`) | in progress | |
 | T7 | S9, S10 | delegated (parallel writer, worktree `ai-drills`) | in progress | |
 | T8 | S1–S10 seam: merge, docs, full suite, calibrate, build and launch | inline | pending | |
@@ -56,4 +56,8 @@ Each analytics item explains itself: it shows the metric and the threshold behin
   - Arena runs keep no `Recording`.
 
   Writer trigger (a): six independent units, each several files of work, launched together in isolated sibling worktrees branched from 8afb9f7. They share hot spots: `trace.rs`, `RunAnalysis`, `rules.rs` with `recommendations.toml` and `FORMER_RULES`, `analysis_panel.rs`, `results_card.rs` and `docs/training-science.md`. Writers append there; the parent resolves those seams at merge. All units share `CARGO_TARGET_DIR=C:\Users\David\projects\AimTrainer\target`, because the disk has 51 GB free and one target is 18 GB.
+- L6 (2026-10-18) The T5 writer found that worktrees sharing one `CARGO_TARGET_DIR` overwrite each other's workspace-crate artifacts, so a test run could execute another worktree's code. All writers now use private hard-linked targets (`cp -al`). The integration worktree uses `.target-integration`.
+  - T4 speed match: weakness below 35% of firing time with the target moving ≥ 5°/s, within 25% speed with a 2°/s floor. Edge share: above 60% of on-target time farther than 70% of the radius. Strafe scenarios score 12–33% speed match even for the simulated elite; tune later.
+  - T5 speed bands (slow < 30°/s, fast ≥ 300°/s) are display estimates. Heatmap grid: 15×15 over ±3 radii.
+  - Integration verify at 3f31fb0 with a private target: fmt OK, clippy -D warnings clean, `cargo test --workspace` all passed (app 154, core 226, world 63 + 1 ignored, others).
 - L5 S6 decision: the X/Y suggestion is shown as information; only the overall multiplier is applied, through the existing F6 path (`Sensitivity::from_cm_per_360`). No vertical-multiplier setting is added unless a sourced VALORANT setting exists in `docs/valorant-mechanics.md`.
