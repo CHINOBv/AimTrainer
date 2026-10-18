@@ -437,6 +437,29 @@ mod tests {
     }
 
     #[test]
+    fn harder_makes_dodging_targets_decide_and_juke_sooner() {
+        let d = find("dodge-juke-heads");
+        let h = d.at_difficulty(1.0);
+        let (
+            Motion::Dodge {
+                change_secs: c0,
+                juke_secs: j0,
+                ..
+            },
+            Motion::Dodge {
+                change_secs: c1,
+                juke_secs: j1,
+                ..
+            },
+        ) = (&d.targets.motion, &h.targets.motion)
+        else {
+            panic!()
+        };
+        assert!((c1.max / c0.max - 0.7).abs() < 1e-5);
+        assert!((j1.min / j0.min - 0.7).abs() < 1e-5);
+    }
+
+    #[test]
     fn levels_clamp_and_every_builtin_stays_valid_across_the_range() {
         for d in builtin::all() {
             for level in [-1.0, -0.5, 0.25, 0.5, 1.0, 3.0] {
