@@ -3,6 +3,7 @@
 //! boxes and the bots mirrored as meshes. All rules live in `aim_world`.
 
 use super::feedback::{ShotFeedback, ShotOutcome};
+use super::hit_effect::{self, EffectAssets, Struck};
 use super::{
     AppState, LastResult, MainCamera, PlayerInput, TargetVisual, WorldAssets, apply_look,
     frame_input, place_camera, spawn_visual, unlit,
@@ -34,6 +35,8 @@ pub struct ArenaRun {
     pub hit_flash: f32,
     pub damage_flash: f32,
     bots: HashMap<u64, Entity>,
+    /// Bots hit this frame, for their visual effect.
+    struck: Vec<Struck>,
 }
 
 impl ArenaRun {
@@ -48,6 +51,7 @@ impl ArenaRun {
             hit_flash: 0.0,
             damage_flash: 0.0,
             bots: HashMap::new(),
+            struck: Vec::new(),
         }
     }
 
@@ -249,7 +253,16 @@ fn tick(
             feedback.write(ShotFeedback(outcome));
         }
         match event {
-            ArenaEvent::Shot { hit: Some(_), .. } => run.hit_flash = 0.08,
+            ArenaEvent::Shot {
+                hit: Some((id, zone)),
+                ..
+            } => {
+                run.hit_flash = finisher.settings.hit_feedback.marker_secs();
+                hit_effect::record(&mut run.struck, id, Some(zone), false);
+            }
+            ArenaEvent::BotKilled { id, .. } => {
+                hit_effect::record(&mut run.struck, id, None, true);
+            }
             ArenaEvent::PlayerHit { .. } => run.damage_flash = 0.25,
             ArenaEvent::Finished => finisher.finish(&run),
             _ => {}
@@ -265,9 +278,21 @@ fn sync_bots(
     mut commands: Commands,
     mut run: ResMut<ArenaRun>,
     assets: Res<WorldAssets>,
+    effects: Option<Res<EffectAssets>>,
+    settings: Res<Settings>,
     mut transforms: Query<&mut Transform, With<TargetVisual>>,
 ) {
     let run = &mut *run;
+    let humanoid = Shape::Humanoid { head_only: false };
+    hit_effect::apply_struck(
+        &mut commands,
+        effects.as_deref(),
+        settings.hit_feedback.target_effect,
+        &mut run.struck,
+        &mut run.bots,
+        &transforms,
+        &humanoid,
+    );
     let alive: HashMap<u64, (Vec3, f32)> = run
         .session
         .bots()
@@ -286,7 +311,6 @@ fn sync_bots(
         }
         keep
     });
-    let humanoid = Shape::Humanoid { head_only: false };
     for (id, (pos, facing)) in alive {
         let entity = *run
             .bots

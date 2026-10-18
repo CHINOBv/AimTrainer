@@ -185,6 +185,14 @@ Full citations are in `docs/training-science.md`.
   - Clips are pure functions of their recipe, so they are unit-tested (length, silent start and end, peak, determinism).
 - **Latency:** a shot spawns a player for a pre-built clip in the same frame; nothing is synthesized or decoded while playing. Linux builds need the ALSA headers (`libasound2-dev`, `alsa-lib` on Arch).
 
+### D17 Subtle hit feedback
+
+- **The request:** "discreet" target hits, configurable, with several options.
+- **Decision:** a hit marker drawn around the crosshair (default: a small white X at 80 % opacity that fades out over 120 ms) and a target effect (default: an 80 ms white flash). Both have an Off option.
+- **Killed targets:** the session removes a killed target at once; the app keeps its visual for the effect's length (at most 0.2 s) so the effect is visible on one-shot targets. It is only a picture: the core no longer knows the target, so it cannot be hit again.
+- **Cost:** every effect material is built once; effects swap handles and scale transforms, and a ring burst is one short-lived entity.
+- **The old behavior** (the crosshair turning white on a hit) is kept as the "Crosshair flash" marker style.
+
 ## Known limitations
 
 | Limitation | Impact |

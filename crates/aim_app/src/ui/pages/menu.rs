@@ -345,6 +345,13 @@ fn menu(
                         cfg.sound_previews.write(SoundPreview(clip));
                     }
                     ui.separator();
+                    let crosshair = cfg.settings.crosshair.color();
+                    feedback_settings::hit_feedback_panel(
+                        ui,
+                        &mut cfg.settings.hit_feedback,
+                        crosshair,
+                    );
+                    ui.separator();
                     profile_code::profile_code(ui, &mut cfg.settings, &mut state.profile_import);
                     ui.add_space(8.0);
                     ui.small(format!(

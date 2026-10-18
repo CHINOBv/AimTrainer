@@ -36,6 +36,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
 - **Your setup**
   - VALORANT **crosshair codes** (import and export).
   - **Sound effects** for hits, headshots, kills and (optionally) misses, synthesized in code: several presets, a volume slider and previews.
+  - Subtle **hit feedback**: a short, semi-transparent hit marker (crosshair flash, dot, cross, ring or brackets; color and duration) and a target effect (flash, pop, fade or ring burst). Each can be turned off.
   - A shareable **profile code**.
   - A **system check**: FPS, 1% lows, vsync, acceleration.
 
@@ -78,7 +79,7 @@ The menu tabs:
 | Arenas | Deathmatch, site hold, angle clearing, jiggle-peek and pre-aim drills; a Practice button plays any arena with bots that never shoot |
 | Benchmark | Your benchmark energy and ranks, at novice, intermediate or advanced tier |
 | Tools | Sensitivity converter (360°, monitor distance 0/75/100%), sensitivity finder, system check |
-| Settings | Sensitivity, DPI check, crosshair, sound, profile code, hotkeys |
+| Settings | Sensitivity, DPI check, crosshair, sound, hit feedback, profile code, hotkeys |
 
 ## Command line
 

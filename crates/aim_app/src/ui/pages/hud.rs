@@ -4,9 +4,10 @@
 use crate::game::AppState;
 use crate::game::MainCamera;
 use crate::game::arena::ArenaRun;
+use crate::game::feedback::HitMarkerStyle;
 use crate::overlay::Overlay;
 use crate::persistence::settings::Settings;
-use crate::ui::atoms::crosshair;
+use crate::ui::atoms::{crosshair, hit_marker};
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::hud_panels;
 use aim_core::scenario::RunKey;
@@ -45,7 +46,7 @@ fn hud(
     }
     let ctx = contexts.ctx_mut()?;
     if let Some(mut arena) = arena {
-        crosshair::draw(ctx, &settings.crosshair, arena.hit_flash > 0.0);
+        hit_feedback(ctx, &settings, arena.hit_flash);
         hud_panels::arena_status(ctx, &arena.session, arena.damage_flash);
         if arena.countdown > 0.0 {
             hud_panels::countdown(ctx, arena.countdown);
@@ -74,7 +75,7 @@ fn hud(
         };
         hud_panels::offscreen_arrows(ctx, &run.session, &cam, settings.target_color);
     }
-    crosshair::draw(ctx, &settings.crosshair, run.hit_flash > 0.0);
+    hit_feedback(ctx, &settings, run.hit_flash);
     hud_panels::run_status(ctx, &run.session);
     if run.session.def().player.movement {
         hud_panels::movement_meter(ctx, &run.session);
@@ -109,6 +110,19 @@ fn hud(
         nav.apply(action);
     }
     Ok(())
+}
+
+/// The crosshair and the hit marker, `marker_secs_left` seconds before the marker ends.
+fn hit_feedback(ctx: &bevy_egui::egui::Context, settings: &Settings, marker_secs_left: f32) {
+    let fb = &settings.hit_feedback;
+    let showing = marker_secs_left > 0.0;
+    let flash = showing && fb.marker == HitMarkerStyle::Flash;
+    crosshair::draw(ctx, &settings.crosshair, flash);
+    if showing {
+        let t = 1.0 - marker_secs_left / fb.marker_secs();
+        let color = settings.crosshair.color();
+        hit_marker::draw(ctx, fb.marker, fb.marker_color, color, t);
+    }
 }
 
 #[cfg(test)]

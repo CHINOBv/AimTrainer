@@ -13,10 +13,11 @@ Branch: `feat/audio-hit-feedback` (worktree `../AimTrainer-worktrees/audio-hit-f
 
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
-| T1 | S1 sounds | delegated (writer: settings, audio module, UI, Cargo features) | done | (recorded in the next commit) |
-| T2 | S1 hit feedback | delegated (same writer, sequential: shares settings and UI) | pending | |
+| T1 | S1 sounds | delegated (writer: settings, audio module, UI, Cargo features) | done | 9a800af |
+| T2 | S1 hit feedback | delegated (same writer, sequential: shares settings and UI) | done | (this commit; see `git log`) |
 
 ## Log
 
 - L1 (2026-10-18) Exploration: no audio code; workspace Bevy uses `default-features = false, features = ["3d"]`; no assets folder; CI installs Linux deps in `.github/workflows/ci.yml` (audio will need ALSA dev headers). No hit marker or hit effect exists.
 - L2 (2026-10-18) T1: `bevy_audio` feature only (no decoder; Cargo.lock +1 line, rodio/cpal MIT/Apache-2.0). Clips synthesized once at startup (`audio::synth`), played via a custom `Decodable` on the frame's strongest `ShotFeedback` (kill > headshot > hit > miss). Settings `[sound]`: enabled, volume_percent, hit (off/click/tick/pop/ding/thump), kill (off/chime/ping/pluck/burst), miss. RED observed for synth (3 failing with stub render) and sound-settings defaults (2 failing); clip_for/strongest checked by stub mutation (3 failing). GREEN: `cargo test --workspace` 392 passed; clippy -D warnings clean. `cargo build -p aim_app` compiled but could not replace the running `aimtrainer.exe` (os error 5); the test binary links the same crate. Playback has no automated test: playtest needed.
+- L3 (2026-10-18) T2: `[hit_feedback]` settings: marker (off/flash/dot/cross/ring/brackets, default cross), marker_ms 40–400 (default 120), marker_color (white/red/yellow/cyan/crosshair), target_effect (off/flash/pop/fade/ring, default flash). Pure curves in `game::feedback`, marker geometry in `ui::atoms::hit_marker`, effects in `game::hit_effect` (pre-built materials, killed targets linger for the effect, at most 0.2 s). RED observed: feedback curves (5 failing with stubs), hit-feedback defaults (1 failing); marker geometry and effect helpers checked by stub mutation (4 failing). GREEN: `cargo test --workspace` 407 passed; clippy -D warnings clean; `cargo build -p aim_app` compiled but could not replace the running `aimtrainer.exe` (os error 5). Rendering has no automated test: playtest needed.

@@ -4,6 +4,7 @@
 
 pub mod arena;
 pub mod feedback;
+pub mod hit_effect;
 
 use crate::overlay::Overlay;
 use crate::persistence::adaptive::AdaptiveLevels;
@@ -26,6 +27,7 @@ use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use feedback::{ShotFeedback, ShotOutcome};
+use hit_effect::{BaseMaterial, EffectAssets, Struck};
 use std::collections::HashMap;
 
 const COUNTDOWN_SECS: f32 = 3.0;
@@ -72,6 +74,8 @@ pub struct Run {
     /// The sensitivity-finder test this run is, if any.
     pub finder_slot: Option<Slot>,
     entities: HashMap<u64, Entity>,
+    /// Targets hit this frame, for their visual effect.
+    struck: Vec<Struck>,
 }
 
 impl Run {
@@ -99,6 +103,7 @@ impl Run {
             hit_flash: 0.0,
             kill_flash: 0.0,
             entities: HashMap::new(),
+            struck: Vec::new(),
         }
     }
 }
@@ -192,7 +197,7 @@ impl Plugin for GamePlugin {
                     .run_if(in_state(AppState::Playing).and_then(resource_exists::<Run>)),
             )
             .add_systems(Update, sync_play_area)
-            .add_plugins(arena::ArenaPlugin)
+            .add_plugins((arena::ArenaPlugin, hit_effect::HitEffectPlugin))
             .add_systems(Update, (manage_cursor, refresh_target_color, fit_viewport))
             .add_systems(OnExit(AppState::Playing), clear_targets);
     }
@@ -553,8 +558,17 @@ fn tick(
             feedback.write(ShotFeedback(outcome));
         }
         match event {
-            SessionEvent::Shot { hit: Some(_), .. } => run.hit_flash = 0.08,
-            SessionEvent::Killed { .. } => run.kill_flash = 0.12,
+            SessionEvent::Shot {
+                hit: Some((id, zone)),
+                ..
+            } => {
+                run.hit_flash = finisher.settings.hit_feedback.marker_secs();
+                hit_effect::record(&mut run.struck, id, Some(zone), false);
+            }
+            SessionEvent::Killed { id, .. } => {
+                run.kill_flash = 0.12;
+                hit_effect::record(&mut run.struck, id, None, true);
+            }
             SessionEvent::Finished => finisher.finish(&run),
             _ => {}
         }
@@ -584,14 +598,16 @@ pub(crate) fn frame_input(
     }
 }
 
+/// A target mesh's material, remembered so hit effects can restore it.
+fn material(h: &Handle<StandardMaterial>) -> (MeshMaterial3d<StandardMaterial>, BaseMaterial) {
+    (MeshMaterial3d(h.clone()), BaseMaterial(h.clone()))
+}
+
 pub(crate) fn spawn_visual(commands: &mut Commands, assets: &WorldAssets, shape: &Shape) -> Entity {
     let mut e = commands.spawn((TargetVisual, Transform::default(), Visibility::default()));
     match *shape {
         Shape::Sphere { radius } => {
-            e.insert((
-                Mesh3d(assets.unit_sphere.clone()),
-                MeshMaterial3d(assets.target.clone()),
-            ));
+            e.insert((Mesh3d(assets.unit_sphere.clone()), material(&assets.target)));
             e.insert(Transform::from_scale(Vec3::splat(radius)));
         }
         Shape::Humanoid { .. } => {
@@ -600,17 +616,17 @@ pub(crate) fn spawn_visual(commands: &mut Commands, assets: &WorldAssets, shape:
             e.with_children(|p| {
                 p.spawn((
                     Mesh3d(assets.head_box.clone()),
-                    MeshMaterial3d(assets.head.clone()),
+                    material(&assets.head),
                     Transform::from_xyz(0.0, d.head_center_height(), 0.0),
                 ));
                 p.spawn((
                     Mesh3d(assets.body_box.clone()),
-                    MeshMaterial3d(assets.body.clone()),
+                    material(&assets.body),
                     Transform::from_xyz(0.0, d.waist_height + torso_h / 2.0, 0.0),
                 ));
                 p.spawn((
                     Mesh3d(assets.legs_box.clone()),
-                    MeshMaterial3d(assets.body.clone()),
+                    material(&assets.body),
                     Transform::from_xyz(0.0, d.waist_height / 2.0, 0.0),
                 ));
             });
@@ -623,10 +639,21 @@ fn sync_targets(
     mut commands: Commands,
     mut run: ResMut<Run>,
     assets: Res<WorldAssets>,
+    effects: Option<Res<EffectAssets>>,
+    settings: Res<Settings>,
     mut transforms: Query<&mut Transform, With<TargetVisual>>,
 ) {
     let run = &mut *run;
     let shape = run.session.def().targets.shape.clone();
+    hit_effect::apply_struck(
+        &mut commands,
+        effects.as_deref(),
+        settings.hit_feedback.target_effect,
+        &mut run.struck,
+        &mut run.entities,
+        &transforms,
+        &shape,
+    );
     let alive: HashMap<u64, (Vec3, f32)> = run
         .session
         .targets()

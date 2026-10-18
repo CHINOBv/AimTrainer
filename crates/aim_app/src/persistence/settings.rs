@@ -1,6 +1,7 @@
 //! Persistent user settings and the folders the app reads and writes.
 
 use crate::audio::synth::{HitSound, KillSound};
+use crate::game::feedback::{HitMarkerStyle, MarkerColor, TargetEffect};
 use aim_core::crosshair::{CUSTOM_COLOR_INDEX, Crosshair, PRESET_COLORS, Rgba};
 use aim_core::sensitivity::Sensitivity;
 use bevy::prelude::Resource;
@@ -76,6 +77,41 @@ pub struct Settings {
     /// Draw an arrow at the screen edge towards each target outside the view (scenarios only).
     pub offscreen_arrows: bool,
     pub sound: SoundSettings,
+    pub hit_feedback: HitFeedbackSettings,
+}
+
+/// Visual feedback on hits. Missing keys (older files) take the subtle defaults.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HitFeedbackSettings {
+    pub marker: HitMarkerStyle,
+    /// How long the hit marker shows, milliseconds.
+    pub marker_ms: u16,
+    pub marker_color: MarkerColor,
+    pub target_effect: TargetEffect,
+}
+
+impl HitFeedbackSettings {
+    pub const MARKER_MS: std::ops::RangeInclusive<u16> = 40..=400;
+
+    /// How long the hit marker shows, seconds, within the allowed range.
+    pub fn marker_secs(&self) -> f32 {
+        let ms = self
+            .marker_ms
+            .clamp(*Self::MARKER_MS.start(), *Self::MARKER_MS.end());
+        f32::from(ms) / 1000.0
+    }
+}
+
+impl Default for HitFeedbackSettings {
+    fn default() -> Self {
+        Self {
+            marker: HitMarkerStyle::default(),
+            marker_ms: 120,
+            marker_color: MarkerColor::default(),
+            target_effect: TargetEffect::default(),
+        }
+    }
 }
 
 /// Sound effects for shots. Missing keys (older files) take the defaults.
@@ -120,6 +156,7 @@ impl Default for Settings {
             target_color: [1.0, 0.27, 0.33],
             offscreen_arrows: true,
             sound: SoundSettings::default(),
+            hit_feedback: HitFeedbackSettings::default(),
         }
     }
 }
@@ -269,6 +306,28 @@ mod tests {
         assert_eq!(sound.hit, HitSound::Ding);
         assert!(sound.miss && sound.enabled);
         assert_eq!(sound.kill, KillSound::Chime);
+    }
+
+    #[test]
+    fn hit_feedback_defaults_are_subtle_for_old_settings_files() {
+        let fb = toml::from_str::<Settings>("fullscreen = false")
+            .unwrap()
+            .hit_feedback;
+        assert_eq!(fb.marker, HitMarkerStyle::Cross);
+        assert_eq!(fb.marker_color, MarkerColor::White);
+        assert_eq!(fb.target_effect, TargetEffect::Flash);
+        assert!(HitFeedbackSettings::MARKER_MS.contains(&fb.marker_ms));
+        assert!(fb.marker_ms <= 150, "a short marker by default");
+    }
+
+    #[test]
+    fn hit_feedback_reads_kebab_case_styles() {
+        let src = "[hit_feedback]\nmarker = \"brackets\"\nmarker_color = \"crosshair\"\ntarget_effect = \"ring\"\n";
+        let fb = toml::from_str::<Settings>(src).unwrap().hit_feedback;
+        assert_eq!(fb.marker, HitMarkerStyle::Brackets);
+        assert_eq!(fb.marker_color, MarkerColor::Crosshair);
+        assert_eq!(fb.target_effect, TargetEffect::Ring);
+        assert_eq!(fb.marker_ms, HitFeedbackSettings::default().marker_ms);
     }
 
     #[test]
