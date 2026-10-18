@@ -28,6 +28,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - **Fatigue warnings.**
   - **Daily goals and streaks.**
   - A **daily challenge** that everyone plays with the same seed.
+  - **Compound daily missions** built from your own recent bests (for example "accuracy ≥ 75% AND kills ≥ 62"), with mastery missions and a low/medium/high commitment level.
 - **Feedback**
   - Flick and tracking analysis with explained recommendations.
   - **Run insights:** flicks by screen direction and distance, click timing, pace and stamina, target priority, tracking speed match and edge time, and firing while moving. In arenas: peek timing.
@@ -76,7 +77,7 @@ The menu tabs:
 
 | Tab | What it holds |
 |---|---|
-| Today | The day's method session, the daily challenge |
+| Today | The day's method session, the daily challenge, daily missions |
 | Progress | Goal, readiness, fatigue, trend, per-skill strengths and trends, bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
 | Scenarios | Play, or play adaptively |
 | Routines | The routines (resume a split one), your personalized playlist |

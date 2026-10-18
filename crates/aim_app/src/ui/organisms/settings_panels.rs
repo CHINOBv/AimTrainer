@@ -8,6 +8,7 @@ use aim_core::crosshair::{
     LineLimits, Lines, OUTLINE_THICKNESS_PX, PRESET_COLORS, Rgba, code, preset,
 };
 use aim_core::sensitivity::Game;
+use aim_core::training::missions::Commitment;
 use bevy_egui::egui;
 
 /// Raw mouse counts accumulated while the DPI check runs.
@@ -161,6 +162,14 @@ pub fn display_panel(
                 .suffix(" min"),
         );
     });
+    ui.horizontal(|ui| {
+        ui.label("Mission commitment");
+        for c in Commitment::ALL {
+            ui.selectable_value(&mut settings.mission_commitment, c, c.label());
+        }
+    })
+    .response
+    .on_hover_text("Low: 2 missions a day. Medium: 3, one of them mastery. High: 4, two mastery, closer to your bests. Changing it regenerates today's missions.");
     ui.add_space(8.0);
     ui.heading("Gameplay keys");
     restart_key_setting::restart_key_setting(ui, &mut settings.restart_key);

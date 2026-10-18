@@ -9,6 +9,7 @@ pub mod hit_effect;
 use crate::overlay::Overlay;
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::history::History;
+use crate::persistence::missions::{Missions, MissionsPlugin};
 use crate::persistence::settings::{Paths, Settings};
 use aim_core::fov;
 use aim_core::games::valorant::HumanoidDims;
@@ -213,7 +214,8 @@ impl Plugin for GamePlugin {
             .add_systems(Update, sync_play_area)
             .add_plugins((arena::ArenaPlugin, hit_effect::HitEffectPlugin))
             .add_systems(Update, (manage_cursor, refresh_target_color, fit_viewport))
-            .add_systems(OnExit(AppState::Playing), clear_targets);
+            .add_systems(OnExit(AppState::Playing), clear_targets)
+            .add_plugins(MissionsPlugin);
     }
 }
 
@@ -459,6 +461,7 @@ struct RunFinisher<'w, 's> {
     settings: Res<'w, Settings>,
     finder: ResMut<'w, FinderState>,
     paths: Res<'w, Paths>,
+    missions: ResMut<'w, Missions>,
 }
 
 /// The sensitivity finder in progress (session only; not persisted).
@@ -482,6 +485,8 @@ impl RunFinisher<'_, '_> {
         } else {
             // Finder test runs do not enter the regular history.
             self.history.record(&result);
+            self.missions
+                .record(&result, session.stats().hits, &self.paths);
         }
         let tuning = RunKey::parse(&session.def().id).tuning;
         if !tuning.is_default() {

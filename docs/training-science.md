@@ -310,6 +310,17 @@ Why 15 flicks and 30% (estimates): the simulated aimer has no directional bias, 
 - **Applying:** only the overall multiplier can be applied, through `Sensitivity::from_cm_per_360` (cm/360 ÷ multiplier, same game and DPI), the same path as the sensitivity finder. The vertical line is information only: mouse look uses one sensitivity for both axes, and decision L5 adds no vertical multiplier setting. Nothing is applied automatically. Once applied, the button stays hidden until new replays arrive.
 - **Limits:** replays do not record the sensitivity they were played at. Runs from before a sensitivity change, and sensitivity-finder test runs (also saved as replays), therefore mix into the evidence. No published source gives the 40-flick minimum, the bounds or the band; they are provisional.
 
+## Compound missions
+
+`aim_core::training::missions` builds the Today page's daily missions. A mission names one scenario and two conditions that must all hold in the **same run**, for example "accuracy ≥ 75% AND kills ≥ 62".
+
+- **Anti-spam rule:** every mission pairs one volume condition (score, kills or shots hit) with one precision condition (accuracy or headshot rate). Spam clicking raises volume but sinks precision. One careful shot has precision but no volume. Neither passes.
+- **Mastery missions** add a third condition and a stricter target. The third condition is time per kill when kills are timed; otherwise it is the other precision or volume metric.
+- **Targets** come from the player's own recent bests on that scenario. The bests are taken per metric over the last 10 plain runs of each of the 12 most recently played scenarios. Plain runs exclude difficulty levels, shortened runs, tuning, floor height and the daily challenge. Regular targets are the best × the commitment factor. Mastery adds +0.08 to the factor. Time per kill is the best ÷ factor. Ratio targets are capped at 95%. Headshot rate is used only when the best reaches 5%.
+- **Commitment** (Settings): low gives 2 missions at ×0.85 with no mastery. Medium gives 3 at ×0.92, the last one mastery. High gives 4 at ×0.97, the last two mastery.
+- **Determinism:** missions depend only on the day, a per-install seed, the commitment and the recent runs. They are generated once per local day and then frozen, so a best set during the day does not move them. Changing the commitment regenerates the day.
+- **Evidence:** the 0.85/0.92/0.97 factors, the +0.08 mastery bonus, the 95% cap, the 5% headshot floor and the 10-run and 12-scenario windows are **estimates**, with no published source. The intent follows the Challenge Point Framework above: goals near, but not above, current ability. Personal-best goals are the player's own baseline, not a population norm.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

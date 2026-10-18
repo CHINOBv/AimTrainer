@@ -4,6 +4,7 @@ use crate::audio::synth::{HitSound, KillSound};
 use crate::game::feedback::{HitMarkerStyle, MarkerColor, TargetEffect};
 use aim_core::crosshair::{CUSTOM_COLOR_INDEX, Crosshair, PRESET_COLORS, Rgba};
 use aim_core::sensitivity::Sensitivity;
+use aim_core::training::missions::Commitment;
 use bevy::prelude::Resource;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
@@ -80,6 +81,8 @@ pub struct Settings {
     pub offscreen_arrows: bool,
     pub sound: SoundSettings,
     pub hit_feedback: HitFeedbackSettings,
+    /// How many daily missions are offered and how hard they are.
+    pub mission_commitment: Commitment,
 }
 
 /// Visual feedback on hits. Missing keys (older files) take the subtle defaults.
@@ -160,6 +163,7 @@ impl Default for Settings {
             offscreen_arrows: true,
             sound: SoundSettings::default(),
             hit_feedback: HitFeedbackSettings::default(),
+            mission_commitment: Commitment::default(),
         }
     }
 }
@@ -368,6 +372,14 @@ mod tests {
         assert!(ch.outlines && ch.center_dot);
         assert_eq!(ch.outline_opacity, 1.0);
         assert!(!ch.outer.show, "the legacy crosshair had no outer lines");
+    }
+
+    #[test]
+    fn mission_commitment_defaults_to_medium_and_reads_kebab_case() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(old.mission_commitment, Commitment::Medium);
+        let high: Settings = toml::from_str("mission_commitment = \"high\"").unwrap();
+        assert_eq!(high.mission_commitment, Commitment::High);
     }
 
     #[test]
