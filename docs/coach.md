@@ -14,7 +14,7 @@ The coach recommends routines, reads the player's stats and can generate scenari
 
 ## Providers
 
-Pick one with `provider` in `CoachConfig`.
+Pick one with `provider` in `CoachConfig`. `aim_ai::build_model(&config, key)` validates the settings and returns the provider as a `ChatModel`.
 
 | `provider` | Talks to | Key | Tool calls |
 |---|---|---|---|
@@ -64,6 +64,31 @@ enabled = true
 provider = "anthropic"
 model = "claude-sonnet-5-5"
 api_key_env = "ANTHROPIC_API_KEY"   # optional fallback when the keyring has no key
+```
+
+### CLI delegate (`CliDelegateProvider`)
+
+Runs a CLI the player installed and signed in to themselves. The conversation is flattened into one labelled prompt, and the reply is the CLI's final text.
+
+| CLI | `cli_command` (presets in `aim_ai::cli`) | `cli_prompt` | Output read |
+|---|---|---|---|
+| Codex | `["codex", "exec", "--skip-git-repo-check", "-"]` | `stdin` | Plain text (the final message) |
+| Claude Code | `["claude", "-p", "--output-format", "json"]` | `stdin` | The `result` field; `is_error: true` becomes an error |
+| OpenCode | `["opencode", "run", "--format", "json"]` | `argument` | Text events (`{"type":"text",...}`), joined |
+
+- **No tool calls.** In this mode the coach cannot read stats or create scenarios; it answers from the conversation only.
+- **No logins.** The app never manages a CLI's login and never reads any CLI's credential files. If the CLI is not signed in, its error is shown.
+- **Sandboxing.** The process starts in an empty scratch directory under the system temp dir, not in the player's files, with the player's own environment.
+- **Timeout.** The process is killed after `request_timeout_secs`. On Windows, killing an npm `.cmd` shim may leave its child running until that child finishes.
+- **Windows.** A bare program name is resolved on `PATH` as `.exe`, `.cmd` or `.bat`, because npm installs CLIs as `.cmd` shims. Prefer `stdin` there: Windows refuses to pass some arguments (such as multi-line text) to `.cmd` files safely.
+
+```toml
+[coach]
+enabled = true
+provider = "cli-delegate"
+cli_command = ["claude", "-p", "--output-format", "json"]
+cli_prompt = "stdin"
+request_timeout_secs = 180
 ```
 
 ### Errors
