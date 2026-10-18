@@ -47,8 +47,29 @@ Two smaller additions came out of the same review:
 - **`aimtrainer play <scenario|arena>`:** bind your favourite drill to a key.
 - **Ultrawide pillarboxing:** the trainer matches VALORANT's 16:9 view on wide monitors.
 
+## Insights and drills inspired by Aim Lab (2026-10-18)
+
+A static analysis of an installed Aim Lab build listed its analytics and training features. Only the *ideas* were taken: no code, assets or data. One example: Aim Lab splits accuracy and reaction time by the screen quadrant of each flick and by near/far distance. The ten features below were missing here. The plan and evidence are in `odd/tasks/aimlab-insights.md`.
+
+| Feature | What it shows | Where |
+|---|---|---|
+| **F13 Flicks by direction** | Hit rate and median reaction time per screen quadrant (up-right, up-left, down-left, down-right) and per near/far distance. Far means above `(min + max) / 1.9` of the scenario's target distances. It also gives the weaker axis and a weakest-direction rule. | `analytics::direction`, results card |
+| **F14 Pace and stamina** | The kill or score rate in six windows of the run, the best and worst window, and slow-start and stamina-drop rules | `analytics::pace`, results card |
+| **F15 Speed match and edge tracking** | The share of tracking time with the crosshair moving at the target's speed (too slow / too fast split), and the share of time spent on the target's edge | `analytics::tracking`, results card |
+| **F16 Click timing** | The median delay from the crosshair entering the target to the shot, with a hesitation rule | `analytics::flick`, results card |
+| **F17 Target prioritization** | In multi-target scenarios, the share of kills that took the nearest target first, and missed opportunities (the crosshair rested on a target without firing) | `analytics::priority`, results card |
+| **F18 Passive sensitivity suggestion** | A multiplier built from the over/undershoot bias of your recent flicks, with the evidence behind it. Only the overall multiplier can be applied, through the same path as F6; the X/Y split is information only. | `analytics::sens_suggest`, Progress page |
+| **F19 Replay extras** | A crosshair trail coloured by speed, a hit/miss heatmap, and a side-by-side comparison with an earlier run of the same scenario | `analytics::path`, replay viewer |
+| **F20 Firing while moving and peek efficiency** | Speed at the shot, accuracy split into stopped and moving shots, and a counter-strafe check, for movement scenarios. In arenas: the time from first sight to the first shot, and the exposure time. | `analytics::moving`, `aim_world::arena`, results |
+| **F21 Score rings** | A scoring block that pays more for hits near the center, used by `precision-rings` | `scenario` scoring, `content/scenarios/precision-rings.toml` |
+| **F22 Go/no-go** | Decoys that must be left alone, with match/non-match hit and wait counts. `go-no-go` trains holding fire on the wrong target. | `scenario` targets, `analytics::decision`, `content/scenarios/go-no-go.toml` |
+
+Every new threshold is provisional, set against the simulated aimer, and documented with its rationale under "Analytics metrics" in `training-science.md`.
+
 ## Honest limits
 
 - **Heuristic thresholds:** the readiness, fatigue and sensitivity-finder thresholds are documented constants built on the cited research, not validated per player. Every message shows the numbers behind it.
+- **Insight thresholds (F13–F22):** these were tuned on the simulated aimer, which never moves, always takes the nearest target and never tires. Prioritization, stamina and moving-shot weaknesses are therefore only checked with synthetic tests until real runs exist. Speed match stays low (12–33%) on strafe scenarios even for strong simulated players.
+- **Sensitivity suggestion (F18):** replays do not record the sensitivity they were played at, so runs at an older sensitivity or from the finder mix into the evidence.
 - **Recoil:** Riot does not publish per-bullet recoil in degrees, so the climb is an estimate (see `docs/research/recoil.md`).
 - **Transfer to the game:** as `docs/training-science.md` states, no controlled study yet shows aim-trainer transfer to in-game performance. The ranked-day features are designed to make practice *consistent and well-timed*, which the evidence does support.

@@ -33,14 +33,14 @@ Each analytics item explains itself: it shows the metric and the threshold behin
 
 | ID | Specs | Route | Status | Commit |
 |---|---|---|---|---|
-| T1 | S11 | inline | done | this commit |
+| T1 | S11 | inline | done | 516f9a8, docs commit below |
 | T1b | foundation for S1–S10 | inline (`MetricSources` refactor) | done | 8afb9f7 |
-| T2 | S1, S4, S6 | delegated (parallel writer, worktree `ai-flicks`, branch `feat/ai-flicks`) | in progress | |
-| T3 | S2, S5 | delegated (parallel writer, worktree `ai-pace`) | in progress | |
+| T2 | S1, S4, S6 | delegated (parallel writer, worktree `ai-flicks`, branch `feat/ai-flicks`) | done (playtest pending) | 81424bd, 22561d6, 1aaebe8, merge 0b3b974 |
+| T3 | S2, S5 | delegated (parallel writer, worktree `ai-pace`) | done (playtest pending) | 34fbb19, 947cd5c, merge 18d5f83 |
 | T4 | S3 | delegated (parallel writer, worktree `ai-tracking`) | done (playtest pending) | 3d082d6, merge 6733cd8 |
 | T5 | S7 | delegated (parallel writer, worktree `ai-replay`) | done (playtest pending) | f0f2d30, 27ce3d6, a0278b7, merge 3f31fb0 |
-| T6 | S8 | delegated (parallel writer, worktree `ai-moving`) | in progress | |
-| T7 | S9, S10 | delegated (parallel writer, worktree `ai-drills`) | in progress | |
+| T6 | S8 | delegated (parallel writer, worktree `ai-moving`) | done (playtest pending) | 54a98a3, 8e8ab96, beb1382, merge adf3fde |
+| T7 | S9, S10 | delegated (parallel writer, worktree `ai-drills`) | done (playtest pending) | ed84148, 042faf3, 150b73c, merge 9724533 |
 | T8 | S1–S10 seam: merge, docs, full suite, calibrate, build and launch | inline | pending | |
 
 ## Log
@@ -61,3 +61,20 @@ Each analytics item explains itself: it shows the metric and the threshold behin
   - T5 speed bands (slow < 30°/s, fast ≥ 300°/s) are display estimates. Heatmap grid: 15×15 over ±3 radii.
   - Integration verify at 3f31fb0 with a private target: fmt OK, clippy -D warnings clean, `cargo test --workspace` all passed (app 154, core 226, world 63 + 1 ignored, others).
 - L5 S6 decision: the X/Y suggestion is shown as information; only the overall multiplier is applied, through the existing F6 path (`Sensitivity::from_cm_per_360`). No vertical-multiplier setting is added unless a sourced VALORANT setting exists in `docs/valorant-mechanics.md`.
+- L7 (2026-10-18) Seam (T8). The six units were merged in order T4, T5, T7, T6, T3, T2.
+  - Text conflicts were all append collisions; both sides were kept. In `analytics/mod.rs`, T2's `distance_split` was moved into the `RunAnalysis` constructor.
+  - Semantic conflicts were test struct literals that lacked other units' fields. They were fixed with `..Default::default()` (`Sample` derives `Default`), `decoy: false`, or `None` fields.
+  - Checks on the integration branch with a private target:
+    - fmt OK;
+    - clippy `-D warnings` clean;
+    - `cargo test --workspace` all passed (app 172, core 297, world 66 + 1 ignored, integrations 3, analyze 14, gltf 6);
+    - ignored arena golden passed;
+    - calibrate identical to baseline for every pre-existing scenario. New: go-no-go 135/1180/2450/2880, contender accuracy 0.54; precision-rings 1715/3740/6895/11130, 0.68.
+  - Docs: `docs/feature-analysis.md` (F13–F22 and honest limits), README (exercise count corrected 23→30 against main's 28 plus 2 new; insights; Progress row), `docs/roadmap.md` status line, recommendations.toml metric list.
+  - Known gaps reported by writers:
+    - flick segmentation sometimes treats a start blip as the primary sub-movement (pre-existing; S6 drops those flicks);
+    - replays do not store their sensitivity;
+    - the Progress tab re-simulates up to 20 replays in one frame when replays change;
+    - a decoy shot plays miss feedback;
+    - decoys are told apart by brightness, not hue.
+  - Risk: item 6 (UI drawing in aim_app has no automated tests: results sections, replay viewer, decoy material, sensitivity panel). An independent verifier runs once at the feature end; playtest pending.

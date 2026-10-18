@@ -12,7 +12,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - Rifle and knife speeds and the stopping curves Riot measured.
   - Shots above 27.5% of run speed are inaccurate.
 - **Training content**
-  - **23 exercises as TOML files**, with difficulty levels generated from one definition.
+  - **30 exercises as TOML files**, with difficulty levels generated from one definition. They include **precision rings** (more points near the center) and a **go/no-go** drill (leave the decoys alone).
   - **Spray and burst drills** with a recoil model built on Riot's published parameters.
   - **Ammo-economy clicking.**
   - **Arenas:** deathmatch, a site hold (stop bots from capturing a site), angle clearing, jiggle-peek and pre-aim drills against bots that peek, strafe and hold like VALORANT players, on original maps (TOML or glTF).
@@ -30,7 +30,9 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - A **daily challenge** that everyone plays with the same seed.
 - **Feedback**
   - Flick and tracking analysis with explained recommendations.
-  - A **replay viewer** of your crosshair path.
+  - **Run insights:** flicks by screen direction and distance, click timing, pace and stamina, target priority, tracking speed match and edge time, and firing while moving. In arenas: peek timing.
+  - A **sensitivity suggestion** from your recent flicks' over/undershoot, with the evidence shown. It is applied only when you choose to.
+  - A **replay viewer** of your crosshair path: the trail is coloured by speed, and it has a hit/miss heatmap and a side-by-side comparison with an earlier run.
   - Benchmark trends and personal bests.
   - Offline **post-match analysis** of official match files.
 - **Your setup**
@@ -75,7 +77,7 @@ The menu tabs:
 | Tab | What it holds |
 |---|---|
 | Today | The day's method session, the daily challenge |
-| Progress | Goal, readiness, fatigue, trend, per-skill strengths and trends, bests, replays |
+| Progress | Goal, readiness, fatigue, trend, per-skill strengths and trends, bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
 | Scenarios | Play, or play adaptively |
 | Routines | The routines (resume a split one), your personalized playlist |
 | Arenas | Deathmatch, site hold, angle clearing, jiggle-peek and pre-aim drills; a Practice button plays any arena with bots that never shoot |

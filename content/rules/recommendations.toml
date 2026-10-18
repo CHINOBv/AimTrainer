@@ -5,7 +5,9 @@
 # can recommend scenarios (best first), a routine and a tip.
 #
 # metric: reaction_time | overshoot_rate | undershoot_rate | corrections | path_efficiency
-#         | on_target_ratio | lag_ratio | reversal_response
+#         | on_target_ratio | lag_ratio | reversal_response | speed_match | edge_share
+#         | moving_shot_rate | start_ratio | stamina_ratio | nearest_first_share
+#         | missed_opportunity_rate | click_delay | weakest_direction_gap
 # Times are in seconds, rates and ratios are shares (0.35 = 35%), corrections per flick.
 #
 # PROVISIONAL: every threshold is an estimate against the simulated aimer, not calibrated
