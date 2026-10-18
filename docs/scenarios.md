@@ -273,7 +273,7 @@ targets = { max_alive = 1, lifetime_secs = 2.0 }
 
 Each frame the session checks, in order: the phase trigger, the phase time limit, the fail conditions, and a kills goal. So a trigger reached on the frame its phase times out still advances. When a phase starts, the previous phase's targets disappear (they do not count as expired) and the new phase's targets spawn at once. Difficulty levels and in-run tuning scale each phase's overrides exactly as they scale `[targets]`.
 
-Score, accuracy and kills per minute use the time actually played.
+Score, accuracy and kills per minute use the time actually played. Pace and stamina are not analysed for phased runs, because the phases change the rate on purpose. For runs that do not end on time, the potential-score tip converts no saved seconds into points, because finishing faster does not add kills there; only miss penalties count.
 
 ### Difficulty
 

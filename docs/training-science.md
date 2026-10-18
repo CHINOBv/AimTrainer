@@ -249,7 +249,7 @@ The results notes show the medians. Line of sight is checked from the player's e
 | Opening pace | Rate of the first window ÷ mean rate of the other five | Slow start below 70% (weakness rule); strong start above 130% (shown only, no rule, because the rest of the run is then slower) |
 | Late pace | Mean rate of the last two windows ÷ mean rate of the first two | Stamina drop below 80% (weakness rule) |
 
-A run needs at least 12 s and, in click scenarios, at least 12 kills (two per window on average), or it has no pace section. A category's ratio is the mean over its runs. All three thresholds are estimates, not calibrated on player data: the simulated aimer does not tire, so its late pace stays at or above about 90%, but its slowest preset shows opening ratios of about 50–65% from noise alone at 3–8 kills per window. Treat one slow-start verdict as a hint and look for it across several runs. The flag thresholds are constants in `pace.rs`, and a test pins them to the rules in `content/rules/recommendations.toml`.
+A run needs at least 12 s and, in click scenarios, at least 12 kills (two per window on average), or it has no pace section. The windows split the time actually played, so a run that ends at its kills or fails early is paced over its own length. Phased scenarios get no pace section: their phases change the rate on purpose, so the windows would measure the scenario's design rather than the player's start or stamina. A category's ratio is the mean over its runs. All three thresholds are estimates, not calibrated on player data: the simulated aimer does not tire, so its late pace stays at or above about 90%, but its slowest preset shows opening ratios of about 50–65% from noise alone at 3–8 kills per window. Treat one slow-start verdict as a hint and look for it across several runs. The flag thresholds are constants in `pace.rs`, and a test pins them to the rules in `content/rules/recommendations.toml`.
 
 | Metric | Weakness | Recommended practice |
 |---|---|---|
@@ -329,7 +329,7 @@ Why 10 misses and 65% (estimates, not calibrated): with no bias, 3 of the 8 sect
 
 `aim_core::analytics::potential` estimates the score a click run would have reached if its single costliest weakness were fixed. The results card shows only that one fix, above the advice list, as "Fix X → about Y points (+Z%)", followed by the assumption behind it. Hold runs get no tip.
 
-**Model.** Every scenario ends on time, so wasted seconds are converted into points at the run's own pace: `points per second = final score ÷ elapsed time`. The final score already includes penalties, so this pace is conservative. Each fix is priced on its own, and only the largest gain is shown:
+**Model.** In a run that ends on time, wasted seconds are converted into points at the run's own pace: `points per second = final score ÷ elapsed time`. A run that ends at its kills or is endless (`[end]`, see `scenarios.md`) gains no points from saved seconds, because finishing sooner adds no kills there; only the miss penalties won back count, so such runs usually get a misses tip or none. The final score already includes penalties, so this pace is conservative. Each fix is priced on its own, and only the largest gain is shown:
 
 | Fix | Events | Saved time | Points won back | Assumption shown |
 |---|---|---|---|---|

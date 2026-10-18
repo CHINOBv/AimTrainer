@@ -129,7 +129,13 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
             let limit = recording.def.weapon.kind.movement().accuracy_speed_limit();
             moving::analyze(&samples, limit)
         }),
-        pace: pace::analyze(&samples, pace_unit(recording.def.weapon.fire)),
+        // Phases change the rate on purpose, so windows would measure the design, not stamina.
+        pace: recording
+            .def
+            .phases
+            .is_none()
+            .then(|| pace::analyze(&samples, pace_unit(recording.def.weapon.fire)))
+            .flatten(),
         priority: priority::analyze(&samples),
         distance_split,
         miss_compass: miss_compass::analyze(&samples),
@@ -144,6 +150,7 @@ fn run_totals(recording: &Recording, samples: &[trace::Sample]) -> potential::Ru
         score: last.map_or(0.0, |s| s.score),
         elapsed_secs: last.map_or(0.0, |s| s.time_secs),
         miss_penalty: recording.def.scoring.miss_penalty,
+        time_limited: recording.def.end.is_time(),
     }
 }
 
@@ -157,7 +164,7 @@ fn pace_unit(fire: FireMode) -> pace::PaceUnit {
 
 #[cfg(test)]
 pub(crate) mod test_support {
-    use crate::scenario::{Recording, builtin};
+    use crate::scenario::{Recording, ScenarioDef, builtin};
     use crate::sim::{AimerProfile, SimAimer};
 
     /// Record a whole built-in scenario played by a simulated aimer at 240 FPS.
@@ -166,6 +173,11 @@ pub(crate) mod test_support {
             .into_iter()
             .find(|d| d.id == id)
             .expect("builtin scenario exists");
+        record_def(def, profile, seed)
+    }
+
+    /// Record a whole run of `def` played by a simulated aimer at 240 FPS.
+    pub fn record_def(def: ScenarioDef, profile: AimerProfile, seed: u64) -> Recording {
         let mut rec = Recording::new(def, seed);
         let mut live = rec.start();
         let mut aimer = SimAimer::new(profile, seed);
@@ -202,6 +214,52 @@ mod tests {
         let rec = test_support::record("track-precise", AimerProfile::PRESETS[2], 4);
         let pace = analyze(&rec).pace.expect("hold run has pace");
         assert_eq!(pace.unit, pace::PaceUnit::Score);
+    }
+
+    fn flick_wide_with(extra: &str) -> crate::scenario::ScenarioDef {
+        let src = crate::scenario::builtin::SOURCES
+            .iter()
+            .find(|(name, _)| *name == "flick-wide.toml")
+            .expect("flick-wide exists")
+            .1;
+        let def = crate::scenario::ScenarioDef::from_toml(&format!("{src}\n{extra}")).unwrap();
+        assert!(def.validate().is_empty(), "{:?}", def.validate());
+        def
+    }
+
+    #[test]
+    fn a_kills_ended_run_is_paced_over_the_time_it_lasted_and_prices_no_saved_time() {
+        let def = flick_wide_with("[end]\nkind = \"kills\"\nkills = 24");
+        let rec = test_support::record_def(def, AimerProfile::PRESETS[1], 4);
+        let end = rec.replay(|_, _| {}).time();
+        assert!(end < rec.def.duration_secs, "ends at its kills: {end}");
+        let a = analyze(&rec);
+        let pace = a.pace.expect("24 kills over more than 12 s");
+        let last = pace.windows.last().unwrap();
+        assert!((last.end_secs - end).abs() < 1e-3, "{last:?} vs {end}");
+        let totals = run_totals(&rec, &trace::trace(&rec));
+        assert!(!totals.time_limited);
+        if let Some(tip) = a.potential {
+            assert!(
+                (tip.gain.points - tip.gain.penalty_points).abs() < 1e-4,
+                "{tip:?}"
+            );
+        }
+        let plain = test_support::record("flick-wide", AimerProfile::PRESETS[1], 4);
+        assert!(run_totals(&plain, &trace::trace(&plain)).time_limited);
+    }
+
+    #[test]
+    fn phased_runs_get_no_pace_analysis() {
+        let def = flick_wide_with(
+            "[[phases]]\nadvance = { kind = \"kills\", kills = 10 }\n\
+             [[phases]]\ntargets = { max_alive = 2 }",
+        );
+        let rec = test_support::record_def(def, AimerProfile::PRESETS[2], 4);
+        assert_eq!(rec.replay(|_, _| {}).phase_index(), Some(1));
+        let a = analyze(&rec);
+        assert_eq!(a.pace, None);
+        assert!(matches!(a.kind, AnalysisKind::Flick(ref f) if !f.is_empty()));
     }
 
     #[test]

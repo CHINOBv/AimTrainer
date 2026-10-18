@@ -55,6 +55,9 @@ pub struct RunTotals {
     pub elapsed_secs: f32,
     /// Points subtracted per missed shot (`scoring.miss_penalty`).
     pub miss_penalty: f32,
+    /// The run ends on the clock (`end.kind = "time"`), so seconds saved would have bought
+    /// more kills. Otherwise saved seconds are worth no points.
+    pub time_limited: bool,
 }
 
 /// The estimated gain of one fix.
@@ -122,7 +125,8 @@ impl PotentialTip {
 /// Every fix with enough events to estimate, in [`Fix::ALL`] order.
 pub fn gains(flicks: &[Flick], totals: RunTotals) -> Vec<Gain> {
     // Saved time is worth the run's average pace; a penalized score makes it conservative.
-    let points_per_sec = if totals.score > 0.0 && totals.elapsed_secs > 0.0 {
+    // Only a run that ends on the clock turns saved seconds into more kills.
+    let points_per_sec = if totals.time_limited && totals.score > 0.0 && totals.elapsed_secs > 0.0 {
         totals.score / totals.elapsed_secs
     } else {
         0.0
@@ -268,7 +272,35 @@ mod tests {
         score: 100.0,
         elapsed_secs: 50.0,
         miss_penalty: 0.0,
+        time_limited: true,
     };
+
+    #[test]
+    fn runs_that_do_not_end_on_time_price_no_saved_seconds() {
+        let mut flicks = vec![clean(); 4];
+        flicks.extend(vec![overshoot(0.6); 4]);
+        flicks.extend(vec![
+            Flick {
+                hit: false,
+                ..clean()
+            };
+            4
+        ]);
+        let totals = RunTotals {
+            miss_penalty: 5.0,
+            time_limited: false,
+            ..TOTALS
+        };
+        let all = gains(&flicks, totals);
+        assert!(!all.is_empty());
+        for g in &all {
+            assert!(g.saved_secs > 0.0 || g.fix == Fix::Misses, "{g:?}");
+            assert!(close(g.points, g.penalty_points), "{g:?}");
+        }
+        let tip = potential(&flicks, totals).expect("half of 4 misses × 5 = 10% of 100");
+        assert_eq!(tip.gain.fix, Fix::Misses);
+        assert!(close(tip.gain.points, 10.0), "{tip:?}");
+    }
 
     fn close(a: f32, b: f32) -> bool {
         (a - b).abs() < 1e-4
@@ -382,6 +414,7 @@ mod tests {
             score: result.score,
             elapsed_secs: rec.def.duration_secs,
             miss_penalty: rec.def.scoring.miss_penalty,
+            time_limited: true,
         };
         let expected = potential(flicks, totals);
         assert!(close(
