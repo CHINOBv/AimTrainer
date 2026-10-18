@@ -16,7 +16,7 @@ This is where the project is going, and which part of the architecture owns each
 
 ## Status (2026-10-17)
 
-Phases 1–8 are implemented on `feat/roadmap-completion`. The feature analysis that followed added 12 features for ranked days; see [`feature-analysis.md`](feature-analysis.md).
+Phases 1–8 are implemented on `feat/roadmap-completion`. The feature analysis that followed added 12 features for ranked days; see [`feature-analysis.md`](feature-analysis.md). Ten more insight and drill features inspired by Aim Lab (F13–F22) followed on `feat/aimlab-insights`.
 
 | Phase | What shipped | Deviations from the plan, and why |
 |---|---|---|

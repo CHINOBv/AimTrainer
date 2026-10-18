@@ -21,6 +21,7 @@ use crate::ui::organisms::progress_panel::{self, ProgressModel};
 use crate::ui::organisms::replay_viewer::{self, ReplayViewerState};
 use crate::ui::organisms::sens_converter::{ConverterState, sens_converter};
 use crate::ui::organisms::sens_finder;
+use crate::ui::organisms::sens_suggestion::{self, RECENT_RUNS, SensSuggestionState};
 use crate::ui::organisms::settings_panels::{self, DpiMeter};
 use crate::ui::organisms::system_check::{self, SystemModel};
 use crate::ui::organisms::today_panel::{
@@ -87,6 +88,7 @@ struct MenuState {
     profile_import: ProfileImport,
     replays: ReplayViewerState,
     converter: Option<ConverterState>,
+    sens_suggestion: SensSuggestionState,
 }
 
 fn count_dpi_meter(motion: Res<AccumulatedMouseMotion>, mut state: ResMut<MenuState>) {
@@ -216,9 +218,20 @@ fn menu(
                             .or(progress_panel::skills_section(ui, &skills, name));
                     }
                     ui.separator();
+                    // One directory scan per frame feeds both the suggestion and the replays.
+                    let entries = replays::list(&cfg.paths);
+                    state.sens_suggestion.refresh(
+                        entries.iter().map(|e| e.timestamp_millis).collect(),
+                        || recent_click_analyses(&entries),
+                    );
+                    sens_suggestion::sens_suggestion(
+                        ui,
+                        &mut state.sens_suggestion,
+                        &mut cfg.settings,
+                    );
+                    ui.separator();
                     ui.heading("Replays");
                     ui.small("Your crosshair path around each target: overshoot, corrections and misses at a glance.");
-                    let entries = replays::list(&cfg.paths);
                     replay_viewer::replay_viewer(ui, &mut state.replays, &entries, |e| {
                         replays::load(&e.path).ok().map(|r| aim_core::analytics::path::replay_path(&r))
                     });
@@ -382,6 +395,20 @@ fn menu(
         nav.apply(action);
     }
     Ok(())
+}
+
+/// Analyses of the newest [`RECENT_RUNS`] click-run replays (`entries` is newest first),
+/// for the sensitivity suggestion. Unreadable files are skipped.
+fn recent_click_analyses(
+    entries: &[replays::ReplayEntry],
+) -> Vec<aim_core::analytics::RunAnalysis> {
+    entries
+        .iter()
+        .filter_map(|e| replays::load(&e.path).ok())
+        .filter(|r| r.def.weapon.fire == aim_core::scenario::FireMode::Click)
+        .take(RECENT_RUNS)
+        .map(|r| aim_core::analytics::analyze(&r))
+        .collect()
 }
 
 /// Scenarios whose readiness is checked: one smooth, one flick, one precision drill.

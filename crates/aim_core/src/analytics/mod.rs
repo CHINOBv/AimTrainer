@@ -8,17 +8,25 @@
 //! turns one into per-target crosshair paths for the replay viewer.
 
 pub mod codec;
+pub mod decision;
+pub mod direction;
 pub mod flick;
+pub mod moving;
+pub mod pace;
 pub mod path;
+pub mod priority;
 pub mod profile;
 pub mod rules;
+pub mod sens_suggest;
 pub mod skills;
 mod stats;
 pub mod trace;
 pub mod tracking;
 
+pub use direction::{DirectionSummary, DistanceClass, DistanceSplit};
 pub use flick::{Flick, FlickSummary};
-pub use path::{Engagement, ReplayPath, ShotPoint};
+pub use moving::{MovingAnalysis, MovingSummary};
+pub use path::{Engagement, PathSummary, ReplayPath, ShotHeatmap, ShotPoint, SpeedBand};
 pub use profile::{Finding, SkillProfile};
 pub use skills::BenchmarkProfile;
 pub use tracking::{TrackingAnalysis, TrackingSummary};
@@ -43,6 +51,16 @@ pub struct RunAnalysis {
     pub category: Category,
     /// The analysis, by fire mode.
     pub kind: AnalysisKind,
+    /// Go/no-go decisions, for scenarios with decoys.
+    pub decision: Option<decision::DecisionSummary>,
+    /// Firing-while-moving analysis, for scenarios with player movement.
+    pub moving: Option<MovingAnalysis>,
+    /// Kill or score rate per time window, if the run was long and busy enough.
+    pub pace: Option<pace::PaceAnalysis>,
+    /// Target prioritization, if more than one target was visible at once.
+    pub priority: Option<priority::PriorityAnalysis>,
+    /// Near/far split of the run's flicks, or `None` for a tracking run.
+    pub distance_split: Option<DistanceSplit>,
 }
 
 impl RunAnalysis {
@@ -61,6 +79,24 @@ impl RunAnalysis {
             AnalysisKind::Flick(_) => None,
         }
     }
+
+    /// Per-direction flick aggregates, or `None` for a tracking run.
+    pub fn direction_summary(&self) -> Option<DirectionSummary> {
+        self.distance_split?;
+        Some(DirectionSummary::from_flicks(self.classified_flicks()))
+    }
+
+    /// Each flick with its near/far class; empty for a tracking run or without a split.
+    pub fn classified_flicks(&self) -> impl Iterator<Item = (&Flick, DistanceClass)> {
+        let flicks = match (&self.kind, self.distance_split) {
+            (AnalysisKind::Flick(f), Some(split)) => Some((f, split)),
+            _ => None,
+        };
+        flicks.into_iter().flat_map(|(f, split)| {
+            f.iter()
+                .map(move |fl| (fl, split.classify(fl.distance_deg)))
+        })
+    }
 }
 
 /// Analyze a run as flicks (click scenarios) or tracking (hold scenarios).
@@ -70,10 +106,30 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         FireMode::Click => AnalysisKind::Flick(flick::flicks(&samples)),
         FireMode::Hold => AnalysisKind::Tracking(tracking::analyze(&samples)),
     };
+    let distance_split = match &kind {
+        AnalysisKind::Flick(f) => DistanceSplit::for_run(&recording.def, f),
+        AnalysisKind::Tracking(_) => None,
+    };
     RunAnalysis {
         scenario_id: recording.def.id.clone(),
         category: recording.def.category,
         kind,
+        decision: decision::analyze(&samples),
+        moving: recording.def.player.movement.then(|| {
+            let limit = recording.def.weapon.kind.movement().accuracy_speed_limit();
+            moving::analyze(&samples, limit)
+        }),
+        pace: pace::analyze(&samples, pace_unit(recording.def.weapon.fire)),
+        priority: priority::analyze(&samples),
+        distance_split,
+    }
+}
+
+/// Click runs are paced by kills; hold runs by score, which accrues while on target.
+fn pace_unit(fire: FireMode) -> pace::PaceUnit {
+    match fire {
+        FireMode::Click => pace::PaceUnit::Kills,
+        FireMode::Hold => pace::PaceUnit::Score,
     }
 }
 
@@ -113,5 +169,27 @@ mod tests {
         assert!(matches!(a.kind, AnalysisKind::Flick(ref f) if !f.is_empty()));
         let rec = test_support::record("track-precise", AimerProfile::PRESETS[1], 4);
         assert!(analyze(&rec).tracking_summary().is_some());
+    }
+
+    #[test]
+    fn pace_counts_kills_in_click_runs_and_points_in_hold_runs() {
+        let rec = test_support::record("flick-wide", AimerProfile::PRESETS[2], 4);
+        let pace = analyze(&rec).pace.expect("click run has pace");
+        assert_eq!(pace.unit, pace::PaceUnit::Kills);
+        assert_eq!(pace.windows.len(), pace::WINDOWS);
+        let rec = test_support::record("track-precise", AimerProfile::PRESETS[2], 4);
+        let pace = analyze(&rec).pace.expect("hold run has pace");
+        assert_eq!(pace.unit, pace::PaceUnit::Score);
+    }
+
+    #[test]
+    fn prioritization_is_measured_only_with_several_targets_visible() {
+        let rec = test_support::record("switch-wide", AimerProfile::PRESETS[2], 4);
+        let p = analyze(&rec)
+            .priority
+            .expect("switch-wide shows three targets");
+        assert_eq!(p.kills, rec.replay(|_, _| {}).stats().kills);
+        let rec = test_support::record("flick-wide", AimerProfile::PRESETS[2], 4);
+        assert_eq!(analyze(&rec).priority, None);
     }
 }

@@ -5,9 +5,14 @@
 //! `content/rules/recommendations.toml`; all thresholds are provisional (see "Analytics
 //! metrics" in `docs/training-science.md`) until they are calibrated on real player data.
 
+use super::direction::DirectionSummary;
 use super::flick::FlickSummary;
+use super::moving::MovingSummary;
 use super::tracking::TrackingSummary;
 use serde::Deserialize;
+
+use super::pace::PaceSummary;
+use super::priority::PriorityAnalysis;
 
 /// A measurable quantity a rule can threshold.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -29,6 +34,25 @@ pub enum Metric {
     LagRatio,
     /// Median seconds to follow a target that reversed direction (tracking).
     ReversalResponse,
+    /// Share of moving-target firing time with the crosshair speed matching the target's
+    /// (tracking).
+    SpeedMatch,
+    /// Share of in-zone time spent near the target's edge rather than its center (tracking).
+    EdgeShare,
+    /// Share of shots fired above the accuracy speed limit (movement scenarios).
+    MovingShotRate,
+    /// Opening-window rate ÷ mean rate of the rest of the run (pace).
+    StartRatio,
+    /// Late-window rate ÷ early-window rate (pace).
+    StaminaRatio,
+    /// Share of contested kills that went to the nearest target (prioritization).
+    NearestFirstShare,
+    /// Missed opportunities ÷ (kills + missed opportunities) (prioritization).
+    MissedOpportunityRate,
+    /// Median seconds from the crosshair first entering the target to the shot (flicks).
+    ClickDelay,
+    /// Hit rate of every other flick minus that of the weakest screen quadrant (flicks).
+    WeakestDirectionGap,
 }
 
 impl Metric {
@@ -43,6 +67,15 @@ impl Metric {
             Metric::OnTargetRatio => "Time on target",
             Metric::LagRatio => "Time behind the target",
             Metric::ReversalResponse => "Reaction to direction changes",
+            Metric::SpeedMatch => "Speed match",
+            Metric::EdgeShare => "Time on the target's edge",
+            Metric::MovingShotRate => "Shots fired while moving",
+            Metric::StartRatio => "Opening pace (vs rest of run)",
+            Metric::StaminaRatio => "Late pace (vs early run)",
+            Metric::NearestFirstShare => "Nearest target first",
+            Metric::MissedOpportunityRate => "Missed opportunities",
+            Metric::ClickDelay => "Median click delay",
+            Metric::WeakestDirectionGap => "Hit-rate gap of your weakest flick direction",
         }
     }
 
@@ -53,15 +86,14 @@ impl Metric {
                 format!("{:.0} ms", value * 1000.0)
             }
             Metric::Corrections => format!("{value:.2}"),
+            Metric::ClickDelay => format!("{:.0} ms", value * 1000.0),
             _ => format!("{:.0}%", value * 100.0),
         }
     }
 
-    pub(super) fn value(
-        self,
-        flick: Option<&FlickSummary>,
-        tracking: Option<&TrackingSummary>,
-    ) -> Option<f32> {
+    pub(super) fn value(self, sources: &MetricSources) -> Option<f32> {
+        let flick = sources.flick;
+        let tracking = sources.tracking;
         match self {
             Metric::ReactionTime => flick?.median_reaction_secs,
             Metric::OvershootRate => Some(flick?.overshoot_rate),
@@ -71,8 +103,28 @@ impl Metric {
             Metric::OnTargetRatio => Some(tracking?.on_target_ratio),
             Metric::LagRatio => tracking?.lag_ratio,
             Metric::ReversalResponse => tracking?.median_reversal_response_secs,
+            Metric::SpeedMatch => tracking?.speed_match_ratio,
+            Metric::EdgeShare => tracking?.edge_ratio,
+            Metric::MovingShotRate => sources.moving?.moving_share,
+            Metric::StartRatio => sources.pace?.start_ratio,
+            Metric::StaminaRatio => sources.pace?.stamina_ratio,
+            Metric::NearestFirstShare => sources.priority?.nearest_share(),
+            Metric::MissedOpportunityRate => sources.priority?.missed_rate(),
+            Metric::ClickDelay => flick?.median_click_delay_secs,
+            Metric::WeakestDirectionGap => sources.direction?.weakest.map(|w| w.gap()),
         }
     }
+}
+
+/// The aggregates a rule's metric can read. Each analysis adds its own summary here.
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct MetricSources<'a> {
+    pub flick: Option<&'a FlickSummary>,
+    pub tracking: Option<&'a TrackingSummary>,
+    pub moving: Option<&'a MovingSummary>,
+    pub pace: Option<&'a PaceSummary>,
+    pub priority: Option<&'a PriorityAnalysis>,
+    pub direction: Option<&'a DirectionSummary>,
 }
 
 /// Whether a fired rule marks a strength or a weakness.
@@ -368,6 +420,122 @@ pub(crate) mod tests {
                 "React to strafes instead of anticipating them; relax your grip so reversals are quicker.",
             )),
         ),
+        (
+            Metric::SpeedMatch,
+            Direction::Below,
+            0.35,
+            Verdict::Weakness,
+            "your crosshair speed rarely matches the target's speed",
+            Some((
+                &["track-orbit", "track-precise"],
+                None,
+                "Match the target's speed before correcting your position; the too slow / too fast split shows which way you miss.",
+            )),
+        ),
+        (
+            Metric::EdgeShare,
+            Direction::Above,
+            0.60,
+            Verdict::Weakness,
+            "you ride the edge of the target instead of its center",
+            Some((
+                &["track-precise", "track-orbit"],
+                None,
+                "Once you are on the target, steer back to its center instead of staying at the edge.",
+            )),
+        ),
+        (
+            Metric::MovingShotRate,
+            Direction::Above,
+            0.20,
+            Verdict::Weakness,
+            "you often fire before you have stopped",
+            Some((
+                &["counter-strafe", "strafe-shot"],
+                None,
+                "Tap the opposite strafe key (or release the keys) and fire only once you have stopped; shots are accurate again at 27.5% of run speed or less.",
+            )),
+        ),
+        (
+            Metric::StartRatio,
+            Direction::Below,
+            0.70,
+            Verdict::Weakness,
+            "you score much slower at the start of a run than in the rest of it",
+            Some((
+                &["flick-wide", "track-precise"],
+                Some("quick-warmup"),
+                "Warm up before scored runs so the first seconds count; the quick warm-up routine gets you to full speed.",
+            )),
+        ),
+        (
+            Metric::StaminaRatio,
+            Direction::Below,
+            0.80,
+            Verdict::Weakness,
+            "your scoring rate drops in the last third of the run",
+            Some((
+                &["static-headline", "track-precise"],
+                Some("fundamentals-hour"),
+                "Keep a relaxed grip and steady breathing to the end; build endurance with longer sessions and short breaks between runs.",
+            )),
+        ),
+        (
+            Metric::NearestFirstShare,
+            Direction::Below,
+            0.50,
+            Verdict::Weakness,
+            "you often go for a farther target while a nearer one is available",
+            Some((
+                &["switch-wide", "switch-speed"],
+                None,
+                "Clear the target closest to your crosshair first: the shorter flick is faster and keeps the others in view.",
+            )),
+        ),
+        (
+            Metric::NearestFirstShare,
+            Direction::Above,
+            0.85,
+            Verdict::Strength,
+            "you clear the nearest target first",
+            None,
+        ),
+        (
+            Metric::MissedOpportunityRate,
+            Direction::Above,
+            0.15,
+            Verdict::Weakness,
+            "your crosshair rests on targets that you then leave without firing",
+            Some((
+                &["static-headline", "switch-heads"],
+                None,
+                "Fire as soon as the crosshair is on the target; trust it instead of waiting for a perfect picture.",
+            )),
+        ),
+        (
+            Metric::ClickDelay,
+            Direction::Above,
+            0.20,
+            Verdict::Weakness,
+            "you hesitate on the target before clicking",
+            Some((
+                &["flick-wide", "peek-reaction"],
+                None,
+                "Click as soon as the crosshair reaches the target; trust the first placement instead of confirming it.",
+            )),
+        ),
+        (
+            Metric::WeakestDirectionGap,
+            Direction::Above,
+            0.30,
+            Verdict::Weakness,
+            "your flicks in one direction hit far less often than the rest",
+            Some((
+                &["flick-wide", "flick-headshot"],
+                None,
+                "Give extra reps to the direction the flick grid marks weakest, and slow down there until its hit rate catches up.",
+            )),
+        ),
     ];
 
     /// The recommendation table as it was written in Rust before it moved to TOML.
@@ -462,6 +630,38 @@ tip = "follow it"
         assert!(RuleSet::from_toml(&typo).is_err());
         let metric = ONE_RULE.replace("lag_ratio", "lag");
         assert!(RuleSet::from_toml(&metric).is_err());
+    }
+
+    #[test]
+    fn speed_match_and_edge_share_read_the_tracking_summary() {
+        let mut a = crate::analytics::TrackingAnalysis {
+            speed_matched_secs: 1.0,
+            speed_under_secs: 2.0,
+            speed_over_secs: 1.0,
+            in_zone_secs: 4.0,
+            edge_secs: 3.0,
+            ..Default::default()
+        };
+        let summary = a.summary();
+        let sources = MetricSources {
+            tracking: Some(&summary),
+            ..Default::default()
+        };
+        assert_eq!(Metric::SpeedMatch.value(&sources), Some(0.25));
+        assert_eq!(Metric::EdgeShare.value(&sources), Some(0.75));
+        assert_eq!(Metric::SpeedMatch.label(), "Speed match");
+        assert_eq!(Metric::EdgeShare.label(), "Time on the target's edge");
+        assert_eq!(Metric::SpeedMatch.format(0.25), "25%");
+        assert_eq!(Metric::EdgeShare.format(0.75), "75%");
+        // No moving or in-zone time: nothing to judge.
+        a = Default::default();
+        let empty = a.summary();
+        let sources = MetricSources {
+            tracking: Some(&empty),
+            ..Default::default()
+        };
+        assert_eq!(Metric::SpeedMatch.value(&sources), None);
+        assert_eq!(Metric::EdgeShare.value(&sources), None);
     }
 
     #[test]

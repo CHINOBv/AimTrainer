@@ -178,12 +178,137 @@ Post-run analysis (`aim_core::analytics`) re-simulates the recorded run and meas
 | Time on target | < 50% | > 75% | `track-precise` |
 | Lag ratio | > 65% (trailing) or < 35% (over-leading) | — | `track-precise`, `track-reactive-micro` |
 | Reaction to direction changes | > 250 ms | — | `track-reactive-strafe`, `track-reactive-micro` |
+| Shots fired while moving | > 20% (≥ 10 shots) | — | `counter-strafe`, `strafe-shot` |
 
 The 300 ms and 220 ms reaction thresholds bracket the simulated recruit (0.32 s + onset) and elite (0.20 s + onset); the rest are estimates.
 
 **Skill profile per benchmark subcategory.** `aim_core::analytics::skills::BenchmarkProfile` takes the benchmark definition and the run history. Each subcategory's energy comes from personal bests with the benchmark's own energy rules (above). It is compared with the arithmetic mean over the subcategories played (at least 2): more than 15% below the mean is a weakness, and the profile offers that subcategory's scenarios to practice; more than 15% above is a strength. The 15% margin is an estimate and is not calibrated. The weakest subcategory matters most because overall energy is a harmonic mean.
 
 **Trends.** `training::progress::subcategory_trend` gives each subcategory's energy at the end of each of the last weeks, using the same weekly cutoffs as the overall `benchmark_trend` (personal bests up to each cutoff). The Progress page charts one trend per subcategory once it has two played weeks.
+
+### Speed match and edge tracking (hold scenarios)
+
+Two tracking metrics in `aim_core::analytics::tracking` describe *how* the crosshair follows the target, not only whether it is on it. Both constants and both rule thresholds are **provisional estimates**, chosen against the simulated aimer (`track-*` scenarios, presets recruit to elite), not calibrated on player data. The idea of measuring them comes from a static analysis of Aim Lab's tracking feedback; no Aim Lab code, numbers or assets are reused.
+
+| Metric | Definition |
+|---|---|
+| Speed match | While firing at a target moving ≥ 5°/s, the share of time the crosshair's angular speed is within a tolerance of the target's angular speed. Tolerance = `max(25% of the target speed, 2°/s)`: relative, so fast targets allow more slack, with an absolute floor so a slow target does not demand an exact speed. The rest of that time is split into **too slow** (crosshair slower than the band) and **too fast** (faster) |
+| Edge share | Of the firing time on a counted zone with the crosshair inside the aim zone's radius (sphere, humanoid head), the share farther than 70% of the radius from the aim point. Hits on another zone (a humanoid's body) are excluded. If the crosshair were spread uniformly over the disk, about 51% of the time would be past 70% of the radius |
+
+Both are per-frame comparisons, so mouse polling jitter lowers speed match slightly. Speeds are compared as magnitudes; direction is covered by lag/lead and reversals. Abrupt strafes (`track-reactive-strafe`, `track-close-strafe`) give low speed match even for the simulated elite (about 27–33%), because the target's speed jumps faster than any follower can match.
+
+| Metric | Weakness | Recommended practice |
+|---|---|---|
+| Speed match | < 35% | `track-orbit`, `track-precise`; match the target's speed before correcting position |
+| Edge share | > 60% | `track-precise`, `track-orbit`; steer back to the center as soon as you are on the target |
+
+Simulated values (seed 13): speed match ranges from 60–87% on `track-precise` and `track-orbit` to 12–33% on strafe scenarios, rising with the aimer's skill; edge share falls from 35–71% (recruit to veteran) to under 1% for the elite on the smooth scenarios.
+
+### Go/no-go decisions and score rings
+
+**Go/no-go.** `go-no-go` mixes match targets, which must be shot, with faint decoys that must be left alone until they vanish. This is the shape of the go/no-go task that cognitive psychology uses to measure response inhibition; no source in this repository yet backs it, so treat it as background, not a verified claim. The in-game link is a judgement call (an estimate, not a measured transfer): a duel often rewards confirming friend or foe, or a real peek against a fake one, before clicking. `aim_core::analytics::decision` reports four counts from the traced run (matchHit, matchWait, nonmatchHit, nonmatchWait), decision accuracy, and two verdicts with their thresholds: decoys shot above 20% of all decoys reads as impulsive, and match targets missed above 20% reads as hesitant. Both thresholds are estimates.
+
+The simulated aimer adds a recognition delay of half its reaction time before each movement, since a choice takes longer than a simple reaction (Hick, 1952, *Quarterly Journal of Experimental Psychology* 4(1); the factor of 0.5 is an estimate). It mistakes a decoy for a match with a chance of 0.25 × its endpoint noise (recruit ≈ 22%, elite ≈ 9%), also an estimate. Scenarios without decoys draw no extra random numbers, so their results are unchanged.
+
+**Score rings.** `precision-rings` pays more for hits near the center (×3, ×2, ×1). The aim is to reward landing on the exact point aimed at rather than anywhere on the target. That this helps in-game headshot precision is an estimate with no study behind it.
+
+### Firing while moving (movement scenarios)
+
+`aim_core::analytics::moving` measures every shot of a scenario with `player.movement = true`. A shot is *moving* when the player was above the weapon's accuracy speed limit when it was fired (27.5% of run speed for rifles, verified in `valorant-mechanics.md`); otherwise it is *stopped*. The session already decides this; the analysis reuses its flag.
+
+| Metric | Definition |
+|---|---|
+| Speed at the shot | Median player speed (m/s) over all shots |
+| Stopped vs moving | Share of shots fired at or below the limit, and above it |
+| Hit rate split | Hit rate of the stopped shots and of the moving shots, separately |
+| Counter-strafe check | A shot *follows movement* when the player was above the limit at any frame within the last **0.5 s** (or at the shot). Counter-strafed share = shots that follow movement and were fired already accurate ÷ shots that follow movement |
+| Stop-to-shot time | For counter-strafed shots: time from the first accurate frame after the last moving frame to the shot (median) |
+
+The 0.5 s window is an estimate: it covers the measured stop (0.16 s counter-strafing, 0.17 s releasing, `valorant-mechanics.md`) plus a reaction margin, so a shot right after a stop counts and a shot after standing still does not.
+
+**Rule (provisional).** Shots fired while moving > 20% is a weakness and recommends `counter-strafe`, then `strafe-shot`. A movement category needs ≥ 10 shots before it is judged. The 20% threshold is an estimate, not calibrated.
+
+### Peek efficiency (arenas)
+
+`aim_world::arena::ArenaStats` times each *engagement*: the first exposure of a bot life, from the first frame any part of its head is in the player's line of sight (the same first sight that feeds crosshair placement and time to kill).
+
+| Metric | Definition |
+|---|---|
+| First shot delay | Time from first sight to the player's first shot during that exposure, at any target. An exposure without a shot adds nothing |
+| Exposure time | Time from first sight to the kill, to the first frame without line of sight, or to the player's death. An exposure still open when the run ends adds nothing |
+
+The results notes show the medians. Line of sight is checked from the player's eye to the bot's head, so the exposure approximates how long the player could be seen. Later re-peeks by the same bot life are not separate engagements. These are measurements only; no rule judges them yet.
+
+### Pace and stamina
+
+`aim_core::analytics::pace` splits every run into 6 equal time windows (5–10 s for 30–60 s runs) and measures the rate in each: kills per second for click scenarios, score per second for hold scenarios, where score accrues while on target. A frame's gain belongs to the window in which the frame started. The results screen shows the best and worst window with their time ranges, and the rate in each window.
+
+| Ratio | Definition | Flag (provisional) |
+|---|---|---|
+| Opening pace | Rate of the first window ÷ mean rate of the other five | Slow start below 70% (weakness rule); strong start above 130% (shown only, no rule, because the rest of the run is then slower) |
+| Late pace | Mean rate of the last two windows ÷ mean rate of the first two | Stamina drop below 80% (weakness rule) |
+
+A run needs at least 12 s and, in click scenarios, at least 12 kills (two per window on average), or it has no pace section. A category's ratio is the mean over its runs. All three thresholds are estimates, not calibrated on player data: the simulated aimer does not tire, so its late pace stays at or above about 90%, but its slowest preset shows opening ratios of about 50–65% from noise alone at 3–8 kills per window. Treat one slow-start verdict as a hint and look for it across several runs. The flag thresholds are constants in `pace.rs`, and a test pins them to the rules in `content/rules/recommendations.toml`.
+
+| Metric | Weakness | Recommended practice |
+|---|---|---|
+| Opening pace | < 70% | `flick-wide`, `track-precise`, `quick-warmup` routine; warm up before scored runs |
+| Late pace | < 80% | `static-headline`, `track-precise`, `fundamentals-hour` routine; relaxed grip, short breaks |
+
+### Target prioritization
+
+`aim_core::analytics::priority` runs only when more than one target was visible at once in some frame that is not a kill frame (a kill frame keeps the dead target next to its respawn, so single-target scenarios never qualify). The results screen shows a "Target priority" section.
+
+| Metric | Definition |
+|---|---|
+| Nearest target first | For each kill, the engagement starts on the frame after the previous kill, or when the killed target appeared, whichever is later. If two or more targets were visible then, the kill is *contested*, and it counts as nearest-first when the killed target was the one nearest to the crosshair by angle in that frame. Share = nearest-first kills ÷ contested kills |
+| Missed opportunities | The crosshair rests inside the nearest target's aim zone (angle to its aim point ≤ its angular radius) for at least 300 ms with no shot and fire not held, and then leaves while the target is still there. A target that is killed or expires under the crosshair, or a rest that lasts to the end of the run, does not count. Rate = missed ÷ (kills + missed) |
+
+The session's own `on_target` flag only exists while firing, so the "under the crosshair" test here uses the aim zone geometry instead. The 300 ms rest is an estimate: it is longer than a typical visual reaction time (about 200–250 ms), so the normal delay between landing on a target and clicking is not counted. A category's counts are summed over its runs. The share needs at least 5 contested kills and the rate at least 5 kills plus missed opportunities. The thresholds are provisional, not calibrated on player data. The simulated aimer always takes the nearest target (share 100%) and almost never rests without firing (rate 0–2%), so it only shows the strength.
+
+| Metric | Weakness | Strength | Recommended practice |
+|---|---|---|---|
+| Nearest target first | < 50% | > 85% | `switch-wide`, `switch-speed`; clear the closest target first |
+| Missed opportunities | > 15% | — | `static-headline`, `switch-heads`; fire as soon as the crosshair is on the target |
+
+### Click timing (hesitation)
+
+`Flick::click_delay_secs` is the time from the first frame of the flick in which the crosshair is inside the target's aim zone (the same angular radius the flick analysis uses) to the shot. It counts from the *first* entry, so a flick that passes over the target, comes back and then clicks includes that correction time. A flick whose crosshair never reached the zone has no click delay. The results card shows the median over the run as "Click delay (median)".
+
+| Metric | Weakness | Recommended practice |
+|---|---|---|
+| Median click delay | > 200 ms ("you hesitate on the target before clicking") | `flick-wide`, `peek-reaction` |
+
+Why 200 ms (estimate, not calibrated): the simulated aimer clicks as soon as its minimum-jerk movement ends, so its click delay is only the deceleration tail inside the target. Measured with seed 2, it runs from about 70 ms (elite) to about 190 ms (recruit) across `flick-wide`, `micro-adjust`, `flick-headshot`, `static-headline`, `switch-wide` and `peek-reaction`. A median above 200 ms is therefore slower than any simulated aimer and suggests deliberate confirmation before the click. No published source gives a target value for this delay; replace the threshold once real player data exists.
+
+### Per-direction flicks
+
+`aim_core::analytics::direction` classifies each fresh flick (retries after a miss start next to the target and are left out) by its screen-space vector from the crosshair at the start of the flick to the target (`Flick::direction_deg`, `.0` right, `.1` up):
+
+- **Quadrant**, by `atan2(dy, dx)` in degrees: up-right (0°, 90°], up-left (90°, 180°], down-left (−180°, −90°], down-right (−90°, 0°]. A pure right flick (0°) is down-right, a pure up flick (90°) is up-right, and −180° is treated as 180° (up-left). A zero vector has no quadrant.
+- **Distance class:** far when the flick's distance is above `(min + max) / 1.9` of the scenario's possible target distances. The divisor comes from Aim Lab's analysis (an observed rule, not a sourced constant); we treat it as a tunable estimate. `min` and `max` come from the spawn area: a crosshair-relative spawn gives its `offset_deg` range; an angular box gives 0 up to its diagonal `hypot(yaw span, pitch span)`, the farthest two spawns can be apart. **Fallback:** a `floor` spawn is in meters, so its run uses the smallest and largest flick distances it actually observed. The results card says which source it used.
+
+Each of the 4 × 2 buckets reports its fresh flicks, hit rate and median reaction time.
+
+**Weakest direction (rule input).** Near and far are pooled per quadrant. A quadrant needs ≥ 15 fresh flicks, and so do all other quadrants together. The weakest is the quadrant with the lowest hit rate. Its gap is the hit rate of every other fresh flick minus its own.
+
+| Metric | Weakness | Recommended practice |
+|---|---|---|
+| Hit-rate gap of your weakest flick direction | > 30% | `flick-wide`, `flick-headshot` |
+
+Why 15 flicks and 30% (estimates): the simulated aimer has no directional bias, yet over single runs (seeds 1–5, six click scenarios, four presets) its gap reached 26 points by chance. With fewer than 15 flicks per quadrant, chance gaps grow quickly. The skill profile pools the category's recent runs, which shrinks this noise.
+
+**Weak axis (shown, not a rule).** `Flick::primary_offset_deg` is the crosshair's offset from the target at the end of the primary sub-movement. On each axis the flick moved at least 2°, that offset is signed along the axis's movement and divided by the target radius. Beyond +1 radius is an axis overshoot and beyond −1 an undershoot, matching the existing overshoot rule. An axis is weak when its over/undershoot rate is more than 20 points above the other axis's, with ≥ 20 measured flicks on each axis. Why (estimates): with 5 samples and a 15-point margin, the simulated recruit, which has no axis bias, was flagged "vertical" in 2 of 5 runs; 20 samples and 20 points flag none. The 2° floor drops axes the flick barely moved on, where a sub-degree error would read as a huge miss.
+
+### Passive sensitivity suggestion
+
+`aim_core::analytics::sens_suggest::suggest` reads the fresh flicks of the newest 20 click-run replays (the Progress page loads them; replays are kept for the last 50 runs). For each flick it takes where the primary sub-movement ended relative to the target (`Flick::primary_offset_deg`) and divides it by the flick's distance. The result is signed along the movement: positive means past the target, negative means short. Three means are kept: along the movement, horizontal and vertical. An axis counts only if the flick moved at least 2° on it.
+
+- **Multiplier** = `1 / (1 + mean bias)`: the gain that would have made the average primary movement land on the target. Consistent overshoot gives less than 1 (lower sensitivity) and undershoot more than 1. The working assumption is that the primary sub-movement is the planned, pre-correction part of the flick (Meyer et al. 1988, above), so its gain reflects the hand-to-view mapping. Primary movements are known to fall slightly short by design, so a small undershoot is normal; that is one reason for the no-change band.
+- **Evidence:** the panel shows the sample count and mean bias per axis. Fewer than 40 measured flicks give no suggestion, and an axis with fewer than 40 gives no axis line.
+- **Bounds (estimates):** ×0.85 to ×1.15 per suggestion, so one step never changes sensitivity by more than about 15%. Within ±3% the panel says "no change". Flicks whose primary ended more than 50% of the distance past or short are dropped. In the simulated aimer, about a quarter of a contender's fresh flicks have a "primary" that is a short blip at the start of the flick (relative error near −100%). Before the drop, they pulled its mean bias to −22% even though its movements are unbiased; after it, the simulated presets get "no change".
+- **Applying:** only the overall multiplier can be applied, through `Sensitivity::from_cm_per_360` (cm/360 ÷ multiplier, same game and DPI), the same path as the sensitivity finder. The vertical line is information only: mouse look uses one sensitivity for both axes, and decision L5 adds no vertical multiplier setting. Nothing is applied automatically. Once applied, the button stays hidden until new replays arrive.
+- **Limits:** replays do not record the sensitivity they were played at. Runs from before a sensitivity change, and sensitivity-finder test runs (also saved as replays), therefore mix into the evidence. No published source gives the 40-flick minimum, the bounds or the band; they are provisional.
 
 ## Caveat
 

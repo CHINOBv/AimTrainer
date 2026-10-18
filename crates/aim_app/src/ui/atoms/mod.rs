@@ -3,6 +3,7 @@
 pub mod crosshair;
 pub mod fonts;
 pub mod hit_marker;
+pub mod speed_ramp;
 
 use bevy_egui::egui::{Color32, FontId, RichText};
 

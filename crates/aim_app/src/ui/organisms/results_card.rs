@@ -6,6 +6,8 @@ use crate::ui::UiAction;
 use crate::ui::atoms::{GOOD, big};
 use crate::ui::molecules::stat_row;
 use crate::ui::organisms::analysis_panel::{RunReport, analysis_panel};
+use crate::ui::organisms::decision_panel::decision_panel;
+use crate::ui::organisms::moving_panel::moving_panel;
 use bevy_egui::egui::{self, Align2};
 
 /// What the card needs beyond the result itself.
@@ -77,6 +79,12 @@ pub fn results_card(
                     .show(ui, |ui| {
                         if let Some(a) = analysis_panel(ui, report) {
                             action = Some(a);
+                        }
+                        if let Some(decision) = &report.decision {
+                            decision_panel(ui, decision);
+                        }
+                        if let Some(m) = &report.moving {
+                            moving_panel(ui, m);
                         }
                     });
             }

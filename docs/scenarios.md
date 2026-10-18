@@ -43,6 +43,7 @@ health = 1                   # click: hits to kill | hold: seconds on target (in
 lifetime_secs = 3.0          # optional; the target leaves if not killed
 appear_delay_secs = [0.0, 0.0]
 min_separation_deg = 0
+decoy_chance = 0             # go/no-go: share of spawns that are decoys, in [0, 1); needs lifetime_secs and fire = "click"
 
 [scoring]                    # all optional
 head = 100                   # per hit (click) or per second (hold)
@@ -53,7 +54,28 @@ miss_penalty = 0
 moving_shot_penalty = 0      # per shot fired above 27.5% of run speed
 expire_penalty = 0
 burst_bonus = 0              # per hit within the weapon's protected bullets; needs weapon.recoil
+rings = { radius = [0.25, 0.5, 1.0], multiplier = [3.0, 2.0, 1.0] }   # optional score-zone rings
+decoy_penalty = 0            # per shot on a go/no-go decoy
 ```
+
+### Go/no-go decoys
+
+With `decoy_chance` above 0, each spawned target is a "non-match" decoy with that chance. Decoys are drawn as a faint, see-through grey, so they stand out by brightness and transparency rather than by colour. The four outcomes are:
+
+| Outcome | What happens |
+|---|---|
+| Match hit | A normal target is shot: normal points and kill |
+| Match wait | A normal target expires unshot: counts as expired, `expire_penalty` applies |
+| Non-match hit | A decoy is shot: it vanishes, the shot counts as a shot that hit nothing, `decoy_penalty` applies |
+| Non-match wait | A decoy expires unshot: the correct choice, with no penalty and no expiry |
+
+Decoys need `lifetime_secs`, so that they leave, and `fire = "click"`. Adaptive difficulty counts a decoy left alone as a success. The results screen shows the four counts, decision accuracy, the median reaction to match targets and two explained verdicts (see `training-science.md`). The built-in `go-no-go` uses decoys.
+
+### Score-zone rings
+
+`rings` makes a hit worth more the closer it lands to the center of a sphere or a humanoid head. The distance is the shot's perpendicular distance from the zone center, as a fraction of the zone radius (the sphere radius, or half the head size). A hit takes the multiplier of the innermost ring it falls in, so with the example above a dead-center sphere hit scores `sphere × 3`. A hit outside every ring, and every body or leg hit, scores the zone's flat points. In hold mode the multiplier scales the points per second.
+
+`radius` must be ascending fractions in (0, 1], with one `multiplier` (> 0) per radius. The built-in `precision-rings` uses them.
 
 ### Play area and floor height
 

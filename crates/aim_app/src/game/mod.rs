@@ -183,6 +183,9 @@ pub(crate) struct WorldAssets {
     unit_box: Handle<Mesh>,
     edge: Handle<StandardMaterial>,
     slab: Handle<StandardMaterial>,
+    /// Go/no-go decoys: a faint, see-through grey, told apart from targets by brightness
+    /// and transparency rather than hue, so it works with colour-vision deficiencies.
+    decoy: Handle<StandardMaterial>,
 }
 
 pub struct GamePlugin;
@@ -307,6 +310,7 @@ fn setup_world(
         unit_box: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
         edge: translucent(&mut materials, Color::srgba(0.35, 0.85, 1.0, 0.7)),
         slab: translucent(&mut materials, Color::srgba(0.35, 0.6, 0.85, 0.12)),
+        decoy: translucent(&mut materials, Color::srgba(0.8, 0.8, 0.85, 0.28)),
     });
 }
 
@@ -686,19 +690,33 @@ fn pose_humanoids(run: Res<Run>, mut parts: Query<(&HumanoidPart, &ChildOf, &mut
 }
 
 pub(crate) fn spawn_visual(commands: &mut Commands, assets: &WorldAssets, shape: &Shape) -> Entity {
+    spawn_target_visual(commands, assets, shape, false)
+}
+
+/// A target visual; a go/no-go `decoy` uses the decoy material on every part.
+fn spawn_target_visual(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    shape: &Shape,
+    decoy: bool,
+) -> Entity {
+    let pick = |normal| if decoy { &assets.decoy } else { normal };
     let mut e = commands.spawn((TargetVisual, Transform::default(), Visibility::default()));
     match *shape {
         Shape::Sphere { radius } => {
-            e.insert((Mesh3d(assets.unit_sphere.clone()), material(&assets.target)));
+            e.insert((
+                Mesh3d(assets.unit_sphere.clone()),
+                material(pick(&assets.target)),
+            ));
             e.insert(Transform::from_scale(Vec3::splat(radius)));
         }
         Shape::Humanoid { .. } => {
             let d = HumanoidDims::default();
             e.with_children(|p| {
                 for (part, mesh, mat) in [
-                    (HumanoidPart::Head, &assets.head_box, &assets.head),
-                    (HumanoidPart::Body, &assets.body_box, &assets.body),
-                    (HumanoidPart::Legs, &assets.legs_box, &assets.body),
+                    (HumanoidPart::Head, &assets.head_box, pick(&assets.head)),
+                    (HumanoidPart::Body, &assets.body_box, pick(&assets.body)),
+                    (HumanoidPart::Legs, &assets.legs_box, pick(&assets.body)),
                 ] {
                     p.spawn((
                         part,
@@ -732,6 +750,12 @@ fn sync_targets(
         &transforms,
         &shape,
     );
+    let decoys: Vec<u64> = run
+        .session
+        .targets()
+        .filter(|t| t.decoy)
+        .map(|t| t.id)
+        .collect();
     let alive: HashMap<u64, (Vec3, f32)> = run
         .session
         .targets()
@@ -754,10 +778,9 @@ fn sync_targets(
         keep
     });
     for (id, (pos, facing)) in alive {
-        let entity = *run
-            .entities
-            .entry(id)
-            .or_insert_with(|| spawn_visual(&mut commands, &assets, &shape));
+        let entity = *run.entities.entry(id).or_insert_with(|| {
+            spawn_target_visual(&mut commands, &assets, &shape, decoys.contains(&id))
+        });
         let rotation = Quat::from_rotation_y(facing.to_radians());
         if let Ok(mut tf) = transforms.get_mut(entity) {
             tf.translation = pos;

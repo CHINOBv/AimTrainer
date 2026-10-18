@@ -104,3 +104,29 @@ pub(super) fn raycast(
         .min_by(|a, b| a.0.total_cmp(&b.0))
         .map(|(_, i, z)| (i, z))
 }
+
+/// How far from the center of the zone it hit `ray` passes, as a fraction of the zone's
+/// radius: the perpendicular distance from the sphere center, or from the head center
+/// over half the head size. `None` for body and leg hits, which have no rings.
+pub(super) fn zone_center_fraction(
+    ray: Ray,
+    target: &Target,
+    shape: &Shape,
+    dims: &HumanoidDims,
+    zone: HitZone,
+) -> Option<f32> {
+    let (center, radius) = match (shape, zone) {
+        (Shape::Sphere { radius }, _) => (target.position, *radius),
+        (Shape::Humanoid { .. }, HitZone::Head) => {
+            let d = dims.crouched(target.crouch());
+            (
+                target.position + Vec3::new(0.0, d.head_center_height(), 0.0),
+                d.head_size / 2.0,
+            )
+        }
+        _ => return None,
+    };
+    let to_center = center - ray.origin;
+    let along = ray.dir * to_center.dot(ray.dir);
+    Some((to_center - along).length() / radius.max(f32::EPSILON))
+}

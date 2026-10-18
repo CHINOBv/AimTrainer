@@ -5,7 +5,9 @@
 # can recommend scenarios (best first), a routine and a tip.
 #
 # metric: reaction_time | overshoot_rate | undershoot_rate | corrections | path_efficiency
-#         | on_target_ratio | lag_ratio | reversal_response
+#         | on_target_ratio | lag_ratio | reversal_response | speed_match | edge_share
+#         | moving_shot_rate | start_ratio | stamina_ratio | nearest_first_share
+#         | missed_opportunity_rate | click_delay | weakest_direction_gap
 # Times are in seconds, rates and ratios are shares (0.35 = 35%), corrections per flick.
 #
 # PROVISIONAL: every threshold is an estimate against the simulated aimer, not calibrated
@@ -124,3 +126,102 @@ meaning = "you take long to follow a target that changes direction"
 [rules.recommendation]
 scenario_ids = ["track-reactive-strafe", "track-reactive-micro"]
 tip = "React to strafes instead of anticipating them; relax your grip so reversals are quicker."
+
+[[rules]]
+metric = "speed_match"
+direction = "below"
+threshold = 0.35
+verdict = "weakness"
+meaning = "your crosshair speed rarely matches the target's speed"
+[rules.recommendation]
+scenario_ids = ["track-orbit", "track-precise"]
+tip = "Match the target's speed before correcting your position; the too slow / too fast split shows which way you miss."
+
+[[rules]]
+metric = "edge_share"
+direction = "above"
+threshold = 0.60
+verdict = "weakness"
+meaning = "you ride the edge of the target instead of its center"
+[rules.recommendation]
+scenario_ids = ["track-precise", "track-orbit"]
+tip = "Once you are on the target, steer back to its center instead of staying at the edge."
+
+[[rules]]
+metric = "moving_shot_rate"
+direction = "above"
+threshold = 0.20
+verdict = "weakness"
+meaning = "you often fire before you have stopped"
+[rules.recommendation]
+scenario_ids = ["counter-strafe", "strafe-shot"]
+tip = "Tap the opposite strafe key (or release the keys) and fire only once you have stopped; shots are accurate again at 27.5% of run speed or less."
+
+[[rules]]
+metric = "start_ratio"
+direction = "below"
+threshold = 0.70
+verdict = "weakness"
+meaning = "you score much slower at the start of a run than in the rest of it"
+[rules.recommendation]
+scenario_ids = ["flick-wide", "track-precise"]
+routine_id = "quick-warmup"
+tip = "Warm up before scored runs so the first seconds count; the quick warm-up routine gets you to full speed."
+
+[[rules]]
+metric = "stamina_ratio"
+direction = "below"
+threshold = 0.80
+verdict = "weakness"
+meaning = "your scoring rate drops in the last third of the run"
+[rules.recommendation]
+scenario_ids = ["static-headline", "track-precise"]
+routine_id = "fundamentals-hour"
+tip = "Keep a relaxed grip and steady breathing to the end; build endurance with longer sessions and short breaks between runs."
+
+[[rules]]
+metric = "nearest_first_share"
+direction = "below"
+threshold = 0.50
+verdict = "weakness"
+meaning = "you often go for a farther target while a nearer one is available"
+[rules.recommendation]
+scenario_ids = ["switch-wide", "switch-speed"]
+tip = "Clear the target closest to your crosshair first: the shorter flick is faster and keeps the others in view."
+
+[[rules]]
+metric = "nearest_first_share"
+direction = "above"
+threshold = 0.85
+verdict = "strength"
+meaning = "you clear the nearest target first"
+
+[[rules]]
+metric = "missed_opportunity_rate"
+direction = "above"
+threshold = 0.15
+verdict = "weakness"
+meaning = "your crosshair rests on targets that you then leave without firing"
+[rules.recommendation]
+scenario_ids = ["static-headline", "switch-heads"]
+tip = "Fire as soon as the crosshair is on the target; trust it instead of waiting for a perfect picture."
+
+[[rules]]
+metric = "click_delay"
+direction = "above"
+threshold = 0.20
+verdict = "weakness"
+meaning = "you hesitate on the target before clicking"
+[rules.recommendation]
+scenario_ids = ["flick-wide", "peek-reaction"]
+tip = "Click as soon as the crosshair reaches the target; trust the first placement instead of confirming it."
+
+[[rules]]
+metric = "weakest_direction_gap"
+direction = "above"
+threshold = 0.30
+verdict = "weakness"
+meaning = "your flicks in one direction hit far less often than the rest"
+[rules.recommendation]
+scenario_ids = ["flick-wide", "flick-headshot"]
+tip = "Give extra reps to the direction the flick grid marks weakest, and slow down there until its hit rate catches up."

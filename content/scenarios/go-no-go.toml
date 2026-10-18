@@ -1,0 +1,19 @@
+id = "go-no-go"
+name = "Go / No-Go"
+category = "reaction"
+description = """
+Decision clicking. Targets appear 4–15° from your crosshair: shoot the solid ones, but leave the
+faint grey decoys alone until they vanish. A decoy shot costs 150 points; a solid target you let
+expire costs 50. Trains telling friend from foe before you click."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.25 }   # ≈2.9° wide at 10 m
+spawn = { kind = "around_crosshair", offset_deg = [4.0, 15.0], distance = [10.0, 10.0] }
+lifetime_secs = 1.5
+appear_delay_secs = [0.2, 0.6]
+decoy_chance = 0.35
+
+[scoring]
+miss_penalty = 25
+expire_penalty = 50
+decoy_penalty = 150

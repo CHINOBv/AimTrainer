@@ -6,8 +6,14 @@
 use crate::ui::UiAction;
 use crate::ui::atoms::{GOOD, WARN};
 use crate::ui::molecules::stat_row;
+use crate::ui::organisms::decision_panel::DecisionReport;
+use crate::ui::organisms::flick_directions::{DirectionGrid, flick_directions};
+use crate::ui::organisms::moving_panel::MovingReport;
 use aim_core::analytics::{RunAnalysis, SkillProfile};
 use bevy_egui::egui;
+
+use crate::ui::organisms::pace_panel::{PaceReport, pace_panel};
+use crate::ui::organisms::priority_panel::{PriorityReport, priority_panel};
 
 /// Recommendations shown on the results card.
 pub const MAX_RECOMMENDATIONS: usize = 2;
@@ -27,13 +33,21 @@ pub struct RunReport {
     pub metrics: Vec<(&'static str, String)>,
     pub strengths: Vec<String>,
     pub advice: Vec<Advice>,
+    /// Go/no-go section, for runs with decoys.
+    pub decision: Option<DecisionReport>,
+    /// Firing-while-moving details, for movement scenarios.
+    pub moving: Option<MovingReport>,
+    pub pace: Option<PaceReport>,
+    pub priority: Option<PriorityReport>,
+    /// Per-direction flick grid (click runs only).
+    pub directions: Option<DirectionGrid>,
 }
 
-fn ms(secs: f32) -> String {
+pub(crate) fn ms(secs: f32) -> String {
     format!("{:.0} ms", secs * 1000.0)
 }
 
-fn pct(ratio: f32) -> String {
+pub(crate) fn pct(ratio: f32) -> String {
     format!("{:.0}%", ratio * 100.0)
 }
 
@@ -76,6 +90,7 @@ impl RunReport {
                 "Throughput (ISO 9241-9)",
                 f.throughput_bits_per_sec.map(|v| format!("{v:.1} bits/s")),
             );
+            push("Click delay (median)", f.median_click_delay_secs.map(ms));
             "Flick analysis"
         } else if let Some(t) = analysis.tracking_summary() {
             push("Time on target", Some(pct(t.on_target_ratio)));
@@ -97,6 +112,19 @@ impl RunReport {
                 t.median_reversal_response_secs
                     .map(|s| format!("{} over {} reversals", ms(s), t.reversals)),
             );
+            push(
+                "Speed match",
+                t.speed_match_ratio.map(|m| {
+                    let split = t
+                        .speed_under_ratio
+                        .zip(t.speed_over_ratio)
+                        .map_or(String::new(), |(u, o)| {
+                            format!(" (too slow {} / too fast {})", pct(u), pct(o))
+                        });
+                    format!("{}{split}", pct(m))
+                }),
+            );
+            push("Time on the target's edge", t.edge_ratio.map(pct));
             "Tracking analysis"
         } else {
             "Analysis"
@@ -124,6 +152,14 @@ impl RunReport {
             metrics,
             strengths,
             advice,
+            decision: analysis.decision.as_ref().map(DecisionReport::new),
+            moving: analysis.moving.as_ref().map(MovingReport::new),
+            pace: analysis.pace.as_ref().map(PaceReport::new),
+            priority: analysis
+                .priority
+                .as_ref()
+                .map(|p| PriorityReport::new(p, profile.findings())),
+            directions: DirectionGrid::new(analysis),
         }
     }
 }
@@ -159,8 +195,17 @@ pub fn analysis_panel(ui: &mut egui::Ui, report: &RunReport) -> Option<UiAction>
             if report.strengths.is_empty() && report.advice.is_empty() {
                 ui.small("No metric crossed a threshold in this run.");
             }
+            if let Some(grid) = &report.directions {
+                flick_directions(ui, grid);
+            }
             ui.small("Thresholds are provisional until calibrated on player data.");
         });
+    if let Some(pace) = &report.pace {
+        pace_panel(ui, pace);
+    }
+    if let Some(priority) = &report.priority {
+        priority_panel(ui, priority);
+    }
     action
 }
 
@@ -199,9 +244,92 @@ mod tests {
     }
 
     #[test]
+    fn flick_runs_show_the_median_click_delay_after_the_existing_metrics() {
+        let r = report("flick-wide", 2);
+        let labels: Vec<&str> = r.metrics.iter().map(|(l, _)| *l).collect();
+        let click = labels
+            .iter()
+            .position(|l| *l == "Click delay (median)")
+            .expect("click delay row");
+        let throughput = labels
+            .iter()
+            .position(|l| *l == "Throughput (ISO 9241-9)")
+            .expect("existing rows are kept");
+        assert!(click > throughput, "{labels:?}");
+        assert!(
+            r.metrics[click].1.ends_with(" ms"),
+            "{:?}",
+            r.metrics[click]
+        );
+    }
+
+    #[test]
     fn tracking_runs_show_tracking_metrics() {
         let r = report("track-precise", 2);
         assert_eq!(r.title, "Tracking analysis");
         assert!(r.metrics.iter().any(|(l, _)| *l == "Time on target"));
+    }
+
+    #[test]
+    fn tracking_runs_show_speed_match_split_and_edge_share() {
+        let r = report("track-precise", 2);
+        let value = |label: &str| {
+            r.metrics
+                .iter()
+                .find(|(l, _)| *l == label)
+                .map(|(_, v)| v.clone())
+        };
+        let speed = value("Speed match").expect("a moving target gives speed match");
+        assert!(
+            speed.contains("too slow") && speed.contains("too fast"),
+            "{speed}"
+        );
+        assert!(value("Time on the target's edge").is_some());
+    }
+
+    #[test]
+    fn only_runs_with_decoys_get_a_decision_section() {
+        let go = report("go-no-go", 0);
+        let d = go.decision.expect("go-no-go has decoys");
+        assert!(
+            d.metrics
+                .iter()
+                .any(|(l, _)| *l == "Decoys shot (non-match hit)")
+        );
+        assert!(report("flick-wide", 1).decision.is_none());
+    }
+
+    #[test]
+    fn only_movement_scenarios_carry_a_moving_report() {
+        assert_eq!(report("flick-wide", 2).moving, None);
+        let moving = report("counter-strafe", 2)
+            .moving
+            .expect("movement scenario");
+        assert_eq!(moving.rows[0].0, "Shots stopped / moving");
+    }
+
+    #[test]
+    fn runs_with_enough_kills_or_score_show_their_pace() {
+        let r = report("flick-wide", 2);
+        assert!(r.pace.as_ref().unwrap().rows[0].1.contains("kills/s"));
+        let r = report("track-precise", 2);
+        assert!(r.pace.as_ref().unwrap().rows[0].1.contains("points/s"));
+    }
+
+    #[test]
+    fn multi_target_runs_show_their_prioritization() {
+        let r = report("switch-wide", 2);
+        let p = r
+            .priority
+            .as_ref()
+            .expect("switch-wide shows three targets");
+        assert!(p.rows[0].1.contains("contested kills"), "{p:?}");
+        // The simulated aimer always takes the nearest target: a strength with its threshold.
+        assert!(
+            p.verdicts
+                .iter()
+                .any(|(s, t)| *s && t.contains("threshold"))
+        );
+        assert!(report("flick-wide", 2).priority.is_none());
     }
 }
