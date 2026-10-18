@@ -65,6 +65,19 @@ fn hud(
     let restart = game_key::label(restart_name);
     let ctx = contexts.ctx_mut()?;
     if let Some(arena) = nav.arena() {
+        if settings.feel.arena_arrows
+            && !arena.paused
+            && let Ok(Projection::Perspective(p)) = camera.single()
+        {
+            let cam = hud_panels::ArrowCamera {
+                eye: arena.session.eye_position(),
+                view: arena.view,
+                vfov_deg: p.fov.to_degrees(),
+                aspect: p.aspect_ratio,
+            };
+            let points = hud_panels::arena_arrow_points(arena.session.bots());
+            hud_panels::offscreen_arrows(ctx, &points, &cam, settings.target_color);
+        }
         hit_feedback(ctx, &settings, arena.hit_frame());
         hud_panels::arena_status(ctx, &arena.session, arena.damage_flash);
         if arena.countdown > 0.0 {
@@ -90,7 +103,8 @@ fn hud(
             vfov_deg: p.fov.to_degrees(),
             aspect: p.aspect_ratio,
         };
-        hud_panels::offscreen_arrows(ctx, &run.session, &cam, settings.target_color);
+        let points = hud_panels::scenario_arrow_points(&run.session);
+        hud_panels::offscreen_arrows(ctx, &points, &cam, settings.target_color);
     }
     hit_feedback(ctx, &settings, run.hit_frame());
     hud_panels::run_status(ctx, &run.session);
