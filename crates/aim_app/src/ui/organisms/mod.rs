@@ -3,6 +3,7 @@
 pub mod analysis_panel;
 pub mod arena_list;
 pub mod benchmark_panel;
+pub mod decision_panel;
 pub mod feedback_settings;
 pub mod history_chart;
 pub mod hotkey_settings;
