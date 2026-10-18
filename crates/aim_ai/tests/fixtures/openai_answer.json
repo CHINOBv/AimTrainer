@@ -1,0 +1,17 @@
+{
+  "id": "chatcmpl-fixture-2",
+  "object": "chat.completion",
+  "created": 1760000001,
+  "model": "gpt-test",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Warm up with micro-adjustments first."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": { "prompt_tokens": 900, "completion_tokens": 9, "total_tokens": 909 }
+}
