@@ -92,6 +92,8 @@ pub struct Settings {
     pub arena_coaching: bool,
     /// Game-feel effects (HUD indicators, transitions, crosshair extras).
     pub feel: FeelSettings,
+    /// Scenario ids starred in the scenario list, in the order they were starred.
+    pub favorites: Vec<String>,
 }
 
 /// VALORANT's "Enemy Highlight Color" options (General → Accessibility), applied to
@@ -433,6 +435,7 @@ impl Default for Settings {
             sens_randomizer: RandomizerConfig::default(),
             arena_coaching: false,
             feel: FeelSettings::default(),
+            favorites: Vec::new(),
         }
     }
 }
@@ -813,6 +816,18 @@ mod tests {
         assert_eq!(sound.volume_percent, 50);
         let text = toml::to_string_pretty(&settings).unwrap();
         assert_eq!(toml::from_str::<Settings>(&text).unwrap(), settings);
+    }
+
+    #[test]
+    fn favorites_are_empty_for_old_settings_files_and_round_trip() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert!(old.favorites.is_empty());
+        let starred = Settings {
+            favorites: vec!["flick-headshot".into(), "track-precise".into()],
+            ..Settings::default()
+        };
+        let text = toml::to_string_pretty(&starred).unwrap();
+        assert_eq!(toml::from_str::<Settings>(&text).unwrap(), starred);
     }
 
     #[test]

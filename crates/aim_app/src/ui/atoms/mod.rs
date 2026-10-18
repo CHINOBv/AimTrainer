@@ -17,6 +17,8 @@ pub const DAMAGE_RED: Color32 = Color32::from_rgb(235, 60, 60);
 pub const HEAD_MARKER: Color32 = Color32::from_rgb(255, 210, 70);
 /// Hit marker on a body shot.
 pub const BODY_MARKER: Color32 = Color32::from_rgb(235, 235, 235);
+/// Favourite star.
+pub const FAVORITE: Color32 = Color32::from_rgb(250, 200, 60);
 
 /// Large, bold text (timer, score, countdown).
 pub fn big(text: impl Into<String>, size: f32) -> RichText {

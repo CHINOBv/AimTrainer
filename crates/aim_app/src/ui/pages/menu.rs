@@ -98,6 +98,7 @@ struct MenuState {
     settings_query: String,
     /// The section whose "Reset" was clicked once and waits for confirmation.
     confirm_reset: Option<SettingsTab>,
+    scenario_filter: scenario_browser::ScenarioFilter,
 }
 
 /// The Settings tab: search, sub-tabs, a reset per section, and the rows.
@@ -374,7 +375,14 @@ fn menu(
                             cfg.paths.scenarios_dir.display()
                         ));
                     });
-                    scenario_browser::scenario_list(ui, lib, &history, &mut state.selected);
+                    scenario_browser::scenario_list(
+                        ui,
+                        lib,
+                        &history,
+                        &mut state.selected,
+                        &mut state.scenario_filter,
+                        &mut cfg.settings.favorites,
+                    );
                 });
             egui::CentralPanel::default().show(&mut root, |ui| {
                 match state.selected.as_deref().and_then(|id| lib.scenario(id)) {
