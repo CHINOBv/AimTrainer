@@ -6,6 +6,7 @@
 //! and `scoring` modules.
 
 use super::behavior::{self, BehaviorState, Situation};
+use super::cue::CueSound;
 use super::def::{FireMode, ScenarioDef, Shape};
 use super::hit::{HitZone, Ray};
 use super::motion::{Drive, MotionState};
@@ -71,6 +72,16 @@ pub enum SessionEvent {
     },
     /// The run reached its duration.
     Finished,
+    /// A sound-cue target made its sound (`targets.perception`, kind `sound_cue`). It is
+    /// heard before it is seen.
+    Cue {
+        /// Id of the target that is heard.
+        id: u64,
+        /// Where the sound comes from (the target's position), meters.
+        position: Vec3,
+        /// Which sound to play.
+        sound: CueSound,
+    },
 }
 
 /// A live target.
@@ -97,6 +108,10 @@ pub struct Target {
     /// Session time of the next `targets.regen` heal (`inf` without regeneration).
     regen_at: f32,
     behavior: BehaviorState,
+    /// Sound-cue drills: session time when the target's sound plays (`None` without a cue).
+    pub cue_at: Option<f32>,
+    /// The sound has been played.
+    cue_played: bool,
 }
 
 impl Target {
@@ -114,6 +129,11 @@ impl Target {
     /// [`super::Motion::Dodge`] targets crouch.
     pub fn crouch(&self) -> f32 {
         self.motion.crouch
+    }
+
+    /// Whether the target's sound cue has played (always false without a cue).
+    pub fn is_heard(&self) -> bool {
+        self.cue_played
     }
 }
 
@@ -354,6 +374,11 @@ impl Session {
         self.targets.iter().filter(move |t| t.is_visible(now))
     }
 
+    /// Sound-cue drills: every live target whose sound has played, visible or not yet.
+    pub fn heard_targets(&self) -> impl Iterator<Item = &Target> {
+        self.targets.iter().filter(|t| t.cue_played)
+    }
+
     /// Advances the session by one frame and returns what happened.
     pub fn update(&mut self, input: FrameInput) -> Vec<SessionEvent> {
         let mut events = Vec::new();
@@ -366,6 +391,7 @@ impl Session {
 
         self.move_player(input.movement, dt);
         self.move_targets(dt);
+        self.reveal_cued();
         let shots_before = self.stats.shots;
         match self.def.weapon.fire {
             FireMode::Click if input.fire_pressed => self.shoot(&mut events),
@@ -380,6 +406,7 @@ impl Session {
         self.regenerate();
         self.expire(&mut events);
         self.refill(&mut events);
+        self.play_cues(&mut events);
 
         if self.time >= self.def.duration_secs {
             self.finished = true;
@@ -762,6 +789,58 @@ impl Session {
         }
     }
 
+    /// Sound-cue drills: plays the sound of every target whose cue time has come.
+    fn play_cues(&mut self, events: &mut Vec<SessionEvent>) {
+        let Some(sound) = self
+            .def
+            .targets
+            .perception
+            .as_ref()
+            .and_then(|p| p.cue_sound())
+        else {
+            return;
+        };
+        let now = self.time;
+        for t in &mut self.targets {
+            if !t.cue_played && t.cue_at.is_some_and(|at| now >= at) {
+                t.cue_played = true;
+                events.push(SessionEvent::Cue {
+                    id: t.id,
+                    position: t.position,
+                    sound,
+                });
+            }
+        }
+    }
+
+    /// Sound-cue drills: reveals a heard target early once the crosshair comes within
+    /// `reveal_within_deg` of its aim point. Its lifetime then starts from the reveal.
+    fn reveal_cued(&mut self) {
+        let Some(within) = self
+            .def
+            .targets
+            .perception
+            .as_ref()
+            .and_then(|p| p.reveal_within_deg())
+        else {
+            return;
+        };
+        let now = self.time;
+        let eye = self.eye_position();
+        let dir = self.view.direction();
+        let (shape, lifetime) = (&self.def.targets.shape, self.def.targets.lifetime_secs);
+        for t in &mut self.targets {
+            if !t.cue_played || t.is_visible(now) {
+                continue;
+            }
+            let aim = spawn::aim_point(shape, &self.dims, t.position);
+            if angle_between_deg(dir, aim - eye) <= within {
+                t.visible_at = now;
+                t.expires_at = lifetime.map(|l| now + l);
+            }
+        }
+    }
+
     fn spawn_target(&mut self) -> Target {
         let point = spawn::separated_point(
             &self.def.targets,
@@ -782,7 +861,20 @@ impl Session {
         }
         let (facing_yaw_deg, lateral) = spawn::face_player(point, self.player_pos);
         let delay = self.rng.in_range(self.def.targets.appear_delay_secs);
-        let visible_at = self.time + delay;
+        let mut visible_at = self.time + delay;
+        // A sound cue plays when the target would have appeared; the target itself shows up
+        // `reveal_after_secs` later. No random draw, so other scenarios are unchanged.
+        let reveal_after = self
+            .def
+            .targets
+            .perception
+            .as_ref()
+            .and_then(|p| p.reveal_after_secs());
+        let cue_at = reveal_after.map(|after| {
+            let heard_at = visible_at;
+            visible_at += after;
+            heard_at
+        });
         // Draw only when decoys are on, so other scenarios keep their random sequences.
         let chance = self.def.targets.decoy_chance;
         let decoy = chance > 0.0 && self.rng.next_f32() < chance;
@@ -800,6 +892,8 @@ impl Session {
             motion: MotionState::new(point, lateral, visible_at),
             last_hit_at: f32::NEG_INFINITY,
             behavior: BehaviorState::new(lateral),
+            cue_at,
+            cue_played: false,
             regen_at: self
                 .def
                 .targets
@@ -877,6 +971,7 @@ mod tests {
                 regen: None,
                 reactions: None,
                 behaviors: Vec::new(),
+                perception: None,
             },
             scoring: ScoringDef::default(),
             difficulty: Default::default(),

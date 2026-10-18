@@ -255,6 +255,7 @@ mod tests {
             distance_split: None,
             miss_compass: None,
             potential: None,
+            audio_cue: None,
         }
     }
 
@@ -441,6 +442,7 @@ mod tests {
             distance_split: None,
             miss_compass: None,
             potential: None,
+            audio_cue: None,
         }
     }
 

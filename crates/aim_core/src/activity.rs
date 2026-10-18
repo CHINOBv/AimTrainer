@@ -66,7 +66,8 @@ impl Activity for Session {
                 SessionEvent::Spawned { .. }
                 | SessionEvent::Expired { .. }
                 | SessionEvent::DecoyAvoided { .. }
-                | SessionEvent::Reload { .. } => None,
+                | SessionEvent::Reload { .. }
+                | SessionEvent::Cue { .. } => None,
             })
             .collect()
     }

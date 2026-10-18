@@ -2,6 +2,7 @@
 
 pub mod analysis_panel;
 pub mod arena_list;
+pub mod audio_cue_panel;
 pub mod benchmark_panel;
 pub mod decision_panel;
 pub mod feedback_settings;

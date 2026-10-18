@@ -6,6 +6,7 @@
 use crate::ui::UiAction;
 use crate::ui::atoms::{GOOD, WARN};
 use crate::ui::molecules::stat_row;
+use crate::ui::organisms::audio_cue_panel::AudioCueReport;
 use crate::ui::organisms::decision_panel::DecisionReport;
 use crate::ui::organisms::flick_directions::{DirectionGrid, flick_directions};
 use crate::ui::organisms::miss_compass::MissCompassGrid;
@@ -47,6 +48,8 @@ pub struct RunReport {
     pub miss_compass: Option<MissCompassGrid>,
     /// The one fix with the largest estimated gain, shown above the advice.
     pub potential: Option<PotentialLine>,
+    /// Turn reaction and angular error per direction, for sound-localisation runs.
+    pub audio_cue: Option<AudioCueReport>,
 }
 
 pub(crate) fn ms(secs: f32) -> String {
@@ -168,6 +171,7 @@ impl RunReport {
             directions: DirectionGrid::new(analysis),
             miss_compass: analysis.miss_compass.as_ref().map(MissCompassGrid::new),
             potential: analysis.potential.as_ref().map(PotentialLine::new),
+            audio_cue: analysis.audio_cue.as_ref().map(AudioCueReport::new),
         }
     }
 }
@@ -332,6 +336,16 @@ mod tests {
         assert!(line.headline.starts_with("Fix "), "{line:?}");
         assert!(line.assumption.starts_with("Estimate: if "), "{line:?}");
         assert_eq!(report("track-precise", 2).potential, None);
+    }
+
+    #[test]
+    fn only_sound_cue_runs_get_a_sound_localisation_section() {
+        let r = report("sound-turn", 2)
+            .audio_cue
+            .expect("sound-turn plays cues");
+        assert_eq!(r.metrics[0].0, "Sound cues");
+        assert_eq!(r.rows[1][1], "you");
+        assert_eq!(report("flick-wide", 2).audio_cue, None);
     }
 
     #[test]

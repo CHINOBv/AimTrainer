@@ -380,6 +380,24 @@ Plain hold scenarios pay the same per second whether time on target comes in one
 
 The numbers in `regen-track` are estimates set by calibration, not sourced values: health 1.5 s, a heal of 0.2 s every 0.3 s off target, and a value that fades to 40% over 3 s. A 0.35 m sphere at 10 m keeps contender accuracy at about 58%; with a 0.3 m sphere it fell to 48%, at the bottom of the challenge-point band.
 
+## Perception drills
+
+### Sound localisation
+
+In tactical shooters many fights start with a sound: footsteps or shots from outside the view. Turning straight to the source, instead of searching, saves the time a visual search would cost. `sound-turn` isolates that step: a target is heard first and appears only later, so the score rewards turning to the right place before seeing anything. Training the turn this way is a design choice inspired by Aim Lab's audio drills (`docs/feature-analysis.md`); no study measures its transfer to games (inference).
+
+The sounds are synthesized and panned in stereo: equal-power left/right panning plus a duller, quieter sound for sources behind the player. Over headphones without individual head-related transfer functions, listeners confuse front and back sources far more often than with natural hearing (Wenzel et al. 1993, *Journal of the Acoustical Society of America* 93(1), 111–123). The rear filtering gives a front/back cue to learn, but expect some front/back mistakes; the per-direction grid shows them as large errors in the "front" or "back" cells.
+
+Metrics, per cue, from the replayed run:
+
+- **Angular error:** the angle between the view and the source 1 s after the sound, or at the first shot if that comes sooner. 1 s is an **estimate**: a reaction to a sound (roughly 0.2–0.3 s, approximate) plus a fast turn of up to 180°.
+- **Turn reaction time:** from the sound to the first frame the crosshair turns towards the source at 60°/s or faster, searched for 2 s. Both numbers are **estimates**: 60°/s is well above hand tremor and well below a flick's peak speed.
+- **Directions:** each cue is binned by its horizontal angle from the view when the sound played, into eight 45° bins centered on front, front-right, right, back-right, back, back-left, left and front-left.
+
+The panning constants (full level within 6 m, a floor of 35% for far sources, 30% quieter and an 85% low-pass straight behind) are **estimates** tuned by ear, not a model of how VALORANT renders sound.
+
+**Calibration caveat.** The simulated aimer cannot hear: it waits for the target to appear 0.8 s after the sound and then flicks. `sound-turn` calibrates at about 75% contender accuracy, but a human who turns on the sound reveals targets earlier and scores more. A playtest should confirm the difficulty.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

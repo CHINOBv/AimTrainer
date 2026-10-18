@@ -78,6 +78,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/regen-track.toml"),
     ),
     (
+        "sound-turn.toml",
+        include_str!("../../../../content/scenarios/sound-turn.toml"),
+    ),
+    (
         "spray-transfer.toml",
         include_str!("../../../../content/scenarios/spray-transfer.toml"),
     ),

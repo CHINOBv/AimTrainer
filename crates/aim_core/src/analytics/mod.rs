@@ -7,6 +7,7 @@
 //! benchmark subcategories from run history, with weekly trends. [`codec`] stores recordings as replay files, and [`path`]
 //! turns one into per-target crosshair paths for the replay viewer.
 
+pub mod audio_cue;
 pub mod codec;
 pub mod decision;
 pub mod direction;
@@ -67,6 +68,8 @@ pub struct RunAnalysis {
     pub miss_compass: Option<miss_compass::MissCompass>,
     /// The score with the costliest weakness fixed, for click runs where one is worth a tip.
     pub potential: Option<potential::PotentialTip>,
+    /// Turn reaction and angular error per sound cue, for sound-localisation runs.
+    pub audio_cue: Option<audio_cue::AudioCueAnalysis>,
 }
 
 impl RunAnalysis {
@@ -134,6 +137,7 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         distance_split,
         miss_compass: miss_compass::analyze(&samples),
         potential,
+        audio_cue: audio_cue::analyze(&samples),
     }
 }
 

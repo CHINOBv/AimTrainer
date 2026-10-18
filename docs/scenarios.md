@@ -46,6 +46,7 @@ min_separation_deg = 0
 decoy_chance = 0             # go/no-go: share of spawns that are decoys, in [0, 1); needs lifetime_secs and fire = "click"
 regen = { interval_secs = 0.5, amount = 1, reset_on_hit = false }   # optional health regeneration
 spawn_rules = { avoid_last_deg = 10, min_flick_deg = 15 }          # optional spawn-pattern controls
+perception = { kind = "sound_cue", sound = "footsteps", reveal_after_secs = 0.8 }   # optional perception drill
 
 [scoring]                    # all optional
 head = 100                   # per hit (click) or per second (hold)
@@ -218,6 +219,33 @@ A rule needs at least one condition and at least one override:
 There is no line-of-sight condition: scenario targets always stand in the open. Arena bots, which can hide behind walls, live in `aim_world`. An airborne `dodge` target keeps its rule until it lands. Reactions and rules draw random numbers only when they are used, so other scenarios replay exactly as before.
 
 Clicking on the stop or reversal works because the target's lateral speed passes through zero there (inference from the movement model, not a measured training effect). The simulated aimer re-aims at the target every frame, so calibrate scores understate how much harder the motion makes these drills for a human.
+
+### Perception drills
+
+`[targets.perception]` (optional) changes how targets are announced and revealed. It has a `kind`; only one perception drill fits in a scenario.
+
+**`kind = "sound_cue"`: sound localisation.** Each target is first only heard: a synthesized sound plays from its position when it would have appeared, and the target itself appears `reveal_after_secs` later, or as soon as the crosshair comes within `reveal_within_deg` of it. A hidden target cannot be shot. When the crosshair reveals it early, its `lifetime_secs` starts then. The built-in `sound-turn` spawns agents 60–180° away from the crosshair, so every sound comes from the side or from behind:
+
+```toml
+[targets]
+shape = { kind = "humanoid" }
+spawn = { kind = "around_crosshair", offset_deg = [60.0, 180.0], distance = [8.0, 16.0] }
+lifetime_secs = 3.0
+
+[targets.perception]
+kind = "sound_cue"
+sound = "footsteps"
+reveal_after_secs = 0.8
+reveal_within_deg = 25
+```
+
+| Field | Meaning |
+|---|---|
+| `sound` | `"footsteps"` (three quick steps) or `"gunshot"` (one crack). Both are made up from tones and noise; no game sound is used. |
+| `reveal_after_secs` | Seconds from the sound to the target appearing, in (0, 10]. |
+| `reveal_within_deg` | Default 0 (off). Reveal the target early once the crosshair is within this angle of its aim point, in [0, 180). |
+
+The sound is panned to where it comes from when it plays: left/right by its angle from your view, duller and quieter when it is behind you, quieter when it is far. Bevy's spatial audio is not used because it cannot tell front from back. Cue sounds play even with shot sound effects off; the volume slider still applies. Use headphones. The results card shows, for each of eight directions around you, the median angular error 1 s after each sound (or at your first shot) and the median turn reaction time (see "Sound localisation" in `training-science.md`).
 
 ### Difficulty
 
