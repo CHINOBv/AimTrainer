@@ -88,6 +88,8 @@ pub struct Settings {
     pub target_visibility: TargetVisibility,
     /// Sensitivity randomiser drill (off by default; never changes `sensitivity`).
     pub sens_randomizer: RandomizerConfig,
+    /// Live coaching overlay in arenas (crosshair placement and movement accuracy).
+    pub arena_coaching: bool,
 }
 
 /// VALORANT's "Enemy Highlight Color" options (General → Accessibility), applied to
@@ -252,6 +254,7 @@ impl Default for Settings {
             mission_commitment: Commitment::default(),
             target_visibility: TargetVisibility::default(),
             sens_randomizer: RandomizerConfig::default(),
+            arena_coaching: false,
         }
     }
 }
@@ -381,6 +384,18 @@ mod tests {
         assert!(settings.offscreen_arrows);
         let off: Settings = toml::from_str("offscreen_arrows = false").unwrap();
         assert!(!off.offscreen_arrows);
+    }
+
+    #[test]
+    fn arena_coaching_is_off_for_old_settings_files_and_persists() {
+        let settings: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert!(!settings.arena_coaching);
+        let on = Settings {
+            arena_coaching: true,
+            ..Settings::default()
+        };
+        let back: Settings = toml::from_str(&toml::to_string(&on).unwrap()).unwrap();
+        assert!(back.arena_coaching);
     }
 
     #[test]

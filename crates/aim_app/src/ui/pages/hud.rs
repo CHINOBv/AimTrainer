@@ -4,7 +4,7 @@
 use crate::game::AppState;
 use crate::game::MainCamera;
 use crate::game::SensDrill;
-use crate::game::arena::{ArenaCoaching, ArenaRun};
+use crate::game::arena::ArenaRun;
 use crate::game::feedback::HitMarkerStyle;
 use crate::overlay::Overlay;
 use crate::persistence::settings::Settings;
@@ -172,12 +172,11 @@ fn hit_feedback(ctx: &bevy_egui::egui::Context, settings: &Settings, marker_secs
 fn coaching_hud(
     mut contexts: EguiContexts,
     overlay: Res<Overlay>,
-    coaching: Option<Res<ArenaCoaching>>,
+    settings: Res<Settings>,
     arena: Option<Res<ArenaRun>>,
 ) -> Result {
     let Some(arena) = arena else { return Ok(()) };
-    let on = coaching.is_some_and(|c| c.enabled);
-    if !(on && overlay.visible && !arena.paused && arena.countdown <= 0.0) {
+    if !(settings.arena_coaching && overlay.visible && !arena.paused && arena.countdown <= 0.0) {
         return Ok(());
     }
     coaching_overlay::coaching_overlay(contexts.ctx_mut()?, &arena.session.coaching());
