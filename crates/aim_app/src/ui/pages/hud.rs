@@ -46,12 +46,16 @@ fn hud(
     if !overlay.visible {
         return Ok(());
     }
-    // The restart key works during the countdown, the run and the pause window alike.
-    if game_key::bindable(&settings.restart_key).is_some_and(|k| keys.just_pressed(k)) {
+    // The restart key works during the countdown, the run and the pause window alike. A
+    // reserved or unknown stored key falls back to the default, and the HUD shows that one.
+    let restart_name = game_key::effective_restart(&settings.restart_key);
+    if game_key::key_code(restart_name)
+        .is_some_and(|k| game_key::plain_press(keys.just_pressed(k), |m| keys.pressed(m)))
+    {
         nav.apply(UiAction::Restart);
         return Ok(());
     }
-    let restart = game_key::label(&settings.restart_key);
+    let restart = game_key::label(restart_name);
     let ctx = contexts.ctx_mut()?;
     if let Some(arena) = nav.arena() {
         hit_feedback(ctx, &settings, arena.hit_flash);
