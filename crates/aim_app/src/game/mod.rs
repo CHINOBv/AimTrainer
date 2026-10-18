@@ -187,6 +187,37 @@ pub(crate) struct WorldAssets {
     /// Go/no-go decoys: a faint, see-through grey, told apart from targets by brightness
     /// and transparency rather than hue, so it works with colour-vision deficiencies.
     decoy: Handle<StandardMaterial>,
+    /// Target outline: an unlit shell drawn from its back faces (inverted hull).
+    outline: Handle<StandardMaterial>,
+    /// Shell scale relative to the target when the outline is on.
+    outline_scale: Option<f32>,
+    /// Floor grid lines, tinted by the environment setting.
+    grid: Handle<StandardMaterial>,
+}
+
+/// Floor grid and play-area slab colours for an environment `tint`; `None` gives the
+/// original colours.
+fn environment_colors(tint: Option<[f32; 3]>) -> (Color, Color) {
+    match tint {
+        None => (
+            Color::srgba(0.35, 0.4, 0.5, 0.35),
+            Color::srgba(0.35, 0.6, 0.85, 0.12),
+        ),
+        Some([r, g, b]) => (Color::srgba(r, g, b, 0.35), Color::srgba(r, g, b, 0.12)),
+    }
+}
+
+/// The outline material: unlit, front faces culled so only the rim around the target shows.
+fn outline_material(
+    materials: &mut Assets<StandardMaterial>,
+    rgb: [f32; 3],
+) -> Handle<StandardMaterial> {
+    materials.add(StandardMaterial {
+        base_color: color(rgb),
+        unlit: true,
+        cull_mode: Some(bevy::render::render_resource::Face::Front),
+        ..default()
+    })
 }
 
 pub struct GamePlugin;
@@ -274,7 +305,8 @@ fn setup_world(
     ));
 
     // Floor grid: thin unlit strips every 2 m. Cheap and keeps the background see-through.
-    let line = unlit(&mut materials, Color::srgba(0.35, 0.4, 0.5, 0.35));
+    let (grid_color, slab_color) = environment_colors(settings.target_visibility.environment_tint);
+    let line = unlit(&mut materials, grid_color);
     let along_x = meshes.add(Cuboid::new(120.0, 0.004, 0.02));
     let along_z = meshes.add(Cuboid::new(0.02, 0.004, 120.0));
     for i in -30..=30 {
@@ -311,8 +343,11 @@ fn setup_world(
         )),
         unit_box: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
         edge: translucent(&mut materials, Color::srgba(0.35, 0.85, 1.0, 0.7)),
-        slab: translucent(&mut materials, Color::srgba(0.35, 0.6, 0.85, 0.12)),
+        slab: translucent(&mut materials, slab_color),
         decoy: translucent(&mut materials, Color::srgba(0.8, 0.8, 0.85, 0.28)),
+        outline: outline_material(&mut materials, settings.target_visibility.outline_color),
+        outline_scale: settings.target_visibility.outline_scale(),
+        grid: line,
     });
 }
 
@@ -380,10 +415,10 @@ fn spawn_play_area(commands: &mut Commands, assets: &WorldAssets, area: PlayArea
 
 fn refresh_target_color(
     settings: Res<Settings>,
-    assets: Option<Res<WorldAssets>>,
+    assets: Option<ResMut<WorldAssets>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let Some(assets) = assets else { return };
+    let Some(mut assets) = assets else { return };
     if !settings.is_changed() {
         return;
     }
@@ -391,6 +426,23 @@ fn refresh_target_color(
         if let Some(mut m) = materials.get_mut(h) {
             m.base_color = color(settings.target_color);
         }
+    }
+    // Visibility options; a new outline setting applies to targets spawned from now on.
+    let vis = &settings.target_visibility;
+    let (grid, slab) = environment_colors(vis.environment_tint);
+    for (h, c) in [
+        (&assets.outline, color(vis.outline_color)),
+        (&assets.grid, grid),
+        (&assets.slab, slab),
+    ] {
+        if let Some(mut m) = materials.get_mut(h)
+            && m.base_color != c
+        {
+            m.base_color = c;
+        }
+    }
+    if assets.outline_scale != vis.outline_scale() {
+        assets.outline_scale = vis.outline_scale();
     }
 }
 
@@ -706,6 +758,13 @@ fn spawn_target_visual(
     decoy: bool,
 ) -> Entity {
     let pick = |normal| if decoy { &assets.decoy } else { normal };
+    // Decoys never get an outline: they must stay faint.
+    let outline = assets.outline_scale.filter(|_| !decoy).map(|s| {
+        (
+            assets.outline.clone(),
+            Transform::from_scale(Vec3::splat(s)),
+        )
+    });
     let mut e = commands.spawn((TargetVisual, Transform::default(), Visibility::default()));
     match *shape {
         Shape::Sphere { radius } => {
@@ -714,6 +773,9 @@ fn spawn_target_visual(
                 material(pick(&assets.target)),
             ));
             e.insert(Transform::from_scale(Vec3::splat(radius)));
+            if let Some((mat, tf)) = outline {
+                e.with_child((Mesh3d(assets.unit_sphere.clone()), MeshMaterial3d(mat), tf));
+            }
         }
         Shape::Humanoid { .. } => {
             let d = HumanoidDims::default();
@@ -723,12 +785,15 @@ fn spawn_target_visual(
                     (HumanoidPart::Body, &assets.body_box, pick(&assets.body)),
                     (HumanoidPart::Legs, &assets.legs_box, pick(&assets.body)),
                 ] {
-                    p.spawn((
+                    let mut part = p.spawn((
                         part,
                         Mesh3d(mesh.clone()),
                         material(mat),
                         part.transform(&d),
                     ));
+                    if let Some((mat, tf)) = &outline {
+                        part.with_child((Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone()), *tf));
+                    }
                 }
             });
         }
@@ -914,6 +979,20 @@ fn manage_cursor(
 mod tests {
     use super::*;
     use bevy::ecs::system::assert_is_system;
+
+    #[test]
+    fn no_environment_tint_keeps_the_original_grid_and_slab_colours() {
+        assert_eq!(
+            environment_colors(None),
+            (
+                Color::srgba(0.35, 0.4, 0.5, 0.35),
+                Color::srgba(0.35, 0.6, 0.85, 0.12)
+            )
+        );
+        let (grid, slab) = environment_colors(Some([0.1, 0.2, 0.3]));
+        assert_eq!(grid, Color::srgba(0.1, 0.2, 0.3, 0.35));
+        assert_eq!(slab, Color::srgba(0.1, 0.2, 0.3, 0.12));
+    }
 
     #[test]
     fn systems_have_no_conflicting_access() {

@@ -113,3 +113,15 @@ Used only when a scenario sets `weapon.recoil = true` (`valorant::RecoilProfile`
 **Why these climb and sway numbers (estimate).** Riot does not publish recoil in degrees. We use the common spraying advice "start on the chest and let the climb walk up to the head" as a target: the chest-to-head-center distance of our hitbox is ≈0.475 m (1.4 m to 1.875 m), which is ≈1.8° at 15 m. Spreading that over the Vandal's 5 climbing bullets gives ≈0.36° (rounded to 0.35°). The Phantom gets a lower 0.30° per bullet, in line with its reputation as the steadier rifle to spray; over its 7 climbing bullets it reaches a total (≈2.1°) close to the Vandal's (≈1.75°). The sway values are set a little below the climb, so 6 uncorrected swaying bullets drift ≈1.5–1.8°, about 0.3 m at 10 m, enough to walk off a body that is 0.5 m wide. Every one of these values is a guess and lives in one place (`Weapon::recoil`), so it is easy to replace once someone measures it.
 
 **Bullets, not the camera.** In VALORANT the camera kick in hip-fire is smaller than the bullet climb, and how they split is not published. The trainer models only the bullets: the crosshair does not move, so players learn to pull down against an invisible climb, as with the in-game hip-fire crosshair.
+
+## Accessibility: enemy highlight colour
+
+VALORANT lets players pick the enemy highlight colour under Settings → General → Accessibility → "Enemy Highlight Color". The trainer offers the same choices for its target colour (`EnemyHighlight` in `persistence/settings.rs`), plus any custom RGB. Only the option names are reused; no Riot asset is copied.
+
+| Value | Used as | Confidence | Source |
+|---|---|---|---|
+| Options: Red (default), Purple (tritanopia), Yellow (deuteranopia), Yellow (protanopia) | `EnemyHighlight::{Red, Purple, Yellow}` | approximate | https://dotesports.com/valorant/news/how-to-change-enemy-highlight-color-in-valorant , https://esports.gg/guides/valorant/how-to-change-enemy-color-in-valorant/ (secondary sources; no Riot page found) |
+| Red is the default | the trainer's original target colour stays the default | approximate | same as above |
+| RGB of each option | Red `[1.0, 0.27, 0.33]` (unchanged trainer default), Purple `[0.75, 0.3, 1.0]`, Yellow `[1.0, 0.92, 0.2]` | estimate | Riot does not publish the values; they are picked by eye to read as the named hue |
+
+VALORANT has two yellow shades, one each for deuteranopia and protanopia. The trainer offers a single yellow for both, because the exact shades are unknown. The custom colour picker covers any other shade.

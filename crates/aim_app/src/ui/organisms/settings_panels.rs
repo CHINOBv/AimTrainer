@@ -2,7 +2,7 @@
 //! crosshair editor with VALORANT code import/export.
 
 use super::{hotkey_settings, restart_key_setting};
-use crate::persistence::settings::Settings;
+use crate::persistence::settings::{EnemyHighlight, Settings, TargetVisibility};
 use aim_core::crosshair::{
     CUSTOM_COLOR_INDEX, Crosshair, DOT_THICKNESS_PX, ERROR_MULTIPLIER_MAX, LINE_THICKNESS_MAX_PX,
     LineLimits, Lines, OUTLINE_THICKNESS_PX, PRESET_COLORS, Rgba, code, preset,
@@ -137,6 +137,7 @@ pub fn display_panel(
         ui.label("Target color");
         ui.color_edit_button_rgb(&mut settings.target_color);
     });
+    target_visibility(ui, settings);
     ui.checkbox(
         &mut settings.offscreen_arrows,
         "Arrows towards off-screen targets",
@@ -177,6 +178,52 @@ pub fn display_panel(
     ui.heading("Global hotkeys (Windows/X11)");
     hotkey_settings::hotkey_settings(ui, settings, recording_hotkey);
     ui.label("Wayland/Hyprland: bind `aimtrainer toggle`, `aimtrainer warmup` and `aimtrainer micro` in your compositor (see README).");
+}
+
+/// Enemy highlight presets (VALORANT's colour-blind options), target outline and
+/// environment tint.
+fn target_visibility(ui: &mut egui::Ui, settings: &mut Settings) {
+    ui.horizontal(|ui| {
+        ui.label("Enemy highlight");
+        let current = EnemyHighlight::of(settings.target_color);
+        egui::ComboBox::from_id_salt("enemy-highlight")
+            .selected_text(current.label())
+            .show_ui(ui, |ui| {
+                for (h, rgb) in EnemyHighlight::PRESETS {
+                    if ui.selectable_label(current == h, h.label()).clicked() {
+                        settings.target_color = rgb;
+                    }
+                }
+                ui.add_enabled(false, egui::Button::selectable(current == EnemyHighlight::Custom, "Custom (pick a colour above)"));
+            });
+    })
+    .response
+    .on_hover_text("VALORANT's enemy highlight options. Purple suits tritanopia; yellow suits deuteranopia and protanopia.");
+    let vis = &mut settings.target_visibility;
+    ui.horizontal(|ui| {
+        ui.checkbox(&mut vis.outline, "Target outline");
+        ui.add_enabled_ui(vis.outline, |ui| {
+            ui.color_edit_button_rgb(&mut vis.outline_color);
+            ui.add(
+                egui::Slider::new(&mut vis.outline_percent, TargetVisibility::OUTLINE_PERCENT)
+                    .suffix("%")
+                    .text("thickness"),
+            );
+        });
+    })
+    .response
+    .on_hover_text("A solid rim around every target (never on decoys). Applies to targets spawned after the change.");
+    ui.horizontal(|ui| {
+        let mut tinted = vis.environment_tint.is_some();
+        if ui.checkbox(&mut tinted, "Environment tint").changed() {
+            vis.environment_tint = tinted.then_some([0.35, 0.4, 0.5]);
+        }
+        if let Some(tint) = vis.environment_tint.as_mut() {
+            ui.color_edit_button_rgb(tint);
+        }
+    })
+    .response
+    .on_hover_text("Colour of the floor grid and play area, to raise contrast with the targets.");
 }
 
 /// Text and feedback of the "Import VALORANT code" field, kept in egui memory.
