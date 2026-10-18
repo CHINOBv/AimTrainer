@@ -380,6 +380,59 @@ fn tune_targets(targets: &mut TargetsDef, t: Tuning) {
     targets.speed_scale *= k(t.speed_pct);
 }
 
+/// Scales `motion` by the speed knob's fraction `s` at this level: faster movement and
+/// sooner decisions for `s > 0`.
+fn scale_motion(motion: &mut Motion, s: f32) {
+    let sooner = |r: &mut Range| *r = scale(*r, 1.0 - s);
+    if let Some(depth) = motion_depth_mut(motion) {
+        sooner(&mut depth.change_secs);
+    }
+    match motion {
+        Motion::Static => {}
+        Motion::Strafe { change_secs, .. } => sooner(change_secs),
+        Motion::Dodge {
+            change_secs,
+            juke_secs,
+            ..
+        } => {
+            sooner(change_secs);
+            sooner(juke_secs);
+        }
+        Motion::Drift {
+            speed, change_secs, ..
+        } => {
+            *speed = scale(*speed, 1.0 + s);
+            sooner(change_secs);
+        }
+        Motion::Ballistic { speed, gravity, .. } => {
+            // The same arcs, flown faster: speed × k and gravity × k².
+            *speed = scale(*speed, 1.0 + s);
+            *gravity *= (1.0 + s) * (1.0 + s);
+        }
+        Motion::LinearBounce { speed_deg, .. } => *speed_deg = scale(*speed_deg, 1.0 + s),
+        Motion::Orbit {
+            speed_deg,
+            change_secs,
+            ..
+        } => {
+            *speed_deg = scale(*speed_deg, 1.0 + s);
+            if let Some(c) = change_secs {
+                sooner(c);
+            }
+        }
+    }
+}
+
+/// The forward/back block of a motion, mutably, when it has one.
+fn motion_depth_mut(m: &mut Motion) -> Option<&mut super::def::DepthDef> {
+    match m {
+        Motion::Strafe { depth, .. }
+        | Motion::Dodge { depth, .. }
+        | Motion::Drift { depth, .. } => depth.as_mut(),
+        _ => None,
+    }
+}
+
 /// Scales `targets` by the difficulty coefficients `c` at level `d` (not 0).
 fn scale_targets(targets: &mut TargetsDef, c: &DifficultyDef, d: f32) {
     let humanoid = matches!(targets.shape, Shape::Humanoid { .. });
@@ -390,26 +443,7 @@ fn scale_targets(targets: &mut TargetsDef, c: &DifficultyDef, d: f32) {
     if let Some(l) = &mut targets.lifetime_secs {
         *l *= 1.0 - c.lifetime.at(d);
     }
-    match &mut targets.motion {
-        Motion::Static => {}
-        Motion::Strafe { change_secs, .. } => {
-            *change_secs = scale(*change_secs, 1.0 - c.speed.at(d))
-        }
-        Motion::Dodge {
-            change_secs,
-            juke_secs,
-            ..
-        } => {
-            *change_secs = scale(*change_secs, 1.0 - c.speed.at(d));
-            *juke_secs = scale(*juke_secs, 1.0 - c.speed.at(d));
-        }
-        Motion::Drift {
-            speed, change_secs, ..
-        } => {
-            *speed = scale(*speed, 1.0 + c.speed.at(d));
-            *change_secs = scale(*change_secs, 1.0 - c.speed.at(d));
-        }
-    }
+    scale_motion(&mut targets.motion, c.speed.at(d));
     let count = c.count.at(d);
     if count != 0.0 {
         let alive = targets.max_alive as f32 * (1.0 + count);
@@ -972,5 +1006,63 @@ mod tests {
                 .collect();
             assert!(errs.is_empty(), "{name}: {errs:?}");
         }
+    }
+
+    #[test]
+    fn the_speed_knob_scales_the_new_motions() {
+        let hard = |id: &str| {
+            (
+                find(id).targets.motion,
+                find(id).at_difficulty(1.0).targets.motion,
+            )
+        };
+        let (
+            Motion::Ballistic {
+                speed: s0,
+                gravity: g0,
+                ..
+            },
+            Motion::Ballistic {
+                speed: s1,
+                gravity: g1,
+                ..
+            },
+        ) = hard("demo-ballistic")
+        else {
+            panic!("ballistic")
+        };
+        assert!((s1.max / s0.max - 1.3).abs() < 1e-5);
+        assert!((g1 / g0 - 1.69).abs() < 1e-5, "the same arc, flown faster");
+        let (
+            Motion::Orbit {
+                speed_deg: o0,
+                change_secs: c0,
+                ..
+            },
+            Motion::Orbit {
+                speed_deg: o1,
+                change_secs: c1,
+                ..
+            },
+        ) = hard("demo-orbit")
+        else {
+            panic!("orbit")
+        };
+        assert!((o1.min / o0.min - 1.3).abs() < 1e-5);
+        assert!((c1.unwrap().max / c0.unwrap().max - 0.7).abs() < 1e-5);
+        let (
+            Motion::LinearBounce { speed_deg: b0, .. },
+            Motion::LinearBounce { speed_deg: b1, .. },
+        ) = hard("demo-bounce")
+        else {
+            panic!("bounce")
+        };
+        assert!((b1.max / b0.max - 1.3).abs() < 1e-5);
+        let depth = |m: &Motion| match m {
+            Motion::Strafe { depth: Some(d), .. } => d.change_secs,
+            _ => panic!("strafe with depth"),
+        };
+        let (d0, d1) = hard("demo-depth");
+        assert!((depth(&d1).max / depth(&d0).max - 0.7).abs() < 1e-5);
     }
 }

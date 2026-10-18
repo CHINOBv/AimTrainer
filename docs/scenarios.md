@@ -157,6 +157,11 @@ Angles are measured from the eye between aim points (a humanoid's head, a sphere
 | `strafe` | `weapon`, `change_secs`, `stop_chance`, `max_offset` | A/D strafing with real VALORANT acceleration and stopping. |
 | `dodge` | `weapon`, `change_secs`, `juke_secs` (default `[0.1, 0.25]`), `juke_chance`, `stop_chance`, `crouch_chance`, `jump_chance` (chances default `0`), `max_offset` | An evasive duelist: `strafe` physics plus jukes, stop-and-go, crouches and jumps. At each decision the target jumps, crouches in place, stops, or moves (reversing if it was moving); `stop_chance + crouch_chance + jump_chance` must be ≤ 1. After a decision, `juke_chance` picks the short `juke_secs` wait instead of `change_secs`, which produces quick A-D jukes. A crouch lowers the head 0.5 m; a jump rises 0.9 m and lands after 0.85 s with no air control (estimates, see `valorant-mechanics.md`). Spheres drop by the crouch height. |
 | `drift` | `speed`, `change_secs`, `max_offset` | Smooth wandering, for tracking and evasive switching. |
+| `ballistic` | `speed`, `angle_deg`, `gravity` (default 9.81), `bounces` (default 0), `restitution` (default 0.5), `on_floor` (default `"expire"`) | Thrown once under gravity, then lands. See "Ballistic targets". |
+| `linear_bounce` | `speed_deg`, `arena = { yaw_deg, pitch_deg, sides }` | Straight lines at a constant angular speed, reflecting off the walls of a box or polygon. See "Bouncing and orbiting targets". |
+| `orbit` | `speed_deg`, `radius` (optional), `change_secs` (optional), `reverse_chance` (default 0.5) | Circles around the player. See "Bouncing and orbiting targets". |
+
+`strafe`, `dodge` and `drift` also take an optional `depth` block, which adds forward/back movement (see "Depth movement").
 
 The built-in `dodge-*` scenarios are dynamic clicking drills against evasive enemies:
 
@@ -167,6 +172,81 @@ The built-in `dodge-*` scenarios are dynamic clicking drills against evasive ene
 | `dodge-jump-spot` | jumps | Clicking an airborne head or pre-aiming the landing spot |
 | `dodge-peek` | jiggle peek, appears after a delay | Reacting to a peek without firing while the agent crosses at full speed |
 | `dodge-micro-spheres` | jukes on a head-sized sphere | Small corrections that do not overshoot into a reversal |
+
+#### Ballistic targets
+
+A `ballistic` target is launched once, when it appears: at a random `speed` (m/s) and a random `angle_deg` above the horizon, towards a random side along the line across your view. 90° throws it straight up, 0° sideways, and negative angles throw it downwards; a target spawned high with `speed = [0, 0]` simply drops. Gravity pulls it down at `gravity` m/s² (Earth's 9.81 by default). Each of its `bounces` reflects it off the floor, keeping `restitution` (in (0, 1]) of its vertical speed. A sphere touches the floor when its center comes down to its radius, a humanoid when its feet reach the floor.
+
+When it comes down after its last bounce, it lands:
+
+| `on_floor` | Landing |
+|---|---|
+| `"expire"` | The target expires: it counts in `expired` and costs `expire_penalty`, like a target whose `lifetime_secs` ran out. |
+| `"fail"` | The same, and the run fails at once ("a target hit the floor"). |
+
+Landing ballistic targets satisfy `fail.max_expired` without a `lifetime_secs`, so `[fail] max_expired = 3` gives three drops. A ballistic target cannot be switched by `[[targets.behaviors]]` (nor be a rule's motion) or be part of `motion_profiles`, because its flight is one throw. Target speed tuning and the difficulty speed knob fly the same arc faster: launch speed × k and gravity × k². The built-in `demo-ballistic` tosses spheres up from the floor:
+
+```toml
+[targets]
+shape = { kind = "sphere", radius = 0.3 }
+spawn = { kind = "floor", x = [-4.0, 4.0], z = [-14.0, -10.0], height = [0.5, 0.5] }
+motion = { kind = "ballistic", speed = [6.0, 8.0], angle_deg = [70.0, 85.0], bounces = 1, restitution = 0.5 }
+```
+
+| Field | Meaning |
+|---|---|
+| `speed` | Launch speed, m/s: a non-negative range. |
+| `angle_deg` | Launch angle above the horizon, degrees within [-90, 90]. |
+| `gravity` | Downward acceleration, m/s², > 0. |
+| `bounces` | Floor bounces before it lands, 0–16. |
+| `restitution` | Share of the vertical speed a bounce keeps, in (0, 1]. |
+| `on_floor` | `"expire"` or `"fail"`. |
+
+#### Depth movement
+
+`depth = { change_secs, distance }` makes a `strafe`, `dodge` or `drift` target also walk towards and away from you:
+
+```toml
+motion = { kind = "strafe", change_secs = [0.4, 0.9], depth = { change_secs = [0.6, 1.4], distance = [10.0, 18.0] } }
+```
+
+| Field | Meaning |
+|---|---|
+| `change_secs` | Time between forward/back decisions, seconds (a positive range). Each decision reverses the direction; the first one picks a random direction. |
+| `distance` | Horizontal distance from your eye (where it was when the target spawned) that the target stays within, meters, ≥ 1. It turns back at either edge. A target that spawns outside the band first walks into it. |
+
+`strafe` and `dodge` walk with the weapon's VALORANT movement on both axes, and diagonal movement is normalized as it is for the player, so a target moving on both axes is no faster than one strafing. `dodge` targets keep their depth speed in the air. `drift` moves in depth at a speed drawn from its own `speed` at every depth decision, on top of its drift. The built-in `demo-depth` uses it.
+
+#### Bouncing and orbiting targets
+
+**`linear_bounce`** moves in a straight line at a constant angular speed `speed_deg` (degrees per second, seen from your eye where it was at spawn), in a random direction, and reflects off the walls of `arena`, keeping its distance from you:
+
+```toml
+motion = { kind = "linear_bounce", speed_deg = [10.5, 13.5], arena = { yaw_deg = [-20.0, 20.0], pitch_deg = [0.0, 18.0], sides = 5 } }
+```
+
+| `arena` field | Meaning |
+|---|---|
+| `yaw_deg` | Yaw range, degrees within [-180, 180], min < max. |
+| `pitch_deg` | Pitch range, degrees within ±89. |
+| `sides` | 0 (default) bounces off the box itself. 3 to 12 bounces off the regular polygon inscribed in the box, with a vertex at the top (5 makes a pentagon); its pitch range must then not be empty. |
+
+The arena is angular so it lines up with an `angular` spawn area; spawn inside it. A target that starts outside drifts in and is held from then on. Humanoids move only horizontally and need the box.
+
+**`orbit`** circles around you (your eye where it was at spawn) at `speed_deg` degrees per second, keeping its height:
+
+```toml
+motion = { kind = "orbit", speed_deg = [12.0, 26.0], change_secs = [1.0, 2.5], reverse_chance = 0.5 }
+```
+
+| Field | Meaning |
+|---|---|
+| `speed_deg` | Angular speed, degrees per second (a positive range); the direction is random. |
+| `radius` | Horizontal radius, meters, ≥ 1. Default: the target's distance when it spawned. With a radius, the target moves onto that circle on its first frame. |
+| `change_secs` | Time between direction decisions, seconds. Without it the target never turns back. |
+| `reverse_chance` | Chance that a decision reverses the direction, in [0, 1]. |
+
+The built-in `demo-bounce` and `demo-orbit` use them. Speed tuning and the difficulty speed knob scale `speed_deg`. Every new motion draws random numbers only when it is used, so other scenarios replay exactly as before.
 
 ### Reactive targets
 
@@ -231,7 +311,7 @@ kills = 30                   # kills only
 
 [fail]                       # optional; the first one reached fails the run
 max_misses = 3               # click fire only; a shot on a decoy is a miss
-max_expired = 2              # needs lifetime_secs on the targets or a phase
+max_expired = 2              # needs lifetime_secs on the targets or a phase, or a ballistic motion
 
 [[phases]]
 name = "Close trio"
@@ -359,7 +439,7 @@ Training methods and adaptive mode play a scenario at a level from −1 (easiest
 ```toml
 [difficulty]
 size = { easy = 0.5, hard = 0.1 }   # spheres: 50% bigger at −1, 10% smaller at +1
-speed = 0.3                         # drift speed and how soon targets change direction or juke (default)
+speed = 0.3                         # motion speeds and how soon targets change direction or juke (default)
 lifetime = 0.25                     # target lifetime (default)
 distance = 0.25                     # humanoid spawn distance (default)
 offset = 0.2                        # crosshair-relative flick offset (default)
@@ -378,7 +458,7 @@ During a library scenario run, press Esc to tune its targets, from 50% to 200% i
 |---|---|
 | Target size | Sphere radius. Agents (humanoids) keep their VALORANT size; use Distance to make their heads smaller or larger on screen. |
 | Distance | Spawn distance: `angular` and `around_crosshair` `distance`, and `floor` `z`. |
-| Target speed | Motion speed: drift `speed`, and strafe run speed and acceleration together, so the strafe keeps its timing. |
+| Target speed | Motion speed: drift `speed`; strafe run speed and acceleration together, so the strafe keeps its timing; `linear_bounce` and `orbit` `speed_deg`; and a `ballistic` launch speed (× k) with its gravity (× k²), so it flies the same arc faster. |
 
 A tuned run is stored under its own key (`%s80d120v150`: size, distance and speed percentages); the default 100/100/100 adds no suffix. Tuned runs never move the adaptive level, even when started adaptively, and never count for the benchmark, which reads only exact untuned keys. The results screen lists the tuning, and the HUD shows a "tuned" tag.
 

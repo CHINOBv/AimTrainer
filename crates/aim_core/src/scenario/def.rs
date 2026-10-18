@@ -507,6 +507,9 @@ pub enum Motion {
         /// Max lateral distance from the spawn point, meters.
         #[serde(default = "default_strafe_width")]
         max_offset: f32,
+        /// Optional forward/back movement inside a distance band (W/S on top of A/D).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        depth: Option<DepthDef>,
     },
     /// Evasive duelist: the same A/D physics as `Strafe`, plus jukes (bursts of quick
     /// reversals), stop-and-go, crouches and jumps. At each decision the target jumps,
@@ -539,6 +542,9 @@ pub enum Motion {
         /// Max lateral distance from the spawn point, meters.
         #[serde(default = "default_strafe_width")]
         max_offset: f32,
+        /// Optional forward/back movement inside a distance band (W/S on top of A/D).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        depth: Option<DepthDef>,
     },
     /// Smooth wandering in the plane facing the player (spheres / smoothness drills).
     Drift {
@@ -549,11 +555,115 @@ pub enum Motion {
         /// Max distance from the spawn point, meters.
         #[serde(default = "default_strafe_width")]
         max_offset: f32,
+        /// Optional forward/back movement inside a distance band, at the drift speed.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        depth: Option<DepthDef>,
     },
+    /// Thrown under gravity: launched once, at a random speed and angle, sideways along
+    /// the target's lateral axis (a random side). It falls, bounces off the floor
+    /// `bounces` times, and then lands, which removes it (see `on_floor`).
+    Ballistic {
+        /// Launch speed, m/s.
+        speed: Range,
+        /// Launch angle above the horizon, degrees within [-90, 90]: 90 throws straight
+        /// up, 0 sideways, negative angles downwards.
+        angle_deg: Range,
+        /// Downward acceleration, m/s² (> 0). Default: Earth's standard gravity.
+        #[serde(default = "default_gravity")]
+        gravity: f32,
+        /// Floor bounces before the target lands.
+        #[serde(default)]
+        bounces: u32,
+        /// Share of the vertical speed kept by a bounce, in (0, 1].
+        #[serde(default = "default_restitution")]
+        restitution: f32,
+        /// What landing does: the target expires, or the run fails.
+        #[serde(default)]
+        on_floor: FloorAction,
+    },
+    /// Straight lines at a constant angular speed in a random direction, reflecting off
+    /// the walls of an angular arena seen from the player's eye at spawn: a box, or a
+    /// regular polygon inside it. Humanoids move horizontally only.
+    LinearBounce {
+        /// Angular speed, degrees per second.
+        speed_deg: Range,
+        /// The walls the target bounces between.
+        arena: BounceArena,
+    },
+    /// Circles around the player (his eye at spawn) at a fixed horizontal radius and
+    /// height, at an angular speed, optionally reversing on a timer.
+    Orbit {
+        /// Angular speed around the player, degrees per second.
+        speed_deg: Range,
+        /// Horizontal radius, meters (≥ 1). Default: the target's distance at spawn.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        radius: Option<f32>,
+        /// Time between direction decisions, seconds. Without it the target never turns.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        change_secs: Option<Range>,
+        /// Chance that a decision reverses the direction, in [0, 1].
+        #[serde(default = "default_reverse_chance")]
+        reverse_chance: f32,
+    },
+}
+
+/// Forward/back movement of a `strafe`, `dodge` or `drift` target (`motion.depth`). The
+/// target walks towards or away from the player, deciding again every `change_secs` and
+/// turning back at the edges of the distance band.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DepthDef {
+    /// Time between forward/back decisions, seconds.
+    pub change_secs: Range,
+    /// Horizontal distance from the player's eye (at spawn) the target stays within, meters.
+    pub distance: Range,
+}
+
+/// What a `ballistic` target does when it lands (`motion.on_floor`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FloorAction {
+    /// It expires, like a target whose lifetime ran out.
+    #[default]
+    Expire,
+    /// It expires and the run fails at once.
+    Fail,
+}
+
+/// Walls of a `linear_bounce` motion: an angular box of yaw × pitch seen from the
+/// player's eye at spawn, or, with `sides` ≥ 3, the regular polygon inscribed in it (a
+/// vertex at the top).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BounceArena {
+    /// Yaw range, degrees within [-180, 180].
+    pub yaw_deg: Range,
+    /// Pitch range, degrees within ±89 (ignored by humanoids).
+    pub pitch_deg: Range,
+    /// 0 for the box, or 3 to 12 for a polygon.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub sides: u32,
 }
 
 fn default_strafe_width() -> f32 {
     3.0
+}
+
+/// Standard gravity, m/s² (the conventional value of Earth's surface gravity).
+fn default_gravity() -> f32 {
+    9.81
+}
+
+fn default_restitution() -> f32 {
+    0.5
+}
+
+fn default_reverse_chance() -> f32 {
+    0.5
+}
+
+fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
 }
 
 fn default_juke_secs() -> Range {
@@ -1028,7 +1138,25 @@ impl ScenarioDef {
                 let name = field.strip_prefix("targets.motion.").unwrap_or("chances");
                 check(false, "targets.behaviors.motion", &format!("{name}: {msg}"));
             }
+            check(
+                !matches!(rule.motion, Some(Motion::Ballistic { .. })),
+                "targets.behaviors.motion",
+                "ballistic is a whole flight: use it as targets.motion",
+            );
         }
+        let ballistic = matches!(t.motion, Motion::Ballistic { .. });
+        check(
+            !ballistic || t.behaviors.is_empty(),
+            "targets.behaviors",
+            "not available with a ballistic motion: its flight cannot be switched",
+        );
+        let humanoid = matches!(t.shape, Shape::Humanoid { .. });
+        check(
+            !humanoid
+                || !matches!(t.motion, Motion::LinearBounce { arena, .. } if arena.sides != 0),
+            "targets.motion.arena.sides",
+            "humanoids bounce horizontally only: use the box (sides = 0)",
+        );
         if let Some(p) = &t.perception {
             for (field, msg) in p.problems(self) {
                 check(false, field, msg);
@@ -1137,6 +1265,7 @@ fn motion_problems(m: &Motion) -> Vec<(&'static str, &'static str)> {
             speed,
             change_secs,
             max_offset,
+            ..
         } => {
             check(
                 speed.is_valid() && speed.min >= 0.0,
@@ -1154,8 +1283,123 @@ fn motion_problems(m: &Motion) -> Vec<(&'static str, &'static str)> {
                 "must be > 0",
             );
         }
+        Motion::Ballistic {
+            speed,
+            angle_deg,
+            gravity,
+            bounces,
+            restitution,
+            ..
+        } => {
+            check(
+                speed.is_valid() && speed.min >= 0.0 && speed.max.is_finite(),
+                "targets.motion.speed",
+                "must be a non-negative [min, max]",
+            );
+            check(
+                angle_deg.is_valid() && angle_deg.min >= -90.0 && angle_deg.max <= 90.0,
+                "targets.motion.angle_deg",
+                "must be a [min, max] within [-90, 90]",
+            );
+            check(
+                gravity.is_finite() && *gravity > 0.0,
+                "targets.motion.gravity",
+                "must be > 0",
+            );
+            check(
+                *bounces <= MAX_BOUNCES,
+                "targets.motion.bounces",
+                "must be at most 16",
+            );
+            check(
+                *restitution > 0.0 && *restitution <= 1.0,
+                "targets.motion.restitution",
+                "must be in (0, 1]",
+            );
+        }
+        Motion::LinearBounce { speed_deg, arena } => {
+            check(
+                speed_deg.is_valid() && speed_deg.min > 0.0 && speed_deg.max.is_finite(),
+                "targets.motion.speed_deg",
+                "must be a positive [min, max]",
+            );
+            check(
+                arena.yaw_deg.is_valid()
+                    && arena.yaw_deg.min < arena.yaw_deg.max
+                    && arena.yaw_deg.min >= -180.0
+                    && arena.yaw_deg.max <= 180.0
+                    && arena.pitch_deg.is_valid()
+                    && arena.pitch_deg.min >= -89.0
+                    && arena.pitch_deg.max <= 89.0,
+                "targets.motion.arena",
+                "needs a yaw_deg [min, max] (min < max) within [-180, 180] and a pitch_deg \
+                 [min, max] within ±89",
+            );
+            check(
+                arena.sides == 0 || (3..=12).contains(&arena.sides),
+                "targets.motion.arena.sides",
+                "must be 0 (box) or 3 to 12",
+            );
+            check(
+                arena.sides == 0 || arena.pitch_deg.min < arena.pitch_deg.max,
+                "targets.motion.arena.pitch_deg",
+                "a polygon needs a pitch range with min < max",
+            );
+        }
+        Motion::Orbit {
+            speed_deg,
+            radius,
+            change_secs,
+            reverse_chance,
+        } => {
+            check(
+                speed_deg.is_valid() && speed_deg.min > 0.0 && speed_deg.max.is_finite(),
+                "targets.motion.speed_deg",
+                "must be a positive [min, max]",
+            );
+            check(
+                radius.is_none_or(|r| r.is_finite() && r >= 1.0),
+                "targets.motion.radius",
+                "must be >= 1 m",
+            );
+            check(
+                change_secs.is_none_or(|c| c.is_valid() && c.min > 0.0),
+                "targets.motion.change_secs",
+                "must be a positive [min, max]",
+            );
+            check(
+                (0.0..=1.0).contains(reverse_chance),
+                "targets.motion.reverse_chance",
+                "must be in [0, 1]",
+            );
+        }
+    }
+    if let Some(d) = motion_depth(m) {
+        check(
+            d.change_secs.is_valid() && d.change_secs.min > 0.0,
+            "targets.motion.depth.change_secs",
+            "must be a positive [min, max]",
+        );
+        check(
+            d.distance.is_valid() && d.distance.min >= 1.0 && d.distance.max.is_finite(),
+            "targets.motion.depth.distance",
+            "must be a [min, max] of at least 1 m",
+        );
     }
     out
+}
+
+/// Most floor bounces a `ballistic` motion may have.
+pub const MAX_BOUNCES: u32 = 16;
+
+/// The forward/back block of a motion, when it has one.
+pub(super) fn motion_depth(m: &Motion) -> Option<&DepthDef> {
+    match m {
+        Motion::Strafe { depth, .. }
+        | Motion::Dodge { depth, .. }
+        | Motion::Drift { depth, .. } => depth.as_ref(),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -1729,6 +1973,7 @@ mod tests {
             change_secs: Range::new(0.0, 0.3),
             stop_chance: 0.0,
             max_offset: 3.0,
+            depth: None,
         };
         let problems: Vec<ValidationError> = {
             let mut c = b.clone();
@@ -1811,5 +2056,178 @@ mod tests {
         let mut negative = go;
         negative.scoring.decoy_penalty = -5.0;
         assert_eq!(fields(negative), ["scoring.decoy_penalty"]);
+    }
+
+    /// Fields of the validation problems of `MINIMAL` with `motion` and `extra` lines.
+    fn motion_fields(motion: &str, extra: &str) -> Vec<&'static str> {
+        let src = format!("{MINIMAL}motion = {motion}\n{extra}");
+        ScenarioDef::from_toml(&src)
+            .unwrap_or_else(|e| panic!("{motion}: {e}"))
+            .validate()
+            .into_iter()
+            .map(|e| e.field)
+            .collect()
+    }
+
+    #[test]
+    fn ballistic_motion_parses_with_defaults_and_validates() {
+        let src = format!(
+            "{MINIMAL}motion = {{ kind = \"ballistic\", speed = [6, 9], angle_deg = [40, 80] }}\n"
+        );
+        let d = ScenarioDef::from_toml(&src).unwrap();
+        assert_eq!(
+            d.targets.motion,
+            Motion::Ballistic {
+                speed: Range::new(6.0, 9.0),
+                angle_deg: Range::new(40.0, 80.0),
+                gravity: 9.81,
+                bounces: 0,
+                restitution: 0.5,
+                on_floor: FloorAction::Expire,
+            }
+        );
+        assert!(d.validate().is_empty(), "{:?}", d.validate());
+        let typo = src.replace("angle_deg", "angel_deg");
+        assert!(ScenarioDef::from_toml(&typo).is_err());
+
+        let ballistic = |rest: &str| format!("{{ kind = \"ballistic\", speed = [6, 9], {rest} }}");
+        for (rest, field) in [
+            ("angle_deg = [40, 100]", "targets.motion.angle_deg"),
+            (
+                "angle_deg = [40, 80], gravity = 0",
+                "targets.motion.gravity",
+            ),
+            (
+                "angle_deg = [40, 80], bounces = 17",
+                "targets.motion.bounces",
+            ),
+            (
+                "angle_deg = [40, 80], restitution = 1.5",
+                "targets.motion.restitution",
+            ),
+            (
+                "angle_deg = [40, 80], restitution = 0",
+                "targets.motion.restitution",
+            ),
+        ] {
+            assert_eq!(motion_fields(&ballistic(rest), ""), [field], "{rest}");
+        }
+        assert_eq!(
+            motion_fields(&ballistic("angle_deg = [40, 80], on_floor = \"fail\""), ""),
+            Vec::<&str>::new()
+        );
+        let flight = ballistic("angle_deg = [40, 80]");
+        assert!(
+            motion_fields(&flight, "[fail]\nmax_expired = 3\n").is_empty(),
+            "landing ballistic targets expire, so max_expired needs no lifetime"
+        );
+        assert_eq!(
+            motion_fields(
+                &flight,
+                "[[targets.behaviors]]\nwhen = { alive_for_secs = 1 }\nspeed_scale = 2\n"
+            ),
+            ["targets.behaviors"]
+        );
+        let base = "{ kind = \"static\" }";
+        let rule =
+            format!("[[targets.behaviors]]\nwhen = {{ alive_for_secs = 1 }}\nmotion = {flight}\n");
+        assert_eq!(motion_fields(base, &rule), ["targets.behaviors.motion"]);
+    }
+
+    #[test]
+    fn depth_bounce_and_orbit_blocks_validate_their_ranges() {
+        let depth = |band: &str| {
+            format!(
+                "{{ kind = \"strafe\", change_secs = [0.3, 0.6], depth = {{ change_secs = [0.4, 0.8], distance = {band} }} }}"
+            )
+        };
+        assert!(motion_fields(&depth("[8, 14]"), "").is_empty());
+        assert_eq!(
+            motion_fields(&depth("[0.5, 14]"), ""),
+            ["targets.motion.depth.distance"]
+        );
+        let zero = "{ kind = \"drift\", speed = [1, 2], change_secs = [1, 2], depth = { change_secs = [0, 1], distance = [8, 9] } }";
+        assert_eq!(
+            motion_fields(zero, ""),
+            ["targets.motion.depth.change_secs"]
+        );
+
+        let bounce = |arena: &str| {
+            format!("{{ kind = \"linear_bounce\", speed_deg = [20, 30], arena = {arena} }}")
+        };
+        assert!(
+            motion_fields(&bounce("{ yaw_deg = [-20, 20], pitch_deg = [0, 15] }"), "").is_empty()
+        );
+        assert!(
+            motion_fields(
+                &bounce("{ yaw_deg = [-20, 20], pitch_deg = [0, 15], sides = 6 }"),
+                ""
+            )
+            .is_empty()
+        );
+        for (arena, field) in [
+            (
+                "{ yaw_deg = [20, 20], pitch_deg = [0, 15] }",
+                "targets.motion.arena",
+            ),
+            (
+                "{ yaw_deg = [-20, 20], pitch_deg = [0, 95] }",
+                "targets.motion.arena",
+            ),
+            (
+                "{ yaw_deg = [-20, 20], pitch_deg = [0, 15], sides = 2 }",
+                "targets.motion.arena.sides",
+            ),
+            (
+                "{ yaw_deg = [-20, 20], pitch_deg = [5, 5], sides = 4 }",
+                "targets.motion.arena.pitch_deg",
+            ),
+        ] {
+            assert_eq!(motion_fields(&bounce(arena), ""), [field], "{arena}");
+        }
+        assert_eq!(
+            motion_fields(
+                "{ kind = \"linear_bounce\", speed_deg = [0, 30], arena = { yaw_deg = [-20, 20], pitch_deg = [0, 15] } }",
+                ""
+            ),
+            ["targets.motion.speed_deg"]
+        );
+        let humanoid = format!(
+            "{}motion = {}\n",
+            MINIMAL.replace(
+                "{ kind = \"sphere\", radius = 0.2 }",
+                "{ kind = \"humanoid\" }"
+            ),
+            bounce("{ yaw_deg = [-20, 20], pitch_deg = [0, 15], sides = 5 }")
+        );
+        let fields: Vec<_> = ScenarioDef::from_toml(&humanoid)
+            .unwrap()
+            .validate()
+            .into_iter()
+            .map(|e| e.field)
+            .collect();
+        assert_eq!(fields, ["targets.motion.arena.sides"]);
+
+        assert!(motion_fields("{ kind = \"orbit\", speed_deg = [30, 50] }", "").is_empty());
+        for (motion, field) in [
+            (
+                "{ kind = \"orbit\", speed_deg = [30, 50], radius = 0.5 }",
+                "targets.motion.radius",
+            ),
+            (
+                "{ kind = \"orbit\", speed_deg = [0, 50] }",
+                "targets.motion.speed_deg",
+            ),
+            (
+                "{ kind = \"orbit\", speed_deg = [30, 50], change_secs = [0, 1] }",
+                "targets.motion.change_secs",
+            ),
+            (
+                "{ kind = \"orbit\", speed_deg = [30, 50], reverse_chance = 2 }",
+                "targets.motion.reverse_chance",
+            ),
+        ] {
+            assert_eq!(motion_fields(motion, ""), [field], "{motion}");
+        }
     }
 }

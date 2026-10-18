@@ -7,7 +7,7 @@
 
 use super::behavior::{self, BehaviorState, Situation};
 use super::cue::{self, CueSound, Perception, RadarView};
-use super::def::{FireMode, ScenarioDef, Shape, TargetsDef};
+use super::def::{FireMode, FloorAction, Motion, ScenarioDef, Shape, TargetsDef};
 use super::hit::{HitZone, Ray};
 use super::motion::{Drive, MotionState};
 use super::phase::{self, FailReason, PhaseRun, RunEnd, RunOutcome};
@@ -308,6 +308,8 @@ pub struct Session {
     radar_dots: Vec<Vec3>,
     /// Radar drills: session time when the current round's radar disappears.
     radar_until: f32,
+    /// A ballistic target with `on_floor = "fail"` landed: the run fails.
+    dropped: bool,
 }
 
 impl Session {
@@ -346,6 +348,7 @@ impl Session {
             outcome: None,
             radar_dots: Vec::new(),
             radar_until: f32::NEG_INFINITY,
+            dropped: false,
         };
         s.ammo = s.def.weapon.ammo.map_or(0.0, |a| a.clip);
         if let Some(first) = s.def.phases.as_ref().and_then(|p| p.first()) {
@@ -506,6 +509,9 @@ impl Session {
                 let failed = RunOutcome::Failed(FailReason::PhaseTimeLimit);
                 return self.finish(failed, events);
             }
+        }
+        if self.dropped {
+            return self.finish(RunOutcome::Failed(FailReason::Dropped), events);
         }
         if let Some(reason) = phase::failed(&self.def.fail, &self.stats) {
             return self.finish(RunOutcome::Failed(reason), events);
@@ -903,8 +909,19 @@ impl Session {
         let now = self.time;
         let scoring_def = &self.def.scoring;
         let stats = &mut self.stats;
+        let fail_on_floor = matches!(
+            self.def.targets.motion,
+            Motion::Ballistic {
+                on_floor: FloorAction::Fail,
+                ..
+            }
+        );
+        let mut dropped = false;
         self.targets.retain(|t| {
-            let alive = t.expires_at.is_none_or(|e| now < e);
+            // A ballistic target that lands expires like one whose lifetime ran out.
+            let landed = t.motion.landed;
+            let alive = !landed && t.expires_at.is_none_or(|e| now < e);
+            dropped |= landed && fail_on_floor && !t.decoy;
             if !alive && t.blank {
                 stats.blank_trials += 1;
             } else if !alive && t.decoy {
@@ -916,6 +933,7 @@ impl Session {
             }
             alive
         });
+        self.dropped |= dropped;
     }
 
     fn refill(&mut self, events: &mut Vec<SessionEvent>) {
@@ -1092,7 +1110,7 @@ impl Session {
             visible_at,
             decoy,
             expires_at: self.def.targets.lifetime_secs.map(|l| visible_at + l),
-            motion: MotionState::new(point, lateral, visible_at),
+            motion: MotionState::new(point, lateral, visible_at, self.eye_position()),
             last_hit_at: f32::NEG_INFINITY,
             behavior: BehaviorState::new(lateral),
             cue_at,
@@ -1365,6 +1383,7 @@ mod tests {
             change_secs: Range::new(0.5, 0.8),
             stop_chance: 0.0,
             max_offset: 2.0,
+            depth: None,
         };
         let mut s = Session::new(def, 4);
         let mut max_speed: f32 = 0.0;
@@ -1390,6 +1409,7 @@ mod tests {
             crouch_chance: crouch,
             jump_chance: jump,
             max_offset: 2.0,
+            depth: None,
         }
     }
 
@@ -2351,6 +2371,7 @@ mod tests {
             change_secs: Range::fixed(100.0),
             stop_chance: 1.0,
             max_offset: 3.0,
+            depth: None,
         }
     }
 
@@ -2361,6 +2382,7 @@ mod tests {
             change_secs: Range::fixed(secs),
             stop_chance: 0.0,
             max_offset: 3.0,
+            depth: None,
         }
     }
 

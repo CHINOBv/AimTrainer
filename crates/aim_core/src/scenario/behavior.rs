@@ -147,7 +147,11 @@ fn holds(w: &BehaviorWhen, s: &Situation) -> bool {
 pub(super) fn motion_weapon(motion: &Motion) -> Weapon {
     match motion {
         Motion::Strafe { weapon, .. } | Motion::Dodge { weapon, .. } => *weapon,
-        Motion::Static | Motion::Drift { .. } => Weapon::Vandal,
+        Motion::Static
+        | Motion::Drift { .. }
+        | Motion::Ballistic { .. }
+        | Motion::LinearBounce { .. }
+        | Motion::Orbit { .. } => Weapon::Vandal,
     }
 }
 
