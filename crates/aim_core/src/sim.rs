@@ -110,7 +110,7 @@ impl SimAimer {
                 (t.position, (radius / d).atan().to_degrees())
             }
             Shape::Humanoid { .. } => {
-                let dims = session.dims();
+                let dims = session.target_dims(t);
                 let head = t.position + Vec3::new(0.0, dims.head_center_height(), 0.0);
                 let d = (head - eye).length();
                 (head, (dims.head_size / 2.0 / d).atan().to_degrees())

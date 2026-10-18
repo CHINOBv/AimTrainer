@@ -263,6 +263,14 @@ impl ScenarioDef {
             Motion::Strafe { change_secs, .. } => {
                 *change_secs = scale(*change_secs, 1.0 - c.speed.at(d))
             }
+            Motion::Dodge {
+                change_secs,
+                juke_secs,
+                ..
+            } => {
+                *change_secs = scale(*change_secs, 1.0 - c.speed.at(d));
+                *juke_secs = scale(*juke_secs, 1.0 - c.speed.at(d));
+            }
             Motion::Drift {
                 speed, change_secs, ..
             } => {
