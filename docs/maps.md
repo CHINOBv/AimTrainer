@@ -86,6 +86,8 @@ Geometry alone decides blocking; the kind tells drills and renderers how the box
 | `nearest_waypoint(p)`, `path(from, to)` | Bot routes: Dijkstra over the waypoint graph, or the direct segment when it is walkable. |
 | `cover_spots()` | Standable points that hug every `wall` and `cover` box: one at each end of each face (the corner a player peeks from) and more in between, at most `COVER_SPOT_SPACING` (2 m) apart, `COVER_SPOT_OFFSET` (0.5 m) out from the face. `low_cover` is skipped: it leaves a standing head visible. |
 | `cover_from(spots, threat_eye, from, max_route)` | The spot nearest to `from` that hides a standing head from `threat_eye` and is reachable along `path` within `max_route` meters. |
+| `peek_corners()` | Peek corners: the four vertical edges of every `wall` and `cover` box, each with the head point (standing head height, `HumanoidDims::head_center_height`) of an enemy just around it, `COVER_SPOT_OFFSET` out from both faces. `low_cover` is skipped and so are edges where a player could not stand. |
+| `exposed_corners(corners, eye)` | The corners an enemy could appear from, seen from `eye`: the edge is on its box's silhouette (the eye sees exactly one of its two faces, so something can hide behind the other), its head point is in line of sight and at least `MIN_CORNER_DISTANCE_M` (1 m, a design choice) away. |
 
 ## Built-in maps
 
@@ -277,6 +279,16 @@ Once the player first sees a bot life, a clock starts. If the bot is still alive
 ### Crosshair placement metric
 
 At the first frame each bot life becomes visible to the player, the arena records the angle in degrees between the player's view direction and the bot's head (`ArenaStats::crosshair_errors_deg`); `ArenaStats::median_crosshair_error_deg` summarizes it. A player who pre-aims where the head appears scores close to 0°; one who looks elsewhere scores tens of degrees. It trains pre-aim and head-level placement (roadmap Phase 7). The vertical part of the same error, how far the crosshair was above or below head level in degrees of pitch, is recorded in `ArenaStats::head_level_errors_deg` (`median_head_level_error_deg`). In an angle clear with `pre_aim_tolerance_deg`, each bot life first seen within that many degrees counts in `ArenaStats::pre_aimed`. A perfectly pre-aimed angle still measures a few degrees, because the head is first seen while only partly out of cover (about 3° on the `angles-lab` doorway), so 5° is a sensible tolerance.
+
+### Live coaching overlay
+
+The **Live coaching overlay** checkbox on the Arenas tab (off by default, kept until the app closes) shows, while an arena runs, what the post-run crosshair placement metric measures, live. `ArenaSession::coaching()` computes the values each frame as a pure read (it changes nothing and draws no random number); the app only draws them:
+
+- **Nearest corner:** among the map's exposed corners (`MapDef::exposed_corners` from the player's eye), the one at the smallest angle from the crosshair, and that angle. Within `COACH_CORNER_TOLERANCE_DEG` (5°, the pre-aim tolerance above) the player counts as holding it.
+- **Head level:** the crosshair's pitch minus the pitch of that corner's head point, signed (positive is above head level). Within `COACH_HEAD_LEVEL_TOLERANCE_DEG` (1°, an estimate: about a head's angular height at 15 m) it shows as on head level. A small gauge draws the crosshair dot against the head line.
+- **Movement:** "ACCURATE" when the player is at or below the weapon's accuracy speed limit, otherwise "MOVING" and the speed.
+
+Corners come from the box geometry only, so a corner counts even if no bot would ever use it, and the world is flat, so head height is the same everywhere. The overlay drawing has no automated test.
 
 ### Result
 

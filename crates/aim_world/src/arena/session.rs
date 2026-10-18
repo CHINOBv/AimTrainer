@@ -2,7 +2,9 @@
 
 use super::behavior::{Phase, Push, Retreat};
 use super::bot::{Bot, Brain, Ctx, PEEK_DELAY_SECS, head_of, yaw_of};
+use super::coaching::Coaching;
 use super::def::{ArenaDef, ArenaError, ArenaMode, PRACTICE_SUFFIX, SiteObjective, bot_profile};
+use crate::corner::PeekCorner;
 use crate::map::{DEFAULT_PLAYER_RADIUS, MapDef, SpawnKind};
 use aim_core::activity::{Activity, ActivityEvent};
 use aim_core::games::valorant::{HumanoidDims, Weapon, WeaponStats};
@@ -216,6 +218,8 @@ pub struct ArenaSession {
     roam_points: Vec<Vec3>,
     /// The map's cover spots, computed once.
     cover_spots: Vec<Vec3>,
+    /// The map's peek corners, computed once, for live coaching.
+    corners: Vec<PeekCorner>,
     /// Angle clear: index into the mode's angle list of the angle being cleared.
     angle_index: usize,
     /// Bots ignore the player until this time (spawn grace).
@@ -276,6 +280,7 @@ impl ArenaSession {
             stats: ArenaStats::default(),
             roam_points,
             cover_spots: map.cover_spots(),
+            corners: map.peek_corners(),
             angle_index: 0,
             // Entering the arena is a spawn too.
             grace_until: RESPAWN_GRACE_SECS,
@@ -391,6 +396,28 @@ impl ArenaSession {
     /// Whether the player is slow enough for the weapon's first-shot accuracy.
     pub fn is_accurate(&self) -> bool {
         self.player_speed() <= self.profile.accuracy_speed_limit()
+    }
+
+    /// Live coaching values for this frame: crosshair placement against head height at
+    /// the exposed corner nearest to the crosshair (`MapDef::exposed_corners`), and
+    /// movement accuracy. A pure read: it changes nothing and draws no random number.
+    pub fn coaching(&self) -> Coaching {
+        let eye = self.eye_position();
+        let view = self.player.view;
+        let dir = view.direction();
+        let nearest = self
+            .map
+            .exposed_corners(&self.corners, eye)
+            .map(|c| (angle_between_deg(dir, c.head - eye), c.head))
+            .min_by(|a, b| a.0.total_cmp(&b.0));
+        Coaching {
+            corner: nearest.map(|(_, head)| head),
+            corner_offset_deg: nearest.map(|(offset, _)| offset),
+            head_level_error_deg: nearest
+                .map(|(_, head)| view.pitch_deg - ViewAngles::from_direction(head - eye).pitch_deg),
+            speed: self.player_speed(),
+            accurate: self.is_accurate(),
+        }
     }
 
     /// The site objective, if the arena has one.

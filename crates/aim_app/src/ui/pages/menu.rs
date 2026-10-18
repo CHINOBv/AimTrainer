@@ -117,6 +117,8 @@ struct TrainingState<'w> {
     adaptive: Res<'w, AdaptiveLevels>,
     finder: ResMut<'w, FinderState>,
     frames: Res<'w, FrameStats>,
+    /// The opt-in live coaching overlay for arenas.
+    arena_coaching: Option<ResMut<'w, crate::game::arena::ArenaCoaching>>,
 }
 
 /// Settings plus what is needed to persist and preview them.
@@ -298,9 +300,17 @@ fn menu(
         Tab::Arenas => {
             egui::CentralPanel::default().show(&mut root, |ui| {
                 let arenas = aim_world::arena::builtin::all();
-                action = action
-                    .take()
-                    .or(arena_list::arena_list(ui, &arenas, |id| history.best(id)));
+                let mut off = false;
+                let coaching = training
+                    .arena_coaching
+                    .as_mut()
+                    .map_or(&mut off, |c| &mut c.enabled);
+                action = action.take().or(arena_list::arena_list(
+                    ui,
+                    &arenas,
+                    |id| history.best(id),
+                    coaching,
+                ));
             });
         }
         Tab::Benchmark => {

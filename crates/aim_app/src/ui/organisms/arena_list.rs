@@ -4,16 +4,21 @@ use crate::ui::UiAction;
 use aim_world::arena::{ArenaDef, ArenaMode};
 use bevy_egui::egui;
 
+const COACHING_LABEL: &str = "Live coaching overlay";
+const COACHING_HINT: &str = "While you play an arena: your crosshair height against head level at the nearest corner an enemy can appear from, and whether you are still enough to shoot accurately.";
+
 pub fn arena_list(
     ui: &mut egui::Ui,
     arenas: &[ArenaDef],
     best: impl Fn(&str) -> Option<f32>,
+    coaching: &mut bool,
 ) -> Option<UiAction> {
     let mut action = None;
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.label(
             "Bots move with VALORANT movement and shoot back. Maps are original training layouts.",
         );
+        ui.checkbox(coaching, COACHING_LABEL).on_hover_text(COACHING_HINT);
         ui.add_space(6.0);
         for a in arenas {
             ui.heading(&a.name);

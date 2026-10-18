@@ -257,6 +257,12 @@ Every juke waits one bot reaction time (the preset's `reaction_secs`, 0.20–0.3
 
 The `corridor-reactive` values (retreat under 0.5 health, strafe for 1.5 s after a hit, hold beyond 20 m, the reaction chances and the deadline above) are **estimates** for a contender-level duel, not calibrated against player data.
 
+### Live coaching in arenas
+
+The arena overlay (`docs/maps.md`, "Live coaching overlay") shows crosshair height against head level at the nearest corner an enemy can appear from, and whether the player is still enough to shoot accurately. The results notes already report crosshair placement and head level after the run; the overlay gives the same information while the player can still act on it. This is concurrent augmented feedback. Motor-learning research finds it helps performance while it is present, but frequent concurrent feedback can create dependence and weaker retention once it is removed: the guidance hypothesis (Salmoni, Schmidt & Walter 1984, *Psychological Bulletin* 95(3); Winstein & Schmidt 1990, *Journal of Experimental Psychology: Learning, Memory, and Cognition* 16(4); verified as general findings, not tested for aim training). That is why the overlay is opt-in and off by default: use it to learn where head level is on a map, then turn it off and check the post-run numbers.
+
+The tolerances are **estimates**: 1° for head level (about the angular height of a 0.25 m head at 15 m) and 5° for holding a corner (the pre-aim tolerance, which already allows for the head being first seen while partly behind cover).
+
 ### Pace and stamina
 
 `aim_core::analytics::pace` splits every run into 6 equal time windows (5–10 s for 30–60 s runs) and measures the rate in each: kills per second for click scenarios, score per second for hold scenarios, where score accrues while on target. A frame's gain belongs to the window in which the frame started. The results screen shows the best and worst window with their time ranges, and the rate in each window.

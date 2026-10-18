@@ -3,6 +3,7 @@
 
 use crate::game::AppState;
 use crate::game::MainCamera;
+use crate::game::arena::{ArenaCoaching, ArenaRun};
 use crate::game::feedback::HitMarkerStyle;
 use crate::overlay::Overlay;
 use crate::persistence::settings::Settings;
@@ -10,7 +11,7 @@ use crate::platform::game_key;
 use crate::ui::UiAction;
 use crate::ui::atoms::{crosshair, hit_marker};
 use crate::ui::navigation::Navigator;
-use crate::ui::organisms::hud_panels;
+use crate::ui::organisms::{coaching_overlay, hud_panels};
 use aim_core::scenario::{RunKey, Tuning};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
@@ -30,6 +31,10 @@ impl Plugin for HudPage {
         app.add_systems(
             EguiPrimaryContextPass,
             hud.run_if(in_state(AppState::Playing)),
+        )
+        .add_systems(
+            EguiPrimaryContextPass,
+            coaching_hud.run_if(in_state(AppState::Playing)),
         );
     }
 }
@@ -137,6 +142,24 @@ fn hit_feedback(ctx: &bevy_egui::egui::Context, settings: &Settings, marker_secs
     }
 }
 
+/// The opt-in live coaching overlay of a running arena (crosshair placement against head
+/// height at the nearest exposed corner, and movement accuracy). Drawing only: the values
+/// come from `ArenaSession::coaching`.
+fn coaching_hud(
+    mut contexts: EguiContexts,
+    overlay: Res<Overlay>,
+    coaching: Option<Res<ArenaCoaching>>,
+    arena: Option<Res<ArenaRun>>,
+) -> Result {
+    let Some(arena) = arena else { return Ok(()) };
+    let on = coaching.is_some_and(|c| c.enabled);
+    if !(on && overlay.visible && !arena.paused && arena.countdown <= 0.0) {
+        return Ok(());
+    }
+    coaching_overlay::coaching_overlay(contexts.ctx_mut()?, &arena.session.coaching());
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use bevy::ecs::system::assert_is_system;
@@ -145,5 +168,6 @@ mod tests {
     #[test]
     fn systems_have_no_conflicting_access() {
         assert_is_system::<(), Result, _>(super::hud);
+        assert_is_system::<(), Result, _>(super::coaching_hud);
     }
 }

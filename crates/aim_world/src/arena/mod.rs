@@ -11,6 +11,7 @@ mod aim;
 mod behavior;
 mod bot;
 pub mod builtin;
+mod coaching;
 mod def;
 #[cfg(test)]
 mod duel_tests;
@@ -26,6 +27,7 @@ pub use behavior::{
 pub use bot::{
     BOT_HEALTH, BOT_NOTICE_HALF_ANGLE_DEG, PEEK_DELAY_SECS, RETREAT_MAX_ROUTE_M, ROAM_PAUSE_SECS,
 };
+pub use coaching::{COACH_CORNER_TOLERANCE_DEG, COACH_HEAD_LEVEL_TOLERANCE_DEG, Coaching};
 pub use def::{
     ArenaDef, ArenaError, ArenaMode, BehaviorRule, BotBehavior, MAX_ATTACKERS, MAX_BOTS, MAX_RULES,
     PRACTICE_SUFFIX, ReactiveBots, RuleConditions, ShootBackDeadline, SiteObjective, bot_profile,
