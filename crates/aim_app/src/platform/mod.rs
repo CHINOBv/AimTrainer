@@ -2,6 +2,7 @@
 
 pub mod frame_stats;
 pub mod hotkey;
+pub mod hotkey_spec;
 pub mod ipc;
 
 /// True when running inside a Wayland session (Linux).

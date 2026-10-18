@@ -1,6 +1,7 @@
 //! Sensitivity (with converter and DPI check) and display settings forms, including the
 //! crosshair editor with VALORANT code import/export.
 
+use super::hotkey_settings;
 use crate::persistence::settings::Settings;
 use aim_core::crosshair::{
     CUSTOM_COLOR_INDEX, Crosshair, DOT_THICKNESS_PX, ERROR_MULTIPLIER_MAX, LINE_THICKNESS_MAX_PX,
@@ -118,7 +119,12 @@ pub fn sensitivity_panel(
     ui.small("Converting from another game? Use the Tools tab.");
 }
 
-pub fn display_panel(ui: &mut egui::Ui, settings: &mut Settings) {
+/// `recording_hotkey`: the global hotkey slot waiting for a key press (see `hotkey_settings`).
+pub fn display_panel(
+    ui: &mut egui::Ui,
+    settings: &mut Settings,
+    recording_hotkey: &mut Option<usize>,
+) {
     ui.heading("Crosshair");
     crosshair_editor(ui, &mut settings.crosshair);
     ui.add_space(8.0);
@@ -140,21 +146,12 @@ pub fn display_panel(ui: &mut egui::Ui, settings: &mut Settings) {
         "Always on top (restart; X11/Windows)",
     );
     ui.horizontal(|ui| {
-        ui.label("Global hotkey (restart, Windows/X11)");
-        ui.text_edit_singleline(&mut settings.overlay_hotkey);
-    });
-    ui.horizontal(|ui| {
-        ui.label("Queue warm-up hotkey");
-        ui.text_edit_singleline(&mut settings.warmup_hotkey);
+        ui.label("Queue warm-up length");
         ui.add(
             egui::DragValue::new(&mut settings.warmup_minutes)
                 .range(1..=30)
                 .suffix(" min"),
         );
-    });
-    ui.horizontal(|ui| {
-        ui.label("Buy-phase micro drill hotkey");
-        ui.text_edit_singleline(&mut settings.micro_hotkey);
     });
     ui.horizontal(|ui| {
         ui.label("Daily goal");
@@ -164,6 +161,9 @@ pub fn display_panel(ui: &mut egui::Ui, settings: &mut Settings) {
                 .suffix(" min"),
         );
     });
+    ui.add_space(8.0);
+    ui.heading("Global hotkeys (Windows/X11)");
+    hotkey_settings::hotkey_settings(ui, settings, recording_hotkey);
     ui.label("Wayland/Hyprland: bind `aimtrainer toggle`, `aimtrainer warmup` and `aimtrainer micro` in your compositor (see README).");
 }
 

@@ -45,10 +45,8 @@ impl QuickLaunch {
     }
 }
 
-pub struct OverlayPlugin {
-    /// Global hotkeys (Windows/X11) and the command each one sends.
-    pub hotkeys: Vec<(String, Command)>,
-}
+/// Global hotkeys (Windows/X11) are read from [`Settings`] and follow its changes.
+pub struct OverlayPlugin;
 
 impl Plugin for OverlayPlugin {
     fn build(&self, app: &mut App) {
@@ -59,7 +57,7 @@ impl Plugin for OverlayPlugin {
                 PostUpdate,
                 apply_overlay.run_if(resource_changed::<Overlay>),
             );
-        platform::hotkey::install(app, &self.hotkeys);
+        platform::hotkey::install(app);
     }
 }
 

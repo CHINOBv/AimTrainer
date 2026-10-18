@@ -81,16 +81,7 @@ fn main() -> AppExit {
         .insert_resource(persistence::method_progress::MethodProgress::load(&paths))
         .insert_resource(persistence::adaptive::AdaptiveLevels::load(&paths))
         .add_plugins((
-            overlay::OverlayPlugin {
-                hotkeys: vec![
-                    (settings.overlay_hotkey.clone(), ipc::Command::Toggle),
-                    (
-                        settings.warmup_hotkey.clone(),
-                        ipc::Command::Warmup(settings.warmup_minutes),
-                    ),
-                    (settings.micro_hotkey.clone(), ipc::Command::Micro),
-                ],
-            },
+            overlay::OverlayPlugin,
             game::GamePlugin,
             persistence::method_progress::MethodProgressPlugin,
             ui::UiPlugin,

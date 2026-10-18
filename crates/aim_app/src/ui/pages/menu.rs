@@ -10,6 +10,7 @@ use crate::persistence::method_progress::{DayProgress, MethodProgress};
 use crate::persistence::replays;
 use crate::persistence::settings::{Paths, Settings};
 use crate::platform::frame_stats::FrameStats;
+use crate::platform::hotkey::HotkeyCapture;
 use crate::ui::UiAction;
 use crate::ui::atoms::ERROR;
 use crate::ui::molecules::tab_bar;
@@ -42,6 +43,7 @@ impl Plugin for MenuPage {
     fn build(&self, app: &mut App) {
         app.init_resource::<MenuState>()
             .add_systems(Update, count_dpi_meter)
+            .add_systems(OnExit(AppState::Menu), stop_recording_on_exit)
             .add_systems(
                 EguiPrimaryContextPass,
                 menu.run_if(in_state(AppState::Menu)),
@@ -91,6 +93,18 @@ fn count_dpi_meter(motion: Res<AccumulatedMouseMotion>, mut state: ResMut<MenuSt
     }
 }
 
+/// Leave hotkey recording (it unregisters every global hotkey) once the hotkey rows are
+/// no longer on screen.
+fn stop_recording(capture: &mut HotkeyCapture) {
+    if capture.recording.is_some() {
+        capture.recording = None;
+    }
+}
+
+fn stop_recording_on_exit(mut capture: ResMut<HotkeyCapture>) {
+    stop_recording(&mut capture);
+}
+
 /// Per-player training state shown in the menu.
 #[derive(SystemParam)]
 struct TrainingState<'w> {
@@ -106,6 +120,7 @@ struct SettingsAccess<'w> {
     settings: ResMut<'w, Settings>,
     paths: Res<'w, Paths>,
     clear: ResMut<'w, ClearColor>,
+    hotkey_capture: ResMut<'w, HotkeyCapture>,
 }
 
 fn menu(
@@ -118,6 +133,7 @@ fn menu(
     mut nav: Navigator,
 ) -> Result {
     if !overlay.visible {
+        stop_recording(&mut cfg.hotkey_capture);
         return Ok(());
     }
     let ctx = contexts.ctx_mut()?;
@@ -314,7 +330,11 @@ fn menu(
                         &mut state.meter,
                     );
                     ui.separator();
-                    settings_panels::display_panel(ui, &mut cfg.settings);
+                    settings_panels::display_panel(
+                        ui,
+                        &mut cfg.settings,
+                        &mut cfg.hotkey_capture.recording,
+                    );
                     ui.separator();
                     profile_code::profile_code(ui, &mut cfg.settings, &mut state.profile_import);
                     ui.add_space(8.0);
@@ -331,6 +351,9 @@ fn menu(
         }
     }
 
+    if state.tab != Tab::Settings {
+        stop_recording(&mut cfg.hotkey_capture);
+    }
     if *cfg.settings != before && cfg.settings.sensitivity.is_valid() {
         cfg.settings.save(&cfg.paths);
         *cfg.clear = background(&cfg.settings, overlay.visible);
@@ -575,5 +598,6 @@ mod tests {
     fn systems_have_no_conflicting_access() {
         assert_is_system::<(), Result, _>(super::menu);
         assert_is_system(super::count_dpi_meter);
+        assert_is_system(super::stop_recording_on_exit);
     }
 }
