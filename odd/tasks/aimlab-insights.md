@@ -34,12 +34,13 @@ Each analytics item explains itself: it shows the metric and the threshold behin
 | ID | Specs | Route | Status | Commit |
 |---|---|---|---|---|
 | T1 | S11 | inline | done | this commit |
-| T2 | S1, S4, S6 | pending map | pending | |
-| T3 | S2, S5 | pending map | pending | |
-| T4 | S3 | pending map | pending | |
-| T5 | S7 | pending map | pending | |
-| T6 | S8 | pending map | pending | |
-| T7 | S9, S10 | pending map | pending | |
+| T1b | foundation for S1–S10 | inline (`MetricSources` refactor) | done | 8afb9f7 |
+| T2 | S1, S4, S6 | delegated (parallel writer, worktree `ai-flicks`, branch `feat/ai-flicks`) | in progress | |
+| T3 | S2, S5 | delegated (parallel writer, worktree `ai-pace`) | in progress | |
+| T4 | S3 | delegated (parallel writer, worktree `ai-tracking`) | in progress | |
+| T5 | S7 | delegated (parallel writer, worktree `ai-replay`) | in progress | |
+| T6 | S8 | delegated (parallel writer, worktree `ai-moving`) | in progress | |
+| T7 | S9, S10 | delegated (parallel writer, worktree `ai-drills`) | in progress | |
 | T8 | S1–S10 seam: merge, docs, full suite, calibrate, build and launch | inline | pending | |
 
 ## Log
@@ -47,3 +48,12 @@ Each analytics item explains itself: it shows the metric and the threshold behin
 - L1 (2026-10-18) User, after the Aim Lab analysis: "Hagamoslo, pero pimero quiero que busques mas features a implementar"
 - L2 (2026-10-18) User, after the 10-feature table: "Apuntalos en algun lugar, implementemos todos"
 - L3 (2026-10-18) Baseline `main` at 629895e. An explorer is mapping the code to choose disjoint edit surfaces. The routes are decided after that map.
+- L4 (2026-10-18) Map done. Facts from the map:
+  - `Recording::replay` drops `SessionEvent`s, so analyses read only `trace::Sample`. Player speed, score, kills and target kind must be added there.
+  - The rules TOML is pinned by `builtin_rules_equal_the_former_rust_table`.
+  - `SimAimer` always shoots the nearest target, so go/no-go needs a decoy-aware sim.
+  - Mouse look uses one `deg_per_count` for both axes.
+  - Arena runs keep no `Recording`.
+
+  Writer trigger (a): six independent units, each several files of work, launched together in isolated sibling worktrees branched from 8afb9f7. They share hot spots: `trace.rs`, `RunAnalysis`, `rules.rs` with `recommendations.toml` and `FORMER_RULES`, `analysis_panel.rs`, `results_card.rs` and `docs/training-science.md`. Writers append there; the parent resolves those seams at merge. All units share `CARGO_TARGET_DIR=C:\Users\David\projects\AimTrainer\target`, because the disk has 51 GB free and one target is 18 GB.
+- L5 S6 decision: the X/Y suggestion is shown as information; only the overall multiplier is applied, through the existing F6 path (`Sensitivity::from_cm_per_360`). No vertical-multiplier setting is added unless a sourced VALORANT setting exists in `docs/valorant-mechanics.md`.
