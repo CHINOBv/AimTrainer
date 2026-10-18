@@ -16,8 +16,8 @@ use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::ViewAngles;
 use aim_core::movement::MoveInput;
 use aim_core::scenario::{
-    FrameInput, Recording, RunKey, RunResult, ScenarioDef, Session, SessionEvent, Shape, Target,
-    Tuning, parse_run_key,
+    FrameInput, Recording, RunKey, RunOutcome, RunResult, ScenarioDef, Session, SessionEvent,
+    Shape, Target, Tuning, parse_run_key,
 };
 use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::finder::{SensFinder, Slot};
@@ -589,6 +589,9 @@ impl RunFinisher<'_, '_> {
             self.missions
                 .record(&result, session.stats().hits, &self.paths);
         }
+        if let Some(note) = outcome_note(session) {
+            notes.insert(0, note);
+        }
         let tuning = RunKey::parse(&session.def().id).tuning;
         if !tuning.is_default() {
             let mut note = tuning_text(&tuning);
@@ -624,6 +627,28 @@ impl RunFinisher<'_, '_> {
 /// own key and never move it.
 pub fn moves_staircase(run: &Run) -> bool {
     run.adaptive && RunKey::parse(&run.session.def().id).tuning.is_default()
+}
+
+/// How a finished run ended, for scenarios with phases, fail conditions or a non-time end,
+/// e.g. "Failed in phase 3/5 (Strafing trio): too many misses". `None` for a plain run that
+/// reached its time.
+pub fn outcome_note(session: &Session) -> Option<String> {
+    let def = session.def();
+    let rules = def.phases.is_some() || !def.fail.is_empty() || !def.end.is_time();
+    let outcome = session.outcome().filter(|_| rules)?;
+    let phase = session.phase_index().map(|i| {
+        let name = def
+            .phases
+            .as_ref()
+            .map_or_else(String::new, |p| p[i].label(i));
+        format!("phase {}/{} ({name})", i + 1, session.phase_count())
+    });
+    Some(match (outcome, phase) {
+        (RunOutcome::Completed, Some(p)) => format!("Completed · reached {p}"),
+        (RunOutcome::Completed, None) => "Completed".to_owned(),
+        (RunOutcome::Failed(r), Some(p)) => format!("Failed in {p}: {}", r.label()),
+        (RunOutcome::Failed(r), None) => format!("Failed: {}", r.label()),
+    })
 }
 
 /// The tuning of a run, e.g. "Tuned: size 120% · distance 80% · speed 150%".
@@ -859,7 +884,8 @@ fn sync_targets(
     mut transforms: Query<&mut Transform, With<TargetVisual>>,
 ) {
     let run = &mut *run;
-    let shape = run.session.def().targets.shape.clone();
+    // The current phase may resize targets.
+    let shape = run.session.active_targets().shape.clone();
     hit_effect::apply_struck(
         &mut commands,
         effects.as_deref(),
@@ -1028,6 +1054,47 @@ fn manage_cursor(
 mod tests {
     use super::*;
     use bevy::ecs::system::assert_is_system;
+
+    /// Plays `def` idle (looking forward, firing every frame) until it ends.
+    fn played(def: ScenarioDef) -> Session {
+        let mut session = Session::new(def, 1);
+        while !session.is_finished() {
+            session.update(FrameInput {
+                dt: 0.2,
+                view: ViewAngles::new(180.0, 0.0),
+                fire_pressed: true,
+                ..Default::default()
+            });
+        }
+        session
+    }
+
+    #[test]
+    fn the_results_note_names_the_phase_reached_and_how_the_run_ended() {
+        let plain = aim_core::scenario::builtin::all()
+            .into_iter()
+            .find(|d| d.id == "flick-wide")
+            .unwrap()
+            .with_duration(2.0);
+        assert_eq!(outcome_note(&played(plain)), None);
+        let ladder = aim_core::scenario::builtin::all()
+            .into_iter()
+            .find(|d| d.id == "phase-peek-ladder")
+            .unwrap();
+        assert_eq!(
+            outcome_note(&played(ladder)).as_deref(),
+            Some("Failed in phase 1/5 (Close trio): too many misses")
+        );
+        let race = aim_core::scenario::builtin::all()
+            .into_iter()
+            .find(|d| d.id == "phase-kill-race")
+            .unwrap()
+            .with_duration(1.0);
+        assert_eq!(
+            outcome_note(&played(race)).as_deref(),
+            Some("Failed in phase 1/2 (Warm-up): ran out of time")
+        );
+    }
 
     #[test]
     fn no_environment_tint_keeps_the_original_grid_and_slab_colours() {
