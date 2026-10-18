@@ -26,6 +26,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/demo-bounce.toml"),
     ),
     (
+        "demo-capsule.toml",
+        include_str!("../../../../content/scenarios/demo-capsule.toml"),
+    ),
+    (
         "demo-depth.toml",
         include_str!("../../../../content/scenarios/demo-depth.toml"),
     ),

@@ -181,10 +181,11 @@ fn sample_point(def: &TargetsDef, eye: Vec3, view: ViewAngles, rng: &mut Rng) ->
             Vec3::new(rng.in_range(x), rng.in_range(height), rng.in_range(z))
         }
     };
-    if humanoid {
-        p.y = 0.0;
-    } else {
-        p.y = p.y.max(MIN_SPHERE_HEIGHT);
+    match def.shape {
+        Shape::Humanoid { .. } => p.y = 0.0,
+        // A capsule never spawns through the floor.
+        Shape::Capsule { height, .. } => p.y = p.y.max(MIN_SPHERE_HEIGHT).max(height / 2.0),
+        Shape::Sphere { .. } => p.y = p.y.max(MIN_SPHERE_HEIGHT),
     }
     p
 }
@@ -246,6 +247,7 @@ pub(super) fn aim_point(shape: &Shape, dims: &HumanoidDims, p: Vec3) -> Vec3 {
     match shape {
         Shape::Humanoid { .. } => p + Vec3::new(0.0, dims.head_center_height(), 0.0),
         Shape::Sphere { .. } => p,
+        Shape::Capsule { .. } => p + Vec3::UP * shape.capsule_aim().map_or(0.0, |a| a.0),
     }
 }
 

@@ -37,6 +37,7 @@ impl<'a> Drive<'a> {
             floor_y: match targets.shape {
                 Shape::Sphere { radius } => radius,
                 Shape::Humanoid { .. } => 0.0,
+                Shape::Capsule { height, .. } => height / 2.0,
             },
         }
     }

@@ -159,6 +159,12 @@ impl SimAimer {
                 let d = (head - eye).length();
                 (head, (dims.head_size / 2.0 / d).atan().to_degrees())
             }
+            Shape::Capsule { .. } => {
+                let (up, r) = shape.capsule_aim().expect("a capsule");
+                let p = t.position + Vec3::UP * up;
+                let d = (p - eye).length();
+                (p, (r / d).atan().to_degrees())
+            }
         }
     }
 

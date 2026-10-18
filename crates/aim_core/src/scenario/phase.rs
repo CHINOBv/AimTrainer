@@ -579,7 +579,7 @@ mod tests {
     fn radius(t: &TargetsDef) -> f32 {
         match t.shape {
             Shape::Sphere { radius } => radius,
-            Shape::Humanoid { .. } => panic!("sphere expected"),
+            Shape::Humanoid { .. } | Shape::Capsule { .. } => panic!("sphere expected"),
         }
     }
 

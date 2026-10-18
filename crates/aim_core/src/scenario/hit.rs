@@ -41,6 +41,76 @@ pub fn ray_sphere(ray: Ray, center: Vec3, radius: f32) -> Option<f32> {
     (t >= 0.0).then_some(t)
 }
 
+/// Distance along the ray to the nearest intersection with the capsule around the
+/// segment `a`–`b` with `radius`, if any.
+pub fn ray_capsule(ray: Ray, a: Vec3, b: Vec3, radius: f32) -> Option<f32> {
+    let axis = b - a;
+    let len = axis.length();
+    if len <= f32::EPSILON {
+        return ray_sphere(ray, a, radius);
+    }
+    let u = axis * (1.0 / len);
+    // Infinite cylinder around the axis: drop the axis component of the ray.
+    let oc = ray.origin - a;
+    let d_perp = ray.dir - u * ray.dir.dot(u);
+    let o_perp = oc - u * oc.dot(u);
+    let qa = d_perp.dot(d_perp);
+    let qb = o_perp.dot(d_perp);
+    let qc = o_perp.dot(o_perp) - radius * radius;
+    let mut best: Option<f32> = None;
+    let mut keep = |t: f32| {
+        if t >= 0.0 && best.is_none_or(|b| t < b) {
+            best = Some(t);
+        }
+    };
+    if qa > 1e-12 {
+        let disc = qb * qb - qa * qc;
+        if disc >= 0.0 {
+            let sq = disc.sqrt();
+            for t in [(-qb - sq) / qa, (-qb + sq) / qa] {
+                let along = (oc + ray.dir * t).dot(u);
+                if (0.0..=len).contains(&along) {
+                    keep(t);
+                }
+            }
+        }
+    }
+    // The rounded end caps.
+    for c in [a, b] {
+        if let Some(t) = ray_sphere(ray, c, radius) {
+            keep(t);
+        }
+    }
+    best
+}
+
+/// Ray against an upright capsule centered on `center` (`radius`, total `height`), with
+/// an optional head sphere (`radius`, center `offset` above `center`). The head wins when
+/// both are hit at the same distance or the head is nearer.
+pub fn ray_capsule_target(
+    ray: Ray,
+    center: Vec3,
+    radius: f32,
+    height: f32,
+    head: Option<(f32, f32)>,
+) -> Option<(f32, HitZone)> {
+    let half = (height / 2.0 - radius).max(0.0);
+    let body = ray_capsule(
+        ray,
+        center - Vec3::UP * half,
+        center + Vec3::UP * half,
+        radius,
+    )
+    .map(|t| (t, HitZone::Body));
+    let head = head.and_then(|(r, offset)| {
+        ray_sphere(ray, center + Vec3::UP * offset, r).map(|t| (t, HitZone::Head))
+    });
+    match (body, head) {
+        (Some(b), Some(h)) => Some(if h.0 <= b.0 { h } else { b }),
+        (b, h) => b.or(h),
+    }
+}
+
 /// Distance along the ray to an axis-aligned box intersection, if any.
 pub fn ray_aabb(ray: Ray, min: Vec3, max: Vec3) -> Option<f32> {
     let mut t0 = 0.0_f32;
@@ -157,6 +227,27 @@ mod tests {
             dir: Vec3::FORWARD,
         };
         let hit = ray_humanoid(r, Vec3::new(0.0, 0.0, -20.0), 37.0, &d);
+        assert_eq!(hit.map(|h| h.1), Some(HitZone::Head));
+    }
+
+    #[test]
+    fn capsule_distances_cover_the_cylinder_and_the_caps() {
+        let (a, b) = (Vec3::new(0.0, 0.0, -10.0), Vec3::new(0.0, 1.0, -10.0));
+        let side = ray(Vec3::new(0.0, 0.5, 0.0), Vec3::new(0.0, 0.5, -10.0));
+        assert!((ray_capsule(side, a, b, 0.5).unwrap() - 9.5).abs() < 1e-4);
+        // Straight down onto the top cap.
+        let down = Ray {
+            origin: Vec3::new(0.0, 5.0, -10.0),
+            dir: Vec3::new(0.0, -1.0, 0.0),
+        };
+        assert!((ray_capsule(down, a, b, 0.5).unwrap() - 3.5).abs() < 1e-4);
+        let past = ray(Vec3::new(0.0, 0.5, 0.0), Vec3::new(0.6, 0.5, -10.0));
+        assert!(ray_capsule(past, a, b, 0.5).is_none());
+        // A head in front of the body wins.
+        let head = ray_capsule_target(side, a, 0.5, 2.0, Some((0.2, 0.5)));
+        assert_eq!(head.map(|h| h.1), Some(HitZone::Body), "the body is nearer");
+        let level = ray(Vec3::new(0.0, 1.9, 0.0), Vec3::new(0.0, 1.9, -10.0));
+        let hit = ray_capsule_target(level, a, 0.5, 2.0, Some((0.2, 1.9)));
         assert_eq!(hit.map(|h| h.1), Some(HitZone::Head));
     }
 }

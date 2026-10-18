@@ -122,6 +122,12 @@ fn aim_zone(session: &Session, t: &Target) -> (Vec3, f32) {
             let d = (head - eye).length().max(1e-3);
             (head, (dims.head_size / 2.0 / d).atan().to_degrees())
         }
+        Shape::Capsule { .. } => {
+            let (up, r) = shape.capsule_aim().expect("a capsule");
+            let p = t.position + Vec3::UP * up;
+            let d = (p - eye).length().max(1e-3);
+            (p, (r / d).atan().to_degrees())
+        }
     }
 }
 

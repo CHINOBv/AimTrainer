@@ -248,10 +248,13 @@ impl Tuning {
         *self == Self::DEFAULT
     }
 
-    /// Whether the size knob changes `def`: only spheres scale; humanoids keep the
+    /// Whether the size knob changes `def`: only spheres and capsules scale; humanoids keep the
     /// VALORANT agent size (move them farther or closer with the distance knob instead).
     pub fn size_applies(def: &ScenarioDef) -> bool {
-        matches!(def.targets.shape, Shape::Sphere { .. })
+        matches!(
+            def.targets.shape,
+            Shape::Sphere { .. } | Shape::Capsule { .. }
+        )
     }
 
     fn clamped(self) -> Self {
@@ -366,9 +369,7 @@ impl ScenarioDef {
 /// Applies `tuning` to `targets`: sphere radius, spawn distance and motion speed.
 fn tune_targets(targets: &mut TargetsDef, t: Tuning) {
     let k = |pct: u16| f32::from(pct) / 100.0;
-    if let Shape::Sphere { radius } = &mut targets.shape {
-        *radius *= k(t.size_pct);
-    }
+    scale_size(&mut targets.shape, k(t.size_pct));
     let dist = k(t.distance_pct);
     match &mut targets.spawn {
         SpawnArea::Angular { distance, .. } | SpawnArea::AroundCrosshair { distance, .. } => {
@@ -378,6 +379,27 @@ fn tune_targets(targets: &mut TargetsDef, t: Tuning) {
         SpawnArea::Floor { z, .. } => *z = scale(*z, dist),
     }
     targets.speed_scale *= k(t.speed_pct);
+}
+
+/// Scales a sphere or capsule by `k` (every length of a capsule, so it keeps its
+/// proportions); humanoids keep the VALORANT agent size.
+fn scale_size(shape: &mut Shape, k: f32) {
+    match shape {
+        Shape::Sphere { radius } => *radius *= k,
+        Shape::Capsule {
+            radius,
+            height,
+            head,
+        } => {
+            *radius *= k;
+            *height *= k;
+            if let Some(h) = head {
+                h.radius *= k;
+                h.offset *= k;
+            }
+        }
+        Shape::Humanoid { .. } => {}
+    }
 }
 
 /// Scales `motion` by the speed knob's fraction `s` at this level: faster movement and
@@ -437,9 +459,7 @@ fn motion_depth_mut(m: &mut Motion) -> Option<&mut super::def::DepthDef> {
 fn scale_targets(targets: &mut TargetsDef, c: &DifficultyDef, d: f32) {
     let humanoid = matches!(targets.shape, Shape::Humanoid { .. });
 
-    if let Shape::Sphere { radius } = &mut targets.shape {
-        *radius *= 1.0 - c.size.at(d);
-    }
+    scale_size(&mut targets.shape, 1.0 - c.size.at(d));
     if let Some(l) = &mut targets.lifetime_secs {
         *l *= 1.0 - c.lifetime.at(d);
     }

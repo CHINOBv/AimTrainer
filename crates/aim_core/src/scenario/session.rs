@@ -943,7 +943,7 @@ impl Session {
     fn sphere_radius(&self) -> f32 {
         match self.def.targets.shape {
             Shape::Sphere { radius } => radius,
-            Shape::Humanoid { .. } => 0.0,
+            Shape::Humanoid { .. } | Shape::Capsule { .. } => 0.0,
         }
     }
 

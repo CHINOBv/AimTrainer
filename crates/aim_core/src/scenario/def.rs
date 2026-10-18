@@ -437,6 +437,40 @@ pub enum Shape {
         #[serde(default)]
         head_only: bool,
     },
+    /// Upright capsule (a cylinder with rounded ends) centered on the target's position,
+    /// with an optional spherical head above it. Body hits score `body`, head hits `head`.
+    Capsule {
+        /// Radius of the cylinder and its end caps, meters.
+        radius: f32,
+        /// Total height including both caps, meters (≥ 2 × radius).
+        height: f32,
+        /// Optional head sphere.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        head: Option<CapsuleHead>,
+    },
+}
+
+impl Shape {
+    /// For a capsule: the height of its aim point above its center (the head's center, or
+    /// the center itself without a head) and the radius of that zone.
+    pub fn capsule_aim(&self) -> Option<(f32, f32)> {
+        match *self {
+            Shape::Capsule { radius, head, .. } => {
+                Some(head.map_or((0.0, radius), |h| (h.offset, h.radius)))
+            }
+            _ => None,
+        }
+    }
+}
+
+/// The head of a capsule target.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CapsuleHead {
+    /// Head sphere radius, meters.
+    pub radius: f32,
+    /// Height of the head's center above the capsule's center, meters.
+    pub offset: f32,
 }
 
 /// Where targets spawn.
@@ -1041,6 +1075,28 @@ impl ScenarioDef {
                 radius.is_finite() && radius > 0.0,
                 "targets.shape.radius",
                 "must be > 0",
+            );
+        }
+        if let Shape::Capsule {
+            radius,
+            height,
+            head,
+        } = t.shape
+        {
+            check(
+                radius.is_finite() && radius > 0.0 && height.is_finite() && height >= 2.0 * radius,
+                "targets.shape",
+                "a capsule needs radius > 0 and height >= 2 × radius",
+            );
+            check(
+                head.is_none_or(|h| {
+                    h.radius.is_finite()
+                        && h.radius > 0.0
+                        && h.offset.is_finite()
+                        && h.offset >= 0.0
+                }),
+                "targets.shape.head",
+                "needs radius > 0 and offset >= 0",
             );
         }
 
@@ -2518,5 +2574,48 @@ mod tests {
         );
         let nine: String = (0..9).map(|_| profile("1", "", still)).collect();
         assert_eq!(fields(&nine), ["targets.motion_profiles"]);
+    }
+
+    #[test]
+    fn capsule_shapes_parse_and_validate() {
+        let shape = |s: &str| {
+            let src = MINIMAL.replace("{ kind = \"sphere\", radius = 0.2 }", s);
+            ScenarioDef::from_toml(&src)
+                .unwrap_or_else(|e| panic!("{s}: {e}"))
+                .validate()
+                .into_iter()
+                .map(|e| e.field)
+                .collect::<Vec<_>>()
+        };
+        let none: Vec<&str> = Vec::new();
+        assert_eq!(
+            shape("{ kind = \"capsule\", radius = 0.3, height = 1.6 }"),
+            none
+        );
+        assert_eq!(
+            shape(
+                "{ kind = \"capsule\", radius = 0.3, height = 1.6, head = { radius = 0.15, offset = 0.95 } }"
+            ),
+            none
+        );
+        assert_eq!(
+            shape("{ kind = \"capsule\", radius = 0.3, height = 0.5 }"),
+            ["targets.shape"]
+        );
+        assert_eq!(
+            shape("{ kind = \"capsule\", radius = 0, height = 1 }"),
+            ["targets.shape"]
+        );
+        assert_eq!(
+            shape(
+                "{ kind = \"capsule\", radius = 0.3, height = 1.6, head = { radius = 0, offset = 1 } }"
+            ),
+            ["targets.shape.head"]
+        );
+        let typo = MINIMAL.replace(
+            "{ kind = \"sphere\", radius = 0.2 }",
+            "{ kind = \"capsule\", radius = 0.3, hieght = 1.6 }",
+        );
+        assert!(ScenarioDef::from_toml(&typo).is_err());
     }
 }

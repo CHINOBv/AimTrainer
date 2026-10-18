@@ -250,4 +250,76 @@ mod tests {
         assert_eq!(s.stats().kills, 3);
         assert_eq!(s.stats().shots, 4);
     }
+
+    /// A static capsule straight ahead at 10 m, its center at eye height.
+    fn capsule(head: &str) -> ScenarioDef {
+        let d = ScenarioDef::from_toml(&format!(
+            r#"
+            id = "c"
+            name = "c"
+            category = "custom"
+            duration_secs = 100.0
+            [targets]
+            shape = {{ kind = "capsule", radius = 0.3, height = 1.6{head} }}
+            spawn = {{ kind = "angular", yaw_deg = [0, 0], pitch_deg = [0, 0], distance = [10, 10] }}
+            health = 100
+            "#
+        ))
+        .unwrap();
+        assert!(d.validate().is_empty(), "{:?}", d.validate());
+        d
+    }
+
+    /// The zone a click at `p` + (`dx`, `dy`) hits, if any.
+    fn zone_at(s: &mut Session, dx: f32, dy: f32) -> Option<crate::scenario::HitZone> {
+        let p = s.targets().next().unwrap().position;
+        let v = ViewAngles::from_direction(p + Vec3::new(dx, dy, 0.0) - s.eye_position());
+        s.update(FrameInput {
+            dt: 0.2,
+            ..Default::default()
+        });
+        let events = s.update(FrameInput {
+            dt: 0.001,
+            view: v,
+            fire_pressed: true,
+            ..Default::default()
+        });
+        events.iter().find_map(|e| match e {
+            crate::scenario::SessionEvent::Shot { hit, .. } => Some(hit.map(|h| h.1)),
+            _ => None,
+        })?
+    }
+
+    #[test]
+    fn capsules_have_a_body_and_an_optional_head() {
+        use crate::scenario::HitZone::{Body, Head};
+        let mut s = Session::new(capsule(", head = { radius = 0.15, offset = 0.95 }"), 1);
+        assert_eq!(zone_at(&mut s, 0.0, 0.0), Some(Body), "center");
+        assert_eq!(
+            zone_at(&mut s, 0.25, 0.0),
+            Some(Body),
+            "side of the cylinder"
+        );
+        assert_eq!(zone_at(&mut s, 0.0, 0.75), Some(Body), "inside the top cap");
+        assert_eq!(zone_at(&mut s, 0.0, 0.95), Some(Head), "head center");
+        assert_eq!(zone_at(&mut s, 0.12, 0.95), Some(Head), "head edge");
+        assert_eq!(zone_at(&mut s, 0.35, 0.0), None, "beside");
+        // Past the rounded corner of the cap: inside the bounding box but outside the capsule.
+        assert_eq!(zone_at(&mut s, 0.27, 0.77), None, "corner");
+        assert_eq!(zone_at(&mut s, 0.0, 1.2), None, "above the head");
+
+        let mut plain = Session::new(capsule(""), 1);
+        assert_eq!(zone_at(&mut plain, 0.0, 0.95), None, "no head without one");
+        assert_eq!(zone_at(&mut plain, 0.0, -0.7), Some(Body), "bottom cap");
+        // Head hits score `head`, body hits score `body`.
+        let mut s = Session::new(capsule(", head = { radius = 0.15, offset = 0.95 }"), 1);
+        zone_at(&mut s, 0.0, 0.0);
+        zone_at(&mut s, 0.0, 0.95);
+        assert!(
+            (s.stats().score - 140.0).abs() < 1e-3,
+            "{}",
+            s.stats().score
+        );
+        assert_eq!((s.stats().body_hits, s.stats().head_hits), (1, 1));
+    }
 }

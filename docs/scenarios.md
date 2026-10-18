@@ -35,7 +35,7 @@ bounds_z = [-1.0, 1.0]       # +Z is behind the player, so a larger max leaves r
 elevation = 0.0              # player's floor above the targets' floor (meters), within [-3, 6]
 
 [targets]
-shape = { kind = "sphere", radius = 0.15 }        # or { kind = "humanoid", head_only = true }
+shape = { kind = "sphere", radius = 0.15 }        # or { kind = "humanoid", head_only = true }, or a capsule (see below)
 spawn = { kind = "around_crosshair", offset_deg = [5.0, 30.0], distance = [10.0, 20.0] }
 motion = { kind = "static" }
 max_alive = 1                # simultaneous targets
@@ -105,6 +105,23 @@ decay = { window_secs = 3.0, floor = 0.4 }
 | `decay.floor` | Fraction of the value left after the window, in [0, 1]. |
 
 The value falls linearly: a hit `age` seconds after the target appeared scores its points × `1 − (1 − floor) × min(age / window_secs, 1)`. It multiplies the score-ring multiplier, and in hold mode it scales the points per second. The built-in `regen-track` combines both: breaking off lets the sphere heal, and a slow kill earns less, so steady tracking pays twice.
+
+### Capsule targets
+
+`shape = { kind = "capsule", radius, height, head }` is an upright capsule: a cylinder with rounded ends, centered on the target's position, with an optional round head above it. Body hits score `scoring.body` and head hits `scoring.head`; `rings` apply to the head. The built-in `demo-capsule`:
+
+```toml
+[targets]
+shape = { kind = "capsule", radius = 0.25, height = 1.4, head = { radius = 0.14, offset = 0.85 } }
+```
+
+| Field | Meaning |
+|---|---|
+| `radius` | Radius of the cylinder and its end caps, meters, > 0. |
+| `height` | Total height including both caps, meters, ≥ 2 × `radius`. |
+| `head` | Optional `{ radius, offset }`: a head sphere of `radius` (> 0) whose center is `offset` meters (≥ 0) above the capsule's center. When the ray passes through both, the nearer one counts. |
+
+Capsules spawn like spheres, with their center at least `height / 2` above the floor so they never sink into it, and the aim point (for spacing, spawn rules and the simulated aimer) is the head's center, or the capsule's center without a head. Ballistic capsules touch the floor with their bottom. The difficulty size knob and size tuning scale every length of a capsule; `shrink_per_kill` needs a sphere.
 
 ### Accuracy multiplier and shrinking targets
 
@@ -502,7 +519,7 @@ During a library scenario run, press Esc to tune its targets, from 50% to 200% i
 
 | Knob | Changes |
 |---|---|
-| Target size | Sphere radius. Agents (humanoids) keep their VALORANT size; use Distance to make their heads smaller or larger on screen. |
+| Target size | Sphere radius, and every length of a capsule. Agents (humanoids) keep their VALORANT size; use Distance to make their heads smaller or larger on screen. |
 | Distance | Spawn distance: `angular` and `around_crosshair` `distance`, and `floor` `z`. |
 | Target speed | Motion speed: drift `speed`; strafe run speed and acceleration together, so the strafe keeps its timing; `linear_bounce` and `orbit` `speed_deg`; and a `ballistic` launch speed (× k) with its gravity (× k²), so it flies the same arc faster. |
 

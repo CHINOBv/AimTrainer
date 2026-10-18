@@ -1,0 +1,17 @@
+id = "demo-capsule"
+name = "Demo: Capsule"
+category = "flicking"
+description = """
+Engine demo for capsule targets. Standing capsules with a small round head strafe across
+the floor ahead. A body hit counts, but a head hit is worth more than twice as much."""
+duration_secs = 45
+
+[targets]
+shape = { kind = "capsule", radius = 0.25, height = 1.4, head = { radius = 0.14, offset = 0.85 } }
+spawn = { kind = "angular", yaw_deg = [-25.0, 25.0], pitch_deg = [0.0, 0.0], distance = [10.0, 14.0] }
+motion = { kind = "strafe", change_secs = [0.5, 1.0], stop_chance = 0.3, max_offset = 2.5 }
+max_alive = 1
+
+[scoring]
+head = 100
+body = 40
