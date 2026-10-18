@@ -80,8 +80,12 @@ pub fn analyze(samples: &[Sample]) -> Option<PriorityAnalysis> {
             p.kills += killed;
             if let Some(target) = s.aimed_target() {
                 // The engagement starts after the previous kill, or when the target appeared.
-                let start = &samples[engagement_from.max(first_seen[&target.id])];
-                if start.targets.len() >= 2 && start.target(target.id).is_some() {
+                // A start on the kill frame itself has no engagement to judge: that frame
+                // still holds the dead target next to its respawn.
+                let start_index = engagement_from.max(first_seen[&target.id]);
+                let start = &samples[start_index];
+                if start_index < i && start.targets.len() >= 2 && start.target(target.id).is_some()
+                {
                     p.contested_kills += 1;
                     if start.aimed_target().map(|t| t.id) == Some(target.id) {
                         p.nearest_kills += 1;
@@ -193,6 +197,21 @@ mod tests {
                 self.frame(yaw_deg, targets, false, false);
             }
         }
+    }
+
+    #[test]
+    fn a_kill_on_the_frame_after_the_previous_kill_is_not_contested() {
+        let (a, b, c) = (target(1, 10.0), target(2, 12.0), target(3, -30.0));
+        let mut run = Run::default();
+        run.look(3, 0.0, &[a, b]);
+        run.frame(10.0, &[a, b], true, true);
+        // B dies on the very next frame, which still holds it next to its respawn C.
+        run.frame(12.0, &[b, c], true, true);
+        run.look(3, 12.0, &[c]);
+        let p = analyze(&run.samples).expect("A and B were visible together");
+        assert_eq!(p.kills, 2);
+        assert_eq!(p.contested_kills, 1);
+        assert_eq!(p.nearest_kills, 1);
     }
 
     #[test]

@@ -340,6 +340,12 @@ pub fn flicks(samples: &[Sample]) -> Vec<Flick> {
         let Some(target) = s.aimed_target().copied() else {
             continue;
         };
+        if target.decoy {
+            // A go/no-go mistake, not an aiming movement: the decision analysis counts it.
+            // The next flick still starts after this shot.
+            last_shot = Some((i, target.id, true));
+            continue;
+        }
         let last_shot_secs = last_shot.map_or(0.0, |(j, _, _)| samples[j].time_secs);
         let start_secs = last_shot_secs.max(target.visible_at_secs);
         let first = samples[..i]
@@ -518,6 +524,16 @@ mod tests {
                 }
             })
             .collect()
+    }
+
+    #[test]
+    fn shots_at_go_no_go_decoys_are_not_flicks() {
+        let mut samples = scripted(&[2.0, 6.0, 9.5, 10.0]);
+        assert_eq!(flicks(&samples).len(), 1, "a match target is a flick");
+        for s in &mut samples {
+            s.targets[0].decoy = true;
+        }
+        assert!(flicks(&samples).is_empty());
     }
 
     #[test]
