@@ -26,8 +26,8 @@ use crate::ui::organisms::sens_suggestion::{self, RECENT_RUNS, SensSuggestionSta
 use crate::ui::organisms::settings_panels::{self, DpiMeter, SettingsTab};
 use crate::ui::organisms::system_check::{self, SystemModel};
 use crate::ui::organisms::today_panel::{
-    self, ChallengeModel, DayModel, MissionModel, MissionsModel, RoutineModel, TodayAction,
-    TodayModel,
+    self, ChallengeModel, DayModel, MissionModel, MissionsModel, QuickModel, RoutineModel,
+    TodayAction, TodayModel,
 };
 use crate::ui::organisms::{
     arena_list, benchmark_panel, feedback_settings, routine_list, scenario_browser,
@@ -35,7 +35,7 @@ use crate::ui::organisms::{
 use aim_core::fov;
 use aim_core::training::method::{MethodDef, Weekday};
 use aim_core::training::playlist;
-use aim_core::training::resume::PositionStore;
+use aim_core::training::resume::{PositionStore, RoutinePosition};
 use aim_core::training::store::RunStore;
 use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::AccumulatedMouseMotion;
@@ -59,7 +59,7 @@ impl Plugin for MenuPage {
     }
 }
 
-#[derive(Default, PartialEq, Clone, Copy)]
+#[derive(Debug, Default, PartialEq, Clone, Copy)]
 enum Tab {
     #[default]
     Today,
@@ -82,6 +82,47 @@ const TABS: [(Tab, &str); 8] = [
     (Tab::Tools, "Tools"),
     (Tab::Settings, "Settings"),
 ];
+
+/// Keys 1–8 select the tabs in [`TABS`] order.
+const TAB_KEYS: [egui::Key; 8] = [
+    egui::Key::Num1,
+    egui::Key::Num2,
+    egui::Key::Num3,
+    egui::Key::Num4,
+    egui::Key::Num5,
+    egui::Key::Num6,
+    egui::Key::Num7,
+    egui::Key::Num8,
+];
+
+fn tab_for_key(key: egui::Key) -> Option<Tab> {
+    TAB_KEYS.iter().position(|&k| k == key).map(|i| TABS[i].0)
+}
+
+/// Number keys switch tabs unless a text field has focus or a key is being recorded
+/// (`on_keys_tab`: the Keys sub-tab, whose restart-key row records bare keys).
+fn number_keys_enabled(text_focus: bool, recording_hotkey: bool, on_keys_tab: bool) -> bool {
+    !(text_focus || recording_hotkey || on_keys_tab)
+}
+
+/// The routine "Continue" resumes: today's unfinished method day, else the newest
+/// unfinished routine from today. `runs_of` gives a routine's current run count; a
+/// position whose count differs belongs to an edited routine and is skipped.
+fn continue_position(
+    progress: &MethodProgress,
+    date: &str,
+    runs_of: impl Fn(&str) -> Option<usize>,
+) -> Option<RoutinePosition> {
+    let open = |p: &&RoutinePosition| {
+        p.date == date && !p.is_done() && runs_of(&p.routine) == Some(p.total_runs)
+    };
+    progress
+        .today
+        .iter()
+        .find(open)
+        .or_else(|| progress.routines.iter().rev().find(open))
+        .cloned()
+}
 
 #[derive(Resource, Default)]
 struct MenuState {
@@ -268,6 +309,20 @@ fn menu(
     let lib = nav.library();
     let mut action: Option<UiAction> = None;
 
+    let on_keys_tab = state.tab == Tab::Settings && state.settings_tab == SettingsTab::Keys;
+    if number_keys_enabled(
+        ctx.egui_wants_keyboard_input(),
+        cfg.hotkey_capture.recording.is_some(),
+        on_keys_tab,
+    ) && let Some(tab) = ctx.input(|i| {
+        TAB_KEYS
+            .iter()
+            .find(|&&k| i.key_pressed(k))
+            .and_then(|&k| tab_for_key(k))
+    }) {
+        state.tab = tab;
+    }
+
     egui::Panel::top("tabs").show(&mut root, |ui| {
         ui.horizontal(|ui| {
             ui.strong("CustomAimTrainer");
@@ -315,9 +370,13 @@ fn menu(
                 &cfg.paths,
             );
             let missions = missions_model(lib, &training.missions, cfg.settings.mission_commitment);
+            let quick = quick_model(lib, &history, &training.progress, &today);
             egui::CentralPanel::default().show(&mut root, |ui| {
+                today_action = today_panel::quick_bar(ui, &quick);
                 match today_model(lib, &history, &training.progress, &today, weekday, missions) {
-                    Some(model) => today_action = today_panel::today_panel(ui, &model),
+                    Some(model) => {
+                        today_action = today_panel::today_panel(ui, &model).or(today_action.take())
+                    }
                     None => {
                         ui.label("No weekly training method is available.");
                     }
@@ -780,6 +839,32 @@ fn today_model(
     })
 }
 
+/// The Today shortcuts: the last scenario played and a routine to continue.
+fn quick_model(
+    lib: &Library,
+    history: &History,
+    progress: &MethodProgress,
+    date: &str,
+) -> QuickModel {
+    let last_scenario =
+        scenario_browser::recent_scenarios(history.runs(), |id| lib.scenario(id).is_some(), 1)
+            .into_iter()
+            .next()
+            .and_then(|id| lib.scenario(&id).map(|d| (id, d.name.clone())));
+    let routine_of = |id: &str| lib.routines.iter().find(|r| r.id == id);
+    let routine = continue_position(progress, date, |id| {
+        routine_of(id).map(|r| r.run_count(&lib.scenarios))
+    })
+    .and_then(|p| {
+        let name = routine_of(&p.routine)?.name.clone();
+        Some((p, name))
+    });
+    QuickModel {
+        last_scenario,
+        routine,
+    }
+}
+
 /// Local day number (days since 0001-01-01), the seed input for today's missions.
 fn local_day_number() -> i64 {
     i64::from(chrono::Local::now().date_naive().num_days_from_ce())
@@ -863,6 +948,13 @@ fn apply_today(
                 seed: d.seed,
             })
         }
+        TodayAction::QuickPlay(scenario) => Some(UiAction::StartScenario(scenario)),
+        TodayAction::Continue(p) => Some(UiAction::StartRoutineAt {
+            routine: p.routine,
+            level: p.level,
+            index: p.next_index,
+            seed: p.seed,
+        }),
         TodayAction::WarmUp => Some(UiAction::StartRoutine("quick-warmup".to_owned())),
         TodayAction::PlayMission(scenario) => Some(UiAction::StartScenario(scenario)),
         TodayAction::Challenge => todays_challenge(lib).map(|c| UiAction::StartChallenge {
@@ -886,6 +978,74 @@ mod tests {
         assert_is_system(super::stop_recording_on_exit);
         assert_is_system(super::save_settings);
         assert_is_system(super::flush_settings_on_exit);
+    }
+
+    #[test]
+    fn number_keys_one_to_eight_pick_the_tabs_in_order() {
+        use egui::Key;
+        assert_eq!(tab_for_key(Key::Num1), Some(Tab::Today));
+        assert_eq!(tab_for_key(Key::Num3), Some(Tab::Scenarios));
+        assert_eq!(tab_for_key(Key::Num8), Some(Tab::Settings));
+        assert_eq!(tab_for_key(Key::Num9), None);
+        assert_eq!(tab_for_key(Key::Num0), None);
+        assert_eq!(tab_for_key(Key::A), None);
+    }
+
+    #[test]
+    fn number_keys_are_off_while_typing_or_recording_a_key() {
+        assert!(number_keys_enabled(false, false, false));
+        assert!(
+            !number_keys_enabled(true, false, false),
+            "a text field has focus"
+        );
+        assert!(
+            !number_keys_enabled(false, true, false),
+            "recording a hotkey"
+        );
+        assert!(
+            !number_keys_enabled(false, false, true),
+            "the Keys sub-tab records bare keys"
+        );
+    }
+
+    fn position(routine: &str, date: &str, next: usize, total: usize) -> RoutinePosition {
+        RoutinePosition {
+            date: date.into(),
+            routine: routine.into(),
+            level: 0.0,
+            seed: 7,
+            next_index: next,
+            total_runs: total,
+        }
+    }
+
+    #[test]
+    fn continue_offers_todays_unfinished_routine_method_day_first() {
+        let runs = |_: &str| Some(10);
+        let day = "2026-10-18";
+        let mut p = MethodProgress {
+            tier: None,
+            today: Some(position("method", day, 3, 10)),
+            routines: vec![position("other", day, 2, 10)],
+        };
+        assert_eq!(
+            continue_position(&p, day, runs).map(|c| c.routine),
+            Some("method".into())
+        );
+        p.today = Some(position("method", day, 10, 10));
+        assert_eq!(
+            continue_position(&p, day, runs).map(|c| c.routine),
+            Some("other".into()),
+            "a finished method day falls back to another routine"
+        );
+        p.routines = vec![position("other", "2026-10-17", 2, 10)];
+        assert_eq!(continue_position(&p, day, runs), None, "yesterday's run");
+        p.routines = vec![position("edited", day, 2, 10)];
+        assert_eq!(
+            continue_position(&p, day, |_| Some(12)),
+            None,
+            "a routine edited since has another run count"
+        );
     }
 
     #[test]

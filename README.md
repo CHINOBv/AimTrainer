@@ -75,11 +75,11 @@ On Windows, install Rust with rustup and run `cargo build --release`. The binary
 | Tune target size, distance and speed (scenario pause menu; tuned runs are saved apart and never move the adaptive level or the benchmark) | Size / Distance / Target speed −/+ (10% steps, 50–200%), then Apply and restart; Reset to scenario defaults |
 | Retry or next routine run (on the results screen) | Space |
 
-The menu tabs:
+The menu tabs (keys 1–8 switch tabs while no text field has focus):
 
 | Tab | What it holds |
 |---|---|
-| Today | The day's method session, the daily challenge, daily missions |
+| Today | Quick play (your last scenario) and Continue (a routine you started today), the day's method session, the daily challenge, daily missions |
 | Progress | Goal, readiness, fatigue, trend, per-skill strengths and trends, bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
 | Scenarios | Search and filter (category, click or hold, moving or standing, waves); ★ pins a scenario to Favourites (saved as `favorites` in `settings.toml`); Recent lists your last 5 scenarios. Play, or play adaptively |
 | Routines | The routines (resume a split one), your personalized playlist |
