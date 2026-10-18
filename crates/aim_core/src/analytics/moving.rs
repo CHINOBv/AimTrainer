@@ -66,6 +66,10 @@ pub struct MovingSummary {
     pub counter_strafe_share: Option<f32>,
     /// Median seconds from becoming accurate to firing, over counter-strafed shots.
     pub median_stop_to_shot_secs: Option<f32>,
+    /// Shots fired at or below the accuracy limit.
+    pub accurate_shots: usize,
+    /// Shots that follow movement and were fired already accurate.
+    pub counter_strafed_shots: usize,
 }
 
 fn share(part: usize, whole: usize) -> Option<f32> {
@@ -106,6 +110,8 @@ impl MovingAnalysis {
             after_movement_shots: after.len(),
             counter_strafe_share: share(countered, after.len()),
             median_stop_to_shot_secs: median(&delays),
+            accurate_shots: accurate,
+            counter_strafed_shots: countered,
         }
     }
 }
@@ -220,6 +226,7 @@ pub(crate) mod tests {
         assert_eq!(s.stopped_hit_rate, Some(2.0 / 3.0));
         assert_eq!(s.moving_hit_rate, Some(0.5));
         assert_eq!(s.after_movement_shots, 3);
+        assert_eq!((s.accurate_shots, s.counter_strafed_shots), (3, 1));
         assert_eq!(s.counter_strafe_share, Some(1.0 / 3.0));
         assert!((s.median_stop_to_shot_secs.unwrap() - 0.1).abs() < 1e-5);
     }
@@ -237,6 +244,8 @@ pub(crate) mod tests {
                 stopped_hit_rate: None,
                 moving_hit_rate: None,
                 after_movement_shots: 0,
+                accurate_shots: 0,
+                counter_strafed_shots: 0,
                 counter_strafe_share: None,
                 median_stop_to_shot_secs: None,
             }
