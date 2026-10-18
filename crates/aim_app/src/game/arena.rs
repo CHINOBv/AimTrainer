@@ -67,6 +67,13 @@ pub fn start_arena(commands: &mut Commands, next: &mut NextState<AppState>, run:
     next.set(AppState::Playing);
 }
 
+/// Opt-in live coaching overlay for arenas (crosshair placement and movement accuracy),
+/// toggled on the Arenas tab. Kept for the session only.
+#[derive(Resource, Default)]
+pub struct ArenaCoaching {
+    pub enabled: bool,
+}
+
 #[derive(Component)]
 struct MapVisual;
 
@@ -76,6 +83,7 @@ impl Plugin for ArenaPlugin {
     fn build(&self, app: &mut App) {
         let playing = in_state(AppState::Playing).and_then(resource_exists::<ArenaRun>);
         add_map_lifecycle(app);
+        app.init_resource::<ArenaCoaching>();
         app.add_systems(
             Update,
             (pause_input, look, tick, sync_bots, update_camera)
@@ -231,6 +239,12 @@ impl ArenaFinisher<'_, '_> {
                     o.attackers
                 )
             });
+        }
+        if let Some(d) = run.session.def().mode.deadline() {
+            notes.push(format!(
+                "Deadline {:.1} s: {} kills before it, {} deadline hits taken",
+                d.secs, stats.deadline_kills, stats.deadline_hits
+            ));
         }
         self.commands.insert_resource(LastResult {
             name: run.session.def().name.clone(),
