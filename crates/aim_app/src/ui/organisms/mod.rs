@@ -9,6 +9,7 @@ pub mod hotkey_settings;
 pub mod hud_panels;
 pub mod profile_code;
 pub mod progress_panel;
+pub mod replay_compare;
 pub mod replay_viewer;
 pub mod restart_key_setting;
 pub mod results_card;
