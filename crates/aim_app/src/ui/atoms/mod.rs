@@ -1,6 +1,7 @@
-//! Smallest UI pieces: colors, text styles, the crosshair painter.
+//! Smallest UI pieces: colors, fonts, text styles, the crosshair painter.
 
 pub mod crosshair;
+pub mod fonts;
 pub mod hit_marker;
 
 use bevy_egui::egui::{Color32, FontId, RichText};

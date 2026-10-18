@@ -15,6 +15,7 @@ use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::finder::Slot;
 use aim_core::training::routine::RoutineDef;
 use bevy::prelude::*;
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
 
 pub use organisms::progress_panel::{
     fatigue_text as progress_fatigue_text, goal_text as progress_goal_text,
@@ -31,6 +32,7 @@ impl Plugin for UiPlugin {
         app.init_resource::<StartupPlay>()
             .init_resource::<crate::platform::frame_stats::FrameStats>()
             .add_systems(Update, crate::platform::frame_stats::track_frames)
+            .add_systems(EguiPrimaryContextPass, install_fonts)
             .add_systems(
                 Update,
                 (launcher::launch_requested, launcher::launch_startup),
@@ -41,6 +43,17 @@ impl Plugin for UiPlugin {
                 pages::results::ResultsPage,
             ));
     }
+}
+
+/// Installs the UI fonts on the primary egui context, once.
+fn install_fonts(mut contexts: EguiContexts, mut done: Local<bool>) -> Result {
+    if !*done {
+        contexts
+            .ctx_mut()?
+            .set_fonts(atoms::fonts::font_definitions());
+        *done = true;
+    }
+    Ok(())
 }
 
 /// Something the player asked for in a view. Pages apply it.
