@@ -110,7 +110,13 @@ fn missions_section(ui: &mut egui::Ui, m: &MissionsModel, action: &mut Option<To
                     mission.best_met,
                     mission.conditions.len()
                 ));
-                if ui.push_id(i, |ui| ui.button("▶  Play")).inner.clicked() {
+                if ui
+                    .push_id(i, |ui| {
+                        crate::audio::ui_click::clicked(ui.button("▶  Play"))
+                    })
+                    .inner
+                    .clicked()
+                {
                     *action = Some(TodayAction::PlayMission(mission.scenario_id.clone()));
                 }
             }
@@ -130,7 +136,8 @@ fn routine_card(ui: &mut egui::Ui, r: &RoutineModel, action: &mut Option<TodayAc
                 GOOD,
                 "Done for today. Rest, or play a quick warm-up before ranked.",
             );
-            if ui.button("↻ Play again from the start").clicked() {
+            if crate::audio::ui_click::clicked(ui.button("↻ Play again from the start")).clicked()
+            {
                 *action = Some(TodayAction::Start(r.id.clone()));
             }
         }
@@ -268,7 +275,7 @@ pub fn today_panel(ui: &mut egui::Ui, m: &TodayModel) -> Option<TodayAction> {
             ));
             let best = c.best_today.map_or("not played yet".to_owned(), |b| format!("your best today {b:.0}"));
             ui.horizontal(|ui| {
-                if ui.button("▶  Play the daily challenge").clicked() {
+                if crate::audio::ui_click::clicked(ui.button("▶  Play the daily challenge")).clicked() {
                     action = Some(TodayAction::Challenge);
                 }
                 ui.small(best);

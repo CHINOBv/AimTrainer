@@ -43,7 +43,7 @@ pub fn arena_list(
                 a.weapon.stats().display_name
             ));
             ui.horizontal(|ui| {
-                if ui.button("▶  Play").clicked() {
+                if crate::audio::ui_click::clicked(ui.button("▶  Play")).clicked() {
                     action = Some(UiAction::StartArena(a.id.clone()));
                 }
                 if ui
