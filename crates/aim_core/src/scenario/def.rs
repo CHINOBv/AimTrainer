@@ -925,9 +925,10 @@ impl ScenarioDef {
                 "must be in [0, 180)",
             );
             check(
-                (1..=16).contains(&r.avoid_recent),
+                (1..=16).contains(&r.avoid_recent)
+                    && (r.avoid_recent == 1 || r.avoid_last_deg > 0.0),
                 "targets.spawn_rules.avoid_recent",
-                "must be between 1 and 16",
+                "must be between 1 and 16; more than 1 needs avoid_last_deg > 0",
             );
             check(
                 (0.0..180.0).contains(&r.min_flick_deg),
@@ -982,6 +983,18 @@ impl ScenarioDef {
                 matches!(t.motion, Motion::Strafe { .. } | Motion::Dodge { .. }),
                 "targets.reactions",
                 "needs motion kind = \"strafe\" or \"dodge\"",
+            );
+            // Options that could never act are refused rather than silently ignored.
+            check(
+                (mirror == 0.0 && oppose == 0.0) || self.player.movement,
+                "targets.reactions",
+                "mirror_strafe_chance and oppose_strafe_chance watch the player's strafe: \
+                 they need player.movement = true",
+            );
+            check(
+                r.shot_juke_chance == 0.0 || self.weapon.fire == FireMode::Click,
+                "targets.reactions.shot_juke_chance",
+                "reacts to click shots: needs weapon.fire = \"click\"",
             );
         }
         check(
@@ -1407,6 +1420,14 @@ mod tests {
                 "{bad}"
             );
         }
+        assert_eq!(
+            with(&|r| {
+                r.avoid_last_deg = 0.0;
+                r.avoid_recent = 4;
+            }),
+            ["targets.spawn_rules.avoid_recent"],
+            "avoid_recent only widens avoid_last_deg, so alone it would do nothing"
+        );
         for bad in [-0.1, 1.0, f32::NAN] {
             assert_eq!(
                 with(&|r| r.exclude_center = bad),
@@ -1508,10 +1529,26 @@ mod tests {
         assert!(!toml::to_string(&d).unwrap().contains("reactions"));
 
         let src = format!(
-            "{}reactions = {{ mirror_strafe_chance = 0.3, oppose_strafe_chance = 0.2, dodge_within_deg = 3, shot_juke_chance = 0.5 }}\n",
+            "{}reactions = {{ mirror_strafe_chance = 0.3, oppose_strafe_chance = 0.2, dodge_within_deg = 3, shot_juke_chance = 0.5 }}\n[player]\nmovement = true\n",
             strafing_minimal()
         );
         let r = ScenarioDef::from_toml(&src).unwrap();
+
+        // Options that could never act are refused, not silently ignored.
+        let mut still = r.clone();
+        still.player.movement = false;
+        assert_eq!(
+            fields_of(&still),
+            ["targets.reactions"],
+            "mirror/oppose watch the player's strafe, which needs movement"
+        );
+        let mut held = r.clone();
+        held.weapon.fire = FireMode::Hold;
+        assert!(
+            fields_of(&held).contains(&"targets.reactions.shot_juke_chance"),
+            "{:?}",
+            fields_of(&held)
+        );
         assert_eq!(
             r.targets.reactions,
             Some(ReactionsDef {
