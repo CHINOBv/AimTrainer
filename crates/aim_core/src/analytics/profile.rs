@@ -8,6 +8,7 @@
 //! `docs/training-science.md`) until they are calibrated on real player data. The
 //! per-benchmark-subcategory profile is in [`super::skills`].
 
+use super::direction::DirectionSummary;
 use super::flick::{Flick, FlickSummary};
 use super::rules::{self, MetricSources, RuleSet};
 use super::tracking::{TrackingAnalysis, TrackingSummary};
@@ -131,6 +132,10 @@ impl SkillProfile {
             let tracking = tracking
                 .map(|t| t.summary())
                 .filter(|t| t.hold_secs >= MIN_TRACKING_SECS);
+            // Each run classifies near/far with its own scenario's distances.
+            let direction = (flicks.len() >= MIN_FLICKS).then(|| {
+                DirectionSummary::from_flicks(runs.iter().flat_map(|r| r.classified_flicks()))
+            });
             categories.push(CategoryProfile {
                 category,
                 runs: runs.len(),
@@ -140,6 +145,7 @@ impl SkillProfile {
                     &MetricSources {
                         flick: flick.as_ref(),
                         tracking: tracking.as_ref(),
+                        direction: direction.as_ref(),
                     },
                 ),
                 flick,
@@ -195,6 +201,8 @@ mod tests {
             settle_secs: Some(0.1),
             path_efficiency: Some(0.9),
             click_delay_secs: Some(0.05),
+            direction_deg: (20.0, 0.0),
+            primary_offset_deg: Some((2.0, 0.0)),
         }
     }
 
@@ -203,6 +211,7 @@ mod tests {
             scenario_id: "flick-wide".into(),
             category: Category::Flicking,
             kind: AnalysisKind::Flick(flicks),
+            distance_split: None,
         }
     }
 
@@ -228,6 +237,61 @@ mod tests {
         // A quick click (50 ms) fires nothing for this metric.
         let p = SkillProfile::build(&[flick_run(vec![overshooting_flick(); MIN_FLICKS])]);
         assert!(p.findings().all(|f| f.metric != Metric::ClickDelay));
+    }
+
+    #[test]
+    fn a_direction_far_below_the_others_is_a_weakness_with_its_threshold() {
+        use crate::analytics::direction::{DistanceSplit, MIN_QUADRANT_FLICKS, RangeSource};
+        let aimed = |direction_deg, hit| Flick {
+            direction_deg,
+            hit,
+            ..overshooting_flick()
+        };
+        let mut flicks = Vec::new();
+        for i in 0..MIN_QUADRANT_FLICKS {
+            flicks.push(aimed((-10.0, 5.0), i % 5 == 0)); // up-left: 20% hit
+            flicks.push(aimed((10.0, 5.0), true)); // up-right: all hit
+        }
+        let mut run = flick_run(flicks);
+        run.distance_split = Some(DistanceSplit {
+            min_deg: 0.0,
+            max_deg: 40.0,
+            source: RangeSource::Observed,
+        });
+        // The same flicks split across two runs are pooled per category.
+        let AnalysisKind::Flick(all) = &run.kind else {
+            unreachable!()
+        };
+        let (a, b) = all.split_at(MIN_QUADRANT_FLICKS);
+        let mut first = run.clone();
+        first.kind = AnalysisKind::Flick(a.to_vec());
+        let mut second = run.clone();
+        second.kind = AnalysisKind::Flick(b.to_vec());
+        for runs in [vec![run.clone()], vec![first, second]] {
+            let p = SkillProfile::build(&runs);
+            let f = p
+                .findings()
+                .find(|f| f.metric == Metric::WeakestDirectionGap)
+                .expect("an 80-point gap fires");
+            assert_eq!(f.verdict, Verdict::Weakness);
+            assert!((f.value - 0.8).abs() < 1e-6, "{}", f.value);
+            assert_eq!(f.threshold, 0.30);
+            assert_eq!(
+                f.explanation,
+                "Hit-rate gap of your weakest flick direction 80% is above the 30% threshold: your flicks in one direction hit far less often than the rest."
+            );
+            assert_eq!(
+                f.recommendation.as_ref().unwrap().scenario_ids,
+                vec!["flick-wide", "flick-headshot"]
+            );
+        }
+        // Without a near/far split (no direction summary) the rule cannot fire.
+        run.distance_split = None;
+        let p = SkillProfile::build(&[run]);
+        assert!(
+            p.findings()
+                .all(|f| f.metric != Metric::WeakestDirectionGap)
+        );
     }
 
     #[test]

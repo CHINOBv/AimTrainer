@@ -73,6 +73,12 @@ pub struct Flick {
     /// First frame the crosshair was inside the target's aim zone to the shot, seconds.
     /// `None` when the crosshair never reached the zone during the flick.
     pub click_delay_secs: Option<f32>,
+    /// Screen-space vector from the crosshair at the start to the target at the shot,
+    /// degrees: `.0` horizontal (positive right), `.1` vertical (positive up).
+    pub direction_deg: (f32, f32),
+    /// Where the primary sub-movement ended relative to the target, in the same screen axes,
+    /// degrees (positive = right of / above the target). `None` without a primary movement.
+    pub primary_offset_deg: Option<(f32, f32)>,
 }
 
 impl Flick {
@@ -192,7 +198,7 @@ fn unit(v: (f32, f32)) -> Option<(f32, f32)> {
     (len > 1e-6).then(|| (v.0 / len, v.1 / len))
 }
 
-fn dot(a: (f32, f32), b: (f32, f32)) -> f32 {
+pub(super) fn dot(a: (f32, f32), b: (f32, f32)) -> f32 {
     a.0 * b.0 + a.1 * b.1
 }
 
@@ -272,6 +278,7 @@ fn analyze_one(
 
     let (mut reaction, mut movement, mut primary_error, mut settle) = (None, None, None, None);
     let mut corrections = 0;
+    let mut primary_offset = None;
     if let Some(onset) = onset {
         let onset_time = segment[onset].time_secs - segment[onset].dt_secs;
         reaction = Some((onset_time - start_secs).max(0.0));
@@ -281,6 +288,7 @@ fn analyze_one(
         if let Some(&(_, end)) = subs.first() {
             let s = &segment[end];
             primary_error = Some(along_error_deg(s.view, goal_at(s), dir) / radius);
+            primary_offset = Some(tangent_offset_deg(goal_at(s), s.view));
             settle = Some((shot.time_secs - s.time_secs).max(0.0));
         }
     }
@@ -316,6 +324,8 @@ fn analyze_one(
         settle_secs: settle,
         path_efficiency: (travelled > 1e-3).then(|| (straight / travelled).min(1.0)),
         click_delay_secs: click_delay,
+        direction_deg: tangent_offset_deg(start_view, goal),
+        primary_offset_deg: primary_offset,
     }
 }
 
@@ -525,6 +535,33 @@ mod tests {
         let yaws = [0.0, 0.0, 0.0, 3.0, 6.0, 8.0, 9.2, 11.5, 11.5, 10.5, 10.0];
         let delay = flicks(&scripted(&yaws))[0].click_delay_secs.unwrap();
         assert!((delay - 4.0 * DT).abs() < 1e-6, "{delay}");
+    }
+
+    #[test]
+    fn a_flick_records_its_screen_direction_and_per_axis_primary_offset() {
+        // Moves right from yaw 0 and stops at yaw 12, 2° past the target at yaw 10.
+        let yaws = [0.0, 0.0, 3.0, 6.0, 9.0, 12.0, 12.0, 12.0, 12.0];
+        let f = &flicks(&scripted(&yaws))[0];
+        let (dx, dy) = f.direction_deg;
+        assert!(
+            (dx - 10.0).abs() < 1e-4 && dy.abs() < 1e-6,
+            "{:?}",
+            f.direction_deg
+        );
+        let (ox, oy) = f
+            .primary_offset_deg
+            .expect("a primary movement was detected");
+        assert!(
+            (ox - 2.0).abs() < 1e-4 && oy.abs() < 1e-6,
+            "{:?}",
+            f.primary_offset_deg
+        );
+        // The along-direction error is unchanged: 2° past a 1° radius.
+        assert!((f.primary_error_radii.unwrap() - 2.0).abs() < 1e-4);
+        // A crosshair that never moves has no primary movement.
+        let still = &flicks(&scripted(&[0.0, 0.0, 0.0]))[0];
+        assert_eq!(still.primary_offset_deg, None);
+        assert!((still.direction_deg.0 - 10.0).abs() < 1e-4);
     }
 
     #[test]

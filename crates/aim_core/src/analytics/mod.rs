@@ -8,6 +8,7 @@
 //! turns one into per-target crosshair paths for the replay viewer.
 
 pub mod codec;
+pub mod direction;
 pub mod flick;
 pub mod path;
 pub mod profile;
@@ -17,6 +18,7 @@ mod stats;
 pub mod trace;
 pub mod tracking;
 
+pub use direction::{DirectionSummary, DistanceClass, DistanceSplit};
 pub use flick::{Flick, FlickSummary};
 pub use path::{Engagement, ReplayPath, ShotPoint};
 pub use profile::{Finding, SkillProfile};
@@ -43,6 +45,8 @@ pub struct RunAnalysis {
     pub category: Category,
     /// The analysis, by fire mode.
     pub kind: AnalysisKind,
+    /// Near/far split of the run's flicks, or `None` for a tracking run.
+    pub distance_split: Option<DistanceSplit>,
 }
 
 impl RunAnalysis {
@@ -61,6 +65,24 @@ impl RunAnalysis {
             AnalysisKind::Flick(_) => None,
         }
     }
+
+    /// Per-direction flick aggregates, or `None` for a tracking run.
+    pub fn direction_summary(&self) -> Option<DirectionSummary> {
+        self.distance_split?;
+        Some(DirectionSummary::from_flicks(self.classified_flicks()))
+    }
+
+    /// Each flick with its near/far class; empty for a tracking run or without a split.
+    pub fn classified_flicks(&self) -> impl Iterator<Item = (&Flick, DistanceClass)> {
+        let flicks = match (&self.kind, self.distance_split) {
+            (AnalysisKind::Flick(f), Some(split)) => Some((f, split)),
+            _ => None,
+        };
+        flicks.into_iter().flat_map(|(f, split)| {
+            f.iter()
+                .map(move |fl| (fl, split.classify(fl.distance_deg)))
+        })
+    }
 }
 
 /// Analyze a run as flicks (click scenarios) or tracking (hold scenarios).
@@ -70,10 +92,15 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         FireMode::Click => AnalysisKind::Flick(flick::flicks(&samples)),
         FireMode::Hold => AnalysisKind::Tracking(tracking::analyze(&samples)),
     };
+    let distance_split = match &kind {
+        AnalysisKind::Flick(f) => DistanceSplit::for_run(&recording.def, f),
+        AnalysisKind::Tracking(_) => None,
+    };
     RunAnalysis {
         scenario_id: recording.def.id.clone(),
         category: recording.def.category,
         kind,
+        distance_split,
     }
 }
 

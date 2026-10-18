@@ -6,6 +6,7 @@
 use crate::ui::UiAction;
 use crate::ui::atoms::{GOOD, WARN};
 use crate::ui::molecules::stat_row;
+use crate::ui::organisms::flick_directions::{DirectionGrid, flick_directions};
 use aim_core::analytics::{RunAnalysis, SkillProfile};
 use bevy_egui::egui;
 
@@ -27,6 +28,8 @@ pub struct RunReport {
     pub metrics: Vec<(&'static str, String)>,
     pub strengths: Vec<String>,
     pub advice: Vec<Advice>,
+    /// Per-direction flick grid (click runs only).
+    pub directions: Option<DirectionGrid>,
 }
 
 fn ms(secs: f32) -> String {
@@ -125,6 +128,7 @@ impl RunReport {
             metrics,
             strengths,
             advice,
+            directions: DirectionGrid::new(analysis),
         }
     }
 }
@@ -159,6 +163,9 @@ pub fn analysis_panel(ui: &mut egui::Ui, report: &RunReport) -> Option<UiAction>
             }
             if report.strengths.is_empty() && report.advice.is_empty() {
                 ui.small("No metric crossed a threshold in this run.");
+            }
+            if let Some(grid) = &report.directions {
+                flick_directions(ui, grid);
             }
             ui.small("Thresholds are provisional until calibrated on player data.");
         });

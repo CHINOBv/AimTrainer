@@ -134,3 +134,13 @@ meaning = "you hesitate on the target before clicking"
 [rules.recommendation]
 scenario_ids = ["flick-wide", "peek-reaction"]
 tip = "Click as soon as the crosshair reaches the target; trust the first placement instead of confirming it."
+
+[[rules]]
+metric = "weakest_direction_gap"
+direction = "above"
+threshold = 0.30
+verdict = "weakness"
+meaning = "your flicks in one direction hit far less often than the rest"
+[rules.recommendation]
+scenario_ids = ["flick-wide", "flick-headshot"]
+tip = "Give extra reps to the direction the flick grid marks weakest, and slow down there until its hit rate catches up."
