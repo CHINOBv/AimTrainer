@@ -248,6 +248,8 @@ pub struct Session {
     last_shot_at: f32,
     ammo: f32,
     reload_until: f32,
+    /// Latest spawn points, newest last, kept only for `targets.spawn_rules`.
+    recent_spawns: Vec<Vec3>,
     /// Spray state when the scenario enables `weapon.recoil`.
     recoil: Option<RecoilState>,
 }
@@ -281,6 +283,7 @@ impl Session {
             last_shot_at: f32::NEG_INFINITY,
             ammo: 0.0,
             reload_until: f32::NEG_INFINITY,
+            recent_spawns: Vec::new(),
             recoil,
         };
         s.ammo = s.def.weapon.ammo.map_or(0.0, |a| a.clip);
@@ -657,11 +660,20 @@ impl Session {
         let point = spawn::separated_point(
             &self.def.targets,
             &self.targets,
+            &self.recent_spawns,
             self.eye_position(),
             self.view,
             &self.dims,
             &mut self.rng,
         );
+        if let Some(rules) = &self.def.targets.spawn_rules {
+            self.recent_spawns.push(point);
+            let excess = self
+                .recent_spawns
+                .len()
+                .saturating_sub(rules.avoid_recent as usize);
+            self.recent_spawns.drain(..excess);
+        }
         let (facing_yaw_deg, lateral) = spawn::face_player(point, self.player_pos);
         let delay = self.rng.in_range(self.def.targets.appear_delay_secs);
         let visible_at = self.time + delay;
@@ -718,6 +730,7 @@ mod tests {
                 min_separation_deg: 5.0,
                 speed_scale: 1.0,
                 decoy_chance: 0.0,
+                spawn_rules: None,
             },
             scoring: ScoringDef::default(),
             difficulty: Default::default(),

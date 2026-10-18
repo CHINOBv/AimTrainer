@@ -310,6 +310,14 @@ Why 15 flicks and 30% (estimates): the simulated aimer has no directional bias, 
 - **Applying:** only the overall multiplier can be applied, through `Sensitivity::from_cm_per_360` (cm/360 ÷ multiplier, same game and DPI), the same path as the sensitivity finder. The vertical line is information only: mouse look uses one sensitivity for both axes, and decision L5 adds no vertical multiplier setting. Nothing is applied automatically. Once applied, the button stays hidden until new replays arrive.
 - **Limits:** replays do not record the sensitivity they were played at. Runs from before a sensitivity change, and sensitivity-finder test runs (also saved as replays), therefore mix into the evidence. No published source gives the 40-flick minimum, the bounds or the band; they are provisional.
 
+## Target behaviour and spawn patterns
+
+### Spawn patterns (`spawn_rules`)
+
+Random spawns repeat by chance: in `spread-flicks` without rules, consecutive targets regularly land within a few degrees of each other or of the crosshair, so some "flicks" are no movement at all. Blocking recent spawn points, enforcing a minimum flick and emptying the middle of the area make every rep a real flick in a new direction. The rationale is variable practice: varying the movement within a session builds a more general skill than repeating one movement (schema theory, Schmidt 1975, *Psychological Review* 82(4), 225–260; the related interleaving evidence is cited under Routine design above). Applying it to spawn placement is inference, not a measured aim-training effect.
+
+The defaults in `spread-flicks` are estimates chosen by calibration, not sourced values: `avoid_last_deg = 15` with `avoid_recent = 2`, `min_flick_deg = 12` and `exclude_center = 0.25`. They keep contender accuracy at about 66%, the same as `flick-wide` (inside the challenge-point band, see Difficulty).
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

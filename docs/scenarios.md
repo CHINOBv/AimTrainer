@@ -104,6 +104,24 @@ Recoil moves the bullets, not the camera. `simulate_spread` still adds running i
 | `around_crosshair` | `offset_deg`, `distance`, `pitch_limit_deg` (default `[-15, 30]`), `on_screen` (default `false`) | Spawns relative to where you aim right now. Use it for flicks (large offsets) and microcorrections (1–6°). `pitch_limit_deg` keeps every spawn inside a vertical band around the horizon, so chained flicks cannot drift into the sky or the floor. `on_screen = true` keeps every spawn inside VALORANT's view from the crosshair at spawn time, with a 4° margin: at most 47.5° sideways and ≈31.3° up or down (half of 103° × 70.53°, minus the margin). `offset_deg.max` must then be ≤ 47.5, and difficulty scaling clamps the offset to that limit. Humanoids only use the horizontal offset. |
 | `floor` | `x`, `z`, `height` | A world-space box. Use it for agents at realistic positions, or spheres at head height (`height = [1.8, 1.95]`). |
 
+### Spawn patterns
+
+`[targets.spawn_rules]` (optional) stops targets from appearing where the player expects them. All four controls default to off and can be combined:
+
+```toml
+[targets]
+spawn_rules = { avoid_last_deg = 15, avoid_recent = 2, min_flick_deg = 12, exclude_center = 0.25 }
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `avoid_last_deg` | `0` (off) | Blocks the last spawn point and every position within this angle of it, in [0, 180). A small angle only stops a target reappearing in the same place; a wider one also blocks the positions next to it. |
+| `avoid_recent` | `1` | How many of the latest spawn points `avoid_last_deg` blocks, 1–16. |
+| `min_flick_deg` | `0` (off) | Minimum angle between the crosshair at spawn time and the new target, in [0, 180): a minimum flick distance. |
+| `exclude_center` | `0` (off) | Keeps targets out of the middle of the area: a fraction in [0, 1) of each axis' half-width around its center. `angular` uses yaw and pitch (humanoids yaw only); `floor` uses x and z. With `around_crosshair` it is rejected, because `offset_deg.min` already keeps targets out of the middle. |
+
+Angles are measured from the eye between aim points (a humanoid's head, a sphere's center). A spawn that breaks a rule is redrawn together with `min_separation_deg`, up to 24 times; if every attempt breaks a rule, the last one is used, so a very strict combination is not guaranteed. The trainer uses positions, not a grid of spawn points, so "the last spawn point" and "the positions adjacent to it" are both an angle around the last position. The built-in `spread-flicks` uses all four controls.
+
 ### Motions
 
 | `kind` | Fields | Meaning |

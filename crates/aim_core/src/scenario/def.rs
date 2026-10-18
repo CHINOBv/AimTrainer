@@ -247,6 +247,36 @@ pub struct TargetsDef {
     /// player must leave alone until it expires. Needs `lifetime_secs` and click fire.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub decoy_chance: f32,
+    /// Spawn-pattern controls: keep new targets away from the last spawns, from the
+    /// crosshair, or out of the middle of the spawn area.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spawn_rules: Option<SpawnRules>,
+}
+
+/// Spawn-pattern controls (`[targets.spawn_rules]`). A candidate spawn point that breaks a
+/// rule is resampled, together with `min_separation_deg`, up to a fixed number of attempts;
+/// if no attempt satisfies every rule, the last candidate is used. Angles are measured from
+/// the eye between aim points (a humanoid's head, a sphere's center).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpawnRules {
+    /// Block the last spawn point and every position within this angle of it, degrees
+    /// (0 = off). A wider angle also blocks the positions adjacent to the last one.
+    #[serde(default)]
+    pub avoid_last_deg: f32,
+    /// How many of the most recent spawn points `avoid_last_deg` blocks (default 1).
+    #[serde(default = "one")]
+    pub avoid_recent: u32,
+    /// Minimum angle between the crosshair at spawn time and the new target, degrees
+    /// (0 = off): a minimum flick distance.
+    #[serde(default)]
+    pub min_flick_deg: f32,
+    /// Exclude the middle of the spawn area: a fraction in [0, 1) of each axis' half-width
+    /// around its center (0 = off). `angular` uses yaw and pitch (humanoids yaw only),
+    /// `floor` uses x and z; `around_crosshair` already excludes its middle with
+    /// `offset_deg.min`.
+    #[serde(default)]
+    pub exclude_center: f32,
 }
 
 fn one() -> u32 {
@@ -726,6 +756,30 @@ impl ScenarioDef {
                 );
             }
         }
+        if let Some(r) = &t.spawn_rules {
+            check(
+                (0.0..180.0).contains(&r.avoid_last_deg),
+                "targets.spawn_rules.avoid_last_deg",
+                "must be in [0, 180)",
+            );
+            check(
+                (1..=16).contains(&r.avoid_recent),
+                "targets.spawn_rules.avoid_recent",
+                "must be between 1 and 16",
+            );
+            check(
+                (0.0..180.0).contains(&r.min_flick_deg),
+                "targets.spawn_rules.min_flick_deg",
+                "must be in [0, 180)",
+            );
+            check(
+                (0.0..1.0).contains(&r.exclude_center)
+                    && (r.exclude_center == 0.0
+                        || !matches!(t.spawn, SpawnArea::AroundCrosshair { .. })),
+                "targets.spawn_rules.exclude_center",
+                "must be in [0, 1); with around_crosshair use offset_deg.min instead",
+            );
+        }
 
         match &t.motion {
             Motion::Static => {}
@@ -1021,6 +1075,84 @@ mod tests {
         assert_eq!(fields(vec![0.5], vec![f32::NAN]), bad, "NaN multiplier");
         assert_eq!(fields(vec![0.5, 1.0], vec![2.0]), bad, "lengths differ");
         assert!(fields(vec![1.0], vec![0.5]).is_empty());
+    }
+
+    /// `MINIMAL` with an `angular` spawn area instead of `around_crosshair`.
+    fn angular_minimal() -> String {
+        MINIMAL.replace(
+            r#"spawn = { kind = "around_crosshair", offset_deg = [10, 40], distance = [10, 10] }"#,
+            r#"spawn = { kind = "angular", yaw_deg = [-40, 40], pitch_deg = [-5, 10], distance = [10, 10] }"#,
+        )
+    }
+
+    fn fields_of(d: &ScenarioDef) -> Vec<&'static str> {
+        d.validate().into_iter().map(|e| e.field).collect()
+    }
+
+    #[test]
+    fn spawn_rules_default_off_stay_out_of_saved_files_parse_and_are_validated() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!(d.targets.spawn_rules, None);
+        assert!(!toml::to_string(&d).unwrap().contains("spawn_rules"));
+
+        let src = format!(
+            "{}\n[targets.spawn_rules]\navoid_last_deg = 12\nmin_flick_deg = 15\nexclude_center = 0.3\n",
+            angular_minimal()
+        );
+        let ruled = ScenarioDef::from_toml(&src).unwrap();
+        assert_eq!(
+            ruled.targets.spawn_rules,
+            Some(SpawnRules {
+                avoid_last_deg: 12.0,
+                avoid_recent: 1,
+                min_flick_deg: 15.0,
+                exclude_center: 0.3,
+            })
+        );
+        assert!(ruled.validate().is_empty(), "{:?}", ruled.validate());
+        assert!(ScenarioDef::from_toml(&src.replace("min_flick_deg", "min_flik_deg")).is_err());
+
+        let with = |f: &dyn Fn(&mut SpawnRules)| {
+            let mut b = ruled.clone();
+            f(b.targets.spawn_rules.as_mut().unwrap());
+            fields_of(&b)
+        };
+        for bad in [-1.0, 180.0, f32::NAN] {
+            assert_eq!(
+                with(&|r| r.avoid_last_deg = bad),
+                ["targets.spawn_rules.avoid_last_deg"],
+                "{bad}"
+            );
+            assert_eq!(
+                with(&|r| r.min_flick_deg = bad),
+                ["targets.spawn_rules.min_flick_deg"],
+                "{bad}"
+            );
+        }
+        for bad in [0, 17] {
+            assert_eq!(
+                with(&|r| r.avoid_recent = bad),
+                ["targets.spawn_rules.avoid_recent"],
+                "{bad}"
+            );
+        }
+        for bad in [-0.1, 1.0, f32::NAN] {
+            assert_eq!(
+                with(&|r| r.exclude_center = bad),
+                ["targets.spawn_rules.exclude_center"],
+                "{bad}"
+            );
+        }
+
+        let mut around = d.clone();
+        around.targets.spawn_rules = ruled.targets.spawn_rules.clone();
+        assert_eq!(
+            fields_of(&around),
+            ["targets.spawn_rules.exclude_center"],
+            "around_crosshair excludes its middle with offset_deg.min"
+        );
+        around.targets.spawn_rules.as_mut().unwrap().exclude_center = 0.0;
+        assert!(fields_of(&around).is_empty());
     }
 
     #[test]

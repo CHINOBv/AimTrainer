@@ -342,6 +342,46 @@ mod tests {
         }
     }
 
+    /// Results recorded before reactive targets, conditional behaviours, spawn rules,
+    /// regeneration and score decay existed. One scenario per spawn area, motion, fire mode
+    /// and weapon feature: scenarios that use none of the new blocks must keep their random
+    /// sequences, and so their exact results.
+    #[test]
+    fn scenarios_without_the_target_behaviour_blocks_simulate_exactly_as_before() {
+        let contender = AimerProfile::PRESETS[1];
+        let mut changed = Vec::new();
+        for (id, score, kills, shots, hits) in PINNED {
+            let mut session = Session::new(builtin(id), 9);
+            let mut aimer = SimAimer::new(contender, 9);
+            while !session.is_finished() {
+                let input = aimer.input(&session, 1.0 / 240.0);
+                session.update(input);
+            }
+            let s = session.stats();
+            let now = (s.score.to_bits(), s.kills, s.shots, s.hits);
+            if now != (score.to_bits(), kills, shots, hits) {
+                changed.push(format!(
+                    "(\"{id}\", {:?}, {}, {}, {})",
+                    s.score, s.kills, s.shots, s.hits
+                ));
+            }
+        }
+        assert!(changed.is_empty(), "{changed:#?}");
+    }
+
+    /// `(id, score, kills, shots, hits)` of a contender run with seed 9.
+    const PINNED: [(&str, f32, u32, u32, u32); 9] = [
+        ("flick-wide", 4460.0, 49, 71, 49),
+        ("switch-wide", 5265.0, 57, 86, 57),
+        ("counter-strafe", 4420.0, 47, 75, 47),
+        ("track-orbit", 3189.722, 0, 0, 0),
+        ("dodge-juke-heads", 4070.0, 51, 65, 51),
+        ("go-no-go", 150.0, 15, 41, 15),
+        ("precision-rings", 4525.0, 64, 93, 64),
+        ("spray-transfer", 6950.0, 8, 85, 67),
+        ("track-reactive-strafe", 1749.9491, 0, 0, 0),
+    ];
+
     /// Decoys shot and decoys left alone over five seeds.
     fn decoy_choices(profile: AimerProfile) -> (u32, u32) {
         let def = builtin("go-no-go");
