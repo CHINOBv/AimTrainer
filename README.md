@@ -158,6 +158,33 @@ Open Settings and enter:
 
 Then use **DPI check**: move the mouse exactly 10 cm along a ruler. The measured DPI should be within a few percent of the DPI you configured. If it isn't, you have OS mouse acceleration on or the wrong DPI.
 
+## Feel settings
+
+Game-feel effects live in the `[feel]` table of `settings.toml`. Missing keys take the Standard preset, which keeps the look of effects that already existed (the red damage flash stays on at its usual strength). A toggle is a table with `enabled` and `intensity_percent` (100 = designed strength); a toggle table that leaves out `enabled` turns the effect on.
+
+| Key | Default | What it does |
+|---|---|---|
+| `preset` | `"standard"` | Last preset applied: `"minimal"`, `"standard"` or `"juicy"`. Changing one key does not change it |
+| `damage_indicator` | on, 100 | Arena: arrow around the crosshair towards the damage source, sized by damage |
+| `damage_vignette` | on, 100 | Arena: red screen-edge flash on damage |
+| `kill_feed` | `true` | Arena: list of recent kills |
+| `streak_banner` | `true` | Arena: multi-kill and streak banner |
+| `health_bar` | `true` | Arena: health bar with a ghost of the damage just taken |
+| `low_hp_pulse` | `true` | Arena: health bar pulse at low health |
+| `death_screen` | `true` | Arena: killing-shot direction and respawn timer after a death |
+| `round_transitions` | `true` | Animated countdown, "GO" pop and end-of-round banner |
+| `screen_punch` | off, 100 | Arena: screen-space jolt on damage; never moves the camera |
+| `crosshair_bloom` | `false` | Crosshair opens with recoil and movement inaccuracy |
+| `arena_arrows` | `true` | Arena: edge arrows towards enemies in sight but outside the view |
+| `kill_flash_arena` | `true` | Arena: brief flash on a kill |
+| `distinct_markers` | `true` | Different hit markers for head, body and kill |
+
+Minimal keeps only the damage indicator (at 60%), health bar and death screen. Juicy adds screen punch and crosshair bloom to Standard.
+
+The game-feel effects are still being built: every key above is already read and saved, but only `damage_vignette` drives an effect today.
+
+The `[sound]` table adds per-category volumes, each a percent of `volume_percent`: `shots_percent`, `world_percent`, `ui_percent` and `cues_percent` (all 100). Sound toggles: `bot_gunfire`, `footsteps`, `damage_taken`, `death`, `streak`, `round_cues` and `low_time_warning` are on; `ui_clicks` is off.
+
 ## Your own exercises
 
 User files live in the folders below. A file with the same `id` as a built-in replaces it.
