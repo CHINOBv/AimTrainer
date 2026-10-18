@@ -1,8 +1,11 @@
-//! Sensitivity (with converter and DPI check) and display settings forms, including the
-//! crosshair editor with VALORANT code import/export.
+//! The Settings sub-tabs other than Feedback and Audio (see `feedback_settings`):
+//! sensitivity (with the DPI check), crosshair (with VALORANT code import/export),
+//! overlay, keys and training. Rows go through [`SettingsRows`] so the search can filter
+//! them.
 
 use super::{hotkey_settings, restart_key_setting};
 use crate::persistence::settings::{EnemyHighlight, Settings, TargetVisibility};
+use crate::ui::molecules::SettingsRows;
 use aim_core::crosshair::{
     CUSTOM_COLOR_INDEX, Crosshair, DOT_THICKNESS_PX, ERROR_MULTIPLIER_MAX, LINE_THICKNESS_MAX_PX,
     LineLimits, Lines, OUTLINE_THICKNESS_PX, PRESET_COLORS, Rgba, code, preset,
@@ -13,6 +16,71 @@ use aim_core::sensitivity::randomizer::{
 };
 use aim_core::training::missions::Commitment;
 use bevy_egui::egui;
+
+/// The Settings sub-tabs.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsTab {
+    #[default]
+    Sensitivity,
+    Crosshair,
+    Feedback,
+    Audio,
+    Overlay,
+    Keys,
+    Training,
+}
+
+impl SettingsTab {
+    /// Every sub-tab with its label, in display order.
+    pub const ALL: [(SettingsTab, &'static str); 7] = [
+        (SettingsTab::Sensitivity, "Sensitivity"),
+        (SettingsTab::Crosshair, "Crosshair"),
+        (SettingsTab::Feedback, "Feedback"),
+        (SettingsTab::Audio, "Audio"),
+        (SettingsTab::Overlay, "Overlay"),
+        (SettingsTab::Keys, "Keys"),
+        (SettingsTab::Training, "Training"),
+    ];
+}
+
+/// Put every setting shown on `tab` back to its default. Settings on other tabs, and
+/// state that is not a preference (favourites, the first-run flag), are kept.
+pub fn reset_section(settings: &mut Settings, tab: SettingsTab) {
+    let d = Settings::default();
+    match tab {
+        SettingsTab::Sensitivity => {
+            settings.sensitivity = d.sensitivity;
+            settings.ads_multiplier = d.ads_multiplier;
+        }
+        SettingsTab::Crosshair => settings.crosshair = d.crosshair,
+        SettingsTab::Feedback => {
+            settings.hit_feedback = d.hit_feedback;
+            settings.feel = d.feel;
+        }
+        SettingsTab::Audio => settings.sound = d.sound,
+        SettingsTab::Overlay => {
+            settings.background_opacity = d.background_opacity;
+            settings.target_color = d.target_color;
+            settings.target_visibility = d.target_visibility;
+            settings.offscreen_arrows = d.offscreen_arrows;
+            settings.fullscreen = d.fullscreen;
+            settings.always_on_top = d.always_on_top;
+        }
+        SettingsTab::Keys => {
+            settings.restart_key = d.restart_key;
+            settings.overlay_hotkey = d.overlay_hotkey;
+            settings.warmup_hotkey = d.warmup_hotkey;
+            settings.micro_hotkey = d.micro_hotkey;
+        }
+        SettingsTab::Training => {
+            settings.warmup_minutes = d.warmup_minutes;
+            settings.daily_goal_minutes = d.daily_goal_minutes;
+            settings.mission_commitment = d.mission_commitment;
+            settings.arena_coaching = d.arena_coaching;
+            settings.sens_randomizer = d.sens_randomizer;
+        }
+    }
+}
 
 /// Raw mouse counts accumulated while the DPI check runs.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -31,157 +99,201 @@ impl DpiMeter {
     }
 }
 
+/// Game picker that keeps the physical sensitivity (cm/360) when the game changes.
+pub fn game_combo(ui: &mut egui::Ui, settings: &mut Settings) {
+    let s = &mut settings.sensitivity;
+    egui::ComboBox::from_id_salt("game")
+        .selected_text(s.game.display_name())
+        .show_ui(ui, |ui| {
+            for g in Game::ALL {
+                if ui.selectable_label(s.game == g, g.display_name()).clicked() && s.game != g {
+                    *s = s.convert_to(g);
+                }
+            }
+        });
+}
+
 pub fn sensitivity_panel(
     ui: &mut egui::Ui,
+    rows: &mut SettingsRows,
     settings: &mut Settings,
     dpi_target: &mut u32,
     meter: &mut DpiMeter,
 ) {
-    let s = &mut settings.sensitivity;
-    ui.heading("Sensitivity");
-    egui::Grid::new("sens").num_columns(2).show(ui, |ui| {
-        ui.label("Game");
-        egui::ComboBox::from_id_salt("game")
-            .selected_text(s.game.display_name())
-            .show_ui(ui, |ui| {
-                for g in Game::ALL {
-                    if ui.selectable_label(s.game == g, g.display_name()).clicked() && s.game != g {
-                        // Switching game keeps your physical sensitivity (cm/360).
-                        *s = s.convert_to(g);
-                    }
-                }
-            });
-        ui.end_row();
-        ui.label("In-game sensitivity");
+    rows.section(ui, "Sensitivity");
+    rows.row(ui, "Game", |ui| game_combo(ui, settings));
+    rows.row(ui, "In-game sensitivity", |ui| {
         ui.add(
-            egui::DragValue::new(&mut s.value)
+            egui::DragValue::new(&mut settings.sensitivity.value)
                 .speed(0.001)
                 .range(0.001..=100.0)
                 .max_decimals(4),
         );
-        ui.end_row();
-        ui.label("Mouse DPI");
-        ui.add(egui::DragValue::new(&mut s.dpi).speed(10).range(50..=64000));
-        ui.end_row();
-        ui.label("ADS multiplier");
+    });
+    rows.row(ui, "Mouse DPI", |ui| {
+        ui.add(
+            egui::DragValue::new(&mut settings.sensitivity.dpi)
+                .speed(10)
+                .range(50..=64000),
+        );
+    });
+    rows.row(ui, "ADS multiplier", |ui| {
         ui.add(
             egui::DragValue::new(&mut settings.ads_multiplier)
                 .speed(0.01)
                 .range(0.01..=5.0),
         );
-        ui.end_row();
     });
     let s = settings.sensitivity;
-    ui.add_space(4.0);
-    ui.label(format!(
-        "{:.2} cm/360  ·  {:.2} in/360  ·  eDPI {:.0}  ·  {:.5}°/count",
-        s.cm_per_360(),
-        s.inches_per_360(),
-        s.edpi(),
-        s.deg_per_count()
-    ));
-    ui.horizontal(|ui| {
-        if *dpi_target == 0 {
-            *dpi_target = s.dpi;
-        }
-        ui.label("Change DPI to");
+    rows.block(ui, "cm/360 in/360 eDPI degrees per count", |ui| {
+        ui.label(format!(
+            "{:.2} cm/360  ·  {:.2} in/360  ·  eDPI {:.0}  ·  {:.5}°/count",
+            s.cm_per_360(),
+            s.inches_per_360(),
+            s.edpi(),
+            s.deg_per_count()
+        ));
+    });
+    if *dpi_target == 0 {
+        *dpi_target = s.dpi;
+    }
+    rows.row(ui, "Change DPI to", |ui| {
         ui.add(egui::DragValue::new(dpi_target).speed(10).range(50..=64000));
         if ui.button("keep cm/360").clicked() {
             settings.sensitivity = s.with_dpi(*dpi_target);
         }
     });
-
-    ui.add_space(8.0);
-    ui.collapsing("DPI check (verify raw input)", |ui| {
-        ui.label(format!(
-            "Press Start, move the mouse exactly {} cm to the right along a ruler, then Stop.",
-            DpiMeter::DISTANCE_CM
-        ));
-        ui.horizontal(|ui| {
-            if ui
-                .button(if meter.active { "Stop" } else { "Start" })
-                .clicked()
-            {
-                if !meter.active {
-                    *meter = DpiMeter::default();
-                }
-                meter.active = !meter.active;
-            }
+    rows.block(ui, "DPI check verify raw input mouse acceleration", |ui| {
+        ui.collapsing("DPI check (verify raw input)", |ui| {
             ui.label(format!(
-                "counts {:.0}  →  measured DPI ≈ {:.0} (configured {})",
-                meter.x,
-                meter.measured_dpi(),
-                s.dpi
+                "Press Start, move the mouse exactly {} cm to the right along a ruler, then Stop.",
+                DpiMeter::DISTANCE_CM
             ));
+            ui.horizontal(|ui| {
+                if ui
+                    .button(if meter.active { "Stop" } else { "Start" })
+                    .clicked()
+                {
+                    if !meter.active {
+                        *meter = DpiMeter::default();
+                    }
+                    meter.active = !meter.active;
+                }
+                ui.label(format!(
+                    "counts {:.0}  →  measured DPI ≈ {:.0} (configured {})",
+                    meter.x,
+                    meter.measured_dpi(),
+                    s.dpi
+                ));
+            });
+            ui.label(
+                "Expect a match within a few %. A large mismatch means wrong DPI or OS acceleration.",
+            );
         });
-        ui.label(
-            "Expect a match within a few %. A large mismatch means wrong DPI or OS acceleration.",
-        );
     });
+    if !rows.searching() {
+        ui.small("Converting from another game? Use the Tools tab.");
+    }
+}
 
-    ui.add_space(8.0);
-    ui.small("Converting from another game? Use the Tools tab.");
+pub fn crosshair_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mut Settings) {
+    rows.section(ui, "Crosshair");
+    rows.block(
+        ui,
+        "Crosshair preset color outlines center dot inner outer lines thickness length offset opacity VALORANT code import export",
+        |ui| crosshair_editor(ui, &mut settings.crosshair),
+    );
+}
+
+pub fn overlay_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mut Settings) {
+    rows.section(ui, "Overlay");
+    rows.row(ui, "Background opacity", |ui| {
+        ui.add(egui::Slider::new(
+            &mut settings.background_opacity,
+            0.0..=1.0,
+        ));
+    });
+    rows.row(ui, "Target color", |ui| {
+        ui.color_edit_button_rgb(&mut settings.target_color);
+    });
+    rows.block(
+        ui,
+        "Enemy highlight colour color-blind target outline environment tint",
+        |ui| target_visibility(ui, settings),
+    );
+    rows.check(
+        ui,
+        "Arrows towards off-screen targets",
+        &mut settings.offscreen_arrows,
+        "Scenarios only; arenas have their own option under Feedback.",
+    );
+    rows.check(
+        ui,
+        "Borderless fullscreen (restart)",
+        &mut settings.fullscreen,
+        "",
+    );
+    rows.check(
+        ui,
+        "Always on top (restart; X11/Windows)",
+        &mut settings.always_on_top,
+        "",
+    );
 }
 
 /// `recording_hotkey`: the global hotkey slot waiting for a key press (see `hotkey_settings`).
-pub fn display_panel(
+pub fn keys_panel(
     ui: &mut egui::Ui,
+    rows: &mut SettingsRows,
     settings: &mut Settings,
     recording_hotkey: &mut Option<usize>,
 ) {
-    ui.heading("Crosshair");
-    crosshair_editor(ui, &mut settings.crosshair);
-    ui.add_space(8.0);
-    ui.heading("Overlay");
-    ui.add(
-        egui::Slider::new(&mut settings.background_opacity, 0.0..=1.0).text("background opacity"),
-    );
-    ui.horizontal(|ui| {
-        ui.label("Target color");
-        ui.color_edit_button_rgb(&mut settings.target_color);
+    rows.section(ui, "Gameplay keys");
+    rows.block(ui, "Restart run key", |ui| {
+        restart_key_setting::restart_key_setting(ui, &mut settings.restart_key)
     });
-    target_visibility(ui, settings);
-    ui.checkbox(
-        &mut settings.offscreen_arrows,
-        "Arrows towards off-screen targets",
+    rows.section(ui, "Global hotkeys (Windows/X11)");
+    rows.block(
+        ui,
+        "Global hotkeys toggle overlay queue warm-up buy-phase micro drill Wayland Hyprland",
+        |ui| {
+            hotkey_settings::hotkey_settings(ui, settings, recording_hotkey);
+            ui.label("Wayland/Hyprland: bind `aimtrainer toggle`, `aimtrainer warmup` and `aimtrainer micro` in your compositor (see README).");
+        },
     );
-    ui.checkbox(&mut settings.fullscreen, "Borderless fullscreen (restart)");
-    ui.checkbox(
-        &mut settings.always_on_top,
-        "Always on top (restart; X11/Windows)",
-    );
-    ui.horizontal(|ui| {
-        ui.label("Queue warm-up length");
+}
+
+pub fn training_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mut Settings) {
+    rows.section(ui, "Training");
+    rows.row(ui, "Queue warm-up length", |ui| {
         ui.add(
             egui::DragValue::new(&mut settings.warmup_minutes)
                 .range(1..=30)
                 .suffix(" min"),
         );
     });
-    ui.horizontal(|ui| {
-        ui.label("Daily goal");
+    rows.row(ui, "Daily goal", |ui| {
         ui.add(
             egui::DragValue::new(&mut settings.daily_goal_minutes)
                 .range(5.0..=120.0)
                 .suffix(" min"),
         );
     });
-    ui.horizontal(|ui| {
-        ui.label("Mission commitment");
+    rows.row(ui, "Mission commitment", |ui| {
         for c in Commitment::ALL {
-            ui.selectable_value(&mut settings.mission_commitment, c, c.label());
+            ui.selectable_value(&mut settings.mission_commitment, c, c.label())
+                .on_hover_text("Low: 2 missions a day. Medium: 3, one of them mastery. High: 4, two mastery, closer to your bests. Changing it regenerates today's missions.");
         }
-    })
-    .response
-    .on_hover_text("Low: 2 missions a day. Medium: 3, one of them mastery. High: 4, two mastery, closer to your bests. Changing it regenerates today's missions.");
-    sens_randomizer(ui, &mut settings.sens_randomizer);
-    ui.add_space(8.0);
-    ui.heading("Gameplay keys");
-    restart_key_setting::restart_key_setting(ui, &mut settings.restart_key);
-    ui.add_space(8.0);
-    ui.heading("Global hotkeys (Windows/X11)");
-    hotkey_settings::hotkey_settings(ui, settings, recording_hotkey);
-    ui.label("Wayland/Hyprland: bind `aimtrainer toggle`, `aimtrainer warmup` and `aimtrainer micro` in your compositor (see README).");
+    });
+    rows.check(
+        ui,
+        "Live coaching overlay in arenas",
+        &mut settings.arena_coaching,
+        "Crosshair height against head level, and whether you are still enough to shoot accurately.",
+    );
+    rows.block(ui, "Sensitivity randomiser drill", |ui| {
+        sens_randomizer(ui, &mut settings.sens_randomizer)
+    });
 }
 
 /// The sensitivity randomiser drill. It only scales the look while playing; the saved
@@ -483,5 +595,71 @@ mod tests {
             y: 0.0,
         };
         assert!((m.measured_dpi() - 800.0).abs() < 0.1);
+    }
+
+    /// Every preference changed away from its default.
+    fn changed() -> Settings {
+        use crate::persistence::settings::FeelPreset;
+        let mut s = Settings {
+            sensitivity: aim_core::sensitivity::Sensitivity::valorant(0.9, 1600),
+            ads_multiplier: 0.8,
+            background_opacity: 0.1,
+            fullscreen: false,
+            always_on_top: false,
+            overlay_hotkey: "F1".into(),
+            warmup_hotkey: "F2".into(),
+            micro_hotkey: "F3".into(),
+            restart_key: "F5".into(),
+            warmup_minutes: 9,
+            daily_goal_minutes: 50.0,
+            target_color: [0.0, 1.0, 0.0],
+            offscreen_arrows: false,
+            mission_commitment: Commitment::High,
+            arena_coaching: true,
+            ..Settings::default()
+        };
+        s.crosshair.center_dot = !s.crosshair.center_dot;
+        s.sound.volume_percent = 7;
+        s.sound.footsteps = false;
+        s.hit_feedback.marker_ms = 300;
+        s.feel.apply_preset(FeelPreset::Juicy);
+        s.target_visibility.outline = true;
+        s.sens_randomizer.enabled = true;
+        s
+    }
+
+    #[test]
+    fn resetting_a_section_only_touches_its_own_settings() {
+        let mut s = changed();
+        reset_section(&mut s, SettingsTab::Audio);
+        assert_eq!(s.sound, Settings::default().sound);
+        assert_eq!(
+            Settings {
+                sound: changed().sound,
+                ..s.clone()
+            },
+            changed(),
+            "nothing outside Audio changed"
+        );
+
+        let mut s = changed();
+        reset_section(&mut s, SettingsTab::Feedback);
+        assert_eq!(s.feel, Settings::default().feel);
+        assert_eq!(s.hit_feedback, Settings::default().hit_feedback);
+        assert_eq!(s.sound, changed().sound);
+
+        let mut s = changed();
+        reset_section(&mut s, SettingsTab::Keys);
+        assert_eq!(s.restart_key, "KeyR");
+        assert_eq!(s.sensitivity, changed().sensitivity);
+    }
+
+    #[test]
+    fn resetting_every_section_restores_every_default() {
+        let mut s = changed();
+        for (tab, _) in SettingsTab::ALL {
+            reset_section(&mut s, tab);
+        }
+        assert_eq!(s, Settings::default());
     }
 }

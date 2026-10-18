@@ -15,7 +15,7 @@ use crate::platform::frame_stats::FrameStats;
 use crate::platform::hotkey::HotkeyCapture;
 use crate::ui::UiAction;
 use crate::ui::atoms::{ERROR, GOOD};
-use crate::ui::molecules::tab_bar;
+use crate::ui::molecules::{SettingsRows, tab_bar};
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::profile_code::{self, ProfileImport};
 use crate::ui::organisms::progress_panel::{self, ProgressModel};
@@ -23,7 +23,7 @@ use crate::ui::organisms::replay_viewer::{self, ReplayViewerState};
 use crate::ui::organisms::sens_converter::{ConverterState, sens_converter};
 use crate::ui::organisms::sens_finder;
 use crate::ui::organisms::sens_suggestion::{self, RECENT_RUNS, SensSuggestionState};
-use crate::ui::organisms::settings_panels::{self, DpiMeter};
+use crate::ui::organisms::settings_panels::{self, DpiMeter, SettingsTab};
 use crate::ui::organisms::system_check::{self, SystemModel};
 use crate::ui::organisms::today_panel::{
     self, ChallengeModel, DayModel, MissionModel, MissionsModel, RoutineModel, TodayAction,
@@ -93,6 +93,108 @@ struct MenuState {
     replays: ReplayViewerState,
     converter: Option<ConverterState>,
     sens_suggestion: SensSuggestionState,
+    settings_tab: SettingsTab,
+    /// Text of the Settings search box.
+    settings_query: String,
+    /// The section whose "Reset" was clicked once and waits for confirmation.
+    confirm_reset: Option<SettingsTab>,
+}
+
+/// The Settings tab: search, sub-tabs, a reset per section, and the rows.
+fn settings_page(root: &mut egui::Ui, state: &mut MenuState, cfg: &mut SettingsAccess) {
+    egui::Panel::top("settings_tabs").show(root, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Search");
+            ui.add(
+                egui::TextEdit::singleline(&mut state.settings_query)
+                    .hint_text("Search settings")
+                    .desired_width(180.0),
+            );
+            if !state.settings_query.is_empty() && ui.small_button("Clear").clicked() {
+                state.settings_query.clear();
+            }
+            ui.separator();
+            tab_bar(ui, &mut state.settings_tab, &SettingsTab::ALL);
+        });
+        let searching = !state.settings_query.trim().is_empty();
+        ui.horizontal(|ui| {
+            if searching {
+                ui.small("Showing matches from every section.");
+            } else if state.confirm_reset == Some(state.settings_tab) {
+                ui.label("Reset this section to its defaults?");
+                if ui.button("Reset").clicked() {
+                    settings_panels::reset_section(&mut cfg.settings, state.settings_tab);
+                    state.confirm_reset = None;
+                }
+                if ui.button("Cancel").clicked() {
+                    state.confirm_reset = None;
+                }
+            } else if ui.button("Reset section to defaults").clicked() {
+                state.confirm_reset = Some(state.settings_tab);
+            }
+        });
+    });
+    // Pinned below the rows, which scroll.
+    egui::Panel::bottom("settings_footer").show(root, |ui| {
+        ui.small(format!(
+            "Settings file: {}  ·  VALORANT FOV: {:.2}° vertical (103° horizontal at 16:9, Hor+)",
+            cfg.paths.settings_file.display(),
+            fov::valorant_vertical_fov_deg()
+        ));
+    });
+    egui::CentralPanel::default().show(root, |ui| {
+        egui::ScrollArea::vertical()
+            .id_salt("settings")
+            .show(ui, |ui| {
+                let query = state.settings_query.clone();
+                let mut rows = SettingsRows::new(&query);
+                let tabs: Vec<SettingsTab> = if rows.searching() {
+                    SettingsTab::ALL.iter().map(|t| t.0).collect()
+                } else {
+                    vec![state.settings_tab]
+                };
+                for tab in tabs {
+                    settings_section(ui, &mut rows, tab, state, cfg);
+                }
+            });
+    });
+}
+
+fn settings_section(
+    ui: &mut egui::Ui,
+    rows: &mut SettingsRows,
+    tab: SettingsTab,
+    state: &mut MenuState,
+    cfg: &mut SettingsAccess,
+) {
+    let settings = &mut *cfg.settings;
+    match tab {
+        SettingsTab::Sensitivity => {
+            settings_panels::sensitivity_panel(
+                ui,
+                rows,
+                settings,
+                &mut state.dpi_target,
+                &mut state.meter,
+            );
+            rows.block(ui, "Profile code share import export", |ui| {
+                ui.add_space(8.0);
+                profile_code::profile_code(ui, settings, &mut state.profile_import);
+            });
+        }
+        SettingsTab::Crosshair => settings_panels::crosshair_panel(ui, rows, settings),
+        SettingsTab::Feedback => feedback_settings::feedback_panel(ui, rows, settings),
+        SettingsTab::Audio => {
+            if let Some(clip) = feedback_settings::audio_panel(ui, rows, &mut settings.sound) {
+                cfg.sound_previews.write(SoundPreview(clip));
+            }
+        }
+        SettingsTab::Overlay => settings_panels::overlay_panel(ui, rows, settings),
+        SettingsTab::Keys => {
+            settings_panels::keys_panel(ui, rows, settings, &mut cfg.hotkey_capture.recording)
+        }
+        SettingsTab::Training => settings_panels::training_panel(ui, rows, settings),
+    }
 }
 
 fn count_dpi_meter(motion: Res<AccumulatedMouseMotion>, mut state: ResMut<MenuState>) {
@@ -365,50 +467,12 @@ fn menu(
                 });
             });
         }
-        Tab::Settings => {
-            egui::CentralPanel::default().show(&mut root, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    settings_panels::sensitivity_panel(
-                        ui,
-                        &mut cfg.settings,
-                        &mut state.dpi_target,
-                        &mut state.meter,
-                    );
-                    ui.separator();
-                    settings_panels::display_panel(
-                        ui,
-                        &mut cfg.settings,
-                        &mut cfg.hotkey_capture.recording,
-                    );
-                    ui.separator();
-                    if let Some(clip) = feedback_settings::sound_panel(ui, &mut cfg.settings.sound)
-                    {
-                        cfg.sound_previews.write(SoundPreview(clip));
-                    }
-                    ui.separator();
-                    let crosshair = cfg.settings.crosshair.color();
-                    feedback_settings::hit_feedback_panel(
-                        ui,
-                        &mut cfg.settings.hit_feedback,
-                        crosshair,
-                    );
-                    ui.separator();
-                    profile_code::profile_code(ui, &mut cfg.settings, &mut state.profile_import);
-                    ui.add_space(8.0);
-                    ui.small(format!(
-                        "Settings file: {}",
-                        cfg.paths.settings_file.display()
-                    ));
-                    ui.small(format!(
-                        "VALORANT FOV: {:.2}° vertical (103° horizontal at 16:9, Hor+)",
-                        fov::valorant_vertical_fov_deg()
-                    ));
-                });
-            });
-        }
+        Tab::Settings => settings_page(&mut root, state, &mut cfg),
     }
 
-    if state.tab != Tab::Settings {
+    let hotkeys_shown = state.tab == Tab::Settings
+        && (state.settings_tab == SettingsTab::Keys || !state.settings_query.trim().is_empty());
+    if !hotkeys_shown {
         stop_recording(&mut cfg.hotkey_capture);
     }
     if *cfg.settings != before && cfg.settings.sensitivity.is_valid() {

@@ -398,13 +398,6 @@ impl FeelSettings {
     }
 
     /// Set every toggle to `preset`'s values.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the settings UI and first-run wizard will apply presets"
-        )
-    )]
     pub fn apply_preset(&mut self, preset: FeelPreset) {
         *self = Self::for_preset(preset);
     }
