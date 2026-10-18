@@ -1,16 +1,27 @@
-//! Sound effects for shots: every clip is synthesized once at startup (`synth`), then
-//! played on the frame's strongest [`ShotFeedback`] and on settings previews. Sound cues
-//! of perception drills are panned to where they come from (`cue`).
+//! Sound effects: every clip is synthesized once at startup (`synth`). Shots play the
+//! frame's strongest [`ShotFeedback`] and settings previews. Sound cues of perception
+//! drills, bot gunfire and bot footsteps are panned to where they come from (`cue`).
+//! Arena feedback, streaks, round cues and the low-time warning are decided in
+//! `game_sounds`; every sound follows the master volume times its category (`mix`).
 
 pub mod cue;
+pub mod game_sounds;
+pub mod mix;
 pub mod synth;
+pub mod ui_click;
 
+use crate::game::arena::{ArenaFeedback, ArenaRun};
 use crate::game::feedback::{ShotFeedback, ShotOutcome, strongest};
+use crate::game::{AppState, Run};
 use crate::persistence::settings::{Settings, SoundSettings};
+use aim_core::math::ViewAngles;
 use aim_core::scenario::cue::CueSound;
 use bevy::audio::{AddAudioSource, ChannelCount, Decodable, Sample, SampleRate, Source, Volume};
 use bevy::prelude::*;
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
 pub use cue::CueHeard;
+use game_sounds::{FootstepTracker, Play, Sfx, StreakTimer};
+use mix::Category;
 use std::collections::HashMap;
 use std::num::NonZero;
 use std::sync::Arc;
@@ -163,6 +174,46 @@ struct SoundBank(HashMap<Clip, Handle<SynthClip>>);
 #[derive(Resource, Default)]
 struct CueBank(HashMap<CueSound, Vec<f32>>);
 
+/// Every game-feel clip, built once; positional ones also keep their mono samples to be
+/// panned when played.
+#[derive(Resource, Default)]
+struct SfxBank {
+    clips: HashMap<Sfx, Handle<SynthClip>>,
+    mono: HashMap<Sfx, Vec<f32>>,
+}
+
+impl SfxBank {
+    /// Play `p`: panned from where it comes from, heard by `listener`, or centered.
+    fn play(
+        &self,
+        commands: &mut Commands,
+        clips: &mut Assets<SynthClip>,
+        p: Play,
+        listener: Option<(aim_core::math::Vec3, ViewAngles)>,
+    ) {
+        let placed = p.from.zip(listener).zip(self.mono.get(&p.sfx));
+        let handle = match placed {
+            Some(((from, (eye, view)), mono)) => {
+                let (offset_deg, distance_m) = cue::bearing(eye, view, from);
+                let placement = cue::place_at(offset_deg, distance_m);
+                clips.add(SynthClip::stereo(cue::stereo(mono, placement)))
+            }
+            None => match self.clips.get(&p.sfx) {
+                Some(handle) => handle.clone(),
+                None => return,
+            },
+        };
+        spawn_clip(commands, handle, p.gain);
+    }
+}
+
+fn spawn_clip(commands: &mut Commands, handle: Handle<SynthClip>, gain: f32) {
+    commands.spawn((
+        AudioPlayer(handle),
+        PlaybackSettings::DESPAWN.with_volume(Volume::Linear(gain)),
+    ));
+}
+
 pub struct SoundPlugin;
 
 impl Plugin for SoundPlugin {
@@ -171,7 +222,12 @@ impl Plugin for SoundPlugin {
             .add_message::<SoundPreview>()
             .add_systems(Startup, build_bank)
             // After `Update`, so a shot is heard from the frame it was fired in.
-            .add_systems(PostUpdate, (play_sounds, play_cues));
+            .add_systems(PostUpdate, (play_sounds, play_cues, play_arena_feedback))
+            .add_systems(
+                PostUpdate,
+                (play_footsteps, play_low_time).run_if(in_state(AppState::Playing)),
+            )
+            .add_systems(EguiPrimaryContextPass, play_ui_clicks);
     }
 }
 
@@ -185,11 +241,21 @@ fn build_bank(mut commands: Commands, mut clips: ResMut<Assets<SynthClip>>) {
         .map(|s| (s, synth::render(&synth::cue_recipe(s), 1.0)))
         .collect();
     commands.insert_resource(CueBank(cues));
+    let mut sfx = SfxBank::default();
+    for s in Sfx::all() {
+        let (effect, pitch) = s.effect();
+        let samples = synth::render(&effect.recipe(), pitch);
+        if matches!(s, Sfx::BotGunshot | Sfx::Footstep) {
+            sfx.mono.insert(s, samples.clone());
+        }
+        sfx.clips.insert(s, clips.add(SynthClip::mono(samples)));
+    }
+    commands.insert_resource(sfx);
 }
 
 /// Plays each sound cue of a perception drill, panned to where it comes from. Cues are
 /// the drill itself, so they play even with shot sound effects off; only a zero volume
-/// silences them.
+/// (master or cues) silences them.
 fn play_cues(
     mut commands: Commands,
     settings: Res<Settings>,
@@ -198,12 +264,13 @@ fn play_cues(
     mut heard: MessageReader<CueHeard>,
 ) {
     let Some(bank) = bank else { return };
-    let volume = Volume::Linear(gain(settings.sound.volume_percent));
+    let gain = mix::category_gain(&settings.sound, Category::Cues);
+    let volume = Volume::Linear(gain);
     for cue in heard.read() {
         let Some(mono) = bank.0.get(&cue.sound) else {
             continue;
         };
-        if settings.sound.volume_percent == 0 {
+        if gain == 0.0 {
             continue;
         }
         let handle = clips.add(SynthClip::stereo(cue::stereo(mono, cue::place(cue))));
@@ -225,15 +292,109 @@ fn play_sounds(
     let sound = &settings.sound;
     let shot = strongest(shots.read().map(|s| s.0)).and_then(|o| clip_for(o, sound));
     let preview = previews.read().last().map(|p| p.0);
-    let volume = Volume::Linear(gain(sound.volume_percent));
+    let gain = mix::category_gain(sound, Category::Shots);
     for clip in shot.into_iter().chain(preview) {
         if let Some(handle) = bank.0.get(&clip) {
-            commands.spawn((
-                AudioPlayer(handle.clone()),
-                PlaybackSettings::DESPAWN.with_volume(volume),
-            ));
+            spawn_clip(&mut commands, handle.clone(), gain);
         }
     }
+}
+
+/// The player's eye and view in a running arena, for positional sounds.
+fn arena_listener(run: Option<&ArenaRun>) -> Option<(aim_core::math::Vec3, ViewAngles)> {
+    run.map(|r| (r.session.eye_position(), r.view))
+}
+
+/// Plays the sounds of arena feedback: bot gunfire from the bot, damage, death, streaks
+/// and round cues.
+fn play_arena_feedback(
+    mut commands: Commands,
+    settings: Res<Settings>,
+    bank: Option<Res<SfxBank>>,
+    mut clips: ResMut<Assets<SynthClip>>,
+    run: Option<Res<ArenaRun>>,
+    mut feedback: MessageReader<ArenaFeedback>,
+    mut streaks: Local<StreakTimer>,
+) {
+    let Some(bank) = bank else { return };
+    let now = run.as_ref().map_or(0.0, |r| r.session.time());
+    let listener = arena_listener(run.as_deref());
+    for f in feedback.read() {
+        if let Some(p) = game_sounds::feedback_sound(f, &settings.sound, now, &mut streaks) {
+            bank.play(&mut commands, &mut clips, p, listener);
+        }
+    }
+}
+
+/// Plays the steps of running bots near the player, from where each bot is.
+fn play_footsteps(
+    mut commands: Commands,
+    settings: Res<Settings>,
+    bank: Option<Res<SfxBank>>,
+    mut clips: ResMut<Assets<SynthClip>>,
+    run: Option<Res<ArenaRun>>,
+    mut tracker: Local<FootstepTracker>,
+) {
+    let (Some(bank), Some(run)) = (bank, run) else {
+        return;
+    };
+    let (eye, view) = (run.session.eye_position(), run.view);
+    let bots = run.session.bots().map(|b| (b.id, b.feet, b.alive));
+    let steps = tracker.update(run.session.time(), eye, bots);
+    let Some(gain) = game_sounds::world_gain(&settings.sound, settings.sound.footsteps) else {
+        return;
+    };
+    for feet in steps {
+        let p = Play {
+            sfx: Sfx::Footstep,
+            gain,
+            from: Some(feet),
+        };
+        bank.play(&mut commands, &mut clips, p, Some((eye, view)));
+    }
+}
+
+/// Ticks each of the last seconds of a scenario or arena run.
+fn play_low_time(
+    mut commands: Commands,
+    settings: Res<Settings>,
+    bank: Option<Res<SfxBank>>,
+    scenario: Option<Res<Run>>,
+    arena: Option<Res<ArenaRun>>,
+    mut last_left: Local<Option<f32>>,
+) {
+    let left = arena
+        .map(|r| r.session.remaining())
+        .or_else(|| scenario.map(|r| r.session.remaining()));
+    let before = std::mem::replace(&mut *last_left, left);
+    let (Some(bank), Some(left)) = (bank, left) else {
+        return;
+    };
+    if !game_sounds::low_time_tick(before, left) {
+        return;
+    }
+    let sound = &settings.sound;
+    let gain = game_sounds::audible(sound, Category::Cues, sound.low_time_warning);
+    if let (Some(gain), Some(handle)) = (gain, bank.clips.get(&Sfx::LowTimeTick)) {
+        spawn_clip(&mut commands, handle.clone(), gain);
+    }
+}
+
+/// Plays one click for menu buttons clicked this frame (see `ui_click`), when enabled.
+fn play_ui_clicks(
+    mut contexts: EguiContexts,
+    mut commands: Commands,
+    settings: Res<Settings>,
+    bank: Option<Res<SfxBank>>,
+) -> Result {
+    let clicked = ui_click::take(contexts.ctx_mut()?);
+    let sound = &settings.sound;
+    let gain = game_sounds::audible(sound, Category::Ui, sound.ui_clicks);
+    let handle = bank.as_ref().and_then(|b| b.clips.get(&Sfx::UiClick));
+    if let (true, Some(gain), Some(handle)) = (clicked, gain, handle) {
+        spawn_clip(&mut commands, handle.clone(), gain);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -256,6 +417,10 @@ mod tests {
         assert_is_system(build_bank);
         assert_is_system(play_sounds);
         assert_is_system(play_cues);
+        assert_is_system(play_arena_feedback);
+        assert_is_system(play_footsteps);
+        assert_is_system(play_low_time);
+        assert_is_system::<(), Result, _>(play_ui_clicks);
     }
 
     #[test]

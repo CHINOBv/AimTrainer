@@ -32,13 +32,23 @@ pub struct CueHeard {
 impl CueHeard {
     /// The cue of a sound made at `position`, heard from `eye` looking along `view`.
     pub fn new(sound: CueSound, eye: Vec3, view: ViewAngles, position: Vec3) -> Self {
-        let to = position - eye;
+        let (offset_deg, distance_m) = bearing(eye, view, position);
         Self {
             sound,
-            offset_deg: wrap_degrees(ViewAngles::from_direction(to).yaw_deg - view.yaw_deg),
-            distance_m: to.length(),
+            offset_deg,
+            distance_m,
         }
     }
+}
+
+/// Horizontal angle from the view to `position` (degrees, positive to the right) and its
+/// distance from `eye` (meters), for a listener at `eye` looking along `view`.
+pub fn bearing(eye: Vec3, view: ViewAngles, position: Vec3) -> (f32, f32) {
+    let to = position - eye;
+    (
+        wrap_degrees(ViewAngles::from_direction(to).yaw_deg - view.yaw_deg),
+        to.length(),
+    )
 }
 
 /// Per-channel gains and rear filtering of a cue.
@@ -52,11 +62,17 @@ pub struct Placement {
 
 /// Where a cue sits in the stereo image.
 pub fn place(cue: &CueHeard) -> Placement {
-    let a = cue.offset_deg.to_radians();
+    place_at(cue.offset_deg, cue.distance_m)
+}
+
+/// Where a sound `offset_deg` from the view (positive to the right) and `distance_m` away
+/// sits in the stereo image.
+pub fn place_at(offset_deg: f32, distance_m: f32) -> Placement {
+    let a = offset_deg.to_radians();
     // sin: -1 hard left, 1 hard right; equal-power law keeps the loudness constant.
     let theta = (a.sin() + 1.0) * std::f32::consts::FRAC_PI_4;
     let behind = (-a.cos()).max(0.0);
-    let distance = (FULL_LEVEL_M / cue.distance_m.max(0.1)).clamp(MIN_DISTANCE_GAIN, 1.0);
+    let distance = (FULL_LEVEL_M / distance_m.max(0.1)).clamp(MIN_DISTANCE_GAIN, 1.0);
     let level = distance * (1.0 - REAR_ATTENUATION * behind);
     Placement {
         left: theta.cos() * level,
