@@ -9,6 +9,7 @@ pub mod hit_effect;
 use crate::overlay::Overlay;
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::history::History;
+use crate::persistence::missions::{Missions, MissionsPlugin};
 use crate::persistence::settings::{Paths, Settings};
 use aim_core::fov;
 use aim_core::games::valorant::HumanoidDims;
@@ -20,6 +21,7 @@ use aim_core::scenario::{
 };
 use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::finder::{SensFinder, Slot};
+use aim_core::sensitivity::randomizer::SensRandomizer;
 use aim_core::training::routine::PlannedRun;
 use aim_core::training::store::RunStore;
 use bevy::camera::{PerspectiveProjection, Projection};
@@ -186,6 +188,37 @@ pub(crate) struct WorldAssets {
     /// Go/no-go decoys: a faint, see-through grey, told apart from targets by brightness
     /// and transparency rather than hue, so it works with colour-vision deficiencies.
     decoy: Handle<StandardMaterial>,
+    /// Target outline: an unlit shell drawn from its back faces (inverted hull).
+    outline: Handle<StandardMaterial>,
+    /// Shell scale relative to the target when the outline is on.
+    outline_scale: Option<f32>,
+    /// Floor grid lines, tinted by the environment setting.
+    grid: Handle<StandardMaterial>,
+}
+
+/// Floor grid and play-area slab colours for an environment `tint`; `None` gives the
+/// original colours.
+fn environment_colors(tint: Option<[f32; 3]>) -> (Color, Color) {
+    match tint {
+        None => (
+            Color::srgba(0.35, 0.4, 0.5, 0.35),
+            Color::srgba(0.35, 0.6, 0.85, 0.12),
+        ),
+        Some([r, g, b]) => (Color::srgba(r, g, b, 0.35), Color::srgba(r, g, b, 0.12)),
+    }
+}
+
+/// The outline material: unlit, front faces culled so only the rim around the target shows.
+fn outline_material(
+    materials: &mut Assets<StandardMaterial>,
+    rgb: [f32; 3],
+) -> Handle<StandardMaterial> {
+    materials.add(StandardMaterial {
+        base_color: color(rgb),
+        unlit: true,
+        cull_mode: Some(bevy::render::render_resource::Face::Front),
+        ..default()
+    })
 }
 
 pub struct GamePlugin;
@@ -213,7 +246,55 @@ impl Plugin for GamePlugin {
             .add_systems(Update, sync_play_area)
             .add_plugins((arena::ArenaPlugin, hit_effect::HitEffectPlugin))
             .add_systems(Update, (manage_cursor, refresh_target_color, fit_viewport))
-            .add_systems(OnExit(AppState::Playing), clear_targets);
+            .add_systems(OnExit(AppState::Playing), clear_targets)
+            .add_plugins(MissionsPlugin)
+            .init_resource::<SensDrill>()
+            .add_systems(Update, tick_sens_drill.before(look));
+    }
+}
+
+/// The sensitivity randomiser drill while a run is played with it enabled.
+#[derive(Resource, Default)]
+pub struct SensDrill(pub Option<SensRandomizer>);
+
+impl SensDrill {
+    /// Multiplier for the look sensitivity: 1 when the drill is off.
+    pub fn multiplier(&self) -> f64 {
+        self.0.as_ref().map_or(1.0, SensRandomizer::multiplier)
+    }
+}
+
+/// Start, advance or stop the drill. It runs only while playing with the setting on, never
+/// in sensitivity-finder tests (they measure one exact sensitivity), and pauses with the run.
+fn tick_sens_drill(
+    time: Res<Time>,
+    settings: Res<Settings>,
+    state: Res<State<AppState>>,
+    run: Option<Res<Run>>,
+    arena: Option<Res<arena::ArenaRun>>,
+    mut drill: ResMut<SensDrill>,
+) {
+    let config = settings.sens_randomizer;
+    let finder_test = run.as_ref().is_some_and(|r| r.sens_override.is_some());
+    if *state.get() != AppState::Playing || !config.enabled || finder_test {
+        if drill.0.is_some() {
+            drill.0 = None;
+        }
+        return;
+    }
+    if drill
+        .0
+        .as_ref()
+        .is_none_or(|d| *d.config() != config.sanitized())
+    {
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos() as u64);
+        drill.0 = Some(SensRandomizer::new(config, seed));
+    }
+    let paused = run.is_some_and(|r| r.paused) || arena.is_some_and(|a| a.paused);
+    if !paused && let Some(d) = drill.0.as_mut() {
+        d.advance(time.delta_secs());
     }
 }
 
@@ -272,7 +353,8 @@ fn setup_world(
     ));
 
     // Floor grid: thin unlit strips every 2 m. Cheap and keeps the background see-through.
-    let line = unlit(&mut materials, Color::srgba(0.35, 0.4, 0.5, 0.35));
+    let (grid_color, slab_color) = environment_colors(settings.target_visibility.environment_tint);
+    let line = unlit(&mut materials, grid_color);
     let along_x = meshes.add(Cuboid::new(120.0, 0.004, 0.02));
     let along_z = meshes.add(Cuboid::new(0.02, 0.004, 120.0));
     for i in -30..=30 {
@@ -309,8 +391,11 @@ fn setup_world(
         )),
         unit_box: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
         edge: translucent(&mut materials, Color::srgba(0.35, 0.85, 1.0, 0.7)),
-        slab: translucent(&mut materials, Color::srgba(0.35, 0.6, 0.85, 0.12)),
+        slab: translucent(&mut materials, slab_color),
         decoy: translucent(&mut materials, Color::srgba(0.8, 0.8, 0.85, 0.28)),
+        outline: outline_material(&mut materials, settings.target_visibility.outline_color),
+        outline_scale: settings.target_visibility.outline_scale(),
+        grid: line,
     });
 }
 
@@ -378,10 +463,10 @@ fn spawn_play_area(commands: &mut Commands, assets: &WorldAssets, area: PlayArea
 
 fn refresh_target_color(
     settings: Res<Settings>,
-    assets: Option<Res<WorldAssets>>,
+    assets: Option<ResMut<WorldAssets>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let Some(assets) = assets else { return };
+    let Some(mut assets) = assets else { return };
     if !settings.is_changed() {
         return;
     }
@@ -389,6 +474,23 @@ fn refresh_target_color(
         if let Some(mut m) = materials.get_mut(h) {
             m.base_color = color(settings.target_color);
         }
+    }
+    // Visibility options; a new outline setting applies to targets spawned from now on.
+    let vis = &settings.target_visibility;
+    let (grid, slab) = environment_colors(vis.environment_tint);
+    for (h, c) in [
+        (&assets.outline, color(vis.outline_color)),
+        (&assets.grid, grid),
+        (&assets.slab, slab),
+    ] {
+        if let Some(mut m) = materials.get_mut(h)
+            && m.base_color != c
+        {
+            m.base_color = c;
+        }
+    }
+    if assets.outline_scale != vis.outline_scale() {
+        assets.outline_scale = vis.outline_scale();
     }
 }
 
@@ -416,13 +518,14 @@ fn look(
     motion: Res<AccumulatedMouseMotion>,
     buttons: Res<ButtonInput<MouseButton>>,
     settings: Res<Settings>,
+    drill: Res<SensDrill>,
     mut run: ResMut<Run>,
 ) {
     if run.paused {
         return;
     }
     run.zoomed = buttons.pressed(MouseButton::Right);
-    let k = deg_per_count(&settings, &run);
+    let k = deg_per_count(&settings, &run) * drill.multiplier();
     run.view = apply_look(run.view, &motion, k);
 }
 
@@ -459,6 +562,7 @@ struct RunFinisher<'w, 's> {
     settings: Res<'w, Settings>,
     finder: ResMut<'w, FinderState>,
     paths: Res<'w, Paths>,
+    missions: ResMut<'w, Missions>,
 }
 
 /// The sensitivity finder in progress (session only; not persisted).
@@ -482,6 +586,8 @@ impl RunFinisher<'_, '_> {
         } else {
             // Finder test runs do not enter the regular history.
             self.history.record(&result);
+            self.missions
+                .record(&result, session.stats().hits, &self.paths);
         }
         let tuning = RunKey::parse(&session.def().id).tuning;
         if !tuning.is_default() {
@@ -701,6 +807,13 @@ fn spawn_target_visual(
     decoy: bool,
 ) -> Entity {
     let pick = |normal| if decoy { &assets.decoy } else { normal };
+    // Decoys never get an outline: they must stay faint.
+    let outline = assets.outline_scale.filter(|_| !decoy).map(|s| {
+        (
+            assets.outline.clone(),
+            Transform::from_scale(Vec3::splat(s)),
+        )
+    });
     let mut e = commands.spawn((TargetVisual, Transform::default(), Visibility::default()));
     match *shape {
         Shape::Sphere { radius } => {
@@ -709,6 +822,9 @@ fn spawn_target_visual(
                 material(pick(&assets.target)),
             ));
             e.insert(Transform::from_scale(Vec3::splat(radius)));
+            if let Some((mat, tf)) = outline {
+                e.with_child((Mesh3d(assets.unit_sphere.clone()), MeshMaterial3d(mat), tf));
+            }
         }
         Shape::Humanoid { .. } => {
             let d = HumanoidDims::default();
@@ -718,12 +834,15 @@ fn spawn_target_visual(
                     (HumanoidPart::Body, &assets.body_box, pick(&assets.body)),
                     (HumanoidPart::Legs, &assets.legs_box, pick(&assets.body)),
                 ] {
-                    p.spawn((
+                    let mut part = p.spawn((
                         part,
                         Mesh3d(mesh.clone()),
                         material(mat),
                         part.transform(&d),
                     ));
+                    if let Some((mat, tf)) = &outline {
+                        part.with_child((Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone()), *tf));
+                    }
                 }
             });
         }
@@ -911,9 +1030,24 @@ mod tests {
     use bevy::ecs::system::assert_is_system;
 
     #[test]
+    fn no_environment_tint_keeps_the_original_grid_and_slab_colours() {
+        assert_eq!(
+            environment_colors(None),
+            (
+                Color::srgba(0.35, 0.4, 0.5, 0.35),
+                Color::srgba(0.35, 0.6, 0.85, 0.12)
+            )
+        );
+        let (grid, slab) = environment_colors(Some([0.1, 0.2, 0.3]));
+        assert_eq!(grid, Color::srgba(0.1, 0.2, 0.3, 0.35));
+        assert_eq!(slab, Color::srgba(0.1, 0.2, 0.3, 0.12));
+    }
+
+    #[test]
     fn systems_have_no_conflicting_access() {
         assert_is_system(pause_input);
         assert_is_system(look);
+        assert_is_system(tick_sens_drill);
         assert_is_system(tick);
         assert_is_system(sync_targets);
         assert_is_system(pose_humanoids);

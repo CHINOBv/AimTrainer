@@ -28,6 +28,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - **Fatigue warnings.**
   - **Daily goals and streaks.**
   - A **daily challenge** that everyone plays with the same seed.
+  - **Compound daily missions** built from your own recent bests (for example "accuracy ≥ 75% AND kills ≥ 62"), with mastery missions and a low/medium/high commitment level.
 - **Feedback**
   - Flick and tracking analysis with explained recommendations.
   - **Run insights:** flicks by screen direction and distance, click timing, pace and stamina, target priority, tracking speed match and edge time, and firing while moving. In arenas: peek timing.
@@ -37,9 +38,11 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - Offline **post-match analysis** of official match files.
 - **Your setup**
   - VALORANT **crosshair codes** (import and export).
+  - **Target visibility:** VALORANT's enemy highlight colours (red, purple for tritanopia, yellow for deuteranopia/protanopia) or any custom colour, an optional target outline with colour and thickness, and an environment tint for the floor grid.
   - **Sound effects** for hits, headshots, kills and (optionally) misses, synthesized in code: several presets, a volume slider and previews.
   - Subtle **hit feedback**: a short, semi-transparent hit marker (crosshair flash, dot, cross, ring or brackets; color and duration) and a target effect (flash, pop, fade or ring burst). Each can be turned off.
   - A shareable **profile code**.
+  - An opt-in **sensitivity randomiser drill**: a random multiplier within your range every few seconds, shown on the HUD. Your saved sensitivity never changes.
   - A **system check**: FPS, 1% lows, vsync, acceleration.
 
 The research behind the training is in [`docs/training-science.md`](docs/training-science.md), and the features are justified in [`docs/feature-analysis.md`](docs/feature-analysis.md).
@@ -76,7 +79,7 @@ The menu tabs:
 
 | Tab | What it holds |
 |---|---|
-| Today | The day's method session, the daily challenge |
+| Today | The day's method session, the daily challenge, daily missions |
 | Progress | Goal, readiness, fatigue, trend, per-skill strengths and trends, bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
 | Scenarios | Play, or play adaptively |
 | Routines | The routines (resume a split one), your personalized playlist |

@@ -3,6 +3,7 @@
 
 use crate::game::AppState;
 use crate::game::MainCamera;
+use crate::game::SensDrill;
 use crate::game::feedback::HitMarkerStyle;
 use crate::overlay::Overlay;
 use crate::persistence::settings::Settings;
@@ -29,7 +30,7 @@ impl Plugin for HudPage {
     fn build(&self, app: &mut App) {
         app.add_systems(
             EguiPrimaryContextPass,
-            hud.run_if(in_state(AppState::Playing)),
+            (hud, sens_drill_hud).run_if(in_state(AppState::Playing)),
         );
     }
 }
@@ -124,6 +125,29 @@ fn hud(
     Ok(())
 }
 
+/// The sensitivity randomiser's current multiplier, bottom left, while the drill runs.
+fn sens_drill_hud(
+    mut contexts: EguiContexts,
+    overlay: Res<Overlay>,
+    drill: Res<SensDrill>,
+) -> Result {
+    if !overlay.visible || drill.0.is_none() {
+        return Ok(());
+    }
+    let multiplier = drill.multiplier();
+    use bevy_egui::egui;
+    egui::Area::new(egui::Id::new("sens-drill"))
+        .anchor(egui::Align2::LEFT_BOTTOM, [24.0, -24.0])
+        .interactable(false)
+        .show(contexts.ctx_mut()?, |ui| {
+            ui.label(crate::ui::atoms::big(
+                format!("Sens ×{multiplier:.2}"),
+                18.0,
+            ));
+        });
+    Ok(())
+}
+
 /// The crosshair and the hit marker, `marker_secs_left` seconds before the marker ends.
 fn hit_feedback(ctx: &bevy_egui::egui::Context, settings: &Settings, marker_secs_left: f32) {
     let fb = &settings.hit_feedback;
@@ -145,5 +169,6 @@ mod tests {
     #[test]
     fn systems_have_no_conflicting_access() {
         assert_is_system::<(), Result, _>(super::hud);
+        assert_is_system::<(), Result, _>(super::sens_drill_hud);
     }
 }

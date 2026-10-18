@@ -2,12 +2,16 @@
 //! crosshair editor with VALORANT code import/export.
 
 use super::{hotkey_settings, restart_key_setting};
-use crate::persistence::settings::Settings;
+use crate::persistence::settings::{EnemyHighlight, Settings, TargetVisibility};
 use aim_core::crosshair::{
     CUSTOM_COLOR_INDEX, Crosshair, DOT_THICKNESS_PX, ERROR_MULTIPLIER_MAX, LINE_THICKNESS_MAX_PX,
     LineLimits, Lines, OUTLINE_THICKNESS_PX, PRESET_COLORS, Rgba, code, preset,
 };
 use aim_core::sensitivity::Game;
+use aim_core::sensitivity::randomizer::{
+    MAX_MULTIPLIER, MIN_INTERVAL_SECS, MIN_MULTIPLIER, RandomizerConfig,
+};
+use aim_core::training::missions::Commitment;
 use bevy_egui::egui;
 
 /// Raw mouse counts accumulated while the DPI check runs.
@@ -136,6 +140,7 @@ pub fn display_panel(
         ui.label("Target color");
         ui.color_edit_button_rgb(&mut settings.target_color);
     });
+    target_visibility(ui, settings);
     ui.checkbox(
         &mut settings.offscreen_arrows,
         "Arrows towards off-screen targets",
@@ -161,6 +166,15 @@ pub fn display_panel(
                 .suffix(" min"),
         );
     });
+    ui.horizontal(|ui| {
+        ui.label("Mission commitment");
+        for c in Commitment::ALL {
+            ui.selectable_value(&mut settings.mission_commitment, c, c.label());
+        }
+    })
+    .response
+    .on_hover_text("Low: 2 missions a day. Medium: 3, one of them mastery. High: 4, two mastery, closer to your bests. Changing it regenerates today's missions.");
+    sens_randomizer(ui, &mut settings.sens_randomizer);
     ui.add_space(8.0);
     ui.heading("Gameplay keys");
     restart_key_setting::restart_key_setting(ui, &mut settings.restart_key);
@@ -168,6 +182,93 @@ pub fn display_panel(
     ui.heading("Global hotkeys (Windows/X11)");
     hotkey_settings::hotkey_settings(ui, settings, recording_hotkey);
     ui.label("Wayland/Hyprland: bind `aimtrainer toggle`, `aimtrainer warmup` and `aimtrainer micro` in your compositor (see README).");
+}
+
+/// The sensitivity randomiser drill. It only scales the look while playing; the saved
+/// sensitivity is never changed.
+fn sens_randomizer(ui: &mut egui::Ui, cfg: &mut RandomizerConfig) {
+    ui.checkbox(&mut cfg.enabled, "Sensitivity randomiser drill")
+        .on_hover_text("Every interval your look sensitivity changes to a random multiplier within the range. Your saved sensitivity is never changed. No study shows it helps; use it as an occasional robustness drill.");
+    if !cfg.enabled {
+        return;
+    }
+    ui.horizontal(|ui| {
+        let range = MIN_MULTIPLIER..=MAX_MULTIPLIER;
+        ui.label("Range ×");
+        ui.add(
+            egui::DragValue::new(&mut cfg.min)
+                .range(range.clone())
+                .speed(0.01)
+                .fixed_decimals(2),
+        );
+        ui.label("to ×");
+        ui.add(
+            egui::DragValue::new(&mut cfg.max)
+                .range(range)
+                .speed(0.01)
+                .fixed_decimals(2),
+        );
+        ui.label("every");
+        ui.add(
+            egui::DragValue::new(&mut cfg.interval_secs)
+                .range(MIN_INTERVAL_SECS..=120.0)
+                .suffix(" s"),
+        );
+        ui.label("easing");
+        let max_ease = cfg.interval_secs.max(MIN_INTERVAL_SECS);
+        ui.add(
+            egui::DragValue::new(&mut cfg.smoothing_secs)
+                .range(0.0..=max_ease)
+                .speed(0.1)
+                .suffix(" s"),
+        );
+    });
+}
+
+/// Enemy highlight presets (VALORANT's colour-blind options), target outline and
+/// environment tint.
+fn target_visibility(ui: &mut egui::Ui, settings: &mut Settings) {
+    ui.horizontal(|ui| {
+        ui.label("Enemy highlight");
+        let current = EnemyHighlight::of(settings.target_color);
+        egui::ComboBox::from_id_salt("enemy-highlight")
+            .selected_text(current.label())
+            .show_ui(ui, |ui| {
+                for (h, rgb) in EnemyHighlight::PRESETS {
+                    if ui.selectable_label(current == h, h.label()).clicked() {
+                        settings.target_color = rgb;
+                    }
+                }
+                ui.add_enabled(false, egui::Button::selectable(current == EnemyHighlight::Custom, "Custom (pick a colour above)"));
+            });
+    })
+    .response
+    .on_hover_text("VALORANT's enemy highlight options. Purple suits tritanopia; yellow suits deuteranopia and protanopia.");
+    let vis = &mut settings.target_visibility;
+    ui.horizontal(|ui| {
+        ui.checkbox(&mut vis.outline, "Target outline");
+        ui.add_enabled_ui(vis.outline, |ui| {
+            ui.color_edit_button_rgb(&mut vis.outline_color);
+            ui.add(
+                egui::Slider::new(&mut vis.outline_percent, TargetVisibility::OUTLINE_PERCENT)
+                    .suffix("%")
+                    .text("thickness"),
+            );
+        });
+    })
+    .response
+    .on_hover_text("A solid rim around every target (never on decoys). Applies to targets spawned after the change.");
+    ui.horizontal(|ui| {
+        let mut tinted = vis.environment_tint.is_some();
+        if ui.checkbox(&mut tinted, "Environment tint").changed() {
+            vis.environment_tint = tinted.then_some([0.35, 0.4, 0.5]);
+        }
+        if let Some(tint) = vis.environment_tint.as_mut() {
+            ui.color_edit_button_rgb(tint);
+        }
+    })
+    .response
+    .on_hover_text("Colour of the floor grid and play area, to raise contrast with the targets.");
 }
 
 /// Text and feedback of the "Import VALORANT code" field, kept in egui memory.

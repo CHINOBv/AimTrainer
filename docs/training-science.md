@@ -133,6 +133,7 @@ Spreading the skills across the week does give VDIM spacing between sessions. Ou
 - Voltaic says changing sensitivity is not harmful for practice, and that a change can help break a plateau (verified, https://app.voltaic.gg/blog/muscle-memory).
 - No controlled evidence supports or rejects sensitivity randomization.
 - **Our default:** train at your exact VALORANT sensitivity. The trainer converts it to the same cm/360.
+- **Sensitivity randomiser drill (opt-in, off by default).** `aim_core::sensitivity::randomizer` changes the look sensitivity to a random multiplier of your own every interval. The defaults are ×0.8–×1.2 every 10 s, with optional easing between values. The bounds are limited to ×0.5–×2.0 and the interval to at least 2 s. It is deterministic per seed. The HUD shows the current multiplier. The saved sensitivity never changes, and sensitivity-finder tests never use the drill. Because no controlled evidence supports or rejects randomisation (above), the drill is offered as an occasional robustness exercise in the spirit of Voltaic's plateau advice. The default range and the limits are **estimates**.
 
 ## Analytics metrics
 
@@ -341,6 +342,17 @@ Why 10 misses and 65% (estimates, not calibrated): with no bias, 3 of the 8 sect
 - **Overlaps:** click delay counts from the first entry into the target, so it includes the correction after an overshoot. The fixes therefore overlap and are never added together; showing only the largest avoids double counting.
 
 Why these values (estimates, not calibrated): fixing half the misses, rather than all of them, keeps the projection reachable. The 200 ms reference is the click-delay weakness threshold above. The 3% floor stops tips on runs with nothing to fix. For the simulated aimer (seed 2, six click scenarios), the elite gets no tip, and the other presets get a misses tip worth about +4% to +35%, largest for the recruit. Its movements rarely overshoot by design, so the overshoot fix rarely shows for it. **Limits:** the model assumes saved time turns into points at the average pace. That holds when targets respawn on a kill, and overstates the gain when targets appear on a fixed schedule. No published source gives these assumptions; they are provisional until real player data exists.
+
+## Compound missions
+
+`aim_core::training::missions` builds the Today page's daily missions. A mission names one scenario and two conditions that must all hold in the **same run**, for example "accuracy ≥ 75% AND kills ≥ 62".
+
+- **Anti-spam rule:** every mission pairs one volume condition (score, kills or shots hit) with one precision condition (accuracy or headshot rate). Spam clicking raises volume but sinks precision. One careful shot has precision but no volume. Neither passes.
+- **Mastery missions** add a third condition and a stricter target. The third condition is time per kill when kills are timed; otherwise it is the other precision or volume metric.
+- **Targets** come from the player's own recent bests on that scenario. The bests are taken per metric over the last 10 plain runs of each of the 12 most recently played scenarios. Plain runs exclude difficulty levels, shortened runs, tuning, floor height and the daily challenge. Regular targets are the best × the commitment factor. Mastery adds +0.08 to the factor. Time per kill is the best ÷ factor. Ratio targets are capped at 95%. Headshot rate is used only when the best reaches 5%.
+- **Commitment** (Settings): low gives 2 missions at ×0.85 with no mastery. Medium gives 3 at ×0.92, the last one mastery. High gives 4 at ×0.97, the last two mastery.
+- **Determinism:** missions depend only on the day, a per-install seed, the commitment and the recent runs. They are generated once per local day and then frozen, so a best set during the day does not move them. Changing the commitment regenerates the day.
+- **Evidence:** the 0.85/0.92/0.97 factors, the +0.08 mastery bonus, the 95% cap, the 5% headshot floor and the 10-run and 12-scenario windows are **estimates**, with no published source. The intent follows the Challenge Point Framework above: goals near, but not above, current ability. Personal-best goals are the player's own baseline, not a population norm.
 
 ## Caveat
 

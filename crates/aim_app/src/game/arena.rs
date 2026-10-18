@@ -146,6 +146,7 @@ fn look(
     motion: Res<AccumulatedMouseMotion>,
     buttons: Res<ButtonInput<MouseButton>>,
     settings: Res<Settings>,
+    drill: Res<super::SensDrill>,
     mut run: ResMut<ArenaRun>,
 ) {
     if run.paused {
@@ -160,7 +161,7 @@ fn look(
     } else {
         settings.sensitivity.deg_per_count()
     };
-    run.view = apply_look(run.view, &motion, k);
+    run.view = apply_look(run.view, &motion, k * drill.multiplier());
 }
 
 /// Record the finished arena run and show the results screen.
