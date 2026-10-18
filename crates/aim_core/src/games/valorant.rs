@@ -224,7 +224,31 @@ impl HumanoidDims {
     pub fn head_center_height(&self) -> f32 {
         self.height - self.head_size / 2.0
     }
+
+    /// The hitbox `fraction` of the way into a crouch (0 standing, 1 fully crouched). The
+    /// head keeps its size and drops by up to [`CROUCH_HEIGHT_DROP_M`]; torso and legs
+    /// compress in proportion.
+    pub fn crouched(&self, fraction: f32) -> Self {
+        let drop = CROUCH_HEIGHT_DROP_M * fraction.clamp(0.0, 1.0);
+        let below_head = self.height - self.head_size;
+        let k = (below_head - drop) / below_head;
+        Self {
+            height: self.height - drop,
+            waist_height: self.waist_height * k,
+            ..*self
+        }
+    }
 }
+
+/// How far a full crouch lowers the head, meters (estimate, see
+/// `docs/valorant-mechanics.md`, "Crouch and jump").
+pub const CROUCH_HEIGHT_DROP_M: f32 = 0.5;
+/// Time to go from standing to fully crouched (or back), seconds (estimate).
+pub const CROUCH_TRANSITION_SECS: f32 = 0.15;
+/// Peak height of a standing jump above the floor, meters (estimate).
+pub const JUMP_APEX_M: f32 = 0.9;
+/// Time from take-off to landing on flat ground, seconds (estimate).
+pub const JUMP_AIR_SECS: f32 = 0.85;
 
 #[cfg(test)]
 mod tests {

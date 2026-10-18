@@ -1,0 +1,19 @@
+id = "dodge-peek"
+name = "Juke Peek"
+category = "reaction"
+description = """
+Hold an angle against a jiggle peeker. After a random 0.6–2.0 s wait, an agent appears near your crosshair at head height,
+jukes and sometimes crouches, then leaves after 1.6 s. React to the appearance, but shoot on the stop or the reversal,
+not while it is crossing your crosshair at full speed."""
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "angular", yaw_deg = [-12.0, 12.0], pitch_deg = [0.0, 0.0], distance = [15.0, 25.0] }
+motion = { kind = "dodge", weapon = "vandal", change_secs = [0.25, 0.5], juke_secs = [0.1, 0.2], juke_chance = 0.6, stop_chance = 0.15, crouch_chance = 0.15, max_offset = 1.5 }
+max_alive = 1
+appear_delay_secs = [0.6, 2.0]
+lifetime_secs = 1.6
+
+[scoring]
+miss_penalty = 25
+expire_penalty = 50

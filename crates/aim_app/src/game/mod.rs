@@ -15,8 +15,8 @@ use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::ViewAngles;
 use aim_core::movement::MoveInput;
 use aim_core::scenario::{
-    FrameInput, Recording, RunKey, RunResult, ScenarioDef, Session, SessionEvent, Shape, Tuning,
-    parse_run_key,
+    FrameInput, Recording, RunKey, RunResult, ScenarioDef, Session, SessionEvent, Shape, Target,
+    Tuning, parse_run_key,
 };
 use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::finder::{SensFinder, Slot};
@@ -196,7 +196,14 @@ impl Plugin for GamePlugin {
             .add_systems(Startup, setup_world)
             .add_systems(
                 Update,
-                (pause_input, look, tick, sync_targets, update_camera)
+                (
+                    pause_input,
+                    look,
+                    tick,
+                    sync_targets,
+                    pose_humanoids,
+                    update_camera,
+                )
                     .chain()
                     .run_if(in_state(AppState::Playing).and_then(resource_exists::<Run>)),
             )
@@ -630,6 +637,54 @@ fn material(h: &Handle<StandardMaterial>) -> (MeshMaterial3d<StandardMaterial>, 
     (MeshMaterial3d(h.clone()), BaseMaterial(h.clone()))
 }
 
+/// One box of a humanoid target visual, posed from the core hitbox each frame.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HumanoidPart {
+    Head,
+    Body,
+    Legs,
+}
+
+impl HumanoidPart {
+    /// Local transform that lines the box (meshed at standing size) up with `d`'s hitbox.
+    fn transform(self, d: &HumanoidDims) -> Transform {
+        let standing = HumanoidDims::default();
+        let neck = d.height - d.head_size;
+        let standing_torso = standing.height - standing.head_size - standing.waist_height;
+        match self {
+            Self::Head => Transform::from_xyz(0.0, d.head_center_height(), 0.0),
+            Self::Body => {
+                let torso = neck - d.waist_height;
+                Transform::from_xyz(0.0, d.waist_height + torso / 2.0, 0.0).with_scale(Vec3::new(
+                    1.0,
+                    torso / standing_torso,
+                    1.0,
+                ))
+            }
+            Self::Legs => Transform::from_xyz(0.0, d.waist_height / 2.0, 0.0)
+                .with_scale(Vec3::new(1.0, d.waist_height / standing.waist_height, 1.0)),
+        }
+    }
+}
+
+/// Lower crouching humanoid targets: each box follows the target's crouched hitbox.
+/// Jumps need nothing here, since the target's feet position already carries them.
+fn pose_humanoids(run: Res<Run>, mut parts: Query<(&HumanoidPart, &ChildOf, &mut Transform)>) {
+    let targets: HashMap<Entity, &Target> = run
+        .session
+        .targets()
+        .filter_map(|t| run.entities.get(&t.id).map(|e| (*e, t)))
+        .collect();
+    for (part, parent, mut tf) in &mut parts {
+        if let Some(t) = targets.get(&parent.parent()) {
+            let posed = part.transform(&run.session.target_dims(t));
+            if *tf != posed {
+                *tf = posed;
+            }
+        }
+    }
+}
+
 pub(crate) fn spawn_visual(commands: &mut Commands, assets: &WorldAssets, shape: &Shape) -> Entity {
     let mut e = commands.spawn((TargetVisual, Transform::default(), Visibility::default()));
     match *shape {
@@ -639,23 +694,19 @@ pub(crate) fn spawn_visual(commands: &mut Commands, assets: &WorldAssets, shape:
         }
         Shape::Humanoid { .. } => {
             let d = HumanoidDims::default();
-            let torso_h = d.height - d.head_size - d.waist_height;
             e.with_children(|p| {
-                p.spawn((
-                    Mesh3d(assets.head_box.clone()),
-                    material(&assets.head),
-                    Transform::from_xyz(0.0, d.head_center_height(), 0.0),
-                ));
-                p.spawn((
-                    Mesh3d(assets.body_box.clone()),
-                    material(&assets.body),
-                    Transform::from_xyz(0.0, d.waist_height + torso_h / 2.0, 0.0),
-                ));
-                p.spawn((
-                    Mesh3d(assets.legs_box.clone()),
-                    material(&assets.body),
-                    Transform::from_xyz(0.0, d.waist_height / 2.0, 0.0),
-                ));
+                for (part, mesh, mat) in [
+                    (HumanoidPart::Head, &assets.head_box, &assets.head),
+                    (HumanoidPart::Body, &assets.body_box, &assets.body),
+                    (HumanoidPart::Legs, &assets.legs_box, &assets.body),
+                ] {
+                    p.spawn((
+                        part,
+                        Mesh3d(mesh.clone()),
+                        material(mat),
+                        part.transform(&d),
+                    ));
+                }
             });
         }
     }
@@ -842,6 +893,7 @@ mod tests {
         assert_is_system(look);
         assert_is_system(tick);
         assert_is_system(sync_targets);
+        assert_is_system(pose_humanoids);
         assert_is_system(update_camera);
         assert_is_system(manage_cursor);
         assert_is_system(refresh_target_color);

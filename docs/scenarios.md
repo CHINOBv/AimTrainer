@@ -88,7 +88,20 @@ Recoil moves the bullets, not the camera. `simulate_spread` still adds running i
 |---|---|---|
 | `static` | none | The target does not move. |
 | `strafe` | `weapon`, `change_secs`, `stop_chance`, `max_offset` | A/D strafing with real VALORANT acceleration and stopping. |
+| `dodge` | `weapon`, `change_secs`, `juke_secs` (default `[0.1, 0.25]`), `juke_chance`, `stop_chance`, `crouch_chance`, `jump_chance` (chances default `0`), `max_offset` | An evasive duelist: `strafe` physics plus jukes, stop-and-go, crouches and jumps. At each decision the target jumps, crouches in place, stops, or moves (reversing if it was moving); `stop_chance + crouch_chance + jump_chance` must be ≤ 1. After a decision, `juke_chance` picks the short `juke_secs` wait instead of `change_secs`, which produces quick A-D jukes. A crouch lowers the head 0.5 m; a jump rises 0.9 m and lands after 0.85 s with no air control (estimates, see `valorant-mechanics.md`). Spheres drop by the crouch height. |
 | `drift` | `speed`, `change_secs`, `max_offset` | Smooth wandering, for tracking and evasive switching. |
+
+The built-in `dodge-*` scenarios are dynamic clicking drills against evasive enemies:
+
+| Scenario | Motion focus | Trains |
+|---|---|---|
+| `dodge-juke-heads` | jukes and stops | Holding the head line through A-D taps and clicking on the stop or reversal |
+| `dodge-crouch-spam` | crouches | Following a head that drops 0.5 m and comes back up |
+| `dodge-jump-spot` | jumps | Clicking an airborne head or pre-aiming the landing spot |
+| `dodge-peek` | jiggle peek, appears after a delay | Reacting to a peek without firing while the agent crosses at full speed |
+| `dodge-micro-spheres` | jukes on a head-sized sphere | Small corrections that do not overshoot into a reversal |
+
+Clicking on the stop or reversal works because the target's lateral speed passes through zero there (inference from the movement model, not a measured training effect). The simulated aimer re-aims at the target every frame, so calibrate scores understate how much harder the motion makes these drills for a human.
 
 ### Difficulty
 
@@ -97,7 +110,7 @@ Training methods and adaptive mode play a scenario at a level from −1 (easiest
 ```toml
 [difficulty]
 size = { easy = 0.5, hard = 0.1 }   # spheres: 50% bigger at −1, 10% smaller at +1
-speed = 0.3                         # drift speed and how soon targets change direction (default)
+speed = 0.3                         # drift speed and how soon targets change direction or juke (default)
 lifetime = 0.25                     # target lifetime (default)
 distance = 0.25                     # humanoid spawn distance (default)
 offset = 0.2                        # crosshair-relative flick offset (default)

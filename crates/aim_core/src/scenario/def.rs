@@ -352,6 +352,38 @@ pub enum Motion {
         #[serde(default = "default_strafe_width")]
         max_offset: f32,
     },
+    /// Evasive duelist: the same A/D physics as `Strafe`, plus jukes (bursts of quick
+    /// reversals), stop-and-go, crouches and jumps. At each decision the target jumps,
+    /// crouches in place, stops or moves (reversing if it was moving), with the given
+    /// chances; jumps and crouches use the VALORANT values in
+    /// `docs/valorant-mechanics.md`. Spheres drop by the crouch height instead of
+    /// shrinking.
+    Dodge {
+        /// Weapon whose run speed the target uses.
+        #[serde(default = "default_weapon")]
+        weapon: Weapon,
+        /// Time until the next decision, seconds.
+        change_secs: Range,
+        /// Time until the next decision after a juke, seconds (short: a quick A-D tap).
+        #[serde(default = "default_juke_secs")]
+        juke_secs: Range,
+        /// Probability that a decision is followed by a juke-length wait.
+        #[serde(default)]
+        juke_chance: f32,
+        /// Probability of stopping at a decision (stop-and-go).
+        #[serde(default)]
+        stop_chance: f32,
+        /// Probability of stopping and crouching at a decision.
+        #[serde(default)]
+        crouch_chance: f32,
+        /// Probability of jumping at a decision. The target keeps its lateral speed in
+        /// the air and decides again after landing.
+        #[serde(default)]
+        jump_chance: f32,
+        /// Max lateral distance from the spawn point, meters.
+        #[serde(default = "default_strafe_width")]
+        max_offset: f32,
+    },
     /// Smooth wandering in the plane facing the player (spheres / smoothness drills).
     Drift {
         /// Speed in m/s.
@@ -366,6 +398,10 @@ pub enum Motion {
 
 fn default_strafe_width() -> f32 {
     3.0
+}
+
+fn default_juke_secs() -> Range {
+    Range::new(0.1, 0.25)
 }
 
 /// Points awarded and subtracted by a scenario.
@@ -649,6 +685,49 @@ impl ScenarioDef {
                     "must be > 0",
                 );
             }
+            Motion::Dodge {
+                change_secs,
+                juke_secs,
+                juke_chance,
+                stop_chance,
+                crouch_chance,
+                jump_chance,
+                max_offset,
+                ..
+            } => {
+                check(
+                    change_secs.is_valid() && change_secs.min > 0.0,
+                    "targets.motion.change_secs",
+                    "must be a positive [min, max]",
+                );
+                check(
+                    juke_secs.is_valid() && juke_secs.min > 0.0,
+                    "targets.motion.juke_secs",
+                    "must be a positive [min, max]",
+                );
+                for (chance, field) in [
+                    (juke_chance, "targets.motion.juke_chance"),
+                    (stop_chance, "targets.motion.stop_chance"),
+                    (crouch_chance, "targets.motion.crouch_chance"),
+                    (jump_chance, "targets.motion.jump_chance"),
+                ] {
+                    check((0.0..=1.0).contains(chance), field, "must be in [0, 1]");
+                }
+                let shared = stop_chance + crouch_chance + jump_chance;
+                check(
+                    [stop_chance, crouch_chance, jump_chance]
+                        .iter()
+                        .any(|c| !(0.0..=1.0).contains(*c))
+                        || shared <= 1.0 + 1e-6,
+                    "targets.motion",
+                    "stop_chance + crouch_chance + jump_chance must be <= 1",
+                );
+                check(
+                    *max_offset > 0.0,
+                    "targets.motion.max_offset",
+                    "must be > 0",
+                );
+            }
             Motion::Drift {
                 speed,
                 change_secs,
@@ -760,6 +839,61 @@ mod tests {
             b.player.elevation = ok;
             assert!(b.validate().is_empty(), "{ok}");
         }
+    }
+
+    #[test]
+    fn dodge_motion_parses_with_defaults_and_validates_its_chances() {
+        let src = format!(
+            "{MINIMAL}motion = {{ kind = \"dodge\", change_secs = [0.3, 0.6], crouch_chance = 0.2 }}\n"
+        );
+        let d = ScenarioDef::from_toml(&src).unwrap();
+        let Motion::Dodge {
+            weapon,
+            juke_chance,
+            stop_chance,
+            crouch_chance,
+            jump_chance,
+            max_offset,
+            ..
+        } = d.targets.motion
+        else {
+            panic!("wrong motion kind")
+        };
+        assert_eq!(weapon, Weapon::Vandal);
+        assert_eq!(
+            (juke_chance, stop_chance, crouch_chance, jump_chance),
+            (0.0, 0.0, 0.2, 0.0)
+        );
+        assert_eq!(max_offset, 3.0);
+        assert!(d.validate().is_empty(), "{:?}", d.validate());
+
+        let typo = src.replace("crouch_chance", "crouch_chanse");
+        assert!(ScenarioDef::from_toml(&typo).is_err());
+
+        let fields = |src: String| -> Vec<&'static str> {
+            ScenarioDef::from_toml(&src)
+                .unwrap()
+                .validate()
+                .into_iter()
+                .map(|e| e.field)
+                .collect()
+        };
+        assert_eq!(
+            fields(src.replace("crouch_chance = 0.2", "crouch_chance = 1.5")),
+            ["targets.motion.crouch_chance"]
+        );
+        assert_eq!(
+            fields(src.replace(
+                "crouch_chance = 0.2",
+                "crouch_chance = 0.5, stop_chance = 0.4, jump_chance = 0.3"
+            )),
+            ["targets.motion"],
+            "stop, crouch and jump share one decision, so they must sum to <= 1"
+        );
+        assert_eq!(
+            fields(src.replace("crouch_chance = 0.2", "juke_secs = [0.0, 0.1]")),
+            ["targets.motion.juke_secs"]
+        );
     }
 
     #[test]

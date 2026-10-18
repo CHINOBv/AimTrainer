@@ -96,6 +96,12 @@ impl Target {
     pub fn velocity(&self) -> Vec3 {
         self.motion.velocity()
     }
+
+    /// How far into a crouch the target is: 0 standing, 1 fully crouched. Only
+    /// [`super::Motion::Dodge`] targets crouch.
+    pub fn crouch(&self) -> f32 {
+        self.motion.crouch
+    }
 }
 
 /// Counters accumulated during a run.
@@ -290,6 +296,12 @@ impl Session {
     /// Humanoid hitbox dimensions in use.
     pub fn dims(&self) -> &HumanoidDims {
         &self.dims
+    }
+
+    /// Hitbox of humanoid target `t` right now: the standing [`Self::dims`] lowered by
+    /// its crouch.
+    pub fn target_dims(&self, t: &Target) -> HumanoidDims {
+        self.dims.crouched(t.crouch())
     }
     /// Player feet position in meters.
     pub fn player_position(&self) -> Vec3 {
@@ -856,6 +868,157 @@ mod tests {
             assert!((t.position - t.motion.anchor).length() <= 2.0 + 0.1);
         }
         assert!(max_speed <= 5.4 + 1e-3 && max_speed > 4.0, "{max_speed}");
+    }
+
+    fn dodge(stop: f32, crouch: f32, jump: f32) -> Motion {
+        Motion::Dodge {
+            weapon: crate::games::valorant::Weapon::Vandal,
+            change_secs: Range::new(0.3, 0.5),
+            juke_secs: Range::new(0.1, 0.2),
+            juke_chance: 0.5,
+            stop_chance: stop,
+            crouch_chance: crouch,
+            jump_chance: jump,
+            max_offset: 2.0,
+        }
+    }
+
+    fn dodging_humanoid(motion: Motion) -> ScenarioDef {
+        let mut def = sphere_def(FireMode::Click, 1.0);
+        def.targets.shape = Shape::Humanoid { head_only: true };
+        def.targets.spawn = SpawnArea::Floor {
+            x: Range::new(-2.0, 2.0),
+            z: Range::new(-15.0, -12.0),
+            height: Range::fixed(0.0),
+        };
+        def.targets.max_alive = 1;
+        def.targets.motion = motion;
+        def
+    }
+
+    fn idle(s: &mut Session, frames: u32) {
+        for _ in 0..frames {
+            s.update(FrameInput {
+                dt: 0.01,
+                ..Default::default()
+            });
+        }
+    }
+
+    #[test]
+    fn dodging_targets_juke_at_valorant_speed_within_their_lane() {
+        let mut s = Session::new(dodging_humanoid(dodge(0.0, 0.0, 0.0)), 4);
+        let mut max_speed: f32 = 0.0;
+        let mut reversals = 0;
+        let mut last_dir = 0.0;
+        for _ in 0..600 {
+            idle(&mut s, 1);
+            let t = s.targets().next().unwrap();
+            let v = t.velocity().dot(t.motion.lateral);
+            max_speed = max_speed.max(v.abs());
+            if v.abs() > 0.5 && v.signum() != last_dir {
+                reversals += 1;
+                last_dir = v.signum();
+            }
+            assert!((t.position - t.motion.anchor).length() <= 2.0 + 0.1);
+            assert_eq!(t.position.y, 0.0, "grounded without jumps");
+            assert_eq!(t.crouch(), 0.0, "never crouches without crouch_chance");
+        }
+        assert!(max_speed <= 5.4 + 1e-3 && max_speed > 3.0, "{max_speed}");
+        assert!(reversals >= 10, "jukes reverse often: {reversals}");
+    }
+
+    #[test]
+    fn crouching_lowers_the_head_hitbox() {
+        let mut s = Session::new(dodging_humanoid(dodge(0.0, 1.0, 0.0)), 3);
+        idle(&mut s, 50);
+        let t = s.targets().next().unwrap().clone();
+        assert!(
+            (t.crouch() - 1.0).abs() < 1e-6,
+            "fully crouched: {}",
+            t.crouch()
+        );
+        let standing = s.dims().head_center_height();
+        let crouched = s.target_dims(&t).head_center_height();
+        let drop = crate::games::valorant::CROUCH_HEIGHT_DROP_M;
+        assert!((standing - crouched - drop).abs() < 1e-5);
+        assert_eq!(s.target_dims(&t).head_size, s.dims().head_size);
+
+        // The standing head line now passes over the target; the crouched head is hit.
+        let over = aim_at(&s, t.position + Vec3::new(0.0, standing, 0.0));
+        let ev = s.update(FrameInput {
+            dt: 0.0,
+            view: over,
+            fire_pressed: true,
+            fire_held: true,
+            ..Default::default()
+        });
+        assert!(ev.contains(&SessionEvent::Shot {
+            hit: None,
+            moving: false
+        }));
+        s.update(FrameInput::default());
+        s.update(FrameInput {
+            dt: 1.0,
+            ..Default::default()
+        });
+        let t = s.targets().next().unwrap().clone();
+        let head = t.position + Vec3::new(0.0, s.target_dims(&t).head_center_height(), 0.0);
+        let ev = s.update(FrameInput {
+            dt: 0.0,
+            view: aim_at(&s, head),
+            fire_pressed: true,
+            fire_held: true,
+            ..Default::default()
+        });
+        assert!(
+            ev.iter().any(|e| matches!(
+                e,
+                SessionEvent::Shot {
+                    hit: Some((_, HitZone::Head)),
+                    ..
+                }
+            )),
+            "{ev:?}"
+        );
+    }
+
+    #[test]
+    fn jumping_targets_rise_to_the_valorant_apex_and_land() {
+        use crate::games::valorant::{JUMP_AIR_SECS, JUMP_APEX_M};
+        let mut s = Session::new(dodging_humanoid(dodge(0.0, 0.0, 1.0)), 9);
+        let mut apex: f32 = 0.0;
+        let mut landings = 0;
+        let mut airborne = false;
+        for _ in 0..400 {
+            idle(&mut s, 1);
+            let y = s.targets().next().unwrap().position.y;
+            assert!(y >= 0.0, "never sinks below the floor: {y}");
+            apex = apex.max(y);
+            if airborne && y == 0.0 {
+                landings += 1;
+            }
+            airborne = y > 0.0;
+        }
+        assert!((apex - JUMP_APEX_M).abs() < 0.02, "apex {apex}");
+        // 4 s of back-to-back jumps, each ≈JUMP_AIR_SECS long.
+        assert!(landings >= (3.0 / JUMP_AIR_SECS) as i32, "{landings}");
+    }
+
+    #[test]
+    fn dodging_is_deterministic_per_seed() {
+        let run = |seed| {
+            let mut s = Session::new(dodging_humanoid(dodge(0.2, 0.2, 0.2)), seed);
+            let mut trace = Vec::new();
+            for _ in 0..300 {
+                idle(&mut s, 1);
+                let t = s.targets().next().unwrap();
+                trace.push((t.position, t.crouch()));
+            }
+            trace
+        };
+        assert_eq!(run(5), run(5));
+        assert_ne!(run(5), run(6));
     }
 
     fn movement_def() -> ScenarioDef {

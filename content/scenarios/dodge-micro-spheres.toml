@@ -1,0 +1,17 @@
+id = "dodge-micro-spheres"
+name = "Evasive Micro Clicks"
+category = "microcorrection"
+description = """
+Microcorrection against an evasive target. A head-sized sphere appears 1.5–5° from your crosshair and immediately jukes,
+stops and sometimes ducks. Fix the small error with a short correction and click on the stop; overcorrecting into a
+reversal is the miss this drill punishes. It leaves after 2.5 s."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.12 }   # ≈1.4° at 10 m, close to a VALORANT head at mid range
+spawn = { kind = "around_crosshair", offset_deg = [1.5, 5.0], distance = [10.0, 10.0] }
+motion = { kind = "dodge", weapon = "vandal", change_secs = [0.25, 0.6], juke_chance = 0.5, stop_chance = 0.25, crouch_chance = 0.1, max_offset = 1.0 }
+lifetime_secs = 2.5
+
+[scoring]
+miss_penalty = 25
+expire_penalty = 50

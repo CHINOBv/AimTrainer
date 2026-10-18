@@ -383,6 +383,14 @@ impl ScenarioDef {
             Motion::Strafe { change_secs, .. } => {
                 *change_secs = scale(*change_secs, 1.0 - c.speed.at(d))
             }
+            Motion::Dodge {
+                change_secs,
+                juke_secs,
+                ..
+            } => {
+                *change_secs = scale(*change_secs, 1.0 - c.speed.at(d));
+                *juke_secs = scale(*juke_secs, 1.0 - c.speed.at(d));
+            }
             Motion::Drift {
                 speed, change_secs, ..
             } => {
@@ -652,8 +660,12 @@ mod tests {
     }
 
     #[test]
-    fn the_speed_multiplier_scales_drift_and_strafe_motion() {
-        for id in ["track-reactive-micro", "dynamic-strafe-heads"] {
+    fn the_speed_multiplier_scales_drift_strafe_and_dodge_motion() {
+        for id in [
+            "track-reactive-micro",
+            "dynamic-strafe-heads",
+            "dodge-juke-heads",
+        ] {
             let d = find(id);
             let base = top_speed(&d, 600);
             let fast = top_speed(&d.with_tuning(tuning(100, 100, 150)), 600);
@@ -685,6 +697,29 @@ mod tests {
             dynamic.at_difficulty(-1.0).targets.lifetime_secs.unwrap()
                 > dynamic.targets.lifetime_secs.unwrap()
         );
+    }
+
+    #[test]
+    fn harder_makes_dodging_targets_decide_and_juke_sooner() {
+        let d = find("dodge-juke-heads");
+        let h = d.at_difficulty(1.0);
+        let (
+            Motion::Dodge {
+                change_secs: c0,
+                juke_secs: j0,
+                ..
+            },
+            Motion::Dodge {
+                change_secs: c1,
+                juke_secs: j1,
+                ..
+            },
+        ) = (&d.targets.motion, &h.targets.motion)
+        else {
+            panic!()
+        };
+        assert!((c1.max / c0.max - 0.7).abs() < 1e-5);
+        assert!((j1.min / j0.min - 0.7).abs() < 1e-5);
     }
 
     #[test]

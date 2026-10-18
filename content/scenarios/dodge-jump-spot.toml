@@ -1,0 +1,19 @@
+id = "dodge-jump-spot"
+name = "Jump Spotting"
+category = "flicking"
+description = """
+Clicking against jumpers. Agents strafe and often jump, rising ≈0.9 m with no air control, so an airborne agent keeps
+its line and lands where you can predict. Either click the head in the air or pre-aim the landing spot and tap as it
+touches down. They leave after 3 s."""
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-8.0, 8.0], z = [-20.0, -12.0] }
+motion = { kind = "dodge", weapon = "vandal", change_secs = [0.3, 0.7], juke_chance = 0.25, stop_chance = 0.2, jump_chance = 0.4, max_offset = 2.5 }
+max_alive = 2
+lifetime_secs = 3.0
+min_separation_deg = 6
+
+[scoring]
+miss_penalty = 20
+expire_penalty = 50

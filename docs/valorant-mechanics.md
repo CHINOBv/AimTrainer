@@ -54,6 +54,19 @@ Research date: 2026-10-16.
 
 **How the model works (`movement.rs`).** We do not fit a friction formula. Each frame, the deceleration is replayed along the measured curve, starting from the current speed fraction. That way, partial states (a key tap, or a release mid-acceleration) stop the same way the game does. One assumption is ours: the curves scale with each weapon's run speed, since they were measured with a Phantom.
 
+## Crouch and jump
+
+Used only by `Motion::Dodge` targets (`games/valorant.rs`, `scenario/motion.rs`). Riot does not publish these, and a search on 2026-10-18 found no community measurement we could cite, so all four are estimates. Each lives in one constant, so a measurement can replace it.
+
+| Value | Used as | Confidence | Reasoning |
+|---|---|---|---|
+| A full crouch lowers the head by 0.5 m (25 % of the 2.0 m height) | `CROUCH_HEIGHT_DROP_M` | estimate | Matches the 25 % drop of the CS:GO hitbox (72 → 54 units), the closest published reference; VALORANT crouch visibly drops the head by roughly a quarter of the agent |
+| Standing to fully crouched takes 0.15 s | `CROUCH_TRANSITION_SECS` | estimate | Crouch spam reads as a near-instant head drop in VALORANT footage; nothing published |
+| Jump apex 0.9 m above the floor | `JUMP_APEX_M` | estimate | A standing jump clears waist-high cover but not chest-high boxes without crouch-jumping |
+| Air time of a jump on flat ground 0.85 s | `JUMP_AIR_SECS` | estimate | Chosen so the implied gravity (8 × apex / air time² ≈ 10 m/s²) is close to Earth's |
+
+**How the model works.** A crouch keeps the head box the same size and lowers it by the drop; torso and legs compress in proportion (`HumanoidDims::crouched`). A crouching target stops moving. A jump is a parabola with no air control: the target keeps its take-off lateral speed until it lands or reaches its lane edge. Spheres have no hitbox to compress, so a crouching sphere drops by the same 0.5 m.
+
 ## Hitbox and camera
 
 In VALORANT every agent shares the same hitbox. Riot does not publish its dimensions, so these are estimates (`HumanoidDims`):

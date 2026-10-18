@@ -92,7 +92,12 @@ pub(super) fn raycast(
                 Shape::Sphere { radius } => {
                     ray_sphere(ray, t.position, radius).map(|d| (d, HitZone::Sphere))
                 }
-                Shape::Humanoid { .. } => ray_humanoid(ray, t.position, t.facing_yaw_deg, dims),
+                Shape::Humanoid { .. } => ray_humanoid(
+                    ray,
+                    t.position,
+                    t.facing_yaw_deg,
+                    &dims.crouched(t.crouch()),
+                ),
             };
             hit.map(|(d, z)| (d, i, z))
         })
