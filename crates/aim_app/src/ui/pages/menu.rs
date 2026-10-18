@@ -243,12 +243,14 @@ fn menu(
                 .resizable(true)
                 .default_size(280.0)
                 .show(&mut root, |ui| {
+                    // Pinned below the list, which scrolls and would otherwise push it off-screen.
+                    egui::Panel::bottom("custom_scenarios").show(ui, |ui| {
+                        ui.small(format!(
+                            "Custom scenarios: {}",
+                            cfg.paths.scenarios_dir.display()
+                        ));
+                    });
                     scenario_browser::scenario_list(ui, lib, &history, &mut state.selected);
-                    ui.separator();
-                    ui.small(format!(
-                        "Custom scenarios: {}",
-                        cfg.paths.scenarios_dir.display()
-                    ));
                 });
             egui::CentralPanel::default().show(&mut root, |ui| {
                 match state.selected.as_deref().and_then(|id| lib.scenario(id)) {
