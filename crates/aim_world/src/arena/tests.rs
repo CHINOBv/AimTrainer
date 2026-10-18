@@ -813,3 +813,85 @@ fn practice_only_applies_before_the_run_starts() {
     assert!(!s.is_practice());
     assert_eq!(s.def().id, "yard-deathmatch");
 }
+
+/// The duel room with a 1.2 m pillar east of the bot spawn and a waypoint behind it, so a
+/// shot bot has cover to fall back to. Without the pillar the room is open.
+fn cover_room(pillar: bool) -> MapDef {
+    let pillar = if pillar {
+        "[[boxes]]\nkind = \"cover\"\nmin = [1.0, 0.0, -6.2]\nmax = [2.2, 2.5, -5.0]\n"
+    } else {
+        ""
+    };
+    MapDef::load(&format!(
+        r#"
+id = "duel-room"
+name = "Duel Room"
+floor_x = [-10.0, 10.0]
+floor_z = [-10.0, 10.0]
+{pillar}
+[[spawns]]
+id = "p"
+kind = "player"
+position = [0.0, 0.0, 5.0]
+yaw_deg = 0.0
+
+[[spawns]]
+id = "b"
+kind = "bot"
+position = [0.0, 0.0, -5.0]
+yaw_deg = 180.0
+
+[[waypoints]]
+id = "behind"
+position = [0.3, 0.0, -7.2]
+"#
+    ))
+    .unwrap()
+}
+
+/// Shoots the bot once in the body, then watches. Returns, per frame after the hit, whether
+/// the living bot is in the player's sight.
+fn shoot_once_and_watch(pillar: bool) -> Vec<bool> {
+    let mut s = ArenaSession::new(duel_def(false), cover_room(pillar), 3).unwrap();
+    let mut shot = false;
+    let mut seen = Vec::new();
+    run(&mut s, 8.0, |s| {
+        let bot = s.bots().next().unwrap();
+        if shot {
+            seen.push(bot.alive && bot.visible_to_player);
+            return idle(s);
+        }
+        shot = true;
+        let chest = bot.feet + Vec3::new(0.0, 1.2, 0.0);
+        FrameInput {
+            dt: DT,
+            view: ViewAngles::from_direction(chest - s.eye_position()),
+            fire_pressed: true,
+            ..Default::default()
+        }
+    });
+    assert_eq!(s.stats().hits, 1, "the body shot lands");
+    assert_eq!(s.stats().kills, 0);
+    seen
+}
+
+#[test]
+fn a_shot_bot_falls_back_out_of_sight_then_repeeks() {
+    let seen = shoot_once_and_watch(true);
+    let hidden_at = seen
+        .iter()
+        .position(|v| !v)
+        .expect("the bot breaks line of sight");
+    assert!(
+        hidden_at as f32 * DT < 1.5,
+        "reaches cover quickly: {} s",
+        hidden_at as f32 * DT
+    );
+    assert!(
+        seen[hidden_at..].iter().any(|v| *v),
+        "the bot re-peeks after hiding"
+    );
+
+    // Control: with no cover the bot holds its ground in the open.
+    assert!(shoot_once_and_watch(false).iter().all(|v| *v));
+}

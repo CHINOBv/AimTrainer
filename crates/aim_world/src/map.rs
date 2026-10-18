@@ -319,6 +319,11 @@ impl MapDef {
         errs
     }
 
+    /// Whether a player can stand with feet at `feet`: on the floor and in no box.
+    pub(crate) fn can_stand(&self, feet: Vec3) -> bool {
+        self.standing_problem(feet).is_none()
+    }
+
     /// Why a player could not stand with feet at `feet`, if anything.
     fn standing_problem(&self, feet: Vec3) -> Option<&'static str> {
         let r = DEFAULT_PLAYER_RADIUS;

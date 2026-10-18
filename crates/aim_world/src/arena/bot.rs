@@ -2,7 +2,7 @@
 //! through `aim_core::movement::step`, and the Fitts-law aim of [`super::aim`].
 
 use super::aim::{BotAim, Sight, angular_radius_deg};
-use super::behavior::{PeekSense, Phase, Push, Strafe};
+use super::behavior::{PeekSense, Phase, Push, Retreat, RetreatSense, Strafe};
 use crate::map::{AngleMarker, DEFAULT_PLAYER_RADIUS, MapDef};
 use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::{Range, Vec3, ViewAngles, angle_between_deg};
@@ -25,10 +25,21 @@ pub const PEEK_DELAY_SECS: Range = Range::new(0.4, 1.2);
 const ARRIVE_EPS: f32 = 0.05;
 /// Distance under which a moving bot counts as having passed a route point, meters.
 const ROUTE_EPS: f32 = 0.3;
+/// Longest route a shot roaming bot runs to reach cover, meters. A design choice: about
+/// 1.5 s at rifle run speed, so a bot only falls back to cover that is close by.
+pub const RETREAT_MAX_ROUTE_M: f32 = 8.0;
 
 /// Yaw (core convention) of a horizontal direction.
 pub(crate) fn yaw_of(dir: Vec3) -> f32 {
     dir.x.atan2(-dir.z).to_degrees()
+}
+
+/// The next point of `route` to walk to from `feet`, skipping the points already reached.
+fn follow(route: &[Vec3], next: &mut usize, feet: Vec3) -> Option<Vec3> {
+    while *next < route.len() && (route[*next] - feet).horizontal().length() < ROUTE_EPS {
+        *next += 1;
+    }
+    route.get(*next).copied()
 }
 
 /// Head center of a standing humanoid whose feet are at `feet`.
@@ -42,6 +53,8 @@ pub(crate) enum Brain {
         route: Vec<Vec3>,
         next: usize,
         pause_until: f32,
+        /// Falling back to cover after being shot, and re-peeking.
+        retreat: Retreat,
     },
     Angle {
         marker: AngleMarker,
@@ -60,6 +73,11 @@ impl Brain {
     /// angle.
     fn duels(&self) -> bool {
         matches!(self, Self::Roam { .. } | Self::Push { .. })
+    }
+
+    /// Whether the bot is running for cover, holding its fire.
+    fn fleeing(&self) -> bool {
+        matches!(self, Self::Roam { retreat, .. } if retreat.fleeing())
     }
 }
 
@@ -84,6 +102,8 @@ pub(crate) struct Ctx<'a> {
     pub bot_strafe: bool,
     /// Where pushing bots walk to.
     pub site: Option<Vec3>,
+    /// The map's cover spots ([`MapDef::cover_spots`]), where shot roaming bots fall back.
+    pub cover_spots: &'a [Vec3],
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +123,9 @@ pub(crate) struct Bot {
     pub first_seen_at: Option<f32>,
     pub brain: Brain,
     pub strafe: Strafe,
+    /// Eye of the player who shot the bot since its last think, if anyone did: the only
+    /// thing a shot bot learns about the player's position.
+    pub shot_from: Option<Vec3>,
 }
 
 impl Bot {
@@ -122,6 +145,7 @@ impl Bot {
             first_seen_at: None,
             brain,
             strafe: Strafe::Idle,
+            shot_from: None,
         }
     }
 
@@ -189,7 +213,7 @@ impl Bot {
         }
         let landed = self.aim.track(ctx.now, sight);
         self.facing_yaw_deg = self.aim.view.yaw_deg;
-        landed
+        landed && !self.brain.fleeing()
     }
 
     /// After a shot, plan the corrective flick: half the reaction time, as in `SimAimer`.
@@ -206,24 +230,50 @@ impl Bot {
     fn move_goal(&mut self, ctx: &Ctx, sees: bool, rng: &mut Rng) -> Option<Vec3> {
         let engaged = self.aim.is_engaged();
         let feet = self.feet;
+        let shot_from = self.shot_from.take();
         match &mut self.brain {
             Brain::Roam {
                 route,
                 next,
                 pause_until,
+                retreat,
             } => {
+                let before = retreat.goal();
+                if let Some(threat) = shot_from
+                    && !retreat.fleeing()
+                    && let Some(spot) =
+                        ctx.map
+                            .cover_from(ctx.cover_spots, threat, feet, RETREAT_MAX_ROUTE_M)
+                {
+                    *retreat = Retreat::start(spot, feet);
+                }
+                let sense = RetreatSense {
+                    now: ctx.now,
+                    feet,
+                    fighting: sees && engaged,
+                };
+                *retreat = retreat.next(&sense, rng);
+                let goal = retreat.goal();
+                if goal != before {
+                    // A new leg of the fall-back, or back to roaming.
+                    *route = goal.and_then(|g| ctx.map.path(feet, g)).unwrap_or_default();
+                    *next = 1;
+                    *pause_until = ctx.now;
+                    if goal.is_some() && route.is_empty() {
+                        *retreat = Retreat::Off;
+                    }
+                }
+                if *retreat != Retreat::Off {
+                    return follow(route, next, feet);
+                }
                 // Stop to fight: release the keys and let the stop curve brake.
                 if sees && engaged {
                     route.clear();
                     *pause_until = ctx.now;
                     return None;
                 }
-                while *next < route.len() && (route[*next] - feet).horizontal().length() < ROUTE_EPS
-                {
-                    *next += 1;
-                }
-                if *next < route.len() {
-                    return Some(route[*next]);
+                if let Some(point) = follow(route, next, feet) {
+                    return Some(point);
                 }
                 if !route.is_empty() {
                     route.clear();
@@ -270,11 +320,7 @@ impl Bot {
                     *route = ctx.map.path(feet, site).unwrap_or_else(|| vec![feet, site]);
                     *next = 1;
                 }
-                while *next < route.len() && (route[*next] - feet).horizontal().length() < ROUTE_EPS
-                {
-                    *next += 1;
-                }
-                route.get(*next).copied()
+                follow(route, next, feet)
             }
         }
     }

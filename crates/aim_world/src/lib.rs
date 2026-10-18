@@ -11,12 +11,14 @@
 
 pub mod arena;
 pub mod builtin;
+mod cover;
 #[cfg(feature = "gltf")]
 pub mod gltf;
 pub mod map;
 mod nav;
 mod query;
 
+pub use cover::{COVER_SPOT_OFFSET, COVER_SPOT_SPACING};
 pub use map::{
     AngleMarker, BoxKind, DEFAULT_PLAYER_RADIUS, MapDef, MapError, SolidBox, Spawn, SpawnKind,
     Waypoint,

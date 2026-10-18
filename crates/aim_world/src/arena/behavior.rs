@@ -6,7 +6,7 @@
 //! a machine that is never entered (strafing off) leaves the arena's random sequence as it
 //! was.
 
-use aim_core::math::Range;
+use aim_core::math::{Range, Vec3};
 use aim_core::rng::Rng;
 
 /// How long a dueling bot holds one strafe key before switching to the other, seconds. A
@@ -138,6 +138,83 @@ impl Push {
             dueling => dueling,
         };
         matches!(self, Self::Dueling { .. })
+    }
+}
+
+/// How long a roaming bot stays in cover after it fell back, before it re-peeks, seconds. A
+/// design choice: long enough to break the duel, short enough to keep the fight going.
+pub const COVER_HOLD_SECS: Range = Range::new(0.6, 1.4);
+/// Distance under which a bot counts as having reached its cover spot or its re-peek spot,
+/// meters.
+const RETREAT_ARRIVE: f32 = 0.3;
+
+/// The fall-back of a roaming bot that was shot: run to a cover spot out of the shooter's
+/// sight, hide there for [`COVER_HOLD_SECS`], then walk back to where it was hit and fight
+/// again. It never learns where the player is beyond the spot the shot came from.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub(crate) enum Retreat {
+    /// Not falling back: the bot roams and fights as usual.
+    #[default]
+    Off,
+    /// Running to `spot`; it will re-peek `back_to`.
+    ToCover { spot: Vec3, back_to: Vec3 },
+    /// Hiding on `spot` until `until`.
+    Hiding {
+        spot: Vec3,
+        back_to: Vec3,
+        until: f32,
+    },
+    /// Walking back to `back_to` to re-peek the fight.
+    Repeek { back_to: Vec3 },
+}
+
+/// What the fall-back needs to know this frame.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RetreatSense {
+    pub now: f32,
+    pub feet: Vec3,
+    /// Whether the bot sees and is engaged with the player.
+    pub fighting: bool,
+}
+
+impl Retreat {
+    /// Start falling back to `spot` from `feet`, the place the bot will re-peek.
+    pub fn start(spot: Vec3, feet: Vec3) -> Self {
+        Self::ToCover {
+            spot,
+            back_to: feet,
+        }
+    }
+
+    /// The state after this frame. A bot running to cover keeps running even if it still
+    /// sees the player; a hiding or re-peeking bot that sees the player stops to fight.
+    pub fn next(self, s: &RetreatSense, rng: &mut Rng) -> Self {
+        let at = |p: Vec3| (p - s.feet).horizontal().length() < RETREAT_ARRIVE;
+        match self {
+            Self::ToCover { spot, back_to } if at(spot) => Self::Hiding {
+                spot,
+                back_to,
+                until: s.now + rng.in_range(COVER_HOLD_SECS),
+            },
+            Self::Hiding { .. } | Self::Repeek { .. } if s.fighting => Self::Off,
+            Self::Hiding { back_to, until, .. } if s.now >= until => Self::Repeek { back_to },
+            Self::Repeek { back_to } if at(back_to) => Self::Off,
+            other => other,
+        }
+    }
+
+    /// Where the bot walks: its cover spot, then back to the re-peek spot. `None` when off.
+    pub fn goal(self) -> Option<Vec3> {
+        match self {
+            Self::Off => None,
+            Self::ToCover { spot, .. } | Self::Hiding { spot, .. } => Some(spot),
+            Self::Repeek { back_to } => Some(back_to),
+        }
+    }
+
+    /// Whether the bot is running for cover: it holds its fire while it runs.
+    pub fn fleeing(self) -> bool {
+        matches!(self, Self::ToCover { .. })
     }
 }
 
@@ -283,5 +360,75 @@ mod tests {
         }
         assert!(fast > 0);
         assert!(accurate_after_fast >= 4, "{accurate_after_fast}");
+    }
+
+    fn at(now: f32, x: f32, fighting: bool) -> RetreatSense {
+        RetreatSense {
+            now,
+            feet: Vec3::new(x, 0.0, 0.0),
+            fighting,
+        }
+    }
+
+    #[test]
+    fn a_shot_bot_runs_to_cover_hides_then_repeeks_where_it_was_hit() {
+        let mut rng = Rng::new(6);
+        let (spot, hit_at) = (Vec3::new(4.0, 0.0, 0.0), Vec3::ZERO);
+        let running = Retreat::start(spot, hit_at);
+        assert!(running.fleeing());
+        assert_eq!(running.goal(), Some(spot));
+        assert_eq!(
+            running.next(&at(0.5, 2.0, true), &mut rng),
+            running,
+            "keeps running while it still sees the player"
+        );
+
+        let hiding = running.next(&at(1.0, 4.0, false), &mut rng);
+        let Retreat::Hiding { until, .. } = hiding else {
+            panic!("hides on the spot: {hiding:?}");
+        };
+        assert!((1.0 + COVER_HOLD_SECS.min..=1.0 + COVER_HOLD_SECS.max).contains(&until));
+        assert!(!hiding.fleeing());
+        assert_eq!(hiding.goal(), Some(spot));
+        assert_eq!(hiding.next(&at(until - 0.01, 4.0, false), &mut rng), hiding);
+
+        let repeek = hiding.next(&at(until, 4.0, false), &mut rng);
+        assert_eq!(repeek, Retreat::Repeek { back_to: hit_at });
+        assert_eq!(repeek.goal(), Some(hit_at));
+        assert_eq!(repeek.next(&at(until + 0.5, 2.0, false), &mut rng), repeek);
+        assert_eq!(
+            repeek.next(&at(until + 1.0, 0.1, false), &mut rng),
+            Retreat::Off,
+            "back on the re-peek spot: roam and fight as usual"
+        );
+        assert_eq!(Retreat::Off.goal(), None);
+    }
+
+    #[test]
+    fn a_hiding_or_repeeking_bot_that_sees_the_player_fights() {
+        let mut rng = Rng::new(7);
+        let hiding = Retreat::Hiding {
+            spot: Vec3::ZERO,
+            back_to: Vec3::new(3.0, 0.0, 0.0),
+            until: 9.0,
+        };
+        assert_eq!(hiding.next(&at(1.0, 0.0, true), &mut rng), Retreat::Off);
+        let repeek = Retreat::Repeek {
+            back_to: Vec3::new(3.0, 0.0, 0.0),
+        };
+        assert_eq!(repeek.next(&at(1.0, 1.0, true), &mut rng), Retreat::Off);
+    }
+
+    #[test]
+    fn only_reaching_cover_draws_a_random_number() {
+        let mut rng = Rng::new(8);
+        let mut probe = rng.clone();
+        let repeek = Retreat::Repeek {
+            back_to: Vec3::new(3.0, 0.0, 0.0),
+        };
+        repeek.next(&at(1.0, 0.0, false), &mut rng);
+        Retreat::Off.next(&at(1.0, 0.0, true), &mut rng);
+        Retreat::start(Vec3::new(5.0, 0.0, 0.0), Vec3::ZERO).next(&at(1.0, 0.0, false), &mut rng);
+        assert_eq!(rng.next_u64(), probe.next_u64(), "no random draw");
     }
 }
