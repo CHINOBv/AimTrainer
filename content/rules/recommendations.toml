@@ -124,3 +124,23 @@ meaning = "you take long to follow a target that changes direction"
 [rules.recommendation]
 scenario_ids = ["track-reactive-strafe", "track-reactive-micro"]
 tip = "React to strafes instead of anticipating them; relax your grip so reversals are quicker."
+
+[[rules]]
+metric = "speed_match"
+direction = "below"
+threshold = 0.35
+verdict = "weakness"
+meaning = "your crosshair speed rarely matches the target's speed"
+[rules.recommendation]
+scenario_ids = ["track-orbit", "track-precise"]
+tip = "Match the target's speed before correcting your position; the too slow / too fast split shows which way you miss."
+
+[[rules]]
+metric = "edge_share"
+direction = "above"
+threshold = 0.60
+verdict = "weakness"
+meaning = "you ride the edge of the target instead of its center"
+[rules.recommendation]
+scenario_ids = ["track-precise", "track-orbit"]
+tip = "Once you are on the target, steer back to its center instead of staying at the edge."
