@@ -8,6 +8,9 @@ use aim_core::crosshair::{
     LineLimits, Lines, OUTLINE_THICKNESS_PX, PRESET_COLORS, Rgba, code, preset,
 };
 use aim_core::sensitivity::Game;
+use aim_core::sensitivity::randomizer::{
+    MAX_MULTIPLIER, MIN_INTERVAL_SECS, MIN_MULTIPLIER, RandomizerConfig,
+};
 use aim_core::training::missions::Commitment;
 use bevy_egui::egui;
 
@@ -171,6 +174,7 @@ pub fn display_panel(
     })
     .response
     .on_hover_text("Low: 2 missions a day. Medium: 3, one of them mastery. High: 4, two mastery, closer to your bests. Changing it regenerates today's missions.");
+    sens_randomizer(ui, &mut settings.sens_randomizer);
     ui.add_space(8.0);
     ui.heading("Gameplay keys");
     restart_key_setting::restart_key_setting(ui, &mut settings.restart_key);
@@ -178,6 +182,47 @@ pub fn display_panel(
     ui.heading("Global hotkeys (Windows/X11)");
     hotkey_settings::hotkey_settings(ui, settings, recording_hotkey);
     ui.label("Wayland/Hyprland: bind `aimtrainer toggle`, `aimtrainer warmup` and `aimtrainer micro` in your compositor (see README).");
+}
+
+/// The sensitivity randomiser drill. It only scales the look while playing; the saved
+/// sensitivity is never changed.
+fn sens_randomizer(ui: &mut egui::Ui, cfg: &mut RandomizerConfig) {
+    ui.checkbox(&mut cfg.enabled, "Sensitivity randomiser drill")
+        .on_hover_text("Every interval your look sensitivity changes to a random multiplier within the range. Your saved sensitivity is never changed. No study shows it helps; use it as an occasional robustness drill.");
+    if !cfg.enabled {
+        return;
+    }
+    ui.horizontal(|ui| {
+        let range = MIN_MULTIPLIER..=MAX_MULTIPLIER;
+        ui.label("Range ×");
+        ui.add(
+            egui::DragValue::new(&mut cfg.min)
+                .range(range.clone())
+                .speed(0.01)
+                .fixed_decimals(2),
+        );
+        ui.label("to ×");
+        ui.add(
+            egui::DragValue::new(&mut cfg.max)
+                .range(range)
+                .speed(0.01)
+                .fixed_decimals(2),
+        );
+        ui.label("every");
+        ui.add(
+            egui::DragValue::new(&mut cfg.interval_secs)
+                .range(MIN_INTERVAL_SECS..=120.0)
+                .suffix(" s"),
+        );
+        ui.label("easing");
+        let max_ease = cfg.interval_secs.max(MIN_INTERVAL_SECS);
+        ui.add(
+            egui::DragValue::new(&mut cfg.smoothing_secs)
+                .range(0.0..=max_ease)
+                .speed(0.1)
+                .suffix(" s"),
+        );
+    });
 }
 
 /// Enemy highlight presets (VALORANT's colour-blind options), target outline and

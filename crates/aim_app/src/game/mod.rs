@@ -21,6 +21,7 @@ use aim_core::scenario::{
 };
 use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::finder::{SensFinder, Slot};
+use aim_core::sensitivity::randomizer::SensRandomizer;
 use aim_core::training::routine::PlannedRun;
 use aim_core::training::store::RunStore;
 use bevy::camera::{PerspectiveProjection, Projection};
@@ -246,7 +247,54 @@ impl Plugin for GamePlugin {
             .add_plugins((arena::ArenaPlugin, hit_effect::HitEffectPlugin))
             .add_systems(Update, (manage_cursor, refresh_target_color, fit_viewport))
             .add_systems(OnExit(AppState::Playing), clear_targets)
-            .add_plugins(MissionsPlugin);
+            .add_plugins(MissionsPlugin)
+            .init_resource::<SensDrill>()
+            .add_systems(Update, tick_sens_drill.before(look));
+    }
+}
+
+/// The sensitivity randomiser drill while a run is played with it enabled.
+#[derive(Resource, Default)]
+pub struct SensDrill(pub Option<SensRandomizer>);
+
+impl SensDrill {
+    /// Multiplier for the look sensitivity: 1 when the drill is off.
+    pub fn multiplier(&self) -> f64 {
+        self.0.as_ref().map_or(1.0, SensRandomizer::multiplier)
+    }
+}
+
+/// Start, advance or stop the drill. It runs only while playing with the setting on, never
+/// in sensitivity-finder tests (they measure one exact sensitivity), and pauses with the run.
+fn tick_sens_drill(
+    time: Res<Time>,
+    settings: Res<Settings>,
+    state: Res<State<AppState>>,
+    run: Option<Res<Run>>,
+    arena: Option<Res<arena::ArenaRun>>,
+    mut drill: ResMut<SensDrill>,
+) {
+    let config = settings.sens_randomizer;
+    let finder_test = run.as_ref().is_some_and(|r| r.sens_override.is_some());
+    if *state.get() != AppState::Playing || !config.enabled || finder_test {
+        if drill.0.is_some() {
+            drill.0 = None;
+        }
+        return;
+    }
+    if drill
+        .0
+        .as_ref()
+        .is_none_or(|d| *d.config() != config.sanitized())
+    {
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos() as u64);
+        drill.0 = Some(SensRandomizer::new(config, seed));
+    }
+    let paused = run.is_some_and(|r| r.paused) || arena.is_some_and(|a| a.paused);
+    if !paused && let Some(d) = drill.0.as_mut() {
+        d.advance(time.delta_secs());
     }
 }
 
@@ -470,13 +518,14 @@ fn look(
     motion: Res<AccumulatedMouseMotion>,
     buttons: Res<ButtonInput<MouseButton>>,
     settings: Res<Settings>,
+    drill: Res<SensDrill>,
     mut run: ResMut<Run>,
 ) {
     if run.paused {
         return;
     }
     run.zoomed = buttons.pressed(MouseButton::Right);
-    let k = deg_per_count(&settings, &run);
+    let k = deg_per_count(&settings, &run) * drill.multiplier();
     run.view = apply_look(run.view, &motion, k);
 }
 
@@ -998,6 +1047,7 @@ mod tests {
     fn systems_have_no_conflicting_access() {
         assert_is_system(pause_input);
         assert_is_system(look);
+        assert_is_system(tick_sens_drill);
         assert_is_system(tick);
         assert_is_system(sync_targets);
         assert_is_system(pose_humanoids);

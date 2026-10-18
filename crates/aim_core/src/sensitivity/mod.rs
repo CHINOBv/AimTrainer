@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod finder;
 pub mod matching;
+pub mod randomizer;
 
 pub use crate::games::{FovAxis, FovModel, Game, GameProfile};
 

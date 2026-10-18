@@ -133,6 +133,7 @@ Spreading the skills across the week does give VDIM spacing between sessions. Ou
 - Voltaic says changing sensitivity is not harmful for practice, and that a change can help break a plateau (verified, https://app.voltaic.gg/blog/muscle-memory).
 - No controlled evidence supports or rejects sensitivity randomization.
 - **Our default:** train at your exact VALORANT sensitivity. The trainer converts it to the same cm/360.
+- **Sensitivity randomiser drill (opt-in, off by default).** `aim_core::sensitivity::randomizer` changes the look sensitivity to a random multiplier of your own every interval. The defaults are ×0.8–×1.2 every 10 s, with optional easing between values. The bounds are limited to ×0.5–×2.0 and the interval to at least 2 s. It is deterministic per seed. The HUD shows the current multiplier. The saved sensitivity never changes, and sensitivity-finder tests never use the drill. Because no controlled evidence supports or rejects randomisation (above), the drill is offered as an occasional robustness exercise in the spirit of Voltaic's plateau advice. The default range and the limits are **estimates**.
 
 ## Analytics metrics
 

@@ -42,6 +42,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - **Sound effects** for hits, headshots, kills and (optionally) misses, synthesized in code: several presets, a volume slider and previews.
   - Subtle **hit feedback**: a short, semi-transparent hit marker (crosshair flash, dot, cross, ring or brackets; color and duration) and a target effect (flash, pop, fade or ring burst). Each can be turned off.
   - A shareable **profile code**.
+  - An opt-in **sensitivity randomiser drill**: a random multiplier within your range every few seconds, shown on the HUD. Your saved sensitivity never changes.
   - A **system check**: FPS, 1% lows, vsync, acceleration.
 
 The research behind the training is in [`docs/training-science.md`](docs/training-science.md), and the features are justified in [`docs/feature-analysis.md`](docs/feature-analysis.md).

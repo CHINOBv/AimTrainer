@@ -4,6 +4,7 @@ use crate::audio::synth::{HitSound, KillSound};
 use crate::game::feedback::{HitMarkerStyle, MarkerColor, TargetEffect};
 use aim_core::crosshair::{CUSTOM_COLOR_INDEX, Crosshair, PRESET_COLORS, Rgba};
 use aim_core::sensitivity::Sensitivity;
+use aim_core::sensitivity::randomizer::RandomizerConfig;
 use aim_core::training::missions::Commitment;
 use bevy::prelude::Resource;
 use directories::ProjectDirs;
@@ -85,6 +86,8 @@ pub struct Settings {
     pub mission_commitment: Commitment,
     /// Target outline and environment tint (colour-vision and visibility options).
     pub target_visibility: TargetVisibility,
+    /// Sensitivity randomiser drill (off by default; never changes `sensitivity`).
+    pub sens_randomizer: RandomizerConfig,
 }
 
 /// VALORANT's "Enemy Highlight Color" options (General → Accessibility), applied to
@@ -248,6 +251,7 @@ impl Default for Settings {
             hit_feedback: HitFeedbackSettings::default(),
             mission_commitment: Commitment::default(),
             target_visibility: TargetVisibility::default(),
+            sens_randomizer: RandomizerConfig::default(),
         }
     }
 }
@@ -456,6 +460,21 @@ mod tests {
         assert!(ch.outlines && ch.center_dot);
         assert_eq!(ch.outline_opacity, 1.0);
         assert!(!ch.outer.show, "the legacy crosshair had no outer lines");
+    }
+
+    #[test]
+    fn sens_randomizer_is_off_for_old_settings_files_and_round_trips() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(old.sens_randomizer, RandomizerConfig::default());
+        assert!(!old.sens_randomizer.enabled);
+        let src = "[sens_randomizer]\nenabled = true\nmin = 0.9\n";
+        let on: Settings = toml::from_str(src).unwrap();
+        assert!(on.sens_randomizer.enabled);
+        assert_eq!(on.sens_randomizer.min, 0.9);
+        assert_eq!(on.sens_randomizer.max, RandomizerConfig::default().max);
+        let text = toml::to_string_pretty(&on).unwrap();
+        assert_eq!(toml::from_str::<Settings>(&text).unwrap(), on);
+        assert_eq!(on.sensitivity, Settings::default().sensitivity);
     }
 
     #[test]
