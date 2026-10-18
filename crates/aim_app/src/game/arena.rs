@@ -2,7 +2,7 @@
 //! look and input as scenarios, feeding `aim_world::arena::ArenaSession`, with the map's
 //! boxes and the bots mirrored as meshes. All rules live in `aim_world`.
 
-use super::feedback::{HitFrame, KILL_FLASH_SECS, MarkerKind, ShotFeedback, ShotOutcome};
+use super::feedback::{self, HitFrame, KILL_FLASH_SECS, MarkerKind, ShotFeedback, ShotOutcome};
 use super::hit_effect::{self, EffectAssets, Struck};
 use super::{
     AppState, LastResult, MainCamera, PlayerInput, TargetVisual, WorldAssets, apply_look,
@@ -161,6 +161,11 @@ impl ArenaRun {
             marker_secs_left: self.hit_flash,
             marker: self.marker,
             kill_flash_secs: self.kill_flash,
+            // Arena sessions expose no recoil state: only movement opens the crosshair.
+            inaccuracy: feedback::movement_inaccuracy(
+                self.session.player_speed(),
+                &self.session.def().weapon.movement(),
+            ),
         }
     }
 

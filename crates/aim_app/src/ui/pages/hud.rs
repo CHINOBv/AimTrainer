@@ -161,7 +161,7 @@ fn sens_drill_hud(
 }
 
 /// The crosshair and the hit marker of `frame` (head, body and kill markers differ with
-/// `feel.distinct_markers`), and the arena kill flash.
+/// `feel.distinct_markers`), the crosshair bloom and the arena kill flash.
 fn hit_feedback(ctx: &bevy_egui::egui::Context, settings: &Settings, frame: HitFrame) {
     let fb = &settings.hit_feedback;
     let showing = frame.marker_secs_left > 0.0;
@@ -175,7 +175,12 @@ fn hit_feedback(ctx: &bevy_egui::egui::Context, settings: &Settings, frame: HitF
         let [r, g, b] = look.flash_rgb;
         aim_core::crosshair::Rgba::opaque(r, g, b)
     });
-    crosshair::draw(ctx, &settings.crosshair, flash);
+    let bloom = if settings.feel.crosshair_bloom {
+        crosshair::bloom_px(frame.inaccuracy)
+    } else {
+        0
+    };
+    crosshair::draw(ctx, &settings.crosshair, flash, bloom);
     if showing {
         let t = 1.0 - frame.marker_secs_left / fb.marker_secs();
         hit_marker::draw(ctx, &look, settings.crosshair.color(), t);

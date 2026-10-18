@@ -117,6 +117,16 @@ impl Run {
         }
     }
 
+    /// Weapon inaccuracy from movement and the spray in progress, for the crosshair bloom.
+    fn inaccuracy(&self) -> f32 {
+        let s = &self.session;
+        let movement = feedback::movement_inaccuracy(s.player_speed(), s.movement_profile());
+        let recoil = s.recoil_profile().map_or(0.0, |p| {
+            feedback::recoil_inaccuracy(s.burst_index(), p.spread_ramp_bullets)
+        });
+        feedback::inaccuracy(movement, recoil)
+    }
+
     /// What the HUD draws for hit feedback this frame.
     pub fn hit_frame(&self) -> HitFrame {
         HitFrame {
@@ -124,6 +134,7 @@ impl Run {
             marker: self.marker,
             // Scenario runs keep their look: their kill flash times out but draws nothing.
             kill_flash_secs: 0.0,
+            inaccuracy: self.inaccuracy(),
         }
     }
 }

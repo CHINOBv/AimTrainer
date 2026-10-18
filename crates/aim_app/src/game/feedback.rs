@@ -1,6 +1,7 @@
 //! What the player's shots did this frame, as the app reports it to sound and hit
 //! feedback. Read from the sessions' events; decides no gameplay.
 
+use aim_core::movement::MovementProfile;
 use aim_core::scenario::{HitZone, SessionEvent};
 use aim_world::arena::ArenaEvent;
 use bevy::prelude::Message;
@@ -231,6 +232,8 @@ pub struct HitFrame {
     pub marker: MarkerKind,
     /// Seconds left on the kill flash (0 = none).
     pub kill_flash_secs: f32,
+    /// Current weapon inaccuracy from movement and recoil, 0–1 (crosshair bloom).
+    pub inaccuracy: f32,
 }
 
 /// What a hit target does for a moment. A killed target plays it before disappearing.
@@ -284,6 +287,32 @@ const FADE_MIN_ALPHA: f32 = 0.3;
 const RING_GROWTH: f32 = 0.8;
 /// Opacity of a ring burst at the start.
 const RING_PEAK_ALPHA: f32 = 0.6;
+
+/// How inaccurate moving at `speed` (m/s) makes the weapon, 0–1, for the crosshair bloom.
+/// Display only. It follows the core's linear spread model (`docs/valorant-mechanics.md`,
+/// "Spread model"): fully accurate at or below the accuracy limit (27.5% of run speed for
+/// rifles), growing linearly to 1 at run speed.
+pub fn movement_inaccuracy(speed: f32, profile: &MovementProfile) -> f32 {
+    let limit = profile.accuracy_speed_limit();
+    if speed <= limit {
+        return 0.0;
+    }
+    ((speed - limit) / (profile.run_speed - limit).max(f32::EPSILON)).clamp(0.0, 1.0)
+}
+
+/// How far a spray's spread has grown, 0–1, after `bullet` bullets of the burst in progress
+/// (0 = recovered), for the crosshair bloom. Display only. It follows the core's recoil
+/// model: first-shot spread at bullet 1, growing linearly over `ramp_bullets` to the
+/// maximum spread.
+pub fn recoil_inaccuracy(bullet: u32, ramp_bullets: u32) -> f32 {
+    let fired = bullet.saturating_sub(1) as f32;
+    (fired / ramp_bullets.max(1) as f32).min(1.0)
+}
+
+/// The crosshair bloom's inaccuracy from its `movement` and `recoil` parts, 0–1.
+pub fn inaccuracy(movement: f32, recoil: f32) -> f32 {
+    (movement + recoil).clamp(0.0, 1.0)
+}
 
 /// Length of the kill flash, the same as the scenario runs' `kill_flash`, seconds.
 pub const KILL_FLASH_SECS: f32 = 0.12;
@@ -358,6 +387,45 @@ mod tests {
         assert!(half > 0.0 && half < KILL_FLASH_PEAK_ALPHA, "{half}");
         assert_eq!(kill_flash_alpha(0.0), 0.0);
         assert_eq!(kill_flash_alpha(-1.0), 0.0);
+    }
+
+    #[test]
+    fn moving_above_the_accuracy_limit_is_inaccurate_up_to_run_speed() {
+        let p = aim_core::games::valorant::Weapon::Vandal.movement();
+        let limit = p.accuracy_speed_limit();
+        assert!(
+            (limit - 0.275 * p.run_speed).abs() < 1e-5,
+            "27.5% of run speed"
+        );
+        assert_eq!(movement_inaccuracy(0.0, &p), 0.0);
+        assert_eq!(movement_inaccuracy(limit, &p), 0.0, "accurate at the limit");
+        let mid = movement_inaccuracy((limit + p.run_speed) / 2.0, &p);
+        assert!((mid - 0.5).abs() < 1e-4, "{mid}");
+        assert_eq!(movement_inaccuracy(p.run_speed, &p), 1.0);
+        assert_eq!(movement_inaccuracy(p.run_speed * 2.0, &p), 1.0, "clamped");
+    }
+
+    #[test]
+    fn recoil_inaccuracy_ramps_from_the_first_bullet() {
+        // Bullet 0 = recovered, bullet 1 = first-shot spread, bullet 11 = max (ramp 10).
+        assert_eq!(recoil_inaccuracy(0, 10), 0.0);
+        assert_eq!(recoil_inaccuracy(1, 10), 0.0);
+        assert!((recoil_inaccuracy(6, 10) - 0.5).abs() < 1e-6);
+        assert_eq!(recoil_inaccuracy(11, 10), 1.0);
+        assert_eq!(recoil_inaccuracy(30, 10), 1.0);
+        assert_eq!(
+            recoil_inaccuracy(2, 0),
+            1.0,
+            "a zero ramp counts as one bullet"
+        );
+    }
+
+    #[test]
+    fn inaccuracy_adds_movement_and_recoil_up_to_one() {
+        assert_eq!(inaccuracy(0.0, 0.0), 0.0);
+        assert_eq!(inaccuracy(0.25, 0.5), 0.75);
+        assert_eq!(inaccuracy(0.8, 0.8), 1.0);
+        assert_eq!(inaccuracy(-1.0, 0.0), 0.0);
     }
 
     #[test]
