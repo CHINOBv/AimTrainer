@@ -24,9 +24,9 @@ pub struct SensSuggestionState {
     /// Click runs analyzed.
     pub runs: usize,
     pub suggestion: Option<SensSuggestion>,
-    /// The player applied this suggestion; hidden until new runs arrive, so it is never
-    /// applied twice on the same evidence.
-    pub applied: bool,
+    /// The sensitivity the player applied from this suggestion. Apply stays hidden until new
+    /// runs arrive, so it is never applied twice on the same evidence.
+    pub applied: Option<Sensitivity>,
 }
 
 impl SensSuggestionState {
@@ -43,7 +43,14 @@ impl SensSuggestionState {
             AnalysisKind::Tracking(_) => &[],
         }));
         self.key = Some(key);
-        self.applied = false;
+        self.applied = None;
+    }
+
+    /// The sensitivity to show: the applied one once applied (the settings already hold it,
+    /// so multiplying again would show a value nobody chose), otherwise the suggestion.
+    pub fn shown_sensitivity(&self, current: Sensitivity, multiplier: f32) -> Sensitivity {
+        self.applied
+            .unwrap_or_else(|| suggested_sensitivity(current, multiplier))
     }
 }
 
@@ -113,9 +120,14 @@ pub fn sens_suggestion(
         ui.colored_label(GOOD, format!("No change needed (×{:.2}).", s.multiplier));
         return;
     }
-    let rec = suggested_sensitivity(settings.sensitivity, s.multiplier);
+    let rec = state.shown_sensitivity(settings.sensitivity, s.multiplier);
     let text = format!(
-        "Suggested: ×{:.2} = {:.1} cm/360 ({} {:.3} at {} DPI)",
+        "{}: ×{:.2} = {:.1} cm/360 ({} {:.3} at {} DPI)",
+        if state.applied.is_some() {
+            "Applied"
+        } else {
+            "Suggested"
+        },
         s.multiplier,
         rec.cm_per_360(),
         rec.game.display_name(),
@@ -123,11 +135,11 @@ pub fn sens_suggestion(
         rec.dpi
     );
     ui.colored_label(WARN, text);
-    if state.applied {
-        ui.small("Applied. Play a few click runs before trusting a new suggestion.");
+    if state.applied.is_some() {
+        ui.small("Play a few click runs before trusting a new suggestion.");
     } else if ui.button("Apply overall multiplier").clicked() {
         settings.sensitivity = rec;
-        state.applied = true;
+        state.applied = Some(rec);
     }
 }
 
@@ -161,12 +173,24 @@ mod tests {
         });
         assert_eq!(loads, 1);
         assert_eq!((state.runs, state.suggestion), (0, None));
-        state.applied = true;
+        state.applied = Some(Sensitivity::from_cm_per_360(Game::Valorant, 40.0, 800));
         state.refresh(vec![1, 2, 3], || {
             loads += 1;
             Vec::new()
         });
         assert_eq!(loads, 2);
-        assert!(!state.applied, "new runs re-enable Apply");
+        assert!(state.applied.is_none(), "new runs re-enable Apply");
+    }
+
+    #[test]
+    fn after_applying_the_panel_shows_the_applied_value_not_a_second_multiplication() {
+        let before = Sensitivity::from_cm_per_360(Game::Valorant, 40.0, 800);
+        let mut state = SensSuggestionState::default();
+        let applied = state.shown_sensitivity(before, 0.9);
+        assert!((applied.cm_per_360() - 40.0 / 0.9).abs() < 1e-4);
+        state.applied = Some(applied);
+        // The settings now hold the applied value; it must not be multiplied again.
+        let shown = state.shown_sensitivity(applied, 0.9);
+        assert!((shown.cm_per_360() - applied.cm_per_360()).abs() < 1e-9);
     }
 }

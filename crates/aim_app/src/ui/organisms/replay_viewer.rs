@@ -512,11 +512,11 @@ pub fn replay_viewer(
         });
     ui.separator();
 
-    let Some(current) = state
-        .selected
-        .as_ref()
-        .and_then(|p| entries.iter().find(|e| &e.path == p))
-    else {
+    let Some(selected) = state.selected.as_ref() else {
+        return;
+    };
+    let Some(current) = entries.iter().find(|e| &e.path == selected) else {
+        ui.label("The selected replay is no longer on disk. Pick another one from the list.");
         return;
     };
     let ReplayViewerState {

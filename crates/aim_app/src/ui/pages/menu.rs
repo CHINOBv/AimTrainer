@@ -218,10 +218,11 @@ fn menu(
                             .or(progress_panel::skills_section(ui, &skills, name));
                     }
                     ui.separator();
-                    let recent = replays::list(&cfg.paths);
+                    // One directory scan per frame feeds both the suggestion and the replays.
+                    let entries = replays::list(&cfg.paths);
                     state.sens_suggestion.refresh(
-                        recent.iter().map(|e| e.timestamp_millis).collect(),
-                        || recent_click_analyses(&recent),
+                        entries.iter().map(|e| e.timestamp_millis).collect(),
+                        || recent_click_analyses(&entries),
                     );
                     sens_suggestion::sens_suggestion(
                         ui,
@@ -231,7 +232,6 @@ fn menu(
                     ui.separator();
                     ui.heading("Replays");
                     ui.small("Your crosshair path around each target: overshoot, corrections and misses at a glance.");
-                    let entries = replays::list(&cfg.paths);
                     replay_viewer::replay_viewer(ui, &mut state.replays, &entries, |e| {
                         replays::load(&e.path).ok().map(|r| aim_core::analytics::path::replay_path(&r))
                     });

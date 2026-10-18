@@ -76,15 +76,21 @@ fn row(
 ) -> CompareRow {
     let text = |v: Option<f32>| v.map_or_else(|| MISSING.to_owned(), &value);
     let delta = current.zip(earlier).map(|(c, e)| c - e);
+    let change = delta.map(change);
+    // Judge only what the table shows: a change that rounds to zero has no verdict.
+    let shown_zero = |c: &String| c.chars().filter(char::is_ascii_digit).all(|d| d == '0');
     CompareRow {
         label,
         current: text(current),
         earlier: text(earlier),
-        change: delta.map_or_else(|| MISSING.to_owned(), change),
-        better: delta.filter(|d| *d != 0.0).map(|d| match better {
-            Better::Higher => d > 0.0,
-            Better::Lower => d < 0.0,
-        }),
+        better: delta
+            .zip(change.as_ref())
+            .filter(|(_, c)| !shown_zero(c))
+            .map(|(d, _)| match better {
+                Better::Higher => d > 0.0,
+                Better::Lower => d < 0.0,
+            }),
+        change: change.unwrap_or_else(|| MISSING.to_owned()),
     }
 }
 
@@ -259,6 +265,24 @@ mod tests {
             corrections: 12,
             median_reaction_secs: Some(0.300),
         }
+    }
+
+    #[test]
+    fn a_change_that_rounds_to_zero_gets_no_verdict() {
+        let now = PathSummary {
+            shots: 3,
+            hits: 1,
+            ..summary()
+        };
+        let before = PathSummary {
+            shots: 100,
+            hits: 33,
+            ..summary()
+        };
+        let rows = compare_rows(&now, &before);
+        let hit_rate = rows.iter().find(|r| r.label == "Hit rate").unwrap();
+        assert_eq!(hit_rate.change, "+0 pts");
+        assert_eq!(hit_rate.better, None);
     }
 
     #[test]
