@@ -178,6 +178,7 @@ Post-run analysis (`aim_core::analytics`) re-simulates the recorded run and meas
 | Time on target | < 50% | > 75% | `track-precise` |
 | Lag ratio | > 65% (trailing) or < 35% (over-leading) | — | `track-precise`, `track-reactive-micro` |
 | Reaction to direction changes | > 250 ms | — | `track-reactive-strafe`, `track-reactive-micro` |
+| Shots fired while moving | > 20% (≥ 10 shots) | — | `counter-strafe`, `strafe-shot` |
 
 The 300 ms and 220 ms reaction thresholds bracket the simulated recruit (0.32 s + onset) and elite (0.20 s + onset); the rest are estimates.
 
@@ -210,6 +211,33 @@ Simulated values (seed 13): speed match ranges from 60–87% on `track-precise` 
 The simulated aimer adds a recognition delay of half its reaction time before each movement, since a choice takes longer than a simple reaction (Hick, 1952, *Quarterly Journal of Experimental Psychology* 4(1); the factor of 0.5 is an estimate). It mistakes a decoy for a match with a chance of 0.25 × its endpoint noise (recruit ≈ 22%, elite ≈ 9%), also an estimate. Scenarios without decoys draw no extra random numbers, so their results are unchanged.
 
 **Score rings.** `precision-rings` pays more for hits near the center (×3, ×2, ×1). The aim is to reward landing on the exact point aimed at rather than anywhere on the target. That this helps in-game headshot precision is an estimate with no study behind it.
+
+### Firing while moving (movement scenarios)
+
+`aim_core::analytics::moving` measures every shot of a scenario with `player.movement = true`. A shot is *moving* when the player was above the weapon's accuracy speed limit when it was fired (27.5% of run speed for rifles, verified in `valorant-mechanics.md`); otherwise it is *stopped*. The session already decides this; the analysis reuses its flag.
+
+| Metric | Definition |
+|---|---|
+| Speed at the shot | Median player speed (m/s) over all shots |
+| Stopped vs moving | Share of shots fired at or below the limit, and above it |
+| Hit rate split | Hit rate of the stopped shots and of the moving shots, separately |
+| Counter-strafe check | A shot *follows movement* when the player was above the limit at any frame within the last **0.5 s** (or at the shot). Counter-strafed share = shots that follow movement and were fired already accurate ÷ shots that follow movement |
+| Stop-to-shot time | For counter-strafed shots: time from the first accurate frame after the last moving frame to the shot (median) |
+
+The 0.5 s window is an estimate: it covers the measured stop (0.16 s counter-strafing, 0.17 s releasing, `valorant-mechanics.md`) plus a reaction margin, so a shot right after a stop counts and a shot after standing still does not.
+
+**Rule (provisional).** Shots fired while moving > 20% is a weakness and recommends `counter-strafe`, then `strafe-shot`. A movement category needs ≥ 10 shots before it is judged. The 20% threshold is an estimate, not calibrated.
+
+### Peek efficiency (arenas)
+
+`aim_world::arena::ArenaStats` times each *engagement*: the first exposure of a bot life, from the first frame any part of its head is in the player's line of sight (the same first sight that feeds crosshair placement and time to kill).
+
+| Metric | Definition |
+|---|---|
+| First shot delay | Time from first sight to the player's first shot during that exposure, at any target. An exposure without a shot adds nothing |
+| Exposure time | Time from first sight to the kill, to the first frame without line of sight, or to the player's death. An exposure still open when the run ends adds nothing |
+
+The results notes show the medians. Line of sight is checked from the player's eye to the bot's head, so the exposure approximates how long the player could be seen. Later re-peeks by the same bot life are not separate engagements. These are measurements only; no rule judges them yet.
 
 ## Caveat
 

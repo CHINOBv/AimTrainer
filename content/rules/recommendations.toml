@@ -144,3 +144,13 @@ meaning = "you ride the edge of the target instead of its center"
 [rules.recommendation]
 scenario_ids = ["track-precise", "track-orbit"]
 tip = "Once you are on the target, steer back to its center instead of staying at the edge."
+
+[[rules]]
+metric = "moving_shot_rate"
+direction = "above"
+threshold = 0.20
+verdict = "weakness"
+meaning = "you often fire before you have stopped"
+[rules.recommendation]
+scenario_ids = ["counter-strafe", "strafe-shot"]
+tip = "Tap the opposite strafe key (or release the keys) and fire only once you have stopped; shots are accurate again at 27.5% of run speed or less."

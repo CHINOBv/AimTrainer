@@ -96,6 +96,31 @@ pub struct ArenaStats {
     /// Bot lives first seen within the arena's `pre_aim_tolerance_deg` (0 when the arena
     /// does not set one).
     pub pre_aimed: u32,
+    /// Peek efficiency: seconds from first sight of a bot life to the player's first shot
+    /// (at any target) during that first exposure. An exposure without a shot adds nothing.
+    pub first_shot_delays_secs: Vec<f32>,
+    /// Peek efficiency: seconds the first exposure of each bot life lasted, from first sight
+    /// to the kill, to line of sight breaking, or to the player's death. An exposure still
+    /// open when the run ends adds nothing.
+    pub exposure_times_secs: Vec<f32>,
+}
+
+/// The first exposure of a bot life while it lasts, for peek efficiency.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Engagement {
+    bot_id: u64,
+    /// Session time of first sight, seconds.
+    seen_at: f32,
+    /// The player has fired since first sight.
+    shot: bool,
+}
+
+/// Record the exposure of `bot_id`'s open engagement as ended at `now`, if there is one.
+fn end_exposure(engagements: &mut Vec<Engagement>, stats: &mut ArenaStats, bot_id: u64, now: f32) {
+    if let Some(i) = engagements.iter().position(|e| e.bot_id == bot_id) {
+        let e = engagements.swap_remove(i);
+        stats.exposure_times_secs.push(now - e.seen_at);
+    }
 }
 
 fn median(values: &[f32]) -> Option<f32> {
@@ -121,6 +146,16 @@ impl ArenaStats {
     /// Median head-level (pitch) error at first sight, degrees.
     pub fn median_head_level_error_deg(&self) -> Option<f32> {
         median(&self.head_level_errors_deg)
+    }
+
+    /// Median seconds from first sight to the first shot (peek efficiency).
+    pub fn median_first_shot_delay_secs(&self) -> Option<f32> {
+        median(&self.first_shot_delays_secs)
+    }
+
+    /// Median seconds a first exposure lasted (peek efficiency).
+    pub fn median_exposure_secs(&self) -> Option<f32> {
+        median(&self.exposure_times_secs)
     }
 }
 
@@ -185,6 +220,8 @@ pub struct ArenaSession {
     practice: bool,
     /// Deathmatch with a site objective.
     site: Option<Site>,
+    /// Bot lives in their first exposure, for peek efficiency.
+    engagements: Vec<Engagement>,
 }
 
 /// The aimer preset angle bots use for flick speed and endpoint error; their reaction time
@@ -238,6 +275,7 @@ impl ArenaSession {
             grace_until: RESPAWN_GRACE_SECS,
             practice: false,
             site: None,
+            engagements: Vec::new(),
             def,
             map,
         };
@@ -478,8 +516,16 @@ impl ArenaSession {
         };
         for b in self.bots.iter_mut().filter(|b| b.alive) {
             b.visible_to_player = self.map.visible_head(eye, b.feet);
+            if !b.visible_to_player {
+                end_exposure(&mut self.engagements, &mut self.stats, b.id, self.time);
+            }
             if b.visible_to_player && b.first_seen_at.is_none() {
                 b.first_seen_at = Some(self.time);
+                self.engagements.push(Engagement {
+                    bot_id: b.id,
+                    seen_at: self.time,
+                    shot: false,
+                });
                 let to_head = head_of(b.feet) - eye;
                 let err = angle_between_deg(dir, to_head);
                 self.stats.crosshair_errors_deg.push(err);
@@ -521,6 +567,12 @@ impl ArenaSession {
         );
         self.player.last_shot_at = self.time;
         self.stats.shots += 1;
+        for e in self.engagements.iter_mut().filter(|e| !e.shot) {
+            e.shot = true;
+            self.stats
+                .first_shot_delays_secs
+                .push(self.time - e.seen_at);
+        }
         if moving {
             self.stats.moving_shots += 1;
         }
@@ -565,6 +617,7 @@ impl ArenaSession {
             let ttk = now - bot.first_seen_at.unwrap_or(now);
             self.stats.kills += 1;
             self.stats.kill_times.push(ttk);
+            end_exposure(&mut self.engagements, &mut self.stats, bot.id, now);
             events.push(ArenaEvent::BotKilled {
                 id: bot.id,
                 time_to_kill_secs: ttk,
@@ -654,6 +707,9 @@ impl ArenaSession {
 
     fn player_died(&mut self) {
         self.stats.deaths += 1;
+        for e in self.engagements.drain(..) {
+            self.stats.exposure_times_secs.push(self.time - e.seen_at);
+        }
         self.player.health = PLAYER_HEALTH;
         let spawn = match &self.def.mode {
             ArenaMode::Deathmatch { .. } if self.site.is_some() => {
@@ -880,5 +936,159 @@ impl Activity for ArenaSession {
 
     fn view(&self) -> Option<ViewAngles> {
         Some(ArenaSession::view(self))
+    }
+}
+
+#[cfg(test)]
+mod peek_efficiency_tests {
+    use super::*;
+
+    const DT: f32 = 1.0 / 60.0;
+
+    /// An open room: the bot is in the player's sight from the first frame.
+    fn open_duel() -> ArenaSession {
+        let map = MapDef::load(
+            r#"
+id = "duel-room"
+name = "Duel Room"
+floor_x = [-10.0, 10.0]
+floor_z = [-10.0, 10.0]
+
+[[spawns]]
+id = "p"
+kind = "player"
+position = [0.0, 0.0, 5.0]
+yaw_deg = 0.0
+
+[[spawns]]
+id = "b"
+kind = "bot"
+position = [0.0, 0.0, -5.0]
+yaw_deg = 180.0
+"#,
+        )
+        .unwrap();
+        let def = ArenaDef::load(
+            r#"
+id = "duel"
+name = "Duel"
+map = "duel-room"
+duration_secs = 10.0
+weapon = "vandal"
+
+[mode]
+kind = "deathmatch"
+bots = 1
+bot_skill = "veteran"
+respawn_secs = 1.0
+bots_shoot_back = false
+"#,
+        )
+        .unwrap();
+        ArenaSession::new(def, map, 3).unwrap()
+    }
+
+    fn idle(s: &ArenaSession) -> FrameInput {
+        FrameInput {
+            dt: DT,
+            view: s.view(),
+            ..Default::default()
+        }
+    }
+
+    /// Looks at the first visible bot's head and clicks.
+    fn shoot_visible(s: &ArenaSession) -> FrameInput {
+        let eye = s.eye_position();
+        match s.bots().find(|b| b.visible_to_player) {
+            Some(b) => FrameInput {
+                dt: DT,
+                view: ViewAngles::from_direction(b.head() - eye),
+                fire_pressed: true,
+                fire_held: true,
+                ..Default::default()
+            },
+            None => idle(s),
+        }
+    }
+
+    fn run(
+        s: &mut ArenaSession,
+        frames: usize,
+        mut policy: impl FnMut(usize, &ArenaSession) -> FrameInput,
+    ) {
+        for frame in 1..=frames {
+            let input = policy(frame, s);
+            s.update(input);
+        }
+    }
+
+    #[test]
+    fn the_first_shot_and_the_exposure_until_the_kill_are_timed() {
+        let mut s = open_duel();
+        run(&mut s, 60, |frame, s| {
+            if frame <= 31 {
+                idle(s)
+            } else {
+                shoot_visible(s)
+            }
+        });
+        let st = s.stats();
+        assert_eq!(st.kills, 1, "{st:?}");
+        // Seen on frame 1, first shot on frame 32: 31 frames later.
+        assert_eq!(st.first_shot_delays_secs.len(), 1, "{st:?}");
+        assert!(
+            (st.first_shot_delays_secs[0] - 31.0 * DT).abs() < 1e-4,
+            "{st:?}"
+        );
+        // The exposure ended with the kill, so it lasted exactly the time to kill.
+        assert_eq!(st.exposure_times_secs, st.kill_times);
+        assert_eq!(
+            st.median_first_shot_delay_secs(),
+            Some(st.first_shot_delays_secs[0])
+        );
+        assert_eq!(st.median_exposure_secs(), Some(st.kill_times[0]));
+    }
+
+    #[test]
+    fn an_exposure_ends_when_line_of_sight_breaks_and_needs_a_shot_to_time_one() {
+        let (mut def, map) = super::super::builtin::load("corridor-jiggle")
+            .expect("known arena")
+            .expect("valid arena");
+        def.duration_secs = 10.0;
+        let mut s = ArenaSession::new(def, map, 4).unwrap();
+        let (mut first_streak, mut ended) = (0u32, false);
+        run(&mut s, 600, |_, s| {
+            let seen = s.bots().any(|b| b.visible_to_player);
+            if seen && !ended {
+                first_streak += 1;
+            } else if first_streak > 0 {
+                ended = true;
+            }
+            idle(s)
+        });
+        let st = s.stats();
+        assert!(first_streak > 0 && ended);
+        assert!(st.first_shot_delays_secs.is_empty(), "{st:?}");
+        // One bot life, never killed: only its first exposure is an engagement, and it
+        // runs from the first frame in sight to the first frame out of sight.
+        assert_eq!(st.exposure_times_secs.len(), 1, "{st:?}");
+        assert!(
+            (st.exposure_times_secs[0] - first_streak as f32 * DT).abs() < 1e-4,
+            "{st:?} vs {first_streak} frames"
+        );
+        assert_eq!(st.median_first_shot_delay_secs(), None);
+    }
+
+    #[test]
+    fn a_player_death_ends_the_open_exposures() {
+        let mut s = open_duel();
+        run(&mut s, 5, |_, s| idle(s));
+        s.player_died();
+        let st = s.stats();
+        assert_eq!(st.exposure_times_secs.len(), 1);
+        assert!(
+            (st.exposure_times_secs[0] - 4.0 * DT).abs() < 1e-4,
+            "{st:?}"
+        );
     }
 }

@@ -9,6 +9,7 @@
 //! per-benchmark-subcategory profile is in [`super::skills`].
 
 use super::flick::{Flick, FlickSummary};
+use super::moving::MovingAnalysis;
 use super::rules::{self, MetricSources, RuleSet};
 use super::tracking::{TrackingAnalysis, TrackingSummary};
 use super::{AnalysisKind, RunAnalysis};
@@ -20,6 +21,8 @@ pub use super::rules::{Direction, Metric, Recommendation, Rule, Verdict};
 pub const MIN_FLICKS: usize = 5;
 /// Less firing time than this in a category gives no tracking findings.
 pub const MIN_TRACKING_SECS: f32 = 3.0;
+/// Fewer shots than this in a movement category give no firing-while-moving findings.
+pub const MIN_MOVING_SHOTS: usize = 10;
 
 /// One strength or weakness found by applying a rule to a category's metrics.
 #[derive(Debug, Clone, PartialEq)]
@@ -131,6 +134,11 @@ impl SkillProfile {
             let tracking = tracking
                 .map(|t| t.summary())
                 .filter(|t| t.hold_secs >= MIN_TRACKING_SECS);
+            let mut moving = MovingAnalysis::default();
+            for m in runs.iter().filter_map(|r| r.moving.as_ref()) {
+                moving.merge(m);
+            }
+            let moving = (moving.shots.len() >= MIN_MOVING_SHOTS).then(|| moving.summary());
             categories.push(CategoryProfile {
                 category,
                 runs: runs.len(),
@@ -140,6 +148,7 @@ impl SkillProfile {
                     &MetricSources {
                         flick: flick.as_ref(),
                         tracking: tracking.as_ref(),
+                        moving: moving.as_ref(),
                     },
                 ),
                 flick,
@@ -203,6 +212,7 @@ mod tests {
             category: Category::Flicking,
             kind: AnalysisKind::Flick(flicks),
             decision: None,
+            moving: None,
         };
         let p = SkillProfile::build(&[run]);
         let recs = p.recommendations();
@@ -280,6 +290,49 @@ mod tests {
                 "{id} preset {preset}: no findings"
             );
         }
+    }
+
+    fn movement_run(shots: usize) -> RunAnalysis {
+        let shot = |i: usize| crate::analytics::moving::MovingShot {
+            time_secs: i as f32,
+            speed: if i.is_multiple_of(2) { 5.4 } else { 0.0 },
+            accurate: !i.is_multiple_of(2),
+            hit: !i.is_multiple_of(2),
+            after_movement: true,
+            stop_to_shot_secs: None,
+        };
+        RunAnalysis {
+            scenario_id: "counter-strafe".into(),
+            category: Category::Movement,
+            kind: AnalysisKind::Flick(Vec::new()),
+            moving: Some(crate::analytics::MovingAnalysis {
+                accuracy_speed_limit: 1.485,
+                shots: (0..shots).map(shot).collect(),
+            }),
+            decision: None,
+        }
+    }
+
+    #[test]
+    fn many_shots_while_moving_recommend_counter_strafing() {
+        let p = SkillProfile::build(&[movement_run(MIN_MOVING_SHOTS)]);
+        let recs = p.recommendations();
+        let f = recs
+            .iter()
+            .find(|f| f.metric == Metric::MovingShotRate)
+            .expect("50% moving shots fires");
+        assert_eq!(f.category, Category::Movement);
+        assert_eq!(f.value, 0.5);
+        assert_eq!(f.threshold, 0.2);
+        assert_eq!(
+            f.explanation,
+            "Shots fired while moving 50% is above the 20% threshold: you often fire before you have stopped."
+        );
+        let rec = f.recommendation.as_ref().unwrap();
+        assert_eq!(rec.scenario_ids, vec!["counter-strafe", "strafe-shot"]);
+
+        let few = SkillProfile::build(&[movement_run(MIN_MOVING_SHOTS - 1)]);
+        assert!(few.findings().all(|f| f.metric != Metric::MovingShotRate));
     }
 
     #[test]

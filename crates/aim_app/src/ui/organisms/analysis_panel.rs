@@ -7,6 +7,7 @@ use crate::ui::UiAction;
 use crate::ui::atoms::{GOOD, WARN};
 use crate::ui::molecules::stat_row;
 use crate::ui::organisms::decision_panel::DecisionReport;
+use crate::ui::organisms::moving_panel::MovingReport;
 use aim_core::analytics::{RunAnalysis, SkillProfile};
 use bevy_egui::egui;
 
@@ -30,13 +31,15 @@ pub struct RunReport {
     pub advice: Vec<Advice>,
     /// Go/no-go section, for runs with decoys.
     pub decision: Option<DecisionReport>,
+    /// Firing-while-moving details, for movement scenarios.
+    pub moving: Option<MovingReport>,
 }
 
-fn ms(secs: f32) -> String {
+pub(crate) fn ms(secs: f32) -> String {
     format!("{:.0} ms", secs * 1000.0)
 }
 
-fn pct(ratio: f32) -> String {
+pub(crate) fn pct(ratio: f32) -> String {
     format!("{:.0}%", ratio * 100.0)
 }
 
@@ -141,6 +144,7 @@ impl RunReport {
             strengths,
             advice,
             decision: analysis.decision.as_ref().map(DecisionReport::new),
+            moving: analysis.moving.as_ref().map(MovingReport::new),
         }
     }
 }
@@ -249,5 +253,14 @@ mod tests {
                 .any(|(l, _)| *l == "Decoys shot (non-match hit)")
         );
         assert!(report("flick-wide", 1).decision.is_none());
+    }
+
+    #[test]
+    fn only_movement_scenarios_carry_a_moving_report() {
+        assert_eq!(report("flick-wide", 2).moving, None);
+        let moving = report("counter-strafe", 2)
+            .moving
+            .expect("movement scenario");
+        assert_eq!(moving.rows[0].0, "Shots stopped / moving");
     }
 }

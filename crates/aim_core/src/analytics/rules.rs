@@ -6,6 +6,7 @@
 //! metrics" in `docs/training-science.md`) until they are calibrated on real player data.
 
 use super::flick::FlickSummary;
+use super::moving::MovingSummary;
 use super::tracking::TrackingSummary;
 use serde::Deserialize;
 
@@ -34,6 +35,8 @@ pub enum Metric {
     SpeedMatch,
     /// Share of in-zone time spent near the target's edge rather than its center (tracking).
     EdgeShare,
+    /// Share of shots fired above the accuracy speed limit (movement scenarios).
+    MovingShotRate,
 }
 
 impl Metric {
@@ -50,6 +53,7 @@ impl Metric {
             Metric::ReversalResponse => "Reaction to direction changes",
             Metric::SpeedMatch => "Speed match",
             Metric::EdgeShare => "Time on the target's edge",
+            Metric::MovingShotRate => "Shots fired while moving",
         }
     }
 
@@ -78,6 +82,7 @@ impl Metric {
             Metric::ReversalResponse => tracking?.median_reversal_response_secs,
             Metric::SpeedMatch => tracking?.speed_match_ratio,
             Metric::EdgeShare => tracking?.edge_ratio,
+            Metric::MovingShotRate => sources.moving?.moving_share,
         }
     }
 }
@@ -87,6 +92,7 @@ impl Metric {
 pub(super) struct MetricSources<'a> {
     pub flick: Option<&'a FlickSummary>,
     pub tracking: Option<&'a TrackingSummary>,
+    pub moving: Option<&'a MovingSummary>,
 }
 
 /// Whether a fired rule marks a strength or a weakness.
@@ -404,6 +410,18 @@ pub(crate) mod tests {
                 &["track-precise", "track-orbit"],
                 None,
                 "Once you are on the target, steer back to its center instead of staying at the edge.",
+            )),
+        ),
+        (
+            Metric::MovingShotRate,
+            Direction::Above,
+            0.20,
+            Verdict::Weakness,
+            "you often fire before you have stopped",
+            Some((
+                &["counter-strafe", "strafe-shot"],
+                None,
+                "Tap the opposite strafe key (or release the keys) and fire only once you have stopped; shots are accurate again at 27.5% of run speed or less.",
             )),
         ),
     ];
