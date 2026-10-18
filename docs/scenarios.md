@@ -53,7 +53,14 @@ miss_penalty = 0
 moving_shot_penalty = 0      # per shot fired above 27.5% of run speed
 expire_penalty = 0
 burst_bonus = 0              # per hit within the weapon's protected bullets; needs weapon.recoil
+rings = { radius = [0.25, 0.5, 1.0], multiplier = [3.0, 2.0, 1.0] }   # optional score-zone rings
 ```
+
+### Score-zone rings
+
+`rings` makes a hit worth more the closer it lands to the center of a sphere or a humanoid head. The distance is the shot's perpendicular distance from the zone center, as a fraction of the zone radius (the sphere radius, or half the head size). A hit takes the multiplier of the innermost ring it falls in, so with the example above a dead-center sphere hit scores `sphere × 3`. A hit outside every ring, and every body or leg hit, scores the zone's flat points. In hold mode the multiplier scales the points per second.
+
+`radius` must be ascending fractions in (0, 1], with one `multiplier` (> 0) per radius. The built-in `precision-rings` uses them.
 
 ### Play area and floor height
 

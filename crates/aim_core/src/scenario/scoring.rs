@@ -32,8 +32,9 @@ pub(super) fn record_miss(stats: &mut Stats, scoring: &ScoringDef) {
     stats.score -= scoring.miss_penalty;
 }
 
-/// Counts a click-mode hit on `zone` and awards its points.
-pub(super) fn record_hit(stats: &mut Stats, scoring: &ScoringDef, zone: HitZone) {
+/// Counts a click-mode hit on `zone` and awards its points times `multiplier` (the
+/// score-ring multiplier, 1 without rings).
+pub(super) fn record_hit(stats: &mut Stats, scoring: &ScoringDef, zone: HitZone, multiplier: f32) {
     stats.hits += 1;
     match zone {
         HitZone::Head => stats.head_hits += 1,
@@ -41,7 +42,7 @@ pub(super) fn record_hit(stats: &mut Stats, scoring: &ScoringDef, zone: HitZone)
         HitZone::Legs => stats.leg_hits += 1,
         HitZone::Sphere => {}
     }
-    stats.score += zone_points(scoring, zone);
+    stats.score += zone_points(scoring, zone) * multiplier;
 }
 
 /// Counts the `bullet`-th bullet (1-based) of a recoil burst: a first bullet starts a
@@ -68,13 +69,20 @@ pub(super) fn record_bullet_hit(
     }
 }
 
-/// Counts `dt` seconds of hold-mode fire on `zone`, awarding its points per second.
-pub(super) fn record_on_target(stats: &mut Stats, scoring: &ScoringDef, zone: HitZone, dt: f32) {
+/// Counts `dt` seconds of hold-mode fire on `zone`, awarding its points per second times
+/// `multiplier` (the score-ring multiplier, 1 without rings).
+pub(super) fn record_on_target(
+    stats: &mut Stats,
+    scoring: &ScoringDef,
+    zone: HitZone,
+    dt: f32,
+    multiplier: f32,
+) {
     stats.on_target_secs += dt;
     if zone == HitZone::Head {
         stats.head_on_target_secs += dt;
     }
-    stats.score += zone_points(scoring, zone) * dt;
+    stats.score += zone_points(scoring, zone) * dt * multiplier;
 }
 
 pub(super) fn record_kill(stats: &mut Stats, time_to_kill: f32) {

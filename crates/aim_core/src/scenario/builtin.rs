@@ -62,6 +62,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/peek-reaction.toml"),
     ),
     (
+        "precision-rings.toml",
+        include_str!("../../../../content/scenarios/precision-rings.toml"),
+    ),
+    (
         "spray-transfer.toml",
         include_str!("../../../../content/scenarios/spray-transfer.toml"),
     ),

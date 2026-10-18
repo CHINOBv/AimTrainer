@@ -423,6 +423,21 @@ impl Session {
             .filter(|(_, z)| scoring::counts(shape, *z))
     }
 
+    /// Score-ring multiplier of a shot along `dir` that hit `zone` of target `idx`; 1
+    /// without rings, so scenarios without rings score exactly as before.
+    fn ring_multiplier(&self, dir: Vec3, idx: usize, zone: HitZone) -> f32 {
+        let Some(rings) = &self.def.scoring.rings else {
+            return 1.0;
+        };
+        let ray = Ray {
+            origin: self.eye_position(),
+            dir,
+        };
+        let shape = &self.def.targets.shape;
+        weapon::zone_center_fraction(ray, &self.targets[idx], shape, &self.dims, zone)
+            .map_or(1.0, |f| rings.multiplier_at(f))
+    }
+
     fn shoot(&mut self, events: &mut Vec<SessionEvent>) {
         if !weapon::can_fire(&self.weapon, self.time, self.last_shot_at) || self.is_reloading() {
             return;
@@ -443,7 +458,8 @@ impl Session {
             self.reload_if_dry(events);
             return;
         };
-        scoring::record_hit(&mut self.stats, &self.def.scoring, zone);
+        let multiplier = self.ring_multiplier(dir, idx, zone);
+        scoring::record_hit(&mut self.stats, &self.def.scoring, zone, multiplier);
         if let (Some(b), Some(r)) = (bullet, &self.recoil) {
             let protected = r.profile().protected_bullets;
             scoring::record_bullet_hit(&mut self.stats, &self.def.scoring, b, protected);
@@ -570,7 +586,8 @@ impl Session {
         let Some((idx, zone)) = self.hit_along(dir) else {
             return;
         };
-        scoring::record_on_target(&mut self.stats, &self.def.scoring, zone, dt);
+        let multiplier = self.ring_multiplier(dir, idx, zone);
+        scoring::record_on_target(&mut self.stats, &self.def.scoring, zone, dt, multiplier);
         self.targets[idx].health -= dt;
         if self.targets[idx].health <= 0.0 {
             self.kill(idx, events);
@@ -1449,5 +1466,122 @@ mod tests {
         assert_eq!(s.stats().hits, 1);
         assert_eq!(s.stats().expired, 1);
         assert!((s.success_rate() - 0.5).abs() < 1e-6);
+    }
+
+    fn ring_def(fire: FireMode) -> ScenarioDef {
+        let mut def = sphere_def(fire, 100.0);
+        def.targets.max_alive = 1;
+        def.scoring.rings = Some(ScoreRings {
+            radius: vec![0.3, 0.6],
+            multiplier: vec![2.0, 1.5],
+        });
+        def
+    }
+
+    /// A view that passes `fraction` of `radius` to the side of `center`.
+    fn aim_beside(s: &Session, center: Vec3, radius: f32, fraction: f32) -> ViewAngles {
+        let to = center - s.eye_position();
+        let side = to.cross(Vec3::new(0.0, 1.0, 0.0)).normalize_or_zero();
+        aim_at(s, center + side * (radius * fraction))
+    }
+
+    /// Clicks along `view`, then waits long enough for the next click to fire.
+    fn click(s: &mut Session, view: ViewAngles) -> Vec<SessionEvent> {
+        let ev = s.update(FrameInput {
+            dt: 0.2,
+            view,
+            fire_pressed: true,
+            fire_held: true,
+            ..Default::default()
+        });
+        s.update(FrameInput {
+            dt: 0.2,
+            view,
+            ..Default::default()
+        });
+        ev
+    }
+
+    #[test]
+    fn score_rings_scale_points_by_distance_from_the_zone_center() {
+        let mut s = Session::new(ring_def(FireMode::Click), 4);
+        let center = s.targets().next().unwrap().position;
+        let mut scores = Vec::new();
+        for fraction in [0.0, 0.2, 0.45, 0.8] {
+            let before = s.stats().score;
+            let view = aim_beside(&s, center, 0.3, fraction);
+            let ev = click(&mut s, view);
+            assert!(
+                ev.iter()
+                    .any(|e| matches!(e, SessionEvent::Shot { hit: Some(_), .. })),
+                "{fraction}: the shot hits"
+            );
+            scores.push(s.stats().score - before);
+        }
+        // Inner ring ×2, second ring ×1.5, outside every ring the flat sphere points.
+        for (got, want) in scores.iter().zip([200.0, 200.0, 150.0, 100.0]) {
+            assert!((got - want).abs() < 1e-3, "{scores:?}");
+        }
+        assert_eq!((s.stats().shots, s.stats().hits), (4, 4));
+    }
+
+    #[test]
+    fn score_rings_use_the_head_center_and_leave_body_hits_flat() {
+        let mut def = ring_def(FireMode::Click);
+        def.targets.shape = Shape::Humanoid { head_only: false };
+        def.targets.spawn = SpawnArea::Angular {
+            yaw_deg: Range::fixed(0.0),
+            pitch_deg: Range::fixed(0.0),
+            distance: Range::fixed(10.0),
+        };
+        let mut s = Session::new(def, 1);
+        let feet = s.targets().next().unwrap().position;
+        let head = feet + Vec3::new(0.0, s.dims().head_center_height(), 0.0);
+        let view = aim_at(&s, head);
+        click(&mut s, view);
+        assert!(
+            (s.stats().score - 200.0).abs() < 1e-3,
+            "{}",
+            s.stats().score
+        );
+        let view = aim_at(&s, feet + Vec3::new(0.0, 1.4, 0.0));
+        click(&mut s, view);
+        assert!(
+            (s.stats().score - 240.0).abs() < 1e-3,
+            "{}",
+            s.stats().score
+        );
+        assert_eq!((s.stats().head_hits, s.stats().body_hits), (1, 1));
+    }
+
+    #[test]
+    fn score_rings_scale_hold_mode_points_per_second() {
+        let mut s = Session::new(ring_def(FireMode::Hold), 4);
+        let center = s.targets().next().unwrap().position;
+        s.update(FrameInput {
+            dt: 0.1,
+            view: aim_at(&s, center),
+            fire_held: true,
+            ..Default::default()
+        });
+        // 100 points per second × 0.1 s × 2 in the inner ring.
+        assert!((s.stats().score - 20.0).abs() < 1e-3, "{}", s.stats().score);
+    }
+
+    #[test]
+    fn without_rings_a_hit_scores_its_flat_points_anywhere_on_the_target() {
+        let mut def = ring_def(FireMode::Click);
+        def.scoring.rings = None;
+        let mut s = Session::new(def, 4);
+        let center = s.targets().next().unwrap().position;
+        let view = aim_beside(&s, center, 0.3, 0.0);
+        click(&mut s, view);
+        let view = aim_beside(&s, center, 0.3, 0.8);
+        click(&mut s, view);
+        assert!(
+            (s.stats().score - 200.0).abs() < 1e-3,
+            "{}",
+            s.stats().score
+        );
     }
 }

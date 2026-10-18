@@ -1,0 +1,16 @@
+id = "precision-rings"
+name = "Precision Rings"
+category = "precision"
+description = """
+Static clicking for precision. A target appears 3–15° from your crosshair; a hit scores more
+the closer it lands to the center (×3 inner ring, ×2 middle, ×1 edge).
+Trains landing on the exact point you aim at, not just anywhere on the target."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.2 }   # ≈2.3° wide at 10 m
+spawn = { kind = "around_crosshair", offset_deg = [3.0, 15.0], distance = [10.0, 10.0] }
+
+[scoring]
+sphere = 50
+miss_penalty = 25
+rings = { radius = [0.25, 0.5, 1.0], multiplier = [3.0, 2.0, 1.0] }

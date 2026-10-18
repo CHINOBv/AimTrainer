@@ -433,6 +433,41 @@ pub struct ScoringDef {
     /// `weapon.recoil`). Rewards short, controlled bursts.
     #[serde(default)]
     pub burst_bonus: f32,
+    /// Score-zone rings: hits near the center of a sphere or head score more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rings: Option<ScoreRings>,
+}
+
+/// Score-zone rings around the center of a sphere or a humanoid head. A hit's points are
+/// multiplied by the multiplier of the innermost ring it lands in, by the hit's
+/// perpendicular distance from the zone center. Hits outside every ring, and body or leg
+/// hits, score the zone's flat points.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScoreRings {
+    /// Outer radius of each ring as a fraction of the zone radius: ascending, in (0, 1].
+    pub radius: Vec<f32>,
+    /// Points multiplier of each ring, one per radius; every multiplier is > 0.
+    pub multiplier: Vec<f32>,
+}
+
+impl ScoreRings {
+    /// Multiplier for a hit `fraction` of the zone radius away from its center.
+    pub fn multiplier_at(&self, fraction: f32) -> f32 {
+        self.radius
+            .iter()
+            .zip(&self.multiplier)
+            .find(|(r, _)| fraction <= **r)
+            .map_or(1.0, |(_, m)| *m)
+    }
+
+    fn is_valid(&self) -> bool {
+        !self.radius.is_empty()
+            && self.radius.len() == self.multiplier.len()
+            && self.radius.iter().all(|r| *r > 0.0 && *r <= 1.0)
+            && self.radius.windows(2).all(|w| w[0] < w[1])
+            && self.multiplier.iter().all(|m| m.is_finite() && *m > 0.0)
+    }
 }
 
 fn pts_head() -> f32 {
@@ -456,6 +491,7 @@ impl Default for ScoringDef {
             moving_shot_penalty: 0.0,
             expire_penalty: 0.0,
             burst_bonus: 0.0,
+            rings: None,
         }
     }
 }
@@ -527,6 +563,11 @@ impl ScenarioDef {
                 && (self.scoring.burst_bonus == 0.0 || self.weapon.recoil),
             "scoring.burst_bonus",
             "must be >= 0 and needs weapon.recoil = true",
+        );
+        check(
+            self.scoring.rings.as_ref().is_none_or(ScoreRings::is_valid),
+            "scoring.rings",
+            "needs ascending radius fractions in (0, 1] and one multiplier > 0 per radius",
         );
         check(
             self.difficulty.is_valid(),
@@ -919,5 +960,41 @@ mod tests {
         hold.weapon.fire = FireMode::Hold;
         let fields: Vec<_> = hold.validate().into_iter().map(|e| e.field).collect();
         assert_eq!(fields, ["weapon.recoil"]);
+    }
+
+    #[test]
+    fn score_rings_default_off_parse_and_are_validated() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!(d.scoring.rings, None);
+
+        let src = format!(
+            "{MINIMAL}\n[scoring]\nrings = {{ radius = [0.3, 0.6, 1.0], multiplier = [3.0, 2.0, 1.0] }}\n"
+        );
+        let ringed = ScenarioDef::from_toml(&src).unwrap();
+        assert_eq!(
+            ringed.scoring.rings,
+            Some(ScoreRings {
+                radius: vec![0.3, 0.6, 1.0],
+                multiplier: vec![3.0, 2.0, 1.0],
+            })
+        );
+        assert!(ringed.validate().is_empty(), "{:?}", ringed.validate());
+        assert!(ScenarioDef::from_toml(&src.replace("multiplier", "multiplyer")).is_err());
+
+        let fields = |radius: Vec<f32>, multiplier: Vec<f32>| -> Vec<&'static str> {
+            let mut b = d.clone();
+            b.scoring.rings = Some(ScoreRings { radius, multiplier });
+            b.validate().into_iter().map(|e| e.field).collect()
+        };
+        let bad = ["scoring.rings"];
+        assert_eq!(fields(vec![], vec![]), bad, "empty");
+        assert_eq!(fields(vec![0.5, 0.3], vec![2.0, 1.0]), bad, "descending");
+        assert_eq!(fields(vec![0.5, 0.5], vec![2.0, 1.0]), bad, "repeated");
+        assert_eq!(fields(vec![0.0, 0.5], vec![2.0, 1.0]), bad, "zero radius");
+        assert_eq!(fields(vec![0.5, 1.2], vec![2.0, 1.0]), bad, "past the edge");
+        assert_eq!(fields(vec![0.5], vec![0.0]), bad, "zero multiplier");
+        assert_eq!(fields(vec![0.5], vec![f32::NAN]), bad, "NaN multiplier");
+        assert_eq!(fields(vec![0.5, 1.0], vec![2.0]), bad, "lengths differ");
+        assert!(fields(vec![1.0], vec![0.5]).is_empty());
     }
 }
