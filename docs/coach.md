@@ -127,3 +127,20 @@ Keys never go into settings files: `CoachConfig` has no key field, and a setting
 
 - **ChatGPT plan.** The only sanctioned path for a third-party app is OpenAI's official "Sign in with ChatGPT" for open-source local apps (PKCE with a `127.0.0.1` loopback). It is planned for later (S3), once eligibility is confirmed. Reusing the Codex CLI's `auth.json` is not allowed, so the coach never reads it.
 - **claude.ai plan.** Anthropic does not allow third-party apps to sign in with a claude.ai account without its approval. Use an Anthropic API key, or the `cli-delegate` provider with the player's own `claude` CLI.
+
+## Memory (`SqliteMemory`)
+
+The coach's `remember` and `recall` tools use `SqliteMemory`, a `CoachMemory` in one local SQLite file. SQLite is bundled, so nothing needs to be installed.
+
+| Topic | Behavior |
+|---|---|
+| File | The app passes the path (S5 decides where it lives); this crate hard-codes none. `open_in_memory()` keeps nothing on disk. |
+| Search | An FTS5 table over the note text and tags. Each query word also matches as a prefix ("track" finds "tracking"). |
+| Order | FTS5 relevance (bm25, which favors short, focused notes) first, then newest first on ties. A query without words returns the newest notes. |
+| Wipe | `wipe()` deletes every note, for the settings page's wipe button. `secure_delete` is on, so wiped text is overwritten in the file. |
+| Schema | Version 1, stored in SQLite's `user_version`. A file from a newer version is refused, never modified. |
+| Errors | `recall` returns no notes on a storage error (the port has no error channel); `try_recall` reports it. |
+
+Query words are reduced to letters and digits before they reach FTS5, so a player's or model's text cannot inject FTS5 query syntax.
+
+Hindsight was evaluated and rejected as the default: it needs a Postgres, pgvector and LLM sidecar. It could become an optional adapter later.

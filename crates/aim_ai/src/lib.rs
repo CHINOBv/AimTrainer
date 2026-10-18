@@ -9,6 +9,7 @@
 //!   are never written to settings files and never logged.
 //! - [`openai`] and [`anthropic`]: chat providers over HTTP, through the [`http`] seam.
 //! - [`cli`]: delegates to the player's own installed CLI, text only.
+//! - [`memory`]: the coach memory in a local SQLite file with FTS5 keyword recall.
 //!
 //! All network and process work is blocking: call it off the frame (a worker thread).
 
@@ -16,6 +17,7 @@ pub mod anthropic;
 pub mod cli;
 pub mod config;
 pub mod http;
+pub mod memory;
 pub mod openai;
 pub mod secrets;
 
@@ -27,6 +29,7 @@ pub use anthropic::AnthropicProvider;
 pub use cli::CliDelegateProvider;
 pub use config::{CoachConfig, PromptInput, ProviderKind};
 pub use http::{ReqwestTransport, Transport};
+pub use memory::SqliteMemory;
 pub use openai::OpenAiCompatProvider;
 pub use secrets::{
     ApiKey, EnvStore, KeySource, KeyringStore, SecretError, SecretStore, lookup_key,
