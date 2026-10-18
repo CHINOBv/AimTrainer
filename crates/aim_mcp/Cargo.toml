@@ -1,0 +1,17 @@
+[package]
+name = "aim_mcp"
+description = "MCP server (stdio) exposing the AI coach's tools and the built-in scenarios to coding agents."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+aim_core.workspace = true
+aim_world.workspace = true
+serde_json.workspace = true
+directories.workspace = true
+rmcp.workspace = true
+
+[lints]
+workspace = true
