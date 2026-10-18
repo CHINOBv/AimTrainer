@@ -226,6 +226,8 @@ pub struct ArenaSession {
     site: Option<Site>,
     /// Bot lives in their first exposure, for peek efficiency.
     engagements: Vec<Engagement>,
+    /// The player fired this frame; reactive bots see it in the next frame.
+    shot_fired: bool,
 }
 
 /// The aimer preset angle bots use for flick speed and endpoint error; their reaction time
@@ -280,6 +282,7 @@ impl ArenaSession {
             practice: false,
             site: None,
             engagements: Vec::new(),
+            shot_fired: false,
             def,
             map,
         };
@@ -421,6 +424,7 @@ impl ArenaSession {
 
         self.move_player(input, dt);
         self.update_bots(dt, &mut events);
+        self.shot_fired = false;
         self.update_player_sight();
         if input.fire_pressed {
             self.player_shoot(&mut events);
@@ -576,6 +580,7 @@ impl ArenaSession {
             &mut self.rng,
         );
         self.player.last_shot_at = self.time;
+        self.shot_fired = true;
         self.stats.shots += 1;
         for e in self.engagements.iter_mut().filter(|e| !e.shot) {
             e.shot = true;
@@ -667,6 +672,11 @@ impl ArenaSession {
         };
         let site = self.site.as_ref().map(|s| s.center);
         let shoot_back = self.def.mode.bots_shoot_back();
+        let reactive = match &self.def.mode {
+            ArenaMode::Deathmatch { reactive, .. } => *reactive,
+            ArenaMode::AngleClear { .. } => None,
+        };
+        let player_vel = self.player.vel.to_world(self.player.view.yaw_deg);
         for i in 0..self.bots.len() {
             let ctx = Ctx {
                 map: &self.map,
@@ -683,12 +693,16 @@ impl ArenaSession {
                 cover_spots: &self.cover_spots,
                 bot_strafe,
                 site,
+                player_view: self.player.view,
+                player_vel,
+                player_fired: self.shot_fired,
+                reactive,
             };
             let bot = &mut self.bots[i];
             let landed = bot.think(&ctx, &mut self.rng);
             let can_fire = self.time - bot.last_shot_at >= 1.0 / self.bot_weapon.fire_rate;
             // A strafing bot waits for the slow moment of its counter-strafe to fire.
-            let steady = !bot_strafe
+            let steady = !bot.careful_fire
                 || bot.vel.horizontal().length() <= self.bot_movement.accuracy_speed_limit();
             if !(landed && shoot_back && can_fire && steady) {
                 continue;

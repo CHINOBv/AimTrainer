@@ -184,7 +184,7 @@ peek_delay_secs = [0.3, 0.9]           # optional, default [0.4, 1.2] (PEEK_DELA
 pre_aim_tolerance_deg = 5.0            # optional: count and score pre-aimed sightings
 ```
 
-Deathmatch options, both optional and off by default so existing arenas behave as before:
+Deathmatch options, all optional and off by default so existing arenas behave as before:
 
 ```toml
 [mode]
@@ -197,6 +197,13 @@ site = "site"                 # waypoint id of the map: the site's center
 site_radius = 2.5             # meters
 capture_secs = 3.0            # an attacker on the site this long, uninterrupted, captures it
 attackers = 6                 # attackers sent in the run (1..=64), at most `bots` alive at once
+
+[mode.reactive]               # optional: bots react to the player while they fight
+mirror_strafe_chance = 0.35   # chance per strafe-key decision to strafe the player's way (0..=1)
+oppose_strafe_chance = 0.35   # chance to strafe against the player (the two sum to at most 1)
+dodge_within_deg = 4.0        # juke when the crosshair comes this close to the head (0..90)
+dodge_chance = 0.5            # chance of that juke (0..=1, default 1)
+react_to_shots = true         # juke when the player fires
 ```
 
 `ArenaDef::validate` checks the definition alone; `ArenaDef::validate_with_map` also checks that the map id matches, that a deathmatch map has bot spawns and that every angle id exists. `ArenaSession::new(def, map, seed)` runs both and returns `ArenaError::Invalid` on failure. `arena::builtin::load(id)` returns a built-in arena together with its built-in map.
@@ -234,6 +241,7 @@ Once the player first sees a bot life, a clock starts. If the bot is still alive
 | Weapon | Vandal (`BOT_WEAPON`) for damage, fire rate and spread. |
 | Movement | `movement::step` with the rifle profile; bots walk toward their next route point and brake with the stop curve when they stop to fight. Angle bots stop exactly on the peek position (a perfect counter-strafe). |
 | Strafe | Only with `bot_strafe = true`. While a roaming or attacking bot fights, it holds one strafe key for 0.2–0.45 s (`STRAFE_SECS`, a design choice), then the other (ADAD). Pressing the opposite key makes `movement::step` counter-strafe, so the bot passes through the accurate speed window at each switch. It fires only when its speed is at or below the accuracy limit (27.5% of run speed, the movement module's VALORANT value), so its shots carry first-shot spread only. |
+| Reactions | Only with `[mode.reactive]` (deathmatch). Reactive bots strafe while they fight, as with `bot_strafe`, and react to the player in three ways. **Copy or oppose:** at each strafe-key decision (the start of a strafe and each switch), one random roll makes the bot strafe the same world direction as the player (`mirror_strafe_chance`), against it (`oppose_strafe_chance`) or as the plain ADAD would. The player counts as strafing when their speed across the bot's view is at least `PLAYER_STRAFE_MIN_SPEED` (0.5 m/s, a design choice). **Dodge:** when the player's crosshair comes within `dodge_within_deg` of the bot's head while it fights, the bot jukes with `dodge_chance`: one bot reaction time later (the `bot_skill` preset's reaction time) it switches strafe keys at once. **Shots:** with `react_to_shots`, a bot that sees the player fire jukes one reaction time later. A bot has at most one pending juke and drops it when it stops fighting. The rolls only happen in arenas that set these options, so other arenas keep their random sequence. |
 | Behavior | The angle peek cycle (hidden, peek, hold, hide), the strafe (ADAD) and the attacker push (duel, press on) are small state machines in `arena/behavior.rs`, unit-tested on their own. They only draw random numbers on the transitions that need them, so an arena that does not use a machine keeps its random sequence. |
 | Cover | A roaming deathmatch bot that is shot and survives falls back: it runs to the nearest cover spot (`MapDef::cover_from`) that hides its head from the eye the shot came from and is at most `RETREAT_MAX_ROUTE_M` (8 m) away along its route, holding its fire while it runs. It hides there for 0.6–1.4 s (`COVER_HOLD_SECS`), then walks back to where it was hit to re-peek; if it sees the player while hiding or re-peeking, it stops to fight. With no cover in reach it holds its ground. The bot only learns the shooter's position at the moment of the shot, never later (no wallhack). Durations and distance are design choices, not VALORANT values. Angle bots and site attackers do not fall back. The state machine is `Retreat` in `arena/behavior.rs`. |
 | Sight | Line of sight from the bot's eye to any part of the player's head (`visible_head`). Roaming bots only notice the player within 60° of where they face (`BOT_NOTICE_HALF_ANGLE_DEG`, an estimate from VALORANT's 103° horizontal field of view); once engaged they track at any angle. |

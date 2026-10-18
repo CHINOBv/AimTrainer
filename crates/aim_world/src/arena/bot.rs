@@ -2,7 +2,10 @@
 //! through `aim_core::movement::step`, and the Fitts-law aim of [`super::aim`].
 
 use super::aim::{BotAim, Sight, angular_radius_deg};
-use super::behavior::{PeekSense, Phase, Push, Retreat, RetreatSense, Strafe};
+use super::behavior::{
+    PLAYER_STRAFE_MIN_SPEED, PeekSense, Phase, Push, Retreat, RetreatSense, Strafe, react_strafe,
+};
+use super::def::ReactiveBots;
 use crate::map::{AngleMarker, DEFAULT_PLAYER_RADIUS, MapDef};
 use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::{Range, Vec3, ViewAngles, angle_between_deg};
@@ -104,6 +107,14 @@ pub(crate) struct Ctx<'a> {
     pub site: Option<Vec3>,
     /// The map's cover spots ([`MapDef::cover_spots`]), where shot roaming bots fall back.
     pub cover_spots: &'a [Vec3],
+    /// The player's view, for reactive bots that dodge the crosshair.
+    pub player_view: ViewAngles,
+    /// The player's world-space velocity, m/s, for reactive bots that read their strafe.
+    pub player_vel: Vec3,
+    /// The player fired a shot in the previous frame.
+    pub player_fired: bool,
+    /// How dueling bots react to the player, if they do.
+    pub reactive: Option<ReactiveBots>,
 }
 
 #[derive(Debug, Clone)]
@@ -128,6 +139,12 @@ pub(crate) struct Bot {
     pub shot_from: Option<Vec3>,
     /// The shoot-back deadline of this life has already landed its sure shot.
     pub deadline_hit: bool,
+    /// The bot strafes while it fights, so it only fires when slow enough to be accurate.
+    pub careful_fire: bool,
+    /// Reactive bots: the player's crosshair was within the dodge angle last frame.
+    pub in_crosshair: bool,
+    /// Reactive bots: when the pending juke happens (after the reaction time).
+    pub juke_at: Option<f32>,
 }
 
 impl Bot {
@@ -149,6 +166,9 @@ impl Bot {
             strafe: Strafe::Idle,
             shot_from: None,
             deadline_hit: false,
+            careful_fire: false,
+            in_crosshair: false,
+            juke_at: None,
         }
     }
 
@@ -175,9 +195,14 @@ impl Bot {
         }
         let sees = ctx.player_targetable && ctx.map.visible_head(self.eye(), ctx.player_feet);
         let goal = self.move_goal(ctx, sees, rng);
-        let strafe = if ctx.bot_strafe {
+        let strafing = ctx.bot_strafe || ctx.reactive.is_some();
+        self.careful_fire = strafing;
+        let strafe = if strafing {
             let dueling = sees && self.aim.is_engaged() && self.brain.duels() && goal.is_none();
-            self.strafe.step(dueling, ctx.now, rng)
+            match ctx.reactive {
+                Some(r) => self.reactive_strafe(ctx, &r, dueling, rng),
+                None => self.strafe.step(dueling, ctx.now, rng),
+            }
         } else {
             0.0
         };
@@ -217,6 +242,66 @@ impl Bot {
         let landed = self.aim.track(ctx.now, sight);
         self.facing_yaw_deg = self.aim.view.yaw_deg;
         landed && !self.brain.fleeing()
+    }
+
+    /// The strafe of a reactive bot: the ADAD of [`Strafe`], copying or opposing the
+    /// player's strafe at each key decision, plus a juke one reaction time after the
+    /// player's crosshair comes within the dodge angle or the player fires.
+    fn reactive_strafe(
+        &mut self,
+        ctx: &Ctx,
+        r: &ReactiveBots,
+        dueling: bool,
+        rng: &mut Rng,
+    ) -> f32 {
+        let side = self.player_side(ctx);
+        let (mirror, oppose) = (r.mirror_strafe_chance, r.oppose_strafe_chance);
+        let key = self.strafe.step_with(dueling, ctx.now, rng, |dir, rng| {
+            react_strafe(dir, side, mirror, oppose, rng)
+        });
+        if let Some(within) = r.dodge_within_deg {
+            let to_head = head_of(self.feet) - MapDef::eye(ctx.player_feet);
+            let near = dueling && angle_between_deg(ctx.player_view.direction(), to_head) <= within;
+            if near && !self.in_crosshair && rng.next_f32() < r.dodge_chance {
+                self.schedule_juke(ctx);
+            }
+            self.in_crosshair = near;
+        }
+        if r.react_to_shots && ctx.player_fired && self.sees_player && dueling {
+            self.schedule_juke(ctx);
+        }
+        if !dueling {
+            self.juke_at = None;
+            return key;
+        }
+        match self.juke_at {
+            Some(at) if ctx.now >= at => {
+                self.juke_at = None;
+                self.strafe.juke(ctx.now, rng)
+            }
+            _ => key,
+        }
+    }
+
+    /// Plan a juke one reaction time from now, unless one is already pending.
+    fn schedule_juke(&mut self, ctx: &Ctx) {
+        if self.juke_at.is_none() {
+            self.juke_at = Some(ctx.now + ctx.aimer.reaction_secs);
+        }
+    }
+
+    /// The strafe key (-1, 0 or 1) that moves the bot the same world direction as the
+    /// player is strafing across its view; 0 when the player moves slower than
+    /// [`PLAYER_STRAFE_MIN_SPEED`] across it.
+    fn player_side(&self, ctx: &Ctx) -> f32 {
+        let facing = ViewAngles::new(self.facing_yaw_deg, 0.0).direction();
+        let right = Vec3::new(-facing.z, 0.0, facing.x).normalize_or_zero();
+        let lateral = ctx.player_vel.horizontal().dot(right);
+        if lateral.abs() < PLAYER_STRAFE_MIN_SPEED {
+            0.0
+        } else {
+            lateral.signum()
+        }
     }
 
     /// After a shot, plan the corrective flick: half the reaction time, as in `SimAimer`.

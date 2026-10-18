@@ -51,6 +51,11 @@ pub enum ArenaMode {
         /// Bots land a sure shot on a player who has not killed them within a deadline.
         #[serde(default)]
         deadline: Option<ShootBackDeadline>,
+        /// Bots react to the player: they copy or oppose the player's strafe and juke when
+        /// the crosshair gets close or the player fires. Reactive bots strafe while they
+        /// fight, as with `bot_strafe`.
+        #[serde(default)]
+        reactive: Option<ReactiveBots>,
     },
     /// One bot per angle marker, in order. Each bot waits hidden, peeks when the player can
     /// see the marker, holds for `hold_secs` and hides again until it is killed.
@@ -75,6 +80,75 @@ pub enum ArenaMode {
         #[serde(default)]
         deadline: Option<ShootBackDeadline>,
     },
+}
+
+/// Reactions of deathmatch bots to the player while they fight. Every reaction changes the
+/// bot's strafe (ADAD), so reactive bots always strafe while they fight. See `docs/maps.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReactiveBots {
+    /// Chance, at each strafe-key decision, that the bot strafes the same world direction
+    /// as the player is strafing (copies the player's ADAD).
+    #[serde(default)]
+    pub mirror_strafe_chance: f32,
+    /// Chance, at each strafe-key decision, that the bot strafes against the player's
+    /// direction. `mirror_strafe_chance + oppose_strafe_chance` is at most 1.
+    #[serde(default)]
+    pub oppose_strafe_chance: f32,
+    /// When the player's crosshair comes within this many degrees of the bot's head, the
+    /// bot jukes (switches strafe direction) after its reaction time.
+    #[serde(default)]
+    pub dodge_within_deg: Option<f32>,
+    /// Chance of a juke each time the crosshair comes that close. Default 1.
+    #[serde(default = "always")]
+    pub dodge_chance: f32,
+    /// A bot that sees the player fire jukes after its reaction time.
+    #[serde(default)]
+    pub react_to_shots: bool,
+}
+
+fn always() -> f32 {
+    1.0
+}
+
+fn validate_reactive(r: &ReactiveBots, push: &mut impl FnMut(&'static str, String)) {
+    let chance = |c: f32| c.is_finite() && (0.0..=1.0).contains(&c);
+    if !chance(r.mirror_strafe_chance) {
+        push(
+            "mode.reactive.mirror_strafe_chance",
+            "must be in [0, 1]".into(),
+        );
+    }
+    if !chance(r.oppose_strafe_chance) {
+        push(
+            "mode.reactive.oppose_strafe_chance",
+            "must be in [0, 1]".into(),
+        );
+    }
+    if r.mirror_strafe_chance + r.oppose_strafe_chance > 1.0 {
+        push(
+            "mode.reactive",
+            "mirror_strafe_chance + oppose_strafe_chance must be at most 1".into(),
+        );
+    }
+    if let Some(d) = r.dodge_within_deg
+        && !(d.is_finite() && d > 0.0 && d < 90.0)
+    {
+        push(
+            "mode.reactive.dodge_within_deg",
+            "must be in (0, 90)".into(),
+        );
+    }
+    if !(chance(r.dodge_chance) && r.dodge_chance > 0.0) {
+        push("mode.reactive.dodge_chance", "must be in (0, 1]".into());
+    }
+    let strafes = r.mirror_strafe_chance > 0.0 || r.oppose_strafe_chance > 0.0;
+    if !(strafes || r.dodge_within_deg.is_some() || r.react_to_shots) {
+        push(
+            "mode.reactive",
+            "needs a strafe chance, dodge_within_deg or react_to_shots".into(),
+        );
+    }
 }
 
 /// Duel pressure: once the player first sees a bot life, they have `secs` to kill it. If
@@ -241,8 +315,12 @@ impl ArenaDef {
                 bot_skill,
                 respawn_secs,
                 objective,
+                reactive,
                 ..
             } => {
+                if let Some(r) = reactive {
+                    validate_reactive(r, &mut push);
+                }
                 if !(1..=MAX_BOTS).contains(bots) {
                     push("mode.bots", format!("must be in 1..={MAX_BOTS}"));
                 }

@@ -87,25 +87,93 @@ pub(crate) enum Strafe {
 impl Strafe {
     /// Advance one frame. Returns the strafe input (-1, 0 or 1) the bot presses.
     pub fn step(&mut self, dueling: bool, now: f32, rng: &mut Rng) -> f32 {
+        self.step_with(dueling, now, rng, |dir, _| dir)
+    }
+
+    /// [`Self::step`], letting `decide` change the key at each strafe-key decision (the
+    /// start of a strafe and each switch): it gets the key the plain ADAD would press and
+    /// returns the key to press.
+    pub fn step_with(
+        &mut self,
+        dueling: bool,
+        now: f32,
+        rng: &mut Rng,
+        mut decide: impl FnMut(f32, &mut Rng) -> f32,
+    ) -> f32 {
         if !dueling {
             *self = Self::Idle;
             return 0.0;
         }
         *self = match *self {
-            Self::Idle => Self::Moving {
-                dir: rng.sign(),
-                until: now + rng.in_range(STRAFE_SECS),
-            },
-            Self::Moving { dir, until } if now >= until => Self::Moving {
-                dir: -dir,
-                until: now + rng.in_range(STRAFE_SECS),
-            },
+            Self::Idle => {
+                let dir = rng.sign();
+                let until = now + rng.in_range(STRAFE_SECS);
+                Self::Moving {
+                    dir: decide(dir, rng),
+                    until,
+                }
+            }
+            Self::Moving { dir, until } if now >= until => {
+                let until = now + rng.in_range(STRAFE_SECS);
+                Self::Moving {
+                    dir: decide(-dir, rng),
+                    until,
+                }
+            }
             moving => moving,
         };
-        match *self {
+        self.key()
+    }
+
+    /// A juke: switch to the other strafe key at once and hold it for a fresh
+    /// [`STRAFE_SECS`]. A bot that is not strafing does nothing (and draws nothing).
+    pub fn juke(&mut self, now: f32, rng: &mut Rng) -> f32 {
+        if let Self::Moving { dir, .. } = *self {
+            *self = Self::Moving {
+                dir: -dir,
+                until: now + rng.in_range(STRAFE_SECS),
+            };
+        }
+        self.key()
+    }
+
+    /// The strafe key pressed: -1 (A), 1 (D) or 0.
+    pub fn key(self) -> f32 {
+        match self {
             Self::Moving { dir, .. } => dir,
             Self::Idle => 0.0,
         }
+    }
+}
+
+/// Slowest lateral speed of the player, m/s, at which a reactive bot reads a strafe
+/// direction to copy or oppose. A design choice: well under walking speed, so standing
+/// still or drifting does not count as strafing.
+pub const PLAYER_STRAFE_MIN_SPEED: f32 = 0.5;
+
+/// The strafe key a reactive bot presses at a strafe-key decision. `dir` is the plain ADAD
+/// key and `player_side` the key (-1, 0 or 1) that moves the bot the same world direction
+/// as the player strafes (0 when the player is not strafing). One random roll decides
+/// between copying the player, opposing them and the plain key.
+pub(crate) fn react_strafe(
+    dir: f32,
+    player_side: f32,
+    mirror_chance: f32,
+    oppose_chance: f32,
+    rng: &mut Rng,
+) -> f32 {
+    if mirror_chance + oppose_chance <= 0.0 {
+        return dir;
+    }
+    let roll = rng.next_f32();
+    if player_side == 0.0 {
+        dir
+    } else if roll < mirror_chance {
+        player_side
+    } else if roll < mirror_chance + oppose_chance {
+        -player_side
+    } else {
+        dir
     }
 }
 
@@ -322,6 +390,62 @@ mod tests {
         assert!((STRAFE_SECS.min..=STRAFE_SECS.max).contains(&until));
         assert_eq!(s.step(true, until - 0.01, &mut rng), first, "keeps the key");
         assert_eq!(s.step(true, until, &mut rng), -first, "switches at the end");
+    }
+
+    #[test]
+    fn plain_and_identity_strafes_draw_the_same_numbers() {
+        let (mut a, mut b) = (Rng::new(10), Rng::new(10));
+        let (mut sa, mut sb) = (Strafe::Idle, Strafe::Idle);
+        for i in 0..200 {
+            let now = i as f32 * 0.05;
+            assert_eq!(
+                sa.step(true, now, &mut a),
+                sb.step_with(true, now, &mut b, |d, _| d)
+            );
+        }
+        assert_eq!(a.next_u64(), b.next_u64());
+    }
+
+    #[test]
+    fn a_juke_switches_keys_at_once_and_an_idle_bot_does_not_juke() {
+        let mut rng = Rng::new(11);
+        let mut probe = rng.clone();
+        let mut idle = Strafe::Idle;
+        assert_eq!(idle.juke(1.0, &mut rng), 0.0);
+        assert_eq!(rng.next_u64(), probe.next_u64(), "no random draw");
+
+        let mut s = Strafe::Moving {
+            dir: 1.0,
+            until: 9.0,
+        };
+        assert_eq!(s.juke(2.0, &mut rng), -1.0);
+        let Strafe::Moving { until, .. } = s else {
+            panic!("still strafing");
+        };
+        assert!((2.0 + STRAFE_SECS.min..=2.0 + STRAFE_SECS.max).contains(&until));
+    }
+
+    #[test]
+    fn a_reactive_strafe_copies_opposes_or_keeps_the_plain_key() {
+        let mut rng = Rng::new(12);
+        // Certain mirror and certain oppose.
+        assert_eq!(react_strafe(-1.0, 1.0, 1.0, 0.0, &mut rng), 1.0);
+        assert_eq!(react_strafe(1.0, 1.0, 0.0, 1.0, &mut rng), -1.0);
+        // A player who is not strafing leaves the plain key, but the roll still happens
+        // so the random sequence does not depend on the player's movement.
+        let mut probe = rng.clone();
+        assert_eq!(react_strafe(-1.0, 0.0, 1.0, 0.0, &mut rng), -1.0);
+        probe.next_f32();
+        assert_eq!(rng.next_u64(), probe.next_u64());
+        // No strafe chances: the plain key and no roll.
+        let mut probe = rng.clone();
+        assert_eq!(react_strafe(1.0, -1.0, 0.0, 0.0, &mut rng), 1.0);
+        assert_eq!(rng.next_u64(), probe.next_u64());
+        // Half and half: both reactions show up.
+        let picks: Vec<f32> = (0..200)
+            .map(|_| react_strafe(1.0, -1.0, 0.5, 0.5, &mut rng))
+            .collect();
+        assert!(picks.contains(&1.0) && picks.contains(&-1.0));
     }
 
     #[test]

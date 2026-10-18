@@ -18,13 +18,15 @@ mod session;
 #[cfg(test)]
 mod tests;
 
-pub use behavior::{COVER_HOLD_SECS, PUSH_ADVANCE_SECS, PUSH_DUEL_SECS, STRAFE_SECS};
+pub use behavior::{
+    COVER_HOLD_SECS, PLAYER_STRAFE_MIN_SPEED, PUSH_ADVANCE_SECS, PUSH_DUEL_SECS, STRAFE_SECS,
+};
 pub use bot::{
     BOT_HEALTH, BOT_NOTICE_HALF_ANGLE_DEG, PEEK_DELAY_SECS, RETREAT_MAX_ROUTE_M, ROAM_PAUSE_SECS,
 };
 pub use def::{
-    ArenaDef, ArenaError, ArenaMode, MAX_ATTACKERS, MAX_BOTS, PRACTICE_SUFFIX, ShootBackDeadline,
-    SiteObjective, bot_profile, split_practice,
+    ArenaDef, ArenaError, ArenaMode, MAX_ATTACKERS, MAX_BOTS, PRACTICE_SUFFIX, ReactiveBots,
+    ShootBackDeadline, SiteObjective, bot_profile, split_practice,
 };
 pub use session::{
     ArenaEvent, ArenaSession, ArenaStats, BOT_WEAPON, BotView, DEATH_POINTS, HEADSHOT_BONUS,

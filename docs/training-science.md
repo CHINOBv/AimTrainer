@@ -245,6 +245,12 @@ An arena can set a shoot-back deadline (`[mode.deadline]`, `docs/maps.md`): a bo
 
 The deadline length is a design value per arena, not a measured number. About 1.5 s is a sensible start, an **estimate**: about a reaction time (0.2–0.3 s), a flick and two or three Vandal shots at 9.75 rounds/s (`valorant-mechanics.md`) with margin, at 15–25 m. Following the Challenge Point Framework (above), a shorter deadline makes the drill harder; it should be tuned so a player beats it on most, not all, bot lives. No study measures the effect of such a deadline on transfer.
 
+### Reactive arena bots
+
+With `[mode.reactive]` (`docs/maps.md`), deathmatch bots copy or oppose the player's strafe, juke when the crosshair gets close and juke when the player fires. The aim is to stop the player from learning one bot's rhythm: a plain ADAD bot switches on its own timer, so after a few duels a player can time the switch instead of tracking it. Reactions tie the bot's movement to the player's own actions, as a human opponent's movement is. The expected benefit is an analogy to the contextual-interference effect (Shea & Morgan 1979, see "Routine design" above: less predictable practice retains and transfers better), not a tested result: no study measures reactive bots.
+
+Every juke waits one bot reaction time (the preset's `reaction_secs`, 0.20–0.32 s) after its trigger, so a bot never reacts faster than a human could. The chances and the dodge angle are per-arena design values, not measured from players. The built-in values are **estimates**, chosen so that about a third of the strafe decisions copy and a third oppose the player.
+
 ### Pace and stamina
 
 `aim_core::analytics::pace` splits every run into 6 equal time windows (5–10 s for 30–60 s runs) and measures the rate in each: kills per second for click scenarios, score per second for hold scenarios, where score accrues while on target. A frame's gain belongs to the window in which the frame started. The results screen shows the best and worst window with their time ranges, and the rate in each window.
