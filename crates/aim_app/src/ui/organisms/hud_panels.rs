@@ -2,7 +2,8 @@
 //! window.
 
 use crate::ui::UiAction;
-use crate::ui::atoms::{BAD, GOOD, WARN, big};
+use crate::ui::atoms::{BAD, GOOD, WARN, big, pop};
+use crate::ui::organisms::health_bar::{self, HealthBar};
 use aim_core::scenario::{RunEnd, RunKey, Session, Tuning};
 use bevy_egui::egui::{self, Align2, FontId, RichText};
 
@@ -143,14 +144,71 @@ pub fn spray_meter(ctx: &egui::Context, s: &Session) {
         });
 }
 
-/// Countdown before a run, with a reminder of the restart key (`restart`, e.g. "R").
-pub fn countdown(ctx: &egui::Context, secs: f32, restart: &str) {
+/// Countdown before a run, with a reminder of the restart key (`restart`, e.g. "R"). With
+/// `animate`, each second's number pops in and fades out.
+pub fn countdown(ctx: &egui::Context, secs: f32, restart: &str, animate: bool) {
+    let (scale, alpha) = if animate {
+        countdown_pop(secs)
+    } else {
+        (1.0, 1.0)
+    };
     egui::Area::new(egui::Id::new("countdown"))
         .anchor(Align2::CENTER_CENTER, [0.0, -80.0])
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                ui.label(big(format!("{}", secs.ceil() as i32), 56.0));
+                ui.label(
+                    big(format!("{}", secs.ceil() as i32), 56.0 * scale)
+                        .color(egui::Color32::WHITE.gamma_multiply(alpha)),
+                );
                 ui.small(format!("{restart}: restart"));
+            });
+        });
+}
+
+/// The animated countdown number never fades below this opacity.
+const COUNTDOWN_MIN_ALPHA: f32 = 0.35;
+/// How long the "GO" pop and the end-of-round banner stay, seconds.
+pub const GO_SECS: f32 = 0.7;
+pub const ROUND_END_SECS: f32 = 1.0;
+
+/// Scale and opacity of the countdown number with `secs` left: each second pops in large
+/// and fades towards [`COUNTDOWN_MIN_ALPHA`] as it runs out.
+pub fn countdown_pop(secs: f32) -> (f32, f32) {
+    let into_second = (secs.ceil() - secs).clamp(0.0, 0.999);
+    let (scale, alpha) = pop(into_second, 1.0).unwrap_or((1.0, 1.0));
+    (scale, alpha.max(COUNTDOWN_MIN_ALPHA))
+}
+
+/// "GO", popping in at the crosshair, `age` seconds after the round started.
+pub fn go_pop(ctx: &egui::Context, age: f32) {
+    let Some((scale, alpha)) = pop(age, GO_SECS) else {
+        return;
+    };
+    egui::Area::new(egui::Id::new("go-pop"))
+        .anchor(Align2::CENTER_CENTER, [0.0, -80.0])
+        .interactable(false)
+        .show(ctx, |ui| {
+            ui.label(big("GO", 64.0 * scale).color(GOOD.gamma_multiply(alpha)));
+        });
+}
+
+/// The end-of-round banner, `age` seconds after the round ended, with the run's kills and
+/// deaths.
+pub fn round_end_banner(ctx: &egui::Context, age: f32, kills: u32, deaths: u32) {
+    let Some((scale, alpha)) = pop(age, ROUND_END_SECS) else {
+        return;
+    };
+    let alpha = alpha.max(COUNTDOWN_MIN_ALPHA);
+    egui::Area::new(egui::Id::new("round-end"))
+        .anchor(Align2::CENTER_CENTER, [0.0, -80.0])
+        .interactable(false)
+        .show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.label(big("ROUND OVER", 48.0 * scale).color(WARN.gamma_multiply(alpha)));
+                ui.label(
+                    big(format!("{kills} kills · {deaths} deaths"), 20.0)
+                        .color(egui::Color32::WHITE.gamma_multiply(alpha)),
+                );
             });
         });
 }
@@ -306,9 +364,22 @@ fn spawn_note(ctx: &egui::Context, s: &aim_world::arena::ArenaSession) {
         });
 }
 
-/// Arena status: time, health, kills/deaths, the site objective (when the arena has one),
-/// a respawn note during the spawn grace, and a red vignette for `damage_flash` seconds.
-pub fn arena_status(ctx: &egui::Context, s: &aim_world::arena::ArenaSession, damage_flash: f32) {
+/// What the arena status draws besides the session itself.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ArenaStatusExtras {
+    /// The health bar instead of the plain HP number, when it is on.
+    pub health_bar: Option<HealthBar>,
+    /// The death screen is up, so the plain "You died" note stays hidden.
+    pub death_screen: bool,
+}
+
+/// Arena status: time, health, kills/deaths, the site objective (when the arena has one)
+/// and a respawn note during the spawn grace (unless the death screen is up).
+pub fn arena_status(
+    ctx: &egui::Context,
+    s: &aim_world::arena::ArenaSession,
+    extras: &ArenaStatusExtras,
+) {
     let stats = s.stats();
     egui::Area::new(egui::Id::new("arena-hud"))
         .anchor(Align2::CENTER_TOP, [0.0, 16.0])
@@ -345,33 +416,22 @@ pub fn arena_status(ctx: &egui::Context, s: &aim_world::arena::ArenaSession, dam
     egui::Area::new(egui::Id::new("arena-health"))
         .anchor(Align2::LEFT_BOTTOM, [24.0, -24.0])
         .show(ctx, |ui| {
-            ui.label(
-                RichText::new(format!("{health:.0} HP"))
-                    .color(color)
-                    .strong()
-                    .font(FontId::proportional(26.0)),
-            );
+            if let Some(bar) = &extras.health_bar {
+                health_bar::draw(ui, bar);
+            } else {
+                ui.label(
+                    RichText::new(format!("{health:.0} HP"))
+                        .color(color)
+                        .strong()
+                        .font(FontId::proportional(26.0)),
+                );
+            }
             if !s.is_accurate() {
                 ui.colored_label(BAD, "MOVING");
             }
         });
-    spawn_note(ctx, s);
-    if damage_flash > 0.0 {
-        let alpha = (damage_flash / 0.25).clamp(0.0, 1.0) * 0.35;
-        let painter = ctx.layer_painter(egui::LayerId::new(
-            egui::Order::Background,
-            egui::Id::new("damage"),
-        ));
-        let rect = ctx.content_rect();
-        painter.rect_stroke(
-            rect.shrink(20.0),
-            0.0,
-            egui::Stroke::new(
-                40.0,
-                egui::Color32::from_rgba_unmultiplied(220, 30, 30, (alpha * 255.0) as u8),
-            ),
-            egui::StrokeKind::Inside,
-        );
+    if !extras.death_screen {
+        spawn_note(ctx, s);
     }
 }
 
@@ -479,6 +539,23 @@ mod progress_tests {
         );
         assert_eq!(progress_label(None, &[], RunEnd::Time, 5), None);
         assert_eq!(progress_label(None, &[], RunEnd::Endless, 5), None);
+    }
+}
+
+#[cfg(test)]
+mod countdown_tests {
+    use super::{COUNTDOWN_MIN_ALPHA, countdown_pop};
+
+    #[test]
+    fn each_countdown_second_pops_in_and_fades() {
+        let (start, start_alpha) = countdown_pop(3.0);
+        assert!(start > 1.3 && (start_alpha - 1.0).abs() < 1e-4, "{start}");
+        let (mid, mid_alpha) = countdown_pop(2.5);
+        assert!((mid - 1.0).abs() < 1e-4 && (mid_alpha - 1.0).abs() < 1e-4);
+        let (_, late) = countdown_pop(2.01);
+        assert!((COUNTDOWN_MIN_ALPHA..1.0).contains(&late), "{late}");
+        // The next second pops again.
+        assert!(countdown_pop(1.999).0 > 1.3);
     }
 }
 

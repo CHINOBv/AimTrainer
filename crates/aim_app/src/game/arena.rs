@@ -23,6 +23,9 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 const COUNTDOWN_SECS: f32 = 3.0;
+/// How long the end-of-round banner holds before the results open, seconds, when round
+/// transitions are on. A design choice: long enough to read, short enough not to drag.
+const END_HOLD_SECS: f32 = 0.8;
 
 /// What happened in the running arena, for sound and HUD feedback. Translated from the
 /// session's `ArenaEvent`s by the arena tick; it decides no gameplay. Positions are in
@@ -51,7 +54,8 @@ pub enum ArenaFeedback {
         headshot: bool,
         streak: u32,
     },
-    /// The run finished; the results screen follows.
+    /// The run finished. The results screen opens in the same frame, or after the
+    /// end-of-round hold when round transitions are on.
     RoundEnded,
 }
 
@@ -105,6 +109,22 @@ impl FeedbackTranslator {
     }
 }
 
+/// Seconds the results wait after the round ends: the banner's hold, or none.
+fn end_hold_secs(round_transitions: bool) -> f32 {
+    if round_transitions {
+        END_HOLD_SECS
+    } else {
+        0.0
+    }
+}
+
+/// The end-of-round hold after a frame of `dt` seconds: what is left, or `None` when the
+/// results should open.
+fn hold_left(left: f32, dt: f32) -> Option<f32> {
+    let left = left - dt;
+    (left > 0.0).then_some(left)
+}
+
 /// The cue for a countdown frame that went from `before` to `after` seconds left.
 fn countdown_cue(before: f32, after: f32) -> Option<ArenaFeedback> {
     if after <= 0.0 {
@@ -123,9 +143,10 @@ pub struct ArenaRun {
     pub countdown: f32,
     pub paused: bool,
     pub zoomed: bool,
-    /// Seconds left on the hit-marker flash and on the "you got hit" vignette.
+    /// Seconds left on the hit-marker flash.
     pub hit_flash: f32,
-    pub damage_flash: f32,
+    /// Seconds left of the end-of-round hold before the results open, once the round ended.
+    end_hold: Option<f32>,
     bots: HashMap<u64, Entity>,
     /// Bots hit this frame, for their visual effect.
     struck: Vec<Struck>,
@@ -142,7 +163,7 @@ impl ArenaRun {
             paused: false,
             zoomed: false,
             hit_flash: 0.0,
-            damage_flash: 0.0,
+            end_hold: None,
             bots: HashMap::new(),
             struck: Vec::new(),
             translator: FeedbackTranslator::default(),
@@ -357,7 +378,13 @@ fn tick(
     }
     let dt = input.time.delta_secs();
     run.hit_flash = (run.hit_flash - dt).max(0.0);
-    run.damage_flash = (run.damage_flash - dt).max(0.0);
+    if let Some(left) = run.end_hold {
+        run.end_hold = hold_left(left, dt);
+        if run.end_hold.is_none() {
+            finisher.finish(&run);
+        }
+        return;
+    }
     if run.countdown > 0.0 {
         let before = run.countdown;
         run.countdown -= dt;
@@ -384,10 +411,14 @@ fn tick(
             ArenaEvent::BotKilled { id, .. } => {
                 hit_effect::record(&mut run.struck, id, None, true);
             }
-            ArenaEvent::PlayerHit { .. } if finisher.settings.feel.damage_vignette.enabled => {
-                run.damage_flash = 0.25;
+            ArenaEvent::Finished => {
+                let hold = end_hold_secs(finisher.settings.feel.round_transitions);
+                if hold > 0.0 {
+                    run.end_hold = Some(hold);
+                } else {
+                    finisher.finish(&run);
+                }
             }
-            ArenaEvent::Finished => finisher.finish(&run),
             _ => {}
         }
     }
@@ -688,6 +719,27 @@ mod tests {
                 ArenaFeedback::CountdownTick { seconds_left: 1 },
                 ArenaFeedback::RoundStarted,
             ]
+        );
+    }
+
+    #[test]
+    fn round_transitions_hold_the_results_for_at_most_a_second() {
+        assert_eq!(end_hold_secs(false), 0.0);
+        let hold = end_hold_secs(true);
+        assert!(hold > 0.0 && hold <= 1.0, "{hold}");
+        let mut left = Some(hold);
+        let mut frames = 0;
+        while let Some(l) = left {
+            left = hold_left(l, 1.0 / 60.0);
+            frames += 1;
+        }
+        // Rounding may cost one more frame, never fewer.
+        let expected = (hold * 60.0).round() as i32;
+        assert!(frames == expected || frames == expected + 1, "{frames}");
+        assert_eq!(
+            hold_left(0.1, 0.0),
+            Some(0.1),
+            "a paused frame keeps the hold"
         );
     }
 
