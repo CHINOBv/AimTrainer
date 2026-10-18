@@ -25,7 +25,7 @@ pub struct TargetSample {
 }
 
 /// What happened in one `Session::update` call.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Sample {
     /// Session time after this frame.
     pub time_secs: f32,
@@ -57,6 +57,10 @@ pub struct Sample {
     pub player_speed: f32,
     /// The player was at or below the weapon's accuracy speed limit after this frame.
     pub accurate: bool,
+    /// Points scored from the start of the run to the end of this frame.
+    pub score: f32,
+    /// Targets killed from the start of the run to the end of this frame.
+    pub kills: u32,
 }
 
 impl Sample {
@@ -198,6 +202,8 @@ pub fn trace(recording: &Recording) -> Vec<Sample> {
             decision: decision_since(stats, previous_decision),
             player_speed: session.player_speed(),
             accurate: session.is_accurate(),
+            score: stats.score,
+            kills: stats.kills,
         });
         previous_targets = snapshot(session);
         previous_view = input.view;
@@ -215,6 +221,23 @@ mod tests {
     use super::*;
     use crate::analytics::test_support::record;
     use crate::sim::AimerProfile;
+
+    #[test]
+    fn samples_carry_the_running_score_and_kill_count() {
+        for id in ["flick-wide", "track-precise"] {
+            let rec = record(id, AimerProfile::PRESETS[2], 3);
+            let samples = trace(&rec);
+            let result = rec.replay(|_, _| {}).stats().clone();
+            let last = samples.last().expect("samples");
+            assert_eq!(last.kills, result.kills, "{id}");
+            assert_eq!(last.score, result.score, "{id}");
+            assert!(
+                samples.windows(2).all(|w| w[1].kills >= w[0].kills),
+                "{id}: kills never decrease"
+            );
+            assert!(result.score > 0.0, "{id}");
+        }
+    }
 
     #[test]
     fn trace_has_one_sample_per_frame_and_counts_every_shot() {

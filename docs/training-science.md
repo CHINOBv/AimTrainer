@@ -239,6 +239,38 @@ The 0.5 s window is an estimate: it covers the measured stop (0.16 s counter-str
 
 The results notes show the medians. Line of sight is checked from the player's eye to the bot's head, so the exposure approximates how long the player could be seen. Later re-peeks by the same bot life are not separate engagements. These are measurements only; no rule judges them yet.
 
+### Pace and stamina
+
+`aim_core::analytics::pace` splits every run into 6 equal time windows (5–10 s for 30–60 s runs) and measures the rate in each: kills per second for click scenarios, score per second for hold scenarios, where score accrues while on target. A frame's gain belongs to the window in which the frame started. The results screen shows the best and worst window with their time ranges, and the rate in each window.
+
+| Ratio | Definition | Flag (provisional) |
+|---|---|---|
+| Opening pace | Rate of the first window ÷ mean rate of the other five | Slow start below 70% (weakness rule); strong start above 130% (shown only, no rule, because the rest of the run is then slower) |
+| Late pace | Mean rate of the last two windows ÷ mean rate of the first two | Stamina drop below 80% (weakness rule) |
+
+A run needs at least 12 s and, in click scenarios, at least 12 kills (two per window on average), or it has no pace section. A category's ratio is the mean over its runs. All three thresholds are estimates, not calibrated on player data: the simulated aimer does not tire, so its late pace stays at or above about 90%, but its slowest preset shows opening ratios of about 50–65% from noise alone at 3–8 kills per window. Treat one slow-start verdict as a hint and look for it across several runs. The flag thresholds are constants in `pace.rs`, and a test pins them to the rules in `content/rules/recommendations.toml`.
+
+| Metric | Weakness | Recommended practice |
+|---|---|---|
+| Opening pace | < 70% | `flick-wide`, `track-precise`, `quick-warmup` routine; warm up before scored runs |
+| Late pace | < 80% | `static-headline`, `track-precise`, `fundamentals-hour` routine; relaxed grip, short breaks |
+
+### Target prioritization
+
+`aim_core::analytics::priority` runs only when more than one target was visible at once in some frame that is not a kill frame (a kill frame keeps the dead target next to its respawn, so single-target scenarios never qualify). The results screen shows a "Target priority" section.
+
+| Metric | Definition |
+|---|---|
+| Nearest target first | For each kill, the engagement starts on the frame after the previous kill, or when the killed target appeared, whichever is later. If two or more targets were visible then, the kill is *contested*, and it counts as nearest-first when the killed target was the one nearest to the crosshair by angle in that frame. Share = nearest-first kills ÷ contested kills |
+| Missed opportunities | The crosshair rests inside the nearest target's aim zone (angle to its aim point ≤ its angular radius) for at least 300 ms with no shot and fire not held, and then leaves while the target is still there. A target that is killed or expires under the crosshair, or a rest that lasts to the end of the run, does not count. Rate = missed ÷ (kills + missed) |
+
+The session's own `on_target` flag only exists while firing, so the "under the crosshair" test here uses the aim zone geometry instead. The 300 ms rest is an estimate: it is longer than a typical visual reaction time (about 200–250 ms), so the normal delay between landing on a target and clicking is not counted. A category's counts are summed over its runs. The share needs at least 5 contested kills and the rate at least 5 kills plus missed opportunities. The thresholds are provisional, not calibrated on player data. The simulated aimer always takes the nearest target (share 100%) and almost never rests without firing (rate 0–2%), so it only shows the strength.
+
+| Metric | Weakness | Strength | Recommended practice |
+|---|---|---|---|
+| Nearest target first | < 50% | > 85% | `switch-wide`, `switch-speed`; clear the closest target first |
+| Missed opportunities | > 15% | — | `static-headline`, `switch-heads`; fire as soon as the crosshair is on the target |
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

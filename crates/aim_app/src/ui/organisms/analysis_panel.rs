@@ -11,6 +11,9 @@ use crate::ui::organisms::moving_panel::MovingReport;
 use aim_core::analytics::{RunAnalysis, SkillProfile};
 use bevy_egui::egui;
 
+use crate::ui::organisms::pace_panel::{PaceReport, pace_panel};
+use crate::ui::organisms::priority_panel::{PriorityReport, priority_panel};
+
 /// Recommendations shown on the results card.
 pub const MAX_RECOMMENDATIONS: usize = 2;
 
@@ -33,6 +36,8 @@ pub struct RunReport {
     pub decision: Option<DecisionReport>,
     /// Firing-while-moving details, for movement scenarios.
     pub moving: Option<MovingReport>,
+    pub pace: Option<PaceReport>,
+    pub priority: Option<PriorityReport>,
 }
 
 pub(crate) fn ms(secs: f32) -> String {
@@ -145,6 +150,11 @@ impl RunReport {
             advice,
             decision: analysis.decision.as_ref().map(DecisionReport::new),
             moving: analysis.moving.as_ref().map(MovingReport::new),
+            pace: analysis.pace.as_ref().map(PaceReport::new),
+            priority: analysis
+                .priority
+                .as_ref()
+                .map(|p| PriorityReport::new(p, profile.findings())),
         }
     }
 }
@@ -182,6 +192,12 @@ pub fn analysis_panel(ui: &mut egui::Ui, report: &RunReport) -> Option<UiAction>
             }
             ui.small("Thresholds are provisional until calibrated on player data.");
         });
+    if let Some(pace) = &report.pace {
+        pace_panel(ui, pace);
+    }
+    if let Some(priority) = &report.priority {
+        priority_panel(ui, priority);
+    }
     action
 }
 
@@ -262,5 +278,30 @@ mod tests {
             .moving
             .expect("movement scenario");
         assert_eq!(moving.rows[0].0, "Shots stopped / moving");
+    }
+
+    #[test]
+    fn runs_with_enough_kills_or_score_show_their_pace() {
+        let r = report("flick-wide", 2);
+        assert!(r.pace.as_ref().unwrap().rows[0].1.contains("kills/s"));
+        let r = report("track-precise", 2);
+        assert!(r.pace.as_ref().unwrap().rows[0].1.contains("points/s"));
+    }
+
+    #[test]
+    fn multi_target_runs_show_their_prioritization() {
+        let r = report("switch-wide", 2);
+        let p = r
+            .priority
+            .as_ref()
+            .expect("switch-wide shows three targets");
+        assert!(p.rows[0].1.contains("contested kills"), "{p:?}");
+        // The simulated aimer always takes the nearest target: a strength with its threshold.
+        assert!(
+            p.verdicts
+                .iter()
+                .any(|(s, t)| *s && t.contains("threshold"))
+        );
+        assert!(report("flick-wide", 2).priority.is_none());
     }
 }

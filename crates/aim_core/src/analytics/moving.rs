@@ -174,7 +174,7 @@ pub(crate) mod tests {
             on_target: false,
             player_speed: speed,
             accurate,
-            decision: Default::default(),
+            ..Default::default()
         }
     }
 

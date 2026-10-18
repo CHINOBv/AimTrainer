@@ -11,7 +11,9 @@ pub mod codec;
 pub mod decision;
 pub mod flick;
 pub mod moving;
+pub mod pace;
 pub mod path;
+pub mod priority;
 pub mod profile;
 pub mod rules;
 pub mod skills;
@@ -50,6 +52,10 @@ pub struct RunAnalysis {
     pub decision: Option<decision::DecisionSummary>,
     /// Firing-while-moving analysis, for scenarios with player movement.
     pub moving: Option<MovingAnalysis>,
+    /// Kill or score rate per time window, if the run was long and busy enough.
+    pub pace: Option<pace::PaceAnalysis>,
+    /// Target prioritization, if more than one target was visible at once.
+    pub priority: Option<priority::PriorityAnalysis>,
 }
 
 impl RunAnalysis {
@@ -86,6 +92,16 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
             let limit = recording.def.weapon.kind.movement().accuracy_speed_limit();
             moving::analyze(&samples, limit)
         }),
+        pace: pace::analyze(&samples, pace_unit(recording.def.weapon.fire)),
+        priority: priority::analyze(&samples),
+    }
+}
+
+/// Click runs are paced by kills; hold runs by score, which accrues while on target.
+fn pace_unit(fire: FireMode) -> pace::PaceUnit {
+    match fire {
+        FireMode::Click => pace::PaceUnit::Kills,
+        FireMode::Hold => pace::PaceUnit::Score,
     }
 }
 
@@ -125,5 +141,27 @@ mod tests {
         assert!(matches!(a.kind, AnalysisKind::Flick(ref f) if !f.is_empty()));
         let rec = test_support::record("track-precise", AimerProfile::PRESETS[1], 4);
         assert!(analyze(&rec).tracking_summary().is_some());
+    }
+
+    #[test]
+    fn pace_counts_kills_in_click_runs_and_points_in_hold_runs() {
+        let rec = test_support::record("flick-wide", AimerProfile::PRESETS[2], 4);
+        let pace = analyze(&rec).pace.expect("click run has pace");
+        assert_eq!(pace.unit, pace::PaceUnit::Kills);
+        assert_eq!(pace.windows.len(), pace::WINDOWS);
+        let rec = test_support::record("track-precise", AimerProfile::PRESETS[2], 4);
+        let pace = analyze(&rec).pace.expect("hold run has pace");
+        assert_eq!(pace.unit, pace::PaceUnit::Score);
+    }
+
+    #[test]
+    fn prioritization_is_measured_only_with_several_targets_visible() {
+        let rec = test_support::record("switch-wide", AimerProfile::PRESETS[2], 4);
+        let p = analyze(&rec)
+            .priority
+            .expect("switch-wide shows three targets");
+        assert_eq!(p.kills, rec.replay(|_, _| {}).stats().kills);
+        let rec = test_support::record("flick-wide", AimerProfile::PRESETS[2], 4);
+        assert_eq!(analyze(&rec).priority, None);
     }
 }

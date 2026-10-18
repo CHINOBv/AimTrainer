@@ -10,6 +10,9 @@ use super::moving::MovingSummary;
 use super::tracking::TrackingSummary;
 use serde::Deserialize;
 
+use super::pace::PaceSummary;
+use super::priority::PriorityAnalysis;
+
 /// A measurable quantity a rule can threshold.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -37,6 +40,14 @@ pub enum Metric {
     EdgeShare,
     /// Share of shots fired above the accuracy speed limit (movement scenarios).
     MovingShotRate,
+    /// Opening-window rate ÷ mean rate of the rest of the run (pace).
+    StartRatio,
+    /// Late-window rate ÷ early-window rate (pace).
+    StaminaRatio,
+    /// Share of contested kills that went to the nearest target (prioritization).
+    NearestFirstShare,
+    /// Missed opportunities ÷ (kills + missed opportunities) (prioritization).
+    MissedOpportunityRate,
 }
 
 impl Metric {
@@ -54,6 +65,10 @@ impl Metric {
             Metric::SpeedMatch => "Speed match",
             Metric::EdgeShare => "Time on the target's edge",
             Metric::MovingShotRate => "Shots fired while moving",
+            Metric::StartRatio => "Opening pace (vs rest of run)",
+            Metric::StaminaRatio => "Late pace (vs early run)",
+            Metric::NearestFirstShare => "Nearest target first",
+            Metric::MissedOpportunityRate => "Missed opportunities",
         }
     }
 
@@ -83,6 +98,10 @@ impl Metric {
             Metric::SpeedMatch => tracking?.speed_match_ratio,
             Metric::EdgeShare => tracking?.edge_ratio,
             Metric::MovingShotRate => sources.moving?.moving_share,
+            Metric::StartRatio => sources.pace?.start_ratio,
+            Metric::StaminaRatio => sources.pace?.stamina_ratio,
+            Metric::NearestFirstShare => sources.priority?.nearest_share(),
+            Metric::MissedOpportunityRate => sources.priority?.missed_rate(),
         }
     }
 }
@@ -93,6 +112,8 @@ pub(super) struct MetricSources<'a> {
     pub flick: Option<&'a FlickSummary>,
     pub tracking: Option<&'a TrackingSummary>,
     pub moving: Option<&'a MovingSummary>,
+    pub pace: Option<&'a PaceSummary>,
+    pub priority: Option<&'a PriorityAnalysis>,
 }
 
 /// Whether a fired rule marks a strength or a weakness.
@@ -422,6 +443,62 @@ pub(crate) mod tests {
                 &["counter-strafe", "strafe-shot"],
                 None,
                 "Tap the opposite strafe key (or release the keys) and fire only once you have stopped; shots are accurate again at 27.5% of run speed or less.",
+            )),
+        ),
+        (
+            Metric::StartRatio,
+            Direction::Below,
+            0.70,
+            Verdict::Weakness,
+            "you score much slower at the start of a run than in the rest of it",
+            Some((
+                &["flick-wide", "track-precise"],
+                Some("quick-warmup"),
+                "Warm up before scored runs so the first seconds count; the quick warm-up routine gets you to full speed.",
+            )),
+        ),
+        (
+            Metric::StaminaRatio,
+            Direction::Below,
+            0.80,
+            Verdict::Weakness,
+            "your scoring rate drops in the last third of the run",
+            Some((
+                &["static-headline", "track-precise"],
+                Some("fundamentals-hour"),
+                "Keep a relaxed grip and steady breathing to the end; build endurance with longer sessions and short breaks between runs.",
+            )),
+        ),
+        (
+            Metric::NearestFirstShare,
+            Direction::Below,
+            0.50,
+            Verdict::Weakness,
+            "you often go for a farther target while a nearer one is available",
+            Some((
+                &["switch-wide", "switch-speed"],
+                None,
+                "Clear the target closest to your crosshair first: the shorter flick is faster and keeps the others in view.",
+            )),
+        ),
+        (
+            Metric::NearestFirstShare,
+            Direction::Above,
+            0.85,
+            Verdict::Strength,
+            "you clear the nearest target first",
+            None,
+        ),
+        (
+            Metric::MissedOpportunityRate,
+            Direction::Above,
+            0.15,
+            Verdict::Weakness,
+            "your crosshair rests on targets that you then leave without firing",
+            Some((
+                &["static-headline", "switch-heads"],
+                None,
+                "Fire as soon as the crosshair is on the target; trust it instead of waiting for a perfect picture.",
             )),
         ),
     ];

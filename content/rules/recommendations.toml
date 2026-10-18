@@ -154,3 +154,52 @@ meaning = "you often fire before you have stopped"
 [rules.recommendation]
 scenario_ids = ["counter-strafe", "strafe-shot"]
 tip = "Tap the opposite strafe key (or release the keys) and fire only once you have stopped; shots are accurate again at 27.5% of run speed or less."
+
+[[rules]]
+metric = "start_ratio"
+direction = "below"
+threshold = 0.70
+verdict = "weakness"
+meaning = "you score much slower at the start of a run than in the rest of it"
+[rules.recommendation]
+scenario_ids = ["flick-wide", "track-precise"]
+routine_id = "quick-warmup"
+tip = "Warm up before scored runs so the first seconds count; the quick warm-up routine gets you to full speed."
+
+[[rules]]
+metric = "stamina_ratio"
+direction = "below"
+threshold = 0.80
+verdict = "weakness"
+meaning = "your scoring rate drops in the last third of the run"
+[rules.recommendation]
+scenario_ids = ["static-headline", "track-precise"]
+routine_id = "fundamentals-hour"
+tip = "Keep a relaxed grip and steady breathing to the end; build endurance with longer sessions and short breaks between runs."
+
+[[rules]]
+metric = "nearest_first_share"
+direction = "below"
+threshold = 0.50
+verdict = "weakness"
+meaning = "you often go for a farther target while a nearer one is available"
+[rules.recommendation]
+scenario_ids = ["switch-wide", "switch-speed"]
+tip = "Clear the target closest to your crosshair first: the shorter flick is faster and keeps the others in view."
+
+[[rules]]
+metric = "nearest_first_share"
+direction = "above"
+threshold = 0.85
+verdict = "strength"
+meaning = "you clear the nearest target first"
+
+[[rules]]
+metric = "missed_opportunity_rate"
+direction = "above"
+threshold = 0.15
+verdict = "weakness"
+meaning = "your crosshair rests on targets that you then leave without firing"
+[rules.recommendation]
+scenario_ids = ["static-headline", "switch-heads"]
+tip = "Fire as soon as the crosshair is on the target; trust it instead of waiting for a perfect picture."
