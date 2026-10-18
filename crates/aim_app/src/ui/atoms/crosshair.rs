@@ -107,7 +107,8 @@ fn with_opacity(c: Rgba, opacity: f64) -> Color32 {
     Color32::from_rgba_unmultiplied(c.r, c.g, c.b, a)
 }
 
-pub fn draw(ctx: &egui::Context, style: &Crosshair, hit: bool) {
+/// Draw the crosshair at the screen center; `flash` replaces its color during a hit flash.
+pub fn draw(ctx: &egui::Context, style: &Crosshair, flash: Option<Rgba>) {
     let painter = ctx.layer_painter(egui::LayerId::new(
         egui::Order::Foreground,
         egui::Id::new("crosshair"),
@@ -117,7 +118,7 @@ pub fn draw(ctx: &egui::Context, style: &Crosshair, hit: bool) {
     // Index of the physical pixel under the screen center.
     let (cx, cy) = ((c.x * ppp).floor() as i32, (c.y * ppp).floor() as i32);
     let to_points = |x: i32, y: i32| Pos2::new((cx + x) as f32 / ppp, (cy + y) as f32 / ppp);
-    let color = if hit { Rgba::WHITE } else { style.color() };
+    let color = flash.unwrap_or_else(|| style.color());
     for (r, opacity, outline) in layers(style) {
         let fill = if outline {
             Color32::from_black_alpha((opacity.clamp(0.0, 1.0) * 255.0).round() as u8)

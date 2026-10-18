@@ -1,7 +1,7 @@
 //! Hit-marker painter: a small, semi-transparent mark around the crosshair that fades out
 //! after a hit. Sizes are in points, kept clear of the crosshair's center.
 
-use crate::game::feedback::{HitMarkerStyle, MarkerColor, marker_alpha};
+use crate::game::feedback::{HitMarkerStyle, MarkerColor, MarkerLook, marker_alpha};
 use aim_core::crosshair::Rgba;
 use bevy_egui::egui::{self, Color32, Pos2, Stroke, Vec2};
 
@@ -23,7 +23,21 @@ enum Mark {
     Circle { radius: f32, filled: bool },
 }
 
-fn marks(style: HitMarkerStyle) -> Vec<Mark> {
+/// The marks of `style` at `scale` times their base size.
+fn marks(style: HitMarkerStyle, scale: f32) -> Vec<Mark> {
+    base_marks(style)
+        .into_iter()
+        .map(|m| match m {
+            Mark::Segment(a, b) => Mark::Segment(a * scale, b * scale),
+            Mark::Circle { radius, filled } => Mark::Circle {
+                radius: radius * scale,
+                filled,
+            },
+        })
+        .collect()
+}
+
+fn base_marks(style: HitMarkerStyle) -> Vec<Mark> {
     let corners =
         [(1.0, 1.0), (-1.0, 1.0), (-1.0, -1.0), (1.0, -1.0)].map(|(x, y)| Vec2::new(x, y));
     match style {
@@ -56,10 +70,8 @@ fn marks(style: HitMarkerStyle) -> Vec<Mark> {
     }
 }
 
-fn marker_color(color: MarkerColor, crosshair: Rgba, alpha: f32) -> Color32 {
-    let [r, g, b] = color
-        .rgb()
-        .unwrap_or([crosshair.r, crosshair.g, crosshair.b]);
+fn marker_color(rgb: Option<[u8; 3]>, crosshair: Rgba, alpha: f32) -> Color32 {
+    let [r, g, b] = rgb.unwrap_or([crosshair.r, crosshair.g, crosshair.b]);
     Color32::from_rgba_unmultiplied(r, g, b, (alpha.clamp(0.0, 1.0) * 255.0).round() as u8)
 }
 
@@ -72,12 +84,30 @@ pub fn paint(
     crosshair: Rgba,
     t: f32,
 ) {
-    let fill = marker_color(color, crosshair, marker_alpha(t));
+    let look = MarkerLook {
+        style,
+        rgb: color.rgb(),
+        scale: 1.0,
+        stroke_scale: 1.0,
+        flash_rgb: [255, 255, 255],
+    };
+    paint_look(painter, center, &look, crosshair, t);
+}
+
+/// Paint a marker `look` around `center`, `t` (0–1) of the way through its fade.
+pub fn paint_look(
+    painter: &egui::Painter,
+    center: Pos2,
+    look: &MarkerLook,
+    crosshair: Rgba,
+    t: f32,
+) {
+    let fill = marker_color(look.rgb, crosshair, marker_alpha(t));
     if fill.a() == 0 {
         return;
     }
-    let stroke = Stroke::new(STROKE, fill);
-    for mark in marks(style) {
+    let stroke = Stroke::new(STROKE * look.stroke_scale, fill);
+    for mark in marks(look.style, look.scale) {
         match mark {
             Mark::Segment(a, b) => {
                 painter.line_segment([center + a, center + b], stroke);
@@ -96,25 +126,12 @@ pub fn paint(
 }
 
 /// Draw the hit marker at the screen center, above everything else.
-pub fn draw(
-    ctx: &egui::Context,
-    style: HitMarkerStyle,
-    color: MarkerColor,
-    crosshair: Rgba,
-    t: f32,
-) {
+pub fn draw(ctx: &egui::Context, look: &MarkerLook, crosshair: Rgba, t: f32) {
     let painter = ctx.layer_painter(egui::LayerId::new(
         egui::Order::Foreground,
         egui::Id::new("hit_marker"),
     ));
-    paint(
-        &painter,
-        ctx.content_rect().center(),
-        style,
-        color,
-        crosshair,
-        t,
-    );
+    paint_look(&painter, ctx.content_rect().center(), look, crosshair, t);
 }
 
 #[cfg(test)]
@@ -123,13 +140,13 @@ mod tests {
 
     #[test]
     fn off_and_flash_draw_no_marker() {
-        assert!(marks(HitMarkerStyle::Off).is_empty());
-        assert!(marks(HitMarkerStyle::Flash).is_empty());
+        assert!(marks(HitMarkerStyle::Off, 1.0).is_empty());
+        assert!(marks(HitMarkerStyle::Flash, 1.0).is_empty());
     }
 
     #[test]
     fn cross_arms_keep_clear_of_the_crosshair_center() {
-        let cross = marks(HitMarkerStyle::Cross);
+        let cross = marks(HitMarkerStyle::Cross, 1.0);
         assert_eq!(cross.len(), 4);
         for m in cross {
             let Mark::Segment(a, b) = m else {
@@ -141,7 +158,7 @@ mod tests {
 
     #[test]
     fn brackets_are_four_symmetric_corners() {
-        let brackets = marks(HitMarkerStyle::Brackets);
+        let brackets = marks(HitMarkerStyle::Brackets, 1.0);
         assert_eq!(brackets.len(), 8);
         let sum = brackets.iter().fold(Vec2::ZERO, |s, m| match m {
             Mark::Segment(a, b) => s + *a + *b,
@@ -151,11 +168,32 @@ mod tests {
     }
 
     #[test]
+    fn scaled_marks_grow_from_the_center_and_keep_their_shape() {
+        for style in HitMarkerStyle::ALL {
+            let base = marks(style, 1.0);
+            let big = marks(style, 1.6);
+            assert_eq!(base.len(), big.len(), "{style:?}");
+            for (b, s) in base.iter().zip(&big) {
+                match (b, s) {
+                    (Mark::Segment(a0, b0), Mark::Segment(a1, b1)) => {
+                        assert!((*a0 * 1.6 - *a1).length() < 1e-4);
+                        assert!((*b0 * 1.6 - *b1).length() < 1e-4);
+                    }
+                    (Mark::Circle { radius: r0, .. }, Mark::Circle { radius: r1, .. }) => {
+                        assert!((r0 * 1.6 - r1).abs() < 1e-4);
+                    }
+                    _ => panic!("{style:?}: shape changed"),
+                }
+            }
+        }
+    }
+
+    #[test]
     fn marker_color_uses_the_crosshair_color_when_asked() {
         let crosshair = Rgba::opaque(10, 20, 30);
-        let c = marker_color(MarkerColor::Crosshair, crosshair, 1.0);
+        let c = marker_color(MarkerColor::Crosshair.rgb(), crosshair, 1.0);
         assert_eq!((c.r(), c.g(), c.b(), c.a()), (10, 20, 30, 255));
-        let white = marker_color(MarkerColor::White, crosshair, 0.0);
+        let white = marker_color(MarkerColor::White.rgb(), crosshair, 0.0);
         assert_eq!(white.a(), 0);
     }
 }

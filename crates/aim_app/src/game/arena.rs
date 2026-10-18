@@ -2,7 +2,7 @@
 //! look and input as scenarios, feeding `aim_world::arena::ArenaSession`, with the map's
 //! boxes and the bots mirrored as meshes. All rules live in `aim_world`.
 
-use super::feedback::{ShotFeedback, ShotOutcome};
+use super::feedback::{HitFrame, MarkerKind, ShotFeedback, ShotOutcome};
 use super::hit_effect::{self, EffectAssets, Struck};
 use super::{
     AppState, LastResult, MainCamera, PlayerInput, TargetVisual, WorldAssets, apply_look,
@@ -126,6 +126,8 @@ pub struct ArenaRun {
     /// Seconds left on the hit-marker flash and on the "you got hit" vignette.
     pub hit_flash: f32,
     pub damage_flash: f32,
+    /// The kind of hit the marker shows.
+    pub marker: MarkerKind,
     bots: HashMap<u64, Entity>,
     /// Bots hit this frame, for their visual effect.
     struck: Vec<Struck>,
@@ -143,9 +145,18 @@ impl ArenaRun {
             zoomed: false,
             hit_flash: 0.0,
             damage_flash: 0.0,
+            marker: MarkerKind::Body,
             bots: HashMap::new(),
             struck: Vec::new(),
             translator: FeedbackTranslator::default(),
+        }
+    }
+
+    /// What the HUD draws for hit feedback this frame.
+    pub fn hit_frame(&self) -> HitFrame {
+        HitFrame {
+            marker_secs_left: self.hit_flash,
+            marker: self.marker,
         }
     }
 
@@ -369,9 +380,11 @@ fn tick(
     let frame = frame_input(dt, run.view, &input.keys, &input.buttons);
     let events = run.session.update(frame);
     arena_feedback.write_batch(run.translator.translate(&events));
+    let mut marker = None;
     for event in events {
         if let Some(outcome) = ShotOutcome::from_arena(&event) {
             feedback.write(ShotFeedback(outcome));
+            marker = marker.max(MarkerKind::of(outcome));
         }
         match event {
             ArenaEvent::Shot {
@@ -390,6 +403,9 @@ fn tick(
             ArenaEvent::Finished => finisher.finish(&run),
             _ => {}
         }
+    }
+    if let Some(kind) = marker {
+        run.marker = kind;
     }
     // The session owns the player's view after respawns (it faces the spawn direction).
     if run.session.view() != frame.view {

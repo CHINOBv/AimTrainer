@@ -142,6 +142,95 @@ impl MarkerColor {
     }
 }
 
+/// Which hit the marker on screen stands for, weakest first.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MarkerKind {
+    #[default]
+    Body,
+    Head,
+    Kill,
+}
+
+impl MarkerKind {
+    /// The marker `outcome` asks for; a miss shows none. A frame shows its strongest kind.
+    pub fn of(outcome: ShotOutcome) -> Option<Self> {
+        match outcome {
+            ShotOutcome::Miss => None,
+            ShotOutcome::Hit { head: false } => Some(Self::Body),
+            ShotOutcome::Hit { head: true } => Some(Self::Head),
+            ShotOutcome::Kill => Some(Self::Kill),
+        }
+    }
+}
+
+/// Gold accent of the head-hit marker (`distinct_markers`).
+pub const HEAD_MARKER_RGB: [u8; 3] = [255, 196, 40];
+/// Red of the kill marker (`distinct_markers`).
+pub const KILL_MARKER_RGB: [u8; 3] = [255, 55, 55];
+const WHITE_RGB: [u8; 3] = [255, 255, 255];
+/// Size of the head-hit and kill markers against a body hit's.
+const HEAD_MARKER_SCALE: f32 = 1.25;
+const KILL_MARKER_SCALE: f32 = 1.6;
+/// Line width of the kill marker against a body hit's.
+const KILL_MARKER_STROKE: f32 = 1.5;
+
+/// How the hit marker is drawn for one kind of hit.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MarkerLook {
+    pub style: HitMarkerStyle,
+    /// sRGB of the mark, or `None` for the crosshair's color.
+    pub rgb: Option<[u8; 3]>,
+    /// Size against the base marker.
+    pub scale: f32,
+    /// Line width against the base marker.
+    pub stroke_scale: f32,
+    /// Color the crosshair turns with [`HitMarkerStyle::Flash`].
+    pub flash_rgb: [u8; 3],
+}
+
+/// The marker drawn for `kind` with the player's `style` and `color`. Without `distinct`
+/// markers every kind looks like a body hit, which is the look from before the option.
+/// With them, a headshot is gold and slightly larger and a kill is a larger, bolder red
+/// mark of the same style; a marker turned off stays off.
+pub fn marker_look(
+    kind: MarkerKind,
+    style: HitMarkerStyle,
+    color: MarkerColor,
+    distinct: bool,
+) -> MarkerLook {
+    let body = MarkerLook {
+        style,
+        rgb: color.rgb(),
+        scale: 1.0,
+        stroke_scale: 1.0,
+        flash_rgb: WHITE_RGB,
+    };
+    match (distinct, kind) {
+        (false, _) | (true, MarkerKind::Body) => body,
+        (true, MarkerKind::Head) => MarkerLook {
+            rgb: Some(HEAD_MARKER_RGB),
+            scale: HEAD_MARKER_SCALE,
+            flash_rgb: HEAD_MARKER_RGB,
+            ..body
+        },
+        (true, MarkerKind::Kill) => MarkerLook {
+            rgb: Some(KILL_MARKER_RGB),
+            scale: KILL_MARKER_SCALE,
+            stroke_scale: KILL_MARKER_STROKE,
+            flash_rgb: KILL_MARKER_RGB,
+            ..body
+        },
+    }
+}
+
+/// What the HUD needs to draw the crosshair and hit feedback this frame.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct HitFrame {
+    /// Seconds before the hit marker ends (0 = none showing).
+    pub marker_secs_left: f32,
+    pub marker: MarkerKind,
+}
+
 /// What a hit target does for a moment. A killed target plays it before disappearing.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -319,6 +408,65 @@ mod tests {
             ShotOutcome::from_session(&SessionEvent::Spawned { id: 2 }),
             None
         );
+    }
+
+    #[test]
+    fn outcomes_pick_the_marker_kind_and_kills_win() {
+        assert_eq!(MarkerKind::of(Miss), None);
+        assert_eq!(MarkerKind::of(Hit { head: false }), Some(MarkerKind::Body));
+        assert_eq!(MarkerKind::of(Hit { head: true }), Some(MarkerKind::Head));
+        assert_eq!(MarkerKind::of(Kill), Some(MarkerKind::Kill));
+        // A frame's marker is its strongest kind; a miss never downgrades it.
+        let frame = [Hit { head: true }, Kill, Miss].map(MarkerKind::of);
+        assert_eq!(frame.into_iter().max().flatten(), Some(MarkerKind::Kill));
+    }
+
+    #[test]
+    fn without_distinct_markers_every_kind_looks_like_today() {
+        for style in HitMarkerStyle::ALL {
+            for color in MarkerColor::ALL {
+                let body = marker_look(MarkerKind::Body, style, color, true);
+                for kind in [MarkerKind::Body, MarkerKind::Head, MarkerKind::Kill] {
+                    let look = marker_look(kind, style, color, false);
+                    assert_eq!(look, body, "{kind:?} {style:?} {color:?}");
+                    assert_eq!(look.style, style);
+                    assert_eq!(look.rgb, color.rgb());
+                    assert_eq!((look.scale, look.stroke_scale), (1.0, 1.0));
+                    assert_eq!(look.flash_rgb, [255, 255, 255]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn head_and_kill_markers_stand_out_from_body_hits() {
+        let look = |kind| marker_look(kind, HitMarkerStyle::Cross, MarkerColor::White, true);
+        let (body, head, kill) = (
+            look(MarkerKind::Body),
+            look(MarkerKind::Head),
+            look(MarkerKind::Kill),
+        );
+        assert_eq!(head.rgb, Some(HEAD_MARKER_RGB));
+        assert_eq!(kill.rgb, Some(KILL_MARKER_RGB));
+        assert!(body.scale < head.scale && head.scale < kill.scale);
+        assert!(kill.stroke_scale > body.stroke_scale);
+        assert_eq!(
+            (head.style, kill.style),
+            (HitMarkerStyle::Cross, HitMarkerStyle::Cross)
+        );
+        // The crosshair flash takes the same accent colors.
+        let flash = |kind| marker_look(kind, HitMarkerStyle::Flash, MarkerColor::White, true);
+        assert_eq!(flash(MarkerKind::Body).flash_rgb, [255, 255, 255]);
+        assert_eq!(flash(MarkerKind::Head).flash_rgb, HEAD_MARKER_RGB);
+        assert_eq!(flash(MarkerKind::Kill).flash_rgb, KILL_MARKER_RGB);
+        // Turning the marker off keeps it off for every kind.
+        let off = marker_look(
+            MarkerKind::Kill,
+            HitMarkerStyle::Off,
+            MarkerColor::Red,
+            true,
+        );
+        assert_eq!(off.style, HitMarkerStyle::Off);
     }
 
     #[test]

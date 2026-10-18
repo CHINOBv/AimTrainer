@@ -5,7 +5,7 @@ use crate::game::AppState;
 use crate::game::MainCamera;
 use crate::game::SensDrill;
 use crate::game::arena::ArenaRun;
-use crate::game::feedback::HitMarkerStyle;
+use crate::game::feedback::{HitFrame, HitMarkerStyle, marker_look};
 use crate::overlay::Overlay;
 use crate::persistence::settings::Settings;
 use crate::platform::game_key;
@@ -65,7 +65,7 @@ fn hud(
     let restart = game_key::label(restart_name);
     let ctx = contexts.ctx_mut()?;
     if let Some(arena) = nav.arena() {
-        hit_feedback(ctx, &settings, arena.hit_flash);
+        hit_feedback(ctx, &settings, arena.hit_frame());
         hud_panels::arena_status(ctx, &arena.session, arena.damage_flash);
         if arena.countdown > 0.0 {
             hud_panels::countdown(ctx, arena.countdown, restart);
@@ -92,7 +92,7 @@ fn hud(
         };
         hud_panels::offscreen_arrows(ctx, &run.session, &cam, settings.target_color);
     }
-    hit_feedback(ctx, &settings, run.hit_flash);
+    hit_feedback(ctx, &settings, run.hit_frame());
     hud_panels::run_status(ctx, &run.session);
     // The session stands still during the countdown and the pause: hide the radar then, so
     // it is never on screen longer than `show_secs`.
@@ -160,16 +160,25 @@ fn sens_drill_hud(
     Ok(())
 }
 
-/// The crosshair and the hit marker, `marker_secs_left` seconds before the marker ends.
-fn hit_feedback(ctx: &bevy_egui::egui::Context, settings: &Settings, marker_secs_left: f32) {
+/// The crosshair and the hit marker of `frame` (head, body and kill markers differ with
+/// `feel.distinct_markers`).
+fn hit_feedback(ctx: &bevy_egui::egui::Context, settings: &Settings, frame: HitFrame) {
     let fb = &settings.hit_feedback;
-    let showing = marker_secs_left > 0.0;
-    let flash = showing && fb.marker == HitMarkerStyle::Flash;
+    let showing = frame.marker_secs_left > 0.0;
+    let look = marker_look(
+        frame.marker,
+        fb.marker,
+        fb.marker_color,
+        settings.feel.distinct_markers,
+    );
+    let flash = (showing && fb.marker == HitMarkerStyle::Flash).then(|| {
+        let [r, g, b] = look.flash_rgb;
+        aim_core::crosshair::Rgba::opaque(r, g, b)
+    });
     crosshair::draw(ctx, &settings.crosshair, flash);
     if showing {
-        let t = 1.0 - marker_secs_left / fb.marker_secs();
-        let color = settings.crosshair.color();
-        hit_marker::draw(ctx, fb.marker, fb.marker_color, color, t);
+        let t = 1.0 - frame.marker_secs_left / fb.marker_secs();
+        hit_marker::draw(ctx, &look, settings.crosshair.color(), t);
     }
 }
 
