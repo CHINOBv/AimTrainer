@@ -65,7 +65,9 @@ On Windows, install Rust with rustup and run `cargo build --release`. The binary
 | ADS zoom (weapons that have a scope) | Right mouse button |
 | Move (movement scenarios) | WASD, Shift to walk |
 | Pause / resume | Esc |
+| Restart the run as it is (scenarios and arenas, also paused or in the countdown; keeps an adaptive run's level and records nothing) | R (Settings → Gameplay keys) |
 | Change your floor height (scenario pause menu) | Floor height −/+ (0.5 m steps), then Apply and restart |
+| Tune target size, distance and speed (scenario pause menu; tuned runs are saved apart and never move the adaptive level or the benchmark) | Size / Distance / Target speed −/+ (10% steps, 50–200%), then Apply and restart; Reset to scenario defaults |
 | Retry or next routine run (on the results screen) | Space |
 
 The menu tabs:

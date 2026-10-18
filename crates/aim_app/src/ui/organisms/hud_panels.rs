@@ -2,8 +2,8 @@
 //! window.
 
 use crate::ui::UiAction;
-use crate::ui::atoms::{BAD, GOOD, big};
-use aim_core::scenario::{Session, parse_run_key};
+use crate::ui::atoms::{BAD, GOOD, WARN, big};
+use aim_core::scenario::{RunKey, Session, Tuning};
 use bevy_egui::egui::{self, Align2, FontId, RichText};
 
 pub fn run_status(ctx: &egui::Context, s: &Session) {
@@ -15,9 +15,13 @@ pub fn run_status(ctx: &egui::Context, s: &Session) {
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.label(big(format!("{:.1}", s.remaining()), 28.0));
-                let (_, level) = parse_run_key(&s.def().id);
-                if level != 0.0 {
-                    ui.small(format!("difficulty {level:+.2}"));
+                let key = RunKey::parse(&s.def().id);
+                if key.level != 0.0 {
+                    ui.small(format!("difficulty {:+.2}", key.level));
+                }
+                if !key.tuning.is_default() {
+                    ui.small(RichText::new("tuned").color(WARN))
+                        .on_hover_text(crate::game::tuning_text(&key.tuning));
                 }
                 ui.label(format!(
                     "{}  ·  score {:.0}  ·  {accuracy:.0}% acc  ·  {} kills",
@@ -105,30 +109,43 @@ pub fn spray_meter(ctx: &egui::Context, s: &Session) {
         });
 }
 
-pub fn countdown(ctx: &egui::Context, secs: f32) {
+/// Countdown before a run, with a reminder of the restart key (`restart`, e.g. "R").
+pub fn countdown(ctx: &egui::Context, secs: f32, restart: &str) {
     egui::Area::new(egui::Id::new("countdown"))
         .anchor(Align2::CENTER_CENTER, [0.0, -80.0])
         .show(ctx, |ui| {
-            ui.label(big(format!("{}", secs.ceil() as i32), 56.0));
+            ui.vertical_centered(|ui| {
+                ui.label(big(format!("{}", secs.ceil() as i32), 56.0));
+                ui.small(format!("{restart}: restart"));
+            });
         });
 }
 
-/// Floor-height picker of a scenario run's pause window.
-pub struct FloorPick<'a> {
+/// Restart options of a library scenario run's pause window: floor height and target
+/// tuning, applied together by "Apply and restart".
+pub struct RestartPick<'a> {
     /// Height the run is played at, meters.
-    pub current: f32,
+    pub current_elevation: f32,
     /// Height being chosen, meters; edited by the picker.
-    pub chosen: &'a mut f32,
+    pub elevation: &'a mut f32,
+    /// Tuning the run is played with.
+    pub current_tuning: Tuning,
+    /// Tuning being chosen; edited by the steppers.
+    pub tuning: &'a mut Tuning,
+    /// Whether the size knob changes this scenario (spheres; agents keep their size).
+    pub size_applies: bool,
 }
 
 /// Step of the floor-height picker, meters.
 const FLOOR_STEP: f32 = 0.5;
 
-/// Pause window. With `floor`, it also offers a floor-height picker and "Apply and restart".
+/// Pause window, with a restart button labelled with the restart key (`restart`). With
+/// `pick`, it also offers a floor-height picker, target tuning and "Apply and restart".
 pub fn pause_window(
     ctx: &egui::Context,
     description: &str,
-    floor: Option<FloorPick>,
+    restart: &str,
+    pick: Option<RestartPick>,
 ) -> Option<UiAction> {
     let mut action = None;
     egui::Window::new("Paused")
@@ -138,36 +155,102 @@ pub fn pause_window(
         .show(ctx, |ui| {
             ui.label(description);
             ui.separator();
-            if let Some(FloorPick { current, chosen }) = floor {
-                let range = aim_core::scenario::def::ELEVATION_RANGE;
-                ui.horizontal(|ui| {
-                    ui.label("Floor height");
-                    if ui.small_button("−").clicked() {
-                        *chosen = (*chosen - FLOOR_STEP).max(range.min);
-                    }
-                    ui.monospace(format!("{:+.1} m", *chosen));
-                    if ui.small_button("+").clicked() {
-                        *chosen = (*chosen + FLOOR_STEP).min(range.max);
-                    }
-                });
-                ui.small("Your floor relative to the targets' floor.");
-                let changed = (*chosen - current).abs() > 1e-3;
-                if ui
-                    .add_enabled(changed, egui::Button::new("Apply and restart"))
-                    .clicked()
-                {
-                    action = Some(UiAction::RestartAtElevation(*chosen));
-                }
+            if let Some(pick) = pick {
+                action = restart_options(ui, pick);
                 ui.separator();
             }
             if ui.button("Resume (Esc)").clicked() {
                 action = Some(UiAction::Resume);
+            }
+            if ui
+                .button(format!("Restart ({restart})"))
+                .on_hover_text("Start this run again as it is; nothing is recorded")
+                .clicked()
+            {
+                action = Some(UiAction::Restart);
             }
             if ui.button("Quit to menu").clicked() {
                 action = Some(UiAction::BackToMenu);
             }
         });
     action
+}
+
+/// Floor height, target tuning and "Apply and restart".
+fn restart_options(ui: &mut egui::Ui, pick: RestartPick) -> Option<UiAction> {
+    let RestartPick {
+        current_elevation,
+        elevation,
+        current_tuning,
+        tuning,
+        size_applies,
+    } = pick;
+    let range = aim_core::scenario::def::ELEVATION_RANGE;
+    ui.horizontal(|ui| {
+        ui.label("Floor height");
+        if ui.small_button("−").clicked() {
+            *elevation = (*elevation - FLOOR_STEP).max(range.min);
+        }
+        ui.monospace(format!("{:+.1} m", *elevation));
+        if ui.small_button("+").clicked() {
+            *elevation = (*elevation + FLOOR_STEP).min(range.max);
+        }
+    });
+    ui.small("Your floor relative to the targets' floor.");
+    ui.add_space(4.0);
+    egui::Grid::new("tuning").num_columns(2).show(ui, |ui| {
+        ui.add_enabled_ui(size_applies, |ui| ui.label("Target size"))
+            .response
+            .on_disabled_hover_text("Agents keep their VALORANT size; use Distance instead.");
+        ui.add_enabled_ui(size_applies, |ui| percent_stepper(ui, &mut tuning.size_pct));
+        ui.end_row();
+        ui.label("Distance");
+        percent_stepper(ui, &mut tuning.distance_pct);
+        ui.end_row();
+        ui.label("Target speed");
+        percent_stepper(ui, &mut tuning.speed_pct);
+        ui.end_row();
+    });
+    if !size_applies {
+        ui.small("Agents keep their VALORANT size; change Distance instead.");
+    }
+    ui.small("Tuned runs are saved apart and never move your adaptive level or benchmark.");
+    let mut action = None;
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(
+                !tuning.is_default(),
+                egui::Button::new("Reset to scenario defaults"),
+            )
+            .clicked()
+        {
+            *tuning = Tuning::DEFAULT;
+        }
+        let changed = (*elevation - current_elevation).abs() > 1e-3 || *tuning != current_tuning;
+        if ui
+            .add_enabled(changed, egui::Button::new("Apply and restart"))
+            .clicked()
+        {
+            action = Some(UiAction::RestartTuned {
+                elevation: *elevation,
+                tuning: *tuning,
+            });
+        }
+    });
+    action
+}
+
+/// − value % + stepper over the tuning range.
+fn percent_stepper(ui: &mut egui::Ui, pct: &mut u16) {
+    ui.horizontal(|ui| {
+        if ui.small_button("−").clicked() {
+            *pct = pct.saturating_sub(Tuning::STEP_PCT).max(Tuning::MIN_PCT);
+        }
+        ui.monospace(format!("{:>3}%", *pct));
+        if ui.small_button("+").clicked() {
+            *pct = (*pct + Tuning::STEP_PCT).min(Tuning::MAX_PCT);
+        }
+    });
 }
 
 /// While the spawn grace lasts, say why the player stands where they do: a respawn after a

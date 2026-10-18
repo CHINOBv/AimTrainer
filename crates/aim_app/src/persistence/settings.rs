@@ -69,6 +69,8 @@ pub struct Settings {
     pub warmup_hotkey: String,
     /// Global hotkey for a buy-phase micro drill (Windows/X11; `aimtrainer micro` on Wayland).
     pub micro_hotkey: String,
+    /// In-window key that restarts the current run (a `KeyCode` name, e.g. "KeyR").
+    pub restart_key: String,
     /// Length of the queue warm-up, minutes.
     pub warmup_minutes: u32,
     /// Daily training goal, minutes (30–50 min captures most daily gains, Listman 2021).
@@ -151,6 +153,7 @@ impl Default for Settings {
             overlay_hotkey: "ctrl+shift+F10".to_owned(),
             warmup_hotkey: "ctrl+shift+F9".to_owned(),
             micro_hotkey: "ctrl+shift+F8".to_owned(),
+            restart_key: crate::platform::game_key::DEFAULT_RESTART.to_owned(),
             warmup_minutes: 5,
             daily_goal_minutes: 30.0,
             target_color: [1.0, 0.27, 0.33],
@@ -286,6 +289,14 @@ mod tests {
         assert!(settings.offscreen_arrows);
         let off: Settings = toml::from_str("offscreen_arrows = false").unwrap();
         assert!(!off.offscreen_arrows);
+    }
+
+    #[test]
+    fn restart_key_defaults_to_r_for_old_settings_files() {
+        let settings: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(settings.restart_key, "KeyR");
+        let custom: Settings = toml::from_str("restart_key = \"F5\"").unwrap();
+        assert_eq!(custom.restart_key, "F5");
     }
 
     #[test]

@@ -3,24 +3,26 @@
 
 use crate::game::AppState;
 use crate::game::MainCamera;
-use crate::game::arena::ArenaRun;
 use crate::game::feedback::HitMarkerStyle;
 use crate::overlay::Overlay;
 use crate::persistence::settings::Settings;
+use crate::platform::game_key;
+use crate::ui::UiAction;
 use crate::ui::atoms::{crosshair, hit_marker};
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::hud_panels;
-use aim_core::scenario::RunKey;
+use aim_core::scenario::{RunKey, Tuning};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
 
 pub struct HudPage;
 
-/// Floor height picked in the pause window, for the run it was picked in.
+/// Floor height and tuning picked in the pause window, for the run they were picked in.
 #[derive(Default)]
-struct FloorChoice {
+struct RestartChoice {
     run_id: String,
-    chosen: f32,
+    elevation: f32,
+    tuning: Tuning,
 }
 
 impl Plugin for HudPage {
@@ -36,29 +38,33 @@ fn hud(
     mut contexts: EguiContexts,
     settings: Res<Settings>,
     overlay: Res<Overlay>,
-    arena: Option<ResMut<ArenaRun>>,
+    keys: Res<ButtonInput<KeyCode>>,
     camera: Query<&Projection, With<MainCamera>>,
-    mut floor: Local<FloorChoice>,
+    mut choice: Local<RestartChoice>,
     mut nav: Navigator,
 ) -> Result {
     if !overlay.visible {
         return Ok(());
     }
+    // The restart key works during the countdown, the run and the pause window alike.
+    if game_key::bindable(&settings.restart_key).is_some_and(|k| keys.just_pressed(k)) {
+        nav.apply(UiAction::Restart);
+        return Ok(());
+    }
+    let restart = game_key::label(&settings.restart_key);
     let ctx = contexts.ctx_mut()?;
-    if let Some(mut arena) = arena {
+    if let Some(arena) = nav.arena() {
         hit_feedback(ctx, &settings, arena.hit_flash);
         hud_panels::arena_status(ctx, &arena.session, arena.damage_flash);
         if arena.countdown > 0.0 {
-            hud_panels::countdown(ctx, arena.countdown);
+            hud_panels::countdown(ctx, arena.countdown, restart);
         }
         let action = arena
             .paused
-            .then(|| hud_panels::pause_window(ctx, &arena.session.def().description, None))
+            .then(|| hud_panels::pause_window(ctx, &arena.session.def().description, restart, None))
             .flatten();
-        match action {
-            Some(crate::ui::UiAction::Resume) => arena.paused = false,
-            Some(other) => nav.apply(other),
-            None => {}
+        if let Some(action) = action {
+            nav.apply(action);
         }
         return Ok(());
     }
@@ -84,27 +90,29 @@ fn hud(
         hud_panels::spray_meter(ctx, &run.session);
     }
     if run.countdown > 0.0 {
-        hud_panels::countdown(ctx, run.countdown);
+        hud_panels::countdown(ctx, run.countdown, restart);
     }
     let def = run.session.def();
-    let current = def.player.elevation;
-    // A new run (or a restart) resets the picker to the height being played.
-    if floor.run_id != def.id {
-        floor.run_id = def.id.clone();
-        floor.chosen = current;
+    let key = RunKey::parse(&def.id);
+    // A new run (or a restart) resets the pickers to what is being played.
+    if choice.run_id != def.id {
+        choice.run_id = def.id.clone();
+        choice.elevation = def.player.elevation;
+        choice.tuning = key.tuning;
     }
-    // Only library scenarios can be rebuilt at another height (not e.g. daily challenges).
-    let restartable = nav
-        .library()
-        .scenario(RunKey::parse(&def.id).base)
-        .is_some();
-    let pick = restartable.then(|| hud_panels::FloorPick {
-        current,
-        chosen: &mut floor.chosen,
+    // Only library scenarios can be rebuilt (not e.g. daily challenges).
+    let restartable = nav.library().scenario(key.base).is_some();
+    let choice = &mut *choice;
+    let pick = restartable.then(|| hud_panels::RestartPick {
+        current_elevation: def.player.elevation,
+        elevation: &mut choice.elevation,
+        current_tuning: key.tuning,
+        tuning: &mut choice.tuning,
+        size_applies: Tuning::size_applies(def),
     });
     let action = run
         .paused
-        .then(|| hud_panels::pause_window(ctx, &def.description, pick))
+        .then(|| hud_panels::pause_window(ctx, &def.description, restart, pick))
         .flatten();
     if let Some(action) = action {
         nav.apply(action);

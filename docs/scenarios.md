@@ -106,7 +106,21 @@ count = 0.0                         # targets alive at once; off by default
 
 Results at a level other than 0 are stored as `id@+0.50`, so difficulties never mix in your history.
 
-The full run key is `id@+0.50~20s^+1.50m`: the difficulty level, a shortened duration, and a floor height that differs from the file's `elevation`. Each part is optional, and they always appear in that order. Retry on the results screen replays the same key.
+The full run key is `id@+0.50~20s%s80d120v150^+1.50m`: the difficulty level, a shortened duration, the in-run tuning, and a floor height that differs from the file's `elevation`. Each part is optional, and they always appear in that order. Retry on the results screen and the restart key replay the same key.
+
+### In-run tuning
+
+During a library scenario run, press Esc to tune its targets, from 50% to 200% in 10% steps, and choose **Apply and restart**. **Reset to scenario defaults** goes back to 100%.
+
+| Knob | Changes |
+|---|---|
+| Target size | Sphere radius. Agents (humanoids) keep their VALORANT size; use Distance to make their heads smaller or larger on screen. |
+| Distance | Spawn distance: `angular` and `around_crosshair` `distance`, and `floor` `z`. |
+| Target speed | Motion speed: drift `speed`, and strafe run speed and acceleration together, so the strafe keeps its timing. |
+
+A tuned run is stored under its own key (`%s80d120v150`: size, distance and speed percentages); the default 100/100/100 adds no suffix. Tuned runs never move the adaptive level, even when started adaptively, and never count for the benchmark, which reads only exact untuned keys. The results screen lists the tuning, and the HUD shows a "tuned" tag.
+
+Target speed is stored in the definition as `targets.speed_scale` (default 1, allowed 0.25–4), which every motion reads. Scenario files normally leave it out.
 
 ### Sizing targets realistically
 

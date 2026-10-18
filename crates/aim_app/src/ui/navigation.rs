@@ -9,9 +9,9 @@ use crate::game::{
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::library::Library;
 use aim_core::activity::ActivityKind;
-use aim_core::scenario::{RunKey, ScenarioDef};
+use aim_core::scenario::{RunKey, ScenarioDef, Tuning};
 use aim_core::training::routine::{PlannedRun, RoutineDef};
-use aim_world::arena::ArenaSession;
+use aim_world::arena::{ArenaSession, PRACTICE_SUFFIX};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
@@ -22,6 +22,7 @@ pub struct Navigator<'w, 's> {
     routine: ResMut<'w, ActiveRoutine>,
     library: Res<'w, Library>,
     run: Option<ResMut<'w, Run>>,
+    arena: Option<ResMut<'w, ArenaRun>>,
     adaptive: Res<'w, AdaptiveLevels>,
 }
 
@@ -36,6 +37,11 @@ impl Navigator<'_, '_> {
         self.run.as_deref()
     }
 
+    /// The active arena run, if one exists (same B0002 reason as [`Self::run`]).
+    pub fn arena(&self) -> Option<&ArenaRun> {
+        self.arena.as_deref()
+    }
+
     pub fn routine(&self) -> Option<&RoutineProgress> {
         self.routine.0.as_ref()
     }
@@ -44,14 +50,11 @@ impl Navigator<'_, '_> {
         match action {
             UiAction::StartScenario(id) | UiAction::Retry(id) => {
                 self.routine.0 = None;
-                // Results carry run keys (`id@+0.50~20s^+1.50m`); retry the same variant.
+                // Results carry run keys (`id@+0.50~20s%s80d120v150^+1.50m`); retry the
+                // same variant.
                 let key = RunKey::parse(&id);
                 if let Some(def) = self.library.scenario(key.base) {
-                    let def = shaped(def, key.level, key.secs);
-                    let def = match key.elevation {
-                        Some(m) => def.with_elevation(m),
-                        None => def,
-                    };
+                    let def = variant(def, &key, key.tuning, key.elevation);
                     start_run(&mut self.commands, &mut self.next, def);
                 }
             }
@@ -92,11 +95,9 @@ impl Navigator<'_, '_> {
                 if let Some(def) = self.library.scenario(&scenario) {
                     let mut def = def.clone();
                     def.id = key;
-                    start_run_with(
-                        &mut self.commands,
-                        &mut self.next,
-                        Run::with_seed(def, seed),
-                    );
+                    let mut run = Run::with_seed(def, seed);
+                    run.fixed_seed = true;
+                    start_run_with(&mut self.commands, &mut self.next, run);
                 }
             }
             UiAction::StartTimed {
@@ -137,10 +138,14 @@ impl Navigator<'_, '_> {
                 p.index += 1;
                 self.start_planned(&next, level);
             }
-            UiAction::RestartAtElevation(m) => self.restart_at_elevation(m),
+            UiAction::RestartTuned { elevation, tuning } => self.restart_tuned(elevation, tuning),
+            UiAction::Restart => self.restart(),
             UiAction::Resume => {
                 if let Some(run) = self.run.as_mut() {
                     run.paused = false;
+                }
+                if let Some(arena) = self.arena.as_mut() {
+                    arena.paused = false;
                 }
             }
             UiAction::BackToMenu => {
@@ -153,9 +158,38 @@ impl Navigator<'_, '_> {
         }
     }
 
-    /// Restart the current scenario run as a fresh run with the player's floor at `m`
-    /// meters: same scenario, level, duration, flags and routine position.
-    fn restart_at_elevation(&mut self, m: f32) {
+    /// Restart the current run as it is (the restart key). Nothing is recorded: results
+    /// are only written when a run finishes.
+    fn restart(&mut self) {
+        if let Some(def) = self.run.as_deref().map(|r| r.session.def().clone()) {
+            self.restart_as(def);
+        } else if let Some(arena) = self.arena.as_deref() {
+            let s = &arena.session;
+            let mut def = s.def().clone();
+            if s.is_practice() {
+                // `practice()` adds the suffix and silences the bots again.
+                if let Some(base) = def.id.strip_suffix(PRACTICE_SUFFIX) {
+                    def.id = base.to_owned();
+                }
+            }
+            match ArenaSession::new(def, s.map().clone(), routine_seed()) {
+                Ok(session) => {
+                    let session = if s.is_practice() {
+                        session.practice()
+                    } else {
+                        session
+                    };
+                    start_arena(&mut self.commands, &mut self.next, ArenaRun::new(session));
+                }
+                Err(e) => bevy::log::error!("arena restart: {e}"),
+            }
+        }
+    }
+
+    /// Restart the current library scenario run with the player's floor at `m` meters and
+    /// its targets tuned by `tuning` (the scenario defaults when default):
+    /// same scenario, level and duration.
+    fn restart_tuned(&mut self, m: f32, tuning: Tuning) {
         let Some(current) = self.run.as_deref() else {
             return;
         };
@@ -163,7 +197,22 @@ impl Navigator<'_, '_> {
         let Some(def) = self.library.scenario(key.base) else {
             return;
         };
-        let mut run = Run::new(shaped(def, key.level, key.secs).with_elevation(m));
+        let def = variant(def, &key, tuning, Some(m));
+        self.restart_as(def);
+    }
+
+    /// Replace the current scenario run with a fresh run of `def`, keeping its flags, its
+    /// seed when fixed (daily challenge), and the routine position.
+    fn restart_as(&mut self, def: ScenarioDef) {
+        let Some(current) = self.run.as_deref() else {
+            return;
+        };
+        let mut run = if current.fixed_seed {
+            Run::with_seed(def, current.recording.seed)
+        } else {
+            Run::new(def)
+        };
+        run.fixed_seed = current.fixed_seed;
         run.adaptive = current.adaptive;
         run.auto_hide = current.auto_hide;
         run.sens_override = current.sens_override;
@@ -246,6 +295,17 @@ fn shaped(def: &ScenarioDef, level: f32, secs: Option<f32>) -> ScenarioDef {
     }
 }
 
+/// A library scenario rebuilt as the variant a run key names (level, duration), with
+/// `tuning` and, when given, the player's floor at `elevation` meters. Applied in run-key
+/// order so the id matches the key.
+fn variant(def: &ScenarioDef, key: &RunKey, tuning: Tuning, elevation: Option<f32>) -> ScenarioDef {
+    let def = shaped(def, key.level, key.secs).with_tuning(tuning);
+    match elevation {
+        Some(m) => def.with_elevation(m),
+        None => def,
+    }
+}
+
 /// Seed for shuffling a routine's interleaved blocks.
 fn routine_seed() -> u64 {
     std::time::SystemTime::now()
@@ -293,6 +353,13 @@ mod tests {
         world
             .get_resource::<Run>()
             .map(|r| r.session.def().id.clone())
+    }
+
+    fn at_height(m: f32) -> UiAction {
+        UiAction::RestartTuned {
+            elevation: m,
+            tuning: Tuning::DEFAULT,
+        }
     }
 
     fn pending(world: &World) -> Option<AppState> {
@@ -474,7 +541,7 @@ mod tests {
         apply(&mut w, UiAction::StartRoutine("quick-warmup".into()));
         apply(&mut w, UiAction::NextRoutineRun);
         let before = running(&w).unwrap();
-        apply(&mut w, UiAction::RestartAtElevation(1.5));
+        apply(&mut w, at_height(1.5));
         assert_eq!(routine_index(&w), Some(1), "the routine position is kept");
         let run = w.resource::<Run>();
         assert_eq!(run.session.def().player.elevation, 1.5);
@@ -487,7 +554,7 @@ mod tests {
         );
         assert_eq!(RunKey::parse(&id).elevation, Some(1.5));
         assert_eq!(pending(&w), Some(AppState::Playing));
-        apply(&mut w, UiAction::RestartAtElevation(0.0));
+        apply(&mut w, at_height(0.0));
         assert_eq!(running(&w), Some(before), "back to the authored height");
     }
 
@@ -496,7 +563,7 @@ mod tests {
         let mut w = world();
         apply(&mut w, UiAction::Retry("counter-strafe@+0.50~20s".into()));
         w.resource_mut::<Run>().adaptive = true;
-        apply(&mut w, UiAction::RestartAtElevation(-2.0));
+        apply(&mut w, at_height(-2.0));
         let run = w.resource::<Run>();
         assert!(run.adaptive, "the run keeps its flags");
         assert_eq!(run.session.def().duration_secs, 20.0);
@@ -510,9 +577,137 @@ mod tests {
     #[test]
     fn restarting_without_a_run_changes_nothing() {
         let mut w = world();
-        apply(&mut w, UiAction::RestartAtElevation(1.0));
+        apply(&mut w, at_height(1.0));
+        apply(&mut w, UiAction::Restart);
         assert_eq!(running(&w), None);
+        assert!(!w.contains_resource::<ArenaRun>());
         assert_eq!(pending(&w), None);
+    }
+
+    #[test]
+    fn tuned_restarts_keep_the_adaptive_level_but_never_move_the_staircase() {
+        let mut w = world();
+        w.resource_mut::<AdaptiveLevels>()
+            .record("micro-adjust", 1.0);
+        apply(&mut w, UiAction::StartAdaptive("micro-adjust".into()));
+        assert!(crate::game::moves_staircase(w.resource::<Run>()));
+        let tuning = Tuning {
+            size_pct: 120,
+            distance_pct: 80,
+            speed_pct: 150,
+        };
+        apply(
+            &mut w,
+            UiAction::RestartTuned {
+                elevation: 1.5,
+                tuning,
+            },
+        );
+        let run = w.resource::<Run>();
+        assert!(run.adaptive, "still played at the adaptive level");
+        let id = run.session.def().id.clone();
+        assert_eq!(id, "micro-adjust@+0.25%s120d80v150^+1.50m");
+        assert!(
+            !crate::game::moves_staircase(run),
+            "a tuned result never moves the adaptive level"
+        );
+
+        apply(&mut w, UiAction::Restart);
+        assert_eq!(running(&w), Some(id.clone()), "the restart key keeps it");
+        apply(&mut w, UiAction::Retry(id.clone()));
+        assert_eq!(running(&w), Some(id), "retry keeps the tuning");
+        apply(&mut w, UiAction::StartAdaptive("micro-adjust".into()));
+        apply(&mut w, at_height(0.0));
+        assert_eq!(
+            running(&w).as_deref(),
+            Some("micro-adjust@+0.25"),
+            "back to the scenario defaults"
+        );
+        assert!(crate::game::moves_staircase(w.resource::<Run>()));
+    }
+
+    #[test]
+    fn restart_keeps_the_adaptive_level_and_moves_no_staircase() {
+        let mut w = world();
+        w.resource_mut::<AdaptiveLevels>()
+            .record("micro-adjust", 1.0);
+        let levels = w.resource::<AdaptiveLevels>().clone();
+        apply(&mut w, UiAction::StartAdaptive("micro-adjust".into()));
+        {
+            let mut run = w.resource_mut::<Run>();
+            run.countdown = 0.0;
+            run.paused = true;
+        }
+        apply(&mut w, UiAction::Restart);
+        let run = w.resource::<Run>();
+        assert!(run.adaptive, "still an adaptive run");
+        assert_eq!(run.session.def().id, "micro-adjust@+0.25", "same level");
+        assert!(!run.paused, "a fresh run");
+        assert!(run.countdown > 0.0, "with a fresh countdown");
+        assert_eq!(
+            *w.resource::<AdaptiveLevels>(),
+            levels,
+            "restarting records nothing"
+        );
+        assert_eq!(pending(&w), Some(AppState::Playing));
+    }
+
+    #[test]
+    fn restart_keeps_the_run_key_flags_and_routine_position() {
+        let mut w = world();
+        apply(&mut w, UiAction::StartRoutine("quick-warmup".into()));
+        apply(&mut w, UiAction::NextRoutineRun);
+        apply(&mut w, at_height(1.5));
+        let sens = aim_core::sensitivity::Sensitivity::valorant(0.8, 800);
+        {
+            let mut run = w.resource_mut::<Run>();
+            run.auto_hide = true;
+            run.sens_override = Some(sens);
+            run.finder_slot = Some(Slot::Slow);
+            run.countdown = 0.0;
+        }
+        let before = running(&w).unwrap();
+        apply(&mut w, UiAction::Restart);
+        assert_eq!(running(&w), Some(before), "level, duration and height kept");
+        assert_eq!(routine_index(&w), Some(1), "the routine position is kept");
+        let run = w.resource::<Run>();
+        assert!(run.auto_hide);
+        assert_eq!(run.sens_override, Some(sens));
+        assert_eq!(run.finder_slot, Some(Slot::Slow));
+        assert!(run.countdown > 0.0, "a fresh run");
+    }
+
+    #[test]
+    fn restarting_a_challenge_keeps_its_seed_and_key() {
+        let mut w = world();
+        apply(
+            &mut w,
+            UiAction::StartChallenge {
+                scenario: "micro-adjust".into(),
+                seed: 42,
+                key: "micro-adjust#daily-1".into(),
+            },
+        );
+        apply(&mut w, UiAction::Restart);
+        let run = w.resource::<Run>();
+        assert_eq!(run.recording.seed, 42, "everyone keeps the same targets");
+        assert_eq!(run.session.def().id, "micro-adjust#daily-1");
+    }
+
+    #[test]
+    fn restarting_an_arena_keeps_its_length_and_practice() {
+        let mut w = world();
+        apply(
+            &mut w,
+            UiAction::StartArenaPractice("yard-deathmatch".into()),
+        );
+        w.resource_mut::<ArenaRun>().countdown = 0.0;
+        apply(&mut w, UiAction::Restart);
+        let run = w.resource::<ArenaRun>();
+        assert!(run.session.is_practice());
+        assert_eq!(run.session.def().id, "yard-deathmatch+practice");
+        assert!(run.countdown > 0.0, "a fresh arena run");
+        assert!(!w.contains_resource::<Run>());
     }
 
     #[test]

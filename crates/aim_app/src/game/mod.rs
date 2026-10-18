@@ -15,7 +15,8 @@ use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::ViewAngles;
 use aim_core::movement::MoveInput;
 use aim_core::scenario::{
-    FrameInput, Recording, RunResult, ScenarioDef, Session, SessionEvent, Shape, parse_run_key,
+    FrameInput, Recording, RunKey, RunResult, ScenarioDef, Session, SessionEvent, Shape, Tuning,
+    parse_run_key,
 };
 use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::finder::{SensFinder, Slot};
@@ -65,6 +66,8 @@ pub struct Run {
     pub kill_flash: f32,
     /// Definition, seed and every input fed to the session, for analysis and replays.
     pub recording: Recording,
+    /// Restarts keep the seed (daily challenge: everyone gets the same targets).
+    pub fixed_seed: bool,
     /// Played in adaptive mode: the result moves the scenario's difficulty staircase.
     pub adaptive: bool,
     /// Hide the overlay when the run ends (buy-phase micro drills).
@@ -91,6 +94,7 @@ impl Run {
         let recording = Recording::new(def.clone(), seed);
         Self {
             recording,
+            fixed_seed: false,
             adaptive: false,
             auto_hide: false,
             sens_override: None,
@@ -468,7 +472,15 @@ impl RunFinisher<'_, '_> {
             // Finder test runs do not enter the regular history.
             self.history.record(&result);
         }
-        let adaptive_next = run.adaptive.then(|| {
+        let tuning = RunKey::parse(&session.def().id).tuning;
+        if !tuning.is_default() {
+            let mut note = tuning_text(&tuning);
+            if run.adaptive {
+                note.push_str(" · tuned runs do not move your adaptive level");
+            }
+            notes.insert(0, note);
+        }
+        let adaptive_next = moves_staircase(run).then(|| {
             let (base, _) = parse_run_key(&session.def().id);
             let next = self.adaptive.record(base, session.success_rate());
             self.adaptive.save(&self.paths);
@@ -488,6 +500,21 @@ impl RunFinisher<'_, '_> {
             self.overlay.visible = false;
         }
     }
+}
+
+/// Whether a finished `run` moves its scenario's adaptive staircase: adaptive runs played
+/// as the scenario is. Tuned runs (target size, distance or speed) are stored under their
+/// own key and never move it.
+pub fn moves_staircase(run: &Run) -> bool {
+    run.adaptive && RunKey::parse(&run.session.def().id).tuning.is_default()
+}
+
+/// The tuning of a run, e.g. "Tuned: size 120% · distance 80% · speed 150%".
+pub fn tuning_text(t: &Tuning) -> String {
+    format!(
+        "Tuned: size {}% · distance {}% · speed {}%",
+        t.size_pct, t.distance_pct, t.speed_pct
+    )
 }
 
 /// Where the sensitivity finder stands, for the results screen.
@@ -822,6 +849,31 @@ mod tests {
         assert_is_system(fit_viewport);
         assert_is_system(setup_world);
         assert_is_system(sync_play_area);
+    }
+
+    #[test]
+    fn only_untuned_adaptive_runs_move_the_staircase() {
+        let def = aim_core::scenario::builtin::all()
+            .into_iter()
+            .find(|d| d.id == "micro-adjust")
+            .unwrap()
+            .at_difficulty(0.25);
+        let tuned = def.with_tuning(Tuning {
+            size_pct: 150,
+            ..Tuning::DEFAULT
+        });
+        let run = |def: &ScenarioDef, adaptive: bool| {
+            let mut r = Run::with_seed(def.clone(), 1);
+            r.adaptive = adaptive;
+            r
+        };
+        assert!(moves_staircase(&run(&def, true)));
+        assert!(!moves_staircase(&run(&def, false)));
+        assert!(!moves_staircase(&run(&tuned, true)), "tuned runs never do");
+        assert_eq!(
+            tuning_text(&RunKey::parse(&tuned.id).tuning),
+            "Tuned: size 150% · distance 100% · speed 100%"
+        );
     }
 
     fn movement_def() -> ScenarioDef {

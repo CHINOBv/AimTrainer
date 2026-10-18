@@ -2,7 +2,7 @@
 //! [`Motion`] (static, VALORANT-style strafing, or free drift).
 
 use super::MIN_SPHERE_HEIGHT;
-use super::def::Motion;
+use super::def::{Motion, Shape, TargetsDef};
 use crate::math::Vec3;
 use crate::movement::{self, LocalVelocity, MoveInput};
 use crate::rng::Rng;
@@ -41,16 +41,19 @@ impl MotionState {
         self.lateral * self.strafe.right + self.drift
     }
 
-    /// Advances one visible target by `dt` seconds at time `now`, moving `position`.
+    /// Advances one visible target by `dt` seconds at time `now`, moving `position`. Every
+    /// motion honors `targets.speed_scale` (in-run speed tuning) by scaling its speed.
     pub(super) fn step(
         &mut self,
         position: &mut Vec3,
-        motion: &Motion,
-        humanoid: bool,
+        targets: &TargetsDef,
         rng: &mut Rng,
         now: f32,
         dt: f32,
     ) {
+        let motion = &targets.motion;
+        let humanoid = matches!(targets.shape, Shape::Humanoid { .. });
+        let speed_k = targets.speed_scale;
         match motion {
             Motion::Static => {}
             Motion::Strafe {
@@ -70,7 +73,10 @@ impl MotionState {
                     };
                     self.next_change_at = now + rng.in_range(*change_secs);
                 }
-                let profile = weapon.movement();
+                let mut profile = weapon.movement();
+                // Scaling run speed and acceleration together keeps the strafe's timing.
+                profile.run_speed *= speed_k;
+                profile.acceleration *= speed_k;
                 // Reverse early enough that the counter-strafe braking distance keeps the
                 // target inside its lane.
                 let braking = self.strafe.right.abs() * STRAFE_BRAKE_SECS;
@@ -92,7 +98,8 @@ impl MotionState {
                 if now >= self.next_change_at {
                     let a = rng.next_f32() * std::f32::consts::TAU;
                     let up = if humanoid { 0.0 } else { a.sin() };
-                    self.drift = (self.lateral * a.cos() + Vec3::UP * up) * rng.in_range(*speed);
+                    self.drift =
+                        (self.lateral * a.cos() + Vec3::UP * up) * (rng.in_range(*speed) * speed_k);
                     self.next_change_at = now + rng.in_range(*change_secs);
                 }
                 let away = *position - self.anchor;

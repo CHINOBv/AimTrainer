@@ -153,10 +153,11 @@ pub fn parse_run_key(key: &str) -> (&str, f32) {
     (base, level)
 }
 
-/// Base id, level and shortened duration (`~20s`) encoded in a run key. A floor-height
-/// suffix (`^+1.50m`) is dropped; [`RunKey::parse`] reads it.
+/// Base id, level and shortened duration (`~20s`) encoded in a run key. Tuning and
+/// floor-height suffixes (`%s80d120v150`, `^+1.50m`) are dropped; [`RunKey::parse`] reads
+/// them.
 pub fn parse_run_key_full(key: &str) -> (&str, f32, Option<f32>) {
-    parse_level_and_secs(split_elevation(key).0)
+    parse_level_and_secs(split_tuning(split_elevation(key).0).0)
 }
 
 fn parse_level_and_secs(key: &str) -> (&str, f32, Option<f32>) {
@@ -176,8 +177,9 @@ fn parse_level_and_secs(key: &str) -> (&str, f32, Option<f32>) {
     }
 }
 
-/// Every part of a run key: `id@+0.50~20s^+1.50m` is the base id, the difficulty level,
-/// the shortened duration and the player's floor height, each optional and in that order.
+/// Every part of a run key: `id@+0.50~20s%s80d120v150^+1.50m` is the base id, the
+/// difficulty level, the shortened duration, the in-run tuning and the player's floor
+/// height, each optional and in that order.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RunKey<'a> {
     /// Base scenario id.
@@ -186,22 +188,109 @@ pub struct RunKey<'a> {
     pub level: f32,
     /// Shortened duration in seconds (`~20s`), if any.
     pub secs: Option<f32>,
+    /// Target size, distance and speed tuning (`%s80d120v150`); default when absent.
+    pub tuning: Tuning,
     /// Player floor height in meters (`^+1.50m`), when it differs from the scenario file.
     pub elevation: Option<f32>,
 }
 
 impl<'a> RunKey<'a> {
-    /// Splits a run key made by [`run_key`], [`ScenarioDef::with_duration`] and
-    /// [`ScenarioDef::with_elevation`].
+    /// Splits a run key made by [`run_key`], [`ScenarioDef::with_duration`],
+    /// [`ScenarioDef::with_tuning`] and [`ScenarioDef::with_elevation`].
     pub fn parse(key: &'a str) -> Self {
         let (rest, elevation) = split_elevation(key);
+        let (rest, tuning) = split_tuning(rest);
         let (base, level, secs) = parse_level_and_secs(rest);
         RunKey {
             base,
             level,
             secs,
+            tuning: tuning.unwrap_or_default(),
             elevation,
         }
+    }
+}
+
+/// In-run tuning of a scenario's targets, in percent of the scenario's own values. Tuned
+/// runs are kept apart in the history by a `%s80d120v150` run-key suffix.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Tuning {
+    /// Sphere radius. Humanoids keep their VALORANT size (see [`Tuning::size_applies`]).
+    pub size_pct: u16,
+    /// Spawn distance from the player.
+    pub distance_pct: u16,
+    /// Target movement speed (drift speed; strafe run speed and acceleration).
+    pub speed_pct: u16,
+}
+
+impl Default for Tuning {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+impl Tuning {
+    /// The scenario as authored.
+    pub const DEFAULT: Tuning = Tuning {
+        size_pct: 100,
+        distance_pct: 100,
+        speed_pct: 100,
+    };
+    /// Lowest percentage of any knob.
+    pub const MIN_PCT: u16 = 50;
+    /// Highest percentage of any knob.
+    pub const MAX_PCT: u16 = 200;
+    /// Step the in-run controls use.
+    pub const STEP_PCT: u16 = 10;
+
+    /// Whether this is the scenario as authored.
+    pub fn is_default(&self) -> bool {
+        *self == Self::DEFAULT
+    }
+
+    /// Whether the size knob changes `def`: only spheres scale; humanoids keep the
+    /// VALORANT agent size (move them farther or closer with the distance knob instead).
+    pub fn size_applies(def: &ScenarioDef) -> bool {
+        matches!(def.targets.shape, Shape::Sphere { .. })
+    }
+
+    fn clamped(self) -> Self {
+        let c = |p: u16| p.clamp(Self::MIN_PCT, Self::MAX_PCT);
+        Tuning {
+            size_pct: c(self.size_pct),
+            distance_pct: c(self.distance_pct),
+            speed_pct: c(self.speed_pct),
+        }
+    }
+
+    fn suffix(&self) -> String {
+        format!(
+            "%s{}d{}v{}",
+            self.size_pct, self.distance_pct, self.speed_pct
+        )
+    }
+
+    /// Inverse of [`Tuning::suffix`] (without the `%`).
+    fn parse(s: &str) -> Option<Self> {
+        let s = s.strip_prefix('s')?;
+        let (size, s) = s.split_once('d')?;
+        let (distance, speed) = s.split_once('v')?;
+        Some(Tuning {
+            size_pct: size.parse().ok()?,
+            distance_pct: distance.parse().ok()?,
+            speed_pct: speed.parse().ok()?,
+        })
+    }
+}
+
+/// Splits a trailing `%s80d120v150` tuning suffix off a run key (without its height).
+fn split_tuning(key: &str) -> (&str, Option<Tuning>) {
+    match key.rsplit_once('%') {
+        Some((rest, t)) => match Tuning::parse(t) {
+            Some(t) => (rest, Some(t)),
+            None => (key, None),
+        },
+        None => (key, None),
     }
 }
 
@@ -226,6 +315,37 @@ impl ScenarioDef {
             out.player.elevation = m;
             out.id = format!("{}^{m:+.2}m", split_elevation(&self.id).0);
         }
+        out
+    }
+
+    /// This scenario with its targets tuned (each knob clamped to
+    /// [`Tuning::MIN_PCT`]..=[`Tuning::MAX_PCT`]): sphere radius, spawn distance and motion
+    /// speed scale by their percentage. The id gains a `%s80d120v150` suffix, before any
+    /// height suffix, so tuned scores never mix; the default tuning keeps the id.
+    pub fn with_tuning(&self, tuning: Tuning) -> ScenarioDef {
+        let t = tuning.clamped();
+        if t.is_default() {
+            return self.clone();
+        }
+        let mut out = self.clone();
+        let (rest, elevation) = match self.id.rsplit_once('^') {
+            Some((rest, e)) if split_elevation(&self.id).1.is_some() => (rest, format!("^{e}")),
+            _ => (self.id.as_str(), String::new()),
+        };
+        out.id = format!("{rest}{}{elevation}", t.suffix());
+        let k = |pct: u16| f32::from(pct) / 100.0;
+        if let Shape::Sphere { radius } = &mut out.targets.shape {
+            *radius *= k(t.size_pct);
+        }
+        let dist = k(t.distance_pct);
+        match &mut out.targets.spawn {
+            SpawnArea::Angular { distance, .. } | SpawnArea::AroundCrosshair { distance, .. } => {
+                *distance = scale(*distance, dist)
+            }
+            // Floor boxes extend away from the player along -Z.
+            SpawnArea::Floor { z, .. } => *z = scale(*z, dist),
+        }
+        out.targets.speed_scale *= k(t.speed_pct);
         out
     }
 
@@ -401,6 +521,145 @@ mod tests {
             "a new height replaces the old suffix"
         );
         assert_eq!(RunKey::parse("odd^name").base, "odd^name");
+    }
+
+    fn tuning(size_pct: u16, distance_pct: u16, speed_pct: u16) -> Tuning {
+        Tuning {
+            size_pct,
+            distance_pct,
+            speed_pct,
+        }
+    }
+
+    #[test]
+    fn default_tuning_changes_nothing_and_adds_no_suffix() {
+        let d = find("micro-adjust").at_difficulty(0.5).with_duration(20.0);
+        assert!(Tuning::DEFAULT.is_default());
+        assert_eq!(d.with_tuning(Tuning::DEFAULT), d);
+        assert_eq!(RunKey::parse(&d.id).tuning, Tuning::DEFAULT);
+    }
+
+    #[test]
+    fn tuning_scales_sphere_size_spawn_distance_and_target_speed() {
+        let d = find("track-reactive-micro");
+        let t = d.with_tuning(tuning(150, 50, 120));
+        assert!((radius(&t) / radius(&d) - 1.5).abs() < 1e-5);
+        let (SpawnArea::Angular { distance: d0, .. }, SpawnArea::Angular { distance: d1, .. }) =
+            (&d.targets.spawn, &t.targets.spawn)
+        else {
+            panic!("angular spawn")
+        };
+        assert!((d1.min / d0.min - 0.5).abs() < 1e-5);
+        assert!((d1.max / d0.max - 0.5).abs() < 1e-5);
+        assert!((t.targets.speed_scale - 1.2).abs() < 1e-5);
+        assert_eq!(
+            t.targets.motion, d.targets.motion,
+            "motion speed is a multiplier"
+        );
+        assert_eq!(t.id, "track-reactive-micro%s150d50v120");
+    }
+
+    #[test]
+    fn humanoids_keep_their_valorant_size_but_take_distance() {
+        let d = find("dynamic-strafe-heads");
+        let t = d.with_tuning(tuning(200, 150, 100));
+        assert_eq!(
+            t.targets.shape, d.targets.shape,
+            "agent size stays accurate"
+        );
+        assert_ne!(t.targets.spawn, d.targets.spawn);
+        assert!(!Tuning::size_applies(&d));
+        assert!(Tuning::size_applies(&find("micro-adjust")));
+    }
+
+    #[test]
+    fn tuning_clamps_to_its_range_and_keeps_every_builtin_valid() {
+        let d = find("micro-adjust");
+        let t = d.with_tuning(tuning(10, 999, 0));
+        assert_eq!(
+            RunKey::parse(&t.id).tuning,
+            tuning(Tuning::MIN_PCT, Tuning::MAX_PCT, Tuning::MIN_PCT)
+        );
+        for d in builtin::all() {
+            for t in [tuning(50, 50, 50), tuning(200, 200, 200)] {
+                let errs: Vec<_> = d
+                    .with_tuning(t)
+                    .validate()
+                    .into_iter()
+                    .filter(|e| e.field != "id")
+                    .collect();
+                assert!(errs.is_empty(), "{} {t:?}: {errs:?}", d.id);
+            }
+        }
+    }
+
+    #[test]
+    fn tuning_keys_round_trip_with_every_other_suffix() {
+        let d = find("counter-strafe");
+        let full = d
+            .at_difficulty(0.5)
+            .with_duration(20.0)
+            .with_tuning(tuning(80, 120, 150))
+            .with_elevation(1.5);
+        assert_eq!(full.id, "counter-strafe@+0.50~20s%s80d120v150^+1.50m");
+        let key = RunKey::parse(&full.id);
+        assert_eq!(key.base, "counter-strafe");
+        assert_eq!(key.level, 0.5);
+        assert_eq!(key.secs, Some(20.0));
+        assert_eq!(key.elevation, Some(1.5));
+        assert_eq!(key.tuning, tuning(80, 120, 150));
+        assert_eq!(
+            parse_run_key_full(&full.id),
+            ("counter-strafe", 0.5, Some(20.0)),
+            "existing parsers ignore the tuning"
+        );
+        let raised = d.with_elevation(1.5).with_tuning(tuning(100, 100, 50));
+        assert_eq!(
+            raised.id, "counter-strafe%s100d100v50^+1.50m",
+            "the tuning goes before a height suffix"
+        );
+        assert_eq!(RunKey::parse("odd%name").base, "odd%name");
+        assert_eq!(RunKey::parse("odd%name").tuning, Tuning::DEFAULT);
+    }
+
+    /// Fastest target speed over `frames` frames at 120 fps, m/s.
+    fn top_speed(def: &ScenarioDef, frames: usize) -> f32 {
+        use crate::scenario::{FrameInput, Session};
+        let dt = 1.0 / 120.0;
+        let positions = |s: &Session| -> std::collections::HashMap<u64, crate::math::Vec3> {
+            s.targets().map(|t| (t.id, t.position)).collect()
+        };
+        let mut s = Session::new(def.clone(), 7);
+        let mut last = positions(&s);
+        let mut top: f32 = 0.0;
+        for _ in 0..frames {
+            s.update(FrameInput {
+                dt,
+                view: Default::default(),
+                fire_pressed: false,
+                fire_held: false,
+                movement: Default::default(),
+            });
+            let now = positions(&s);
+            for (id, b) in &now {
+                if let Some(a) = last.get(id) {
+                    top = top.max((*b - *a).length() / dt);
+                }
+            }
+            last = now;
+        }
+        top
+    }
+
+    #[test]
+    fn the_speed_multiplier_scales_drift_and_strafe_motion() {
+        for id in ["track-reactive-micro", "dynamic-strafe-heads"] {
+            let d = find(id);
+            let base = top_speed(&d, 600);
+            let fast = top_speed(&d.with_tuning(tuning(100, 100, 150)), 600);
+            assert!(base > 0.0, "{id} moves");
+            assert!((fast / base - 1.5).abs() < 0.1, "{id}: {base} → {fast}");
+        }
     }
 
     #[test]
