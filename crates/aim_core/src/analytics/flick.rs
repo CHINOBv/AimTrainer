@@ -70,6 +70,9 @@ pub struct Flick {
     pub settle_secs: Option<f32>,
     /// Straight-line angle from start to shot divided by the angle travelled (1 = straight).
     pub path_efficiency: Option<f32>,
+    /// First frame the crosshair was inside the target's aim zone to the shot, seconds.
+    /// `None` when the crosshair never reached the zone during the flick.
+    pub click_delay_secs: Option<f32>,
 }
 
 impl Flick {
@@ -110,6 +113,8 @@ pub struct FlickSummary {
     pub median_path_efficiency: Option<f32>,
     /// Fitts' law effective throughput (ISO 9241-9), bits/s.
     pub throughput_bits_per_sec: Option<f32>,
+    /// Median time from first entering the target to the shot, over flicks that entered it.
+    pub median_click_delay_secs: Option<f32>,
 }
 
 impl FlickSummary {
@@ -154,6 +159,7 @@ impl FlickSummary {
             median_settle_secs: median(&collect(|f| f.settle_secs)),
             median_path_efficiency: median(&collect(|f| f.path_efficiency)),
             throughput_bits_per_sec: throughput(flicks),
+            median_click_delay_secs: median(&collect(|f| f.click_delay_secs)),
         }
     }
 }
@@ -283,6 +289,17 @@ fn analyze_one(
         .map(|s| s.angular_speed_deg_per_sec * s.dt_secs)
         .sum();
     let straight = angle_between_deg(start_view.direction(), shot.view.direction());
+    // Hesitation: how long the crosshair had already been on the target (since it first got
+    // there) when the shot was fired.
+    let click_delay = segment
+        .iter()
+        .find(|s| {
+            let (point, radius) = s
+                .target(target.id)
+                .map_or((goal, target.radius_deg), |t| (t.aim_point, t.radius_deg));
+            angle_between_deg(s.view.direction(), point.direction()) <= radius
+        })
+        .map(|s| (shot.time_secs - s.time_secs).max(0.0));
     Flick {
         kind,
         target_id: target.id,
@@ -298,6 +315,7 @@ fn analyze_one(
         corrections,
         settle_secs: settle,
         path_efficiency: (travelled > 1e-3).then(|| (straight / travelled).min(1.0)),
+        click_delay_secs: click_delay,
     }
 }
 
@@ -453,6 +471,84 @@ mod tests {
         let reaction = f.reaction_secs.unwrap();
         assert!((0.15..0.30).contains(&reaction), "{reaction}");
         assert!(f.settle_secs.unwrap() > 0.1);
+    }
+
+    const DT: f32 = 1.0 / 240.0;
+
+    /// Hand-built samples: one fixed target at yaw 10°, radius 1°, visible from the start;
+    /// the crosshair follows `yaws` (pitch 0) and the last frame fires.
+    fn scripted(yaws: &[f32]) -> Vec<Sample> {
+        let target = TargetSample {
+            id: 1,
+            aim_point: ViewAngles::new(10.0, 0.0),
+            radius_deg: 1.0,
+            visible_at_secs: 0.0,
+        };
+        let mut previous = 0.0;
+        yaws.iter()
+            .enumerate()
+            .map(|(i, &yaw)| {
+                let last = i + 1 == yaws.len();
+                let speed = (yaw - previous).abs() / DT;
+                previous = yaw;
+                Sample {
+                    time_secs: (i + 1) as f32 * DT,
+                    dt_secs: DT,
+                    view: ViewAngles::new(yaw, 0.0),
+                    view_velocity_deg_per_sec: (speed, 0.0),
+                    angular_speed_deg_per_sec: speed,
+                    targets: vec![target],
+                    aimed: Some(0),
+                    fire_held: last,
+                    shot: last,
+                    hit: last && (yaw - 10.0).abs() <= 1.0,
+                    on_target: false,
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn click_delay_runs_from_first_entering_the_target_to_the_shot() {
+        // Enters the 1° radius at frame 9 (yaw 9.5) and fires at frame 13.
+        let yaws = [
+            0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 4.0, 6.0, 8.0, 9.5, 10.0, 10.0, 10.0, 10.0,
+        ];
+        let fl = flicks(&scripted(&yaws));
+        assert_eq!(fl.len(), 1);
+        let delay = fl[0]
+            .click_delay_secs
+            .expect("the crosshair entered the target");
+        assert!((delay - 4.0 * DT).abs() < 1e-6, "{delay}");
+        assert!(fl[0].hit);
+        // Entering, leaving and re-entering still counts from the first entry (frame 6).
+        let yaws = [0.0, 0.0, 0.0, 3.0, 6.0, 8.0, 9.2, 11.5, 11.5, 10.5, 10.0];
+        let delay = flicks(&scripted(&yaws))[0].click_delay_secs.unwrap();
+        assert!((delay - 4.0 * DT).abs() < 1e-6, "{delay}");
+    }
+
+    #[test]
+    fn click_delay_is_none_when_the_crosshair_never_reached_the_target() {
+        let yaws = [0.0, 0.0, 2.0, 4.0, 6.0, 7.0, 7.0];
+        let fl = flicks(&scripted(&yaws));
+        assert_eq!(fl[0].click_delay_secs, None);
+        assert!(!fl[0].hit);
+    }
+
+    #[test]
+    fn summary_reports_the_median_click_delay_of_flicks_that_reached_the_target() {
+        let mut fl = flicks(&scripted(&[0.0, 0.0, 5.0, 9.5, 10.0, 10.0]));
+        fl.extend(flicks(&scripted(&[
+            0.0, 0.0, 5.0, 9.5, 10.0, 10.0, 10.0, 10.0,
+        ])));
+        fl.extend(flicks(&scripted(&[0.0, 0.0, 5.0, 7.0])));
+        let s = FlickSummary::from_flicks(&fl);
+        // Delays 2·DT and 4·DT; the miss that never entered is left out.
+        let median = s.median_click_delay_secs.unwrap();
+        assert!((median - 3.0 * DT).abs() < 1e-6, "{median}");
+        assert_eq!(s.flicks, 3);
+        assert!((s.hit_rate - 2.0 / 3.0).abs() < 1e-6);
+        assert_eq!(FlickSummary::from_flicks(&[]).median_click_delay_secs, None);
     }
 
     #[test]

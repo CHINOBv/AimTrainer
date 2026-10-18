@@ -76,6 +76,7 @@ impl RunReport {
                 "Throughput (ISO 9241-9)",
                 f.throughput_bits_per_sec.map(|v| format!("{v:.1} bits/s")),
             );
+            push("Click delay (median)", f.median_click_delay_secs.map(ms));
             "Flick analysis"
         } else if let Some(t) = analysis.tracking_summary() {
             push("Time on target", Some(pct(t.on_target_ratio)));
@@ -196,6 +197,26 @@ mod tests {
         assert!(first.explanation.contains("threshold"), "{first:?}");
         assert!(!first.practice.is_empty());
         assert!(r.advice.len() <= MAX_RECOMMENDATIONS);
+    }
+
+    #[test]
+    fn flick_runs_show_the_median_click_delay_after_the_existing_metrics() {
+        let r = report("flick-wide", 2);
+        let labels: Vec<&str> = r.metrics.iter().map(|(l, _)| *l).collect();
+        let click = labels
+            .iter()
+            .position(|l| *l == "Click delay (median)")
+            .expect("click delay row");
+        let throughput = labels
+            .iter()
+            .position(|l| *l == "Throughput (ISO 9241-9)")
+            .expect("existing rows are kept");
+        assert!(click > throughput, "{labels:?}");
+        assert!(
+            r.metrics[click].1.ends_with(" ms"),
+            "{:?}",
+            r.metrics[click]
+        );
     }
 
     #[test]

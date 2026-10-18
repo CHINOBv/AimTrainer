@@ -29,6 +29,8 @@ pub enum Metric {
     LagRatio,
     /// Median seconds to follow a target that reversed direction (tracking).
     ReversalResponse,
+    /// Median seconds from the crosshair first entering the target to the shot (flicks).
+    ClickDelay,
 }
 
 impl Metric {
@@ -43,6 +45,7 @@ impl Metric {
             Metric::OnTargetRatio => "Time on target",
             Metric::LagRatio => "Time behind the target",
             Metric::ReversalResponse => "Reaction to direction changes",
+            Metric::ClickDelay => "Median click delay",
         }
     }
 
@@ -53,6 +56,7 @@ impl Metric {
                 format!("{:.0} ms", value * 1000.0)
             }
             Metric::Corrections => format!("{value:.2}"),
+            Metric::ClickDelay => format!("{:.0} ms", value * 1000.0),
             _ => format!("{:.0}%", value * 100.0),
         }
     }
@@ -69,6 +73,7 @@ impl Metric {
             Metric::OnTargetRatio => Some(tracking?.on_target_ratio),
             Metric::LagRatio => tracking?.lag_ratio,
             Metric::ReversalResponse => tracking?.median_reversal_response_secs,
+            Metric::ClickDelay => flick?.median_click_delay_secs,
         }
     }
 }
@@ -371,6 +376,18 @@ pub(crate) mod tests {
                 &["track-reactive-strafe", "track-reactive-micro"],
                 None,
                 "React to strafes instead of anticipating them; relax your grip so reversals are quicker.",
+            )),
+        ),
+        (
+            Metric::ClickDelay,
+            Direction::Above,
+            0.20,
+            Verdict::Weakness,
+            "you hesitate on the target before clicking",
+            Some((
+                &["flick-wide", "peek-reaction"],
+                None,
+                "Click as soon as the crosshair reaches the target; trust the first placement instead of confirming it.",
             )),
         ),
     ];

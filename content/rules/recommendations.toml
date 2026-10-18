@@ -124,3 +124,13 @@ meaning = "you take long to follow a target that changes direction"
 [rules.recommendation]
 scenario_ids = ["track-reactive-strafe", "track-reactive-micro"]
 tip = "React to strafes instead of anticipating them; relax your grip so reversals are quicker."
+
+[[rules]]
+metric = "click_delay"
+direction = "above"
+threshold = 0.20
+verdict = "weakness"
+meaning = "you hesitate on the target before clicking"
+[rules.recommendation]
+scenario_ids = ["flick-wide", "peek-reaction"]
+tip = "Click as soon as the crosshair reaches the target; trust the first placement instead of confirming it."

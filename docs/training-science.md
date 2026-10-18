@@ -185,6 +185,16 @@ The 300 ms and 220 ms reaction thresholds bracket the simulated recruit (0.32 s 
 
 **Trends.** `training::progress::subcategory_trend` gives each subcategory's energy at the end of each of the last weeks, using the same weekly cutoffs as the overall `benchmark_trend` (personal bests up to each cutoff). The Progress page charts one trend per subcategory once it has two played weeks.
 
+### Click timing (hesitation)
+
+`Flick::click_delay_secs` is the time from the first frame of the flick in which the crosshair is inside the target's aim zone (the same angular radius the flick analysis uses) to the shot. It counts from the *first* entry, so a flick that passes over the target, comes back and then clicks includes that correction time. A flick whose crosshair never reached the zone has no click delay. The results card shows the median over the run as "Click delay (median)".
+
+| Metric | Weakness | Recommended practice |
+|---|---|---|
+| Median click delay | > 200 ms ("you hesitate on the target before clicking") | `flick-wide`, `peek-reaction` |
+
+Why 200 ms (estimate, not calibrated): the simulated aimer clicks as soon as its minimum-jerk movement ends, so its click delay is only the deceleration tail inside the target. Measured with seed 2, it runs from about 70 ms (elite) to about 190 ms (recruit) across `flick-wide`, `micro-adjust`, `flick-headshot`, `static-headline`, `switch-wide` and `peek-reaction`. A median above 200 ms is therefore slower than any simulated aimer and suggests deliberate confirmation before the click. No published source gives a target value for this delay; replace the threshold once real player data exists.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

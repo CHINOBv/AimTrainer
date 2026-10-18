@@ -177,32 +177,62 @@ mod tests {
     use crate::analytics::test_support::record;
     use crate::sim::AimerProfile;
 
-    #[test]
-    fn findings_state_the_metric_value_and_threshold() {
-        let flicks = vec![
-            Flick {
-                kind: crate::analytics::flick::FlickKind::Fresh,
-                target_id: 1,
-                hit: true,
-                distance_deg: 20.0,
-                target_radius_deg: 1.0,
-                reaction_secs: Some(0.4),
-                movement_secs: Some(0.3),
-                peak_speed_deg_per_sec: 200.0,
-                primary_error_radii: Some(2.0),
-                endpoint_error_deg: 0.0,
-                effective_distance_deg: 20.0,
-                corrections: 1,
-                settle_secs: Some(0.1),
-                path_efficiency: Some(0.9),
-            };
-            MIN_FLICKS
-        ];
-        let run = RunAnalysis {
+    /// A slow, overshooting flick that hits.
+    fn overshooting_flick() -> Flick {
+        Flick {
+            kind: crate::analytics::flick::FlickKind::Fresh,
+            target_id: 1,
+            hit: true,
+            distance_deg: 20.0,
+            target_radius_deg: 1.0,
+            reaction_secs: Some(0.4),
+            movement_secs: Some(0.3),
+            peak_speed_deg_per_sec: 200.0,
+            primary_error_radii: Some(2.0),
+            endpoint_error_deg: 0.0,
+            effective_distance_deg: 20.0,
+            corrections: 1,
+            settle_secs: Some(0.1),
+            path_efficiency: Some(0.9),
+            click_delay_secs: Some(0.05),
+        }
+    }
+
+    fn flick_run(flicks: Vec<Flick>) -> RunAnalysis {
+        RunAnalysis {
             scenario_id: "flick-wide".into(),
             category: Category::Flicking,
             kind: AnalysisKind::Flick(flicks),
+        }
+    }
+
+    #[test]
+    fn a_long_click_delay_is_a_hesitation_weakness_with_its_threshold() {
+        let slow = Flick {
+            click_delay_secs: Some(0.3),
+            ..overshooting_flick()
         };
+        let p = SkillProfile::build(&[flick_run(vec![slow; MIN_FLICKS])]);
+        let f = p
+            .findings()
+            .find(|f| f.metric == Metric::ClickDelay)
+            .expect("300 ms click delay fires");
+        assert_eq!(f.verdict, Verdict::Weakness);
+        assert_eq!((f.value, f.threshold), (0.3, 0.20));
+        assert_eq!(
+            f.explanation,
+            "Median click delay 300 ms is above the 200 ms threshold: you hesitate on the target before clicking."
+        );
+        let rec = f.recommendation.as_ref().unwrap();
+        assert_eq!(rec.scenario_ids, vec!["flick-wide", "peek-reaction"]);
+        // A quick click (50 ms) fires nothing for this metric.
+        let p = SkillProfile::build(&[flick_run(vec![overshooting_flick(); MIN_FLICKS])]);
+        assert!(p.findings().all(|f| f.metric != Metric::ClickDelay));
+    }
+
+    #[test]
+    fn findings_state_the_metric_value_and_threshold() {
+        let run = flick_run(vec![overshooting_flick(); MIN_FLICKS]);
         let p = SkillProfile::build(&[run]);
         let recs = p.recommendations();
         let overshoot = recs
