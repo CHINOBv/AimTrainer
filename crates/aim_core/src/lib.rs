@@ -8,6 +8,7 @@
 
 pub mod activity;
 pub mod analytics;
+pub mod coach;
 pub mod crosshair;
 pub mod fov;
 pub mod games;
