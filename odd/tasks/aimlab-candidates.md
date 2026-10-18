@@ -37,8 +37,8 @@ Rules that hold for every spec:
 | T3 | S6, S8 | delegated, wave 1 (worktree `cand-analytics`) | done (playtest pending) | c022ad6, a67133e, merge a5eda13 |
 | T4 | S9, S12, S13 | delegated, wave 1 (worktree `cand-player`) | done (playtest pending) | b6bdc75, 512d1a5, d536110, merge 183c35f |
 | T5 | S1, S2 (arena bots), S7, S10 | delegated, wave 1 (worktree `cand-arena`) | done (playtest pending) | 69d1ea3, 6447b42, d3ab727, dcb29c6, merge 6640289, f877a73 |
-| T6 | S3 | delegated, wave 2, after T2 merges (worktree `cand-phases`) | in progress | |
-| T7 | S4, S11 | delegated, wave 2, after T2 merges (worktree `cand-perception`) | in progress | |
+| T6 | S3 | delegated, wave 2, after T2 merges (worktree `cand-phases`) | done (playtest pending) | 2109708, ac6da2a, 26e9958, 16701b5, merge 9d9ce59, 7752512 | |
+| T7 | S4, S11 | delegated, wave 2, after T2 merges (worktree `cand-perception`) | done (playtest pending) | 78794bf, d6d846b, merge b92e640 | |
 | T8 | S1–S15 seam: merge, docs, full suite, calibrate, verifier, review, merge to main, build and launch | inline | pending | |
 
 ## Log
@@ -61,3 +61,19 @@ Rules that hold for every spec:
     - T2 implements "adjacent spawn points" as an angle around recent spawns (spawns are positions, not cells);
     - T5 rule "speed" means the player's speed.
   - Wave 2 (T6 phases, T7 perception) started from bb438cd.
+- L5 (2026-10-18) Wave 2 merged. T6 merged cleanly. T7 conflicted with T6 in `session.rs`, and seven hunks were resolved by hand:
+  - imports unioned;
+  - both `SessionEvent` variants kept;
+  - both state field sets kept;
+  - the update tail now applies run rules, refills when not finished, then plays cues;
+  - `refill` runs the radar round first, then the wave-limited loop with `spawn_target(None)`;
+  - `wave_has_room` was kept before T7's helpers.
+
+  One semantic fix: `validate()` checked perception before `errs.extend(run_rule_problems())`, because the closure still borrowed `errs`.
+  - Checks after merge: tests all pass (app 202, core 411, world 100 + 1 ignored); clippy clean; arena golden OK.
+  - Calibrate against main's baseline: all 30 earlier rows identical, plus 8 new rows, each recruit < contender < veteran < elite with contender accuracy 0.58–0.79.
+  - T6 left the HUD without a phase display, so the parent added `progress_label` (phase N/M · name, kills x/goal) test-first (7752512).
+  - Docs: `feature-analysis.md` marks C1–C14 shipped; the README exercise count is now 38, with new drills, arena options and insights. Each writer documented its own fields and estimates.
+  - Writer notes:
+    - T6: kills and endless runs still stop at `duration_secs` as a cap; `phase-peek-ladder` fails at 5 misses (3 failed the simulated contender too early).
+    - T7: Bevy spatial audio cannot tell front from back, so cues are panned in stereo with a muffled rear; a detection click counts anywhere on screen.

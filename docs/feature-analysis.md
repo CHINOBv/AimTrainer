@@ -66,11 +66,21 @@ A static analysis of an installed Aim Lab build listed its analytics and trainin
 
 Every new threshold is provisional, set against the simulated aimer, and documented with its rationale under "Analytics metrics" in `training-science.md`.
 
-## Candidates from a second Aim Lab pass (not scheduled)
+## Second Aim Lab pass: C1–C14 (shipped 2026-10-18)
 
 A second static pass (2026-10-18) looked at what F1–F22 and the roadmap do not cover. The richest source was Aim Lab's Creator Studio, a modular system of bot behaviours, conditions and triggers. Its VALORANT-specific code is thin (crosshair placement, movement accuracy, peek efficiency, a callout-based task generator), and we already cover it.
 
-These ideas are recorded, **not planned**. Each one waits for the owner's go-ahead (YAGNI). Size: S small, M medium. The evidence names are Aim Lab identifiers from the analysis; only the ideas would be reused.
+These were recorded first and then implemented at the owner's request (`odd/tasks/aimlab-candidates.md`). Size: S small, M medium. The evidence names are Aim Lab identifiers from the analysis; only the ideas were reused.
+
+What shipped:
+- **Scenario targets:** reactions (C1), behaviour rules (C2), spawn rules (C5), regeneration and score decay (C14). Built-ins: `react-duel`, `spread-flicks`, `regen-track`.
+- **Phases, fail conditions and run end (C3):** `phase-peek-ladder`, `phase-kill-race`. The HUD shows the phase and the kills goal.
+- **Perception (C4, C11):** `sound-turn`, `peripheral-detect`, `radar-recall`.
+- **Analytics:** miss compass (C6), potential score with one tip (C8).
+- **Training and settings:** compound daily missions with commitment levels (C9), enemy highlight colours with outline and tint (C12), sensitivity randomiser (C13).
+- **Arenas:** reactive bots and behaviour rules (C1, C2), a shoot-back deadline (C10), live coaching overlay with automatic corner detection (C7). The arena is `corridor-reactive`; the overlay toggle is saved in settings.
+
+Every threshold and constant without a source is marked as an estimate in `training-science.md`, `scenarios.md` or `maps.md`. Calibrate keeps every earlier scenario identical.
 
 | # | Candidate | What it adds | Size | Likely owner | Evidence |
 |---|---|---|---|---|---|
