@@ -193,6 +193,19 @@ impl ArenaFinisher<'_, '_> {
                 "Head level: median {h:.1}° above or below the head at first sight"
             ));
         }
+        if let Some(d) = stats.median_first_shot_delay_secs() {
+            notes.push(format!(
+                "Peek: median {:.0} ms from first sight to your first shot ({} engagements)",
+                d * 1000.0,
+                stats.first_shot_delays_secs.len()
+            ));
+        }
+        if let Some(e) = stats.median_exposure_secs() {
+            notes.push(format!(
+                "Exposure: median {:.0} ms in sight of an enemy before the kill or breaking line of sight (lower is safer)",
+                e * 1000.0
+            ));
+        }
         if let aim_world::arena::ArenaMode::AngleClear {
             pre_aim_tolerance_deg: Some(t),
             ..
