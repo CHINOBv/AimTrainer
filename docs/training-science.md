@@ -185,6 +185,24 @@ The 300 ms and 220 ms reaction thresholds bracket the simulated recruit (0.32 s 
 
 **Trends.** `training::progress::subcategory_trend` gives each subcategory's energy at the end of each of the last weeks, using the same weekly cutoffs as the overall `benchmark_trend` (personal bests up to each cutoff). The Progress page charts one trend per subcategory once it has two played weeks.
 
+### Speed match and edge tracking (hold scenarios)
+
+Two tracking metrics in `aim_core::analytics::tracking` describe *how* the crosshair follows the target, not only whether it is on it. Both constants and both rule thresholds are **provisional estimates**, chosen against the simulated aimer (`track-*` scenarios, presets recruit to elite), not calibrated on player data. The idea of measuring them comes from a static analysis of Aim Lab's tracking feedback; no Aim Lab code, numbers or assets are reused.
+
+| Metric | Definition |
+|---|---|
+| Speed match | While firing at a target moving ≥ 5°/s, the share of time the crosshair's angular speed is within a tolerance of the target's angular speed. Tolerance = `max(25% of the target speed, 2°/s)`: relative, so fast targets allow more slack, with an absolute floor so a slow target does not demand an exact speed. The rest of that time is split into **too slow** (crosshair slower than the band) and **too fast** (faster) |
+| Edge share | Of the firing time on a counted zone with the crosshair inside the aim zone's radius (sphere, humanoid head), the share farther than 70% of the radius from the aim point. Hits on another zone (a humanoid's body) are excluded. If the crosshair were spread uniformly over the disk, about 51% of the time would be past 70% of the radius |
+
+Both are per-frame comparisons, so mouse polling jitter lowers speed match slightly. Speeds are compared as magnitudes; direction is covered by lag/lead and reversals. Abrupt strafes (`track-reactive-strafe`, `track-close-strafe`) give low speed match even for the simulated elite (about 27–33%), because the target's speed jumps faster than any follower can match.
+
+| Metric | Weakness | Recommended practice |
+|---|---|---|
+| Speed match | < 35% | `track-orbit`, `track-precise`; match the target's speed before correcting position |
+| Edge share | > 60% | `track-precise`, `track-orbit`; steer back to the center as soon as you are on the target |
+
+Simulated values (seed 13): speed match ranges from 60–87% on `track-precise` and `track-orbit` to 12–33% on strafe scenarios, rising with the aimer's skill; edge share falls from 35–71% (recruit to veteran) to under 1% for the elite on the smooth scenarios.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.

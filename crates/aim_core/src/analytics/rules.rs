@@ -29,6 +29,11 @@ pub enum Metric {
     LagRatio,
     /// Median seconds to follow a target that reversed direction (tracking).
     ReversalResponse,
+    /// Share of moving-target firing time with the crosshair speed matching the target's
+    /// (tracking).
+    SpeedMatch,
+    /// Share of in-zone time spent near the target's edge rather than its center (tracking).
+    EdgeShare,
 }
 
 impl Metric {
@@ -43,6 +48,8 @@ impl Metric {
             Metric::OnTargetRatio => "Time on target",
             Metric::LagRatio => "Time behind the target",
             Metric::ReversalResponse => "Reaction to direction changes",
+            Metric::SpeedMatch => "Speed match",
+            Metric::EdgeShare => "Time on the target's edge",
         }
     }
 
@@ -69,6 +76,8 @@ impl Metric {
             Metric::OnTargetRatio => Some(tracking?.on_target_ratio),
             Metric::LagRatio => tracking?.lag_ratio,
             Metric::ReversalResponse => tracking?.median_reversal_response_secs,
+            Metric::SpeedMatch => tracking?.speed_match_ratio,
+            Metric::EdgeShare => tracking?.edge_ratio,
         }
     }
 }
@@ -373,6 +382,30 @@ pub(crate) mod tests {
                 "React to strafes instead of anticipating them; relax your grip so reversals are quicker.",
             )),
         ),
+        (
+            Metric::SpeedMatch,
+            Direction::Below,
+            0.35,
+            Verdict::Weakness,
+            "your crosshair speed rarely matches the target's speed",
+            Some((
+                &["track-orbit", "track-precise"],
+                None,
+                "Match the target's speed before correcting your position; the too slow / too fast split shows which way you miss.",
+            )),
+        ),
+        (
+            Metric::EdgeShare,
+            Direction::Above,
+            0.60,
+            Verdict::Weakness,
+            "you ride the edge of the target instead of its center",
+            Some((
+                &["track-precise", "track-orbit"],
+                None,
+                "Once you are on the target, steer back to its center instead of staying at the edge.",
+            )),
+        ),
     ];
 
     /// The recommendation table as it was written in Rust before it moved to TOML.
@@ -467,6 +500,38 @@ tip = "follow it"
         assert!(RuleSet::from_toml(&typo).is_err());
         let metric = ONE_RULE.replace("lag_ratio", "lag");
         assert!(RuleSet::from_toml(&metric).is_err());
+    }
+
+    #[test]
+    fn speed_match_and_edge_share_read_the_tracking_summary() {
+        let mut a = crate::analytics::TrackingAnalysis {
+            speed_matched_secs: 1.0,
+            speed_under_secs: 2.0,
+            speed_over_secs: 1.0,
+            in_zone_secs: 4.0,
+            edge_secs: 3.0,
+            ..Default::default()
+        };
+        let summary = a.summary();
+        let sources = MetricSources {
+            tracking: Some(&summary),
+            ..Default::default()
+        };
+        assert_eq!(Metric::SpeedMatch.value(&sources), Some(0.25));
+        assert_eq!(Metric::EdgeShare.value(&sources), Some(0.75));
+        assert_eq!(Metric::SpeedMatch.label(), "Speed match");
+        assert_eq!(Metric::EdgeShare.label(), "Time on the target's edge");
+        assert_eq!(Metric::SpeedMatch.format(0.25), "25%");
+        assert_eq!(Metric::EdgeShare.format(0.75), "75%");
+        // No moving or in-zone time: nothing to judge.
+        a = Default::default();
+        let empty = a.summary();
+        let sources = MetricSources {
+            tracking: Some(&empty),
+            ..Default::default()
+        };
+        assert_eq!(Metric::SpeedMatch.value(&sources), None);
+        assert_eq!(Metric::EdgeShare.value(&sources), None);
     }
 
     #[test]

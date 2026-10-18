@@ -97,6 +97,19 @@ impl RunReport {
                 t.median_reversal_response_secs
                     .map(|s| format!("{} over {} reversals", ms(s), t.reversals)),
             );
+            push(
+                "Speed match",
+                t.speed_match_ratio.map(|m| {
+                    let split = t
+                        .speed_under_ratio
+                        .zip(t.speed_over_ratio)
+                        .map_or(String::new(), |(u, o)| {
+                            format!(" (too slow {} / too fast {})", pct(u), pct(o))
+                        });
+                    format!("{}{split}", pct(m))
+                }),
+            );
+            push("Time on the target's edge", t.edge_ratio.map(pct));
             "Tracking analysis"
         } else {
             "Analysis"
@@ -203,5 +216,22 @@ mod tests {
         let r = report("track-precise", 2);
         assert_eq!(r.title, "Tracking analysis");
         assert!(r.metrics.iter().any(|(l, _)| *l == "Time on target"));
+    }
+
+    #[test]
+    fn tracking_runs_show_speed_match_split_and_edge_share() {
+        let r = report("track-precise", 2);
+        let value = |label: &str| {
+            r.metrics
+                .iter()
+                .find(|(l, _)| *l == label)
+                .map(|(_, v)| v.clone())
+        };
+        let speed = value("Speed match").expect("a moving target gives speed match");
+        assert!(
+            speed.contains("too slow") && speed.contains("too fast"),
+            "{speed}"
+        );
+        assert!(value("Time on the target's edge").is_some());
     }
 }
