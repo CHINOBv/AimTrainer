@@ -5,7 +5,7 @@
 //! weapons, recoil and scoring live in the sibling `spawn`, `motion`, `weapon`, `recoil`
 //! and `scoring` modules.
 
-use super::def::{FireMode, ScenarioDef, Shape};
+use super::def::{FireMode, ScenarioDef};
 use super::hit::{HitZone, Ray};
 use super::motion::MotionState;
 use super::recoil::RecoilState;
@@ -380,12 +380,11 @@ impl Session {
 
     fn move_targets(&mut self, dt: f32) {
         let now = self.time;
-        let motion = &self.def.targets.motion;
-        let humanoid = matches!(self.def.targets.shape, Shape::Humanoid { .. });
+        let targets = &self.def.targets;
         for t in &mut self.targets {
             if t.is_visible(now) {
                 t.motion
-                    .step(&mut t.position, motion, humanoid, &mut self.rng, now, dt);
+                    .step(&mut t.position, targets, &mut self.rng, now, dt);
             }
         }
     }
@@ -657,6 +656,7 @@ mod tests {
                 lifetime_secs: None,
                 appear_delay_secs: Range::fixed(0.0),
                 min_separation_deg: 5.0,
+                speed_scale: 1.0,
             },
             scoring: ScoringDef::default(),
             difficulty: Default::default(),

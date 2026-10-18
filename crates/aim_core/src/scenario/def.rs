@@ -239,6 +239,10 @@ pub struct TargetsDef {
     /// Minimum angle between simultaneously alive targets.
     #[serde(default)]
     pub min_separation_deg: f32,
+    /// Multiplier on target movement speed (drift speed; strafe run speed and
+    /// acceleration). Set by in-run tuning; scenario files normally leave it at 1.
+    #[serde(default = "one_f", skip_serializing_if = "is_one")]
+    pub speed_scale: f32,
 }
 
 fn one() -> u32 {
@@ -246,6 +250,9 @@ fn one() -> u32 {
 }
 fn one_f() -> f32 {
     1.0
+}
+fn is_one(v: &f32) -> bool {
+    *v == 1.0
 }
 fn zero_range() -> Range {
     Range::fixed(0.0)
@@ -542,6 +549,11 @@ impl ScenarioDef {
             (0.0..180.0).contains(&t.min_separation_deg),
             "targets.min_separation_deg",
             "must be in [0, 180)",
+        );
+        check(
+            (0.25..=4.0).contains(&t.speed_scale),
+            "targets.speed_scale",
+            "must be in [0.25, 4]",
         );
 
         if let Shape::Sphere { radius } = t.shape {

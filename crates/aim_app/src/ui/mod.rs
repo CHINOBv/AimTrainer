@@ -99,9 +99,13 @@ pub enum UiAction {
     /// Restart the current run (scenario or arena) as it is: same run key, flags, seed
     /// policy and routine position. Records nothing.
     Restart,
-    /// Restart the current scenario run with the player's floor at this height (meters),
-    /// keeping its difficulty level, duration and routine position.
-    RestartAtElevation(f32),
+    /// Restart the current library scenario run with the player's floor at `elevation`
+    /// meters and its targets tuned, keeping its difficulty level, duration, flags and
+    /// routine position.
+    RestartTuned {
+        elevation: f32,
+        tuning: aim_core::scenario::Tuning,
+    },
     Retry(String),
     Resume,
     BackToMenu,
