@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/aim_core", "crates/aim_app", "crates/aim_world", "crates/aim_integrations"]
+members = ["crates/aim_core", "crates/aim_app", "crates/aim_world", "crates/aim_integrations", "crates/aim_mcp"]
 
 [workspace.package]
 edition = "2024"
@@ -22,6 +22,9 @@ directories = "6.0"
 global-hotkey = "0.9"
 # Map loading only: JSON and GLB parsing, no image or buffer import.
 gltf = { version = "1.4.1", default-features = false, features = ["names"] }
+# MCP server only (`aim_mcp`): stdio transport, no HTTP, no macros.
+rmcp = { version = "3.5.1", default-features = false, features = ["server", "transport-io"] }
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 
 # Part of the coding standard (docs/coding-standards.md): enforced in every crate.
 [workspace.lints.rust]
