@@ -70,8 +70,20 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/precision-rings.toml"),
     ),
     (
+        "react-duel.toml",
+        include_str!("../../../../content/scenarios/react-duel.toml"),
+    ),
+    (
+        "regen-track.toml",
+        include_str!("../../../../content/scenarios/regen-track.toml"),
+    ),
+    (
         "spray-transfer.toml",
         include_str!("../../../../content/scenarios/spray-transfer.toml"),
+    ),
+    (
+        "spread-flicks.toml",
+        include_str!("../../../../content/scenarios/spread-flicks.toml"),
     ),
     (
         "static-headline.toml",

@@ -855,6 +855,35 @@ mod tests {
     }
 
     #[test]
+    fn difficulty_and_tuning_keep_the_target_behaviour_blocks() {
+        for id in ["spread-flicks", "regen-track", "react-duel"] {
+            let d = find(id);
+            let tuned = Tuning {
+                size_pct: 150,
+                distance_pct: 80,
+                speed_pct: 130,
+            };
+            for v in [
+                d.at_difficulty(-1.0),
+                d.at_difficulty(1.0),
+                d.with_tuning(tuned),
+            ] {
+                assert_eq!(v.targets.spawn_rules, d.targets.spawn_rules, "{id}");
+                assert_eq!(v.targets.regen, d.targets.regen, "{id}");
+                assert_eq!(v.scoring.decay, d.scoring.decay, "{id}");
+                assert_eq!(v.targets.reactions, d.targets.reactions, "{id}");
+                assert_eq!(v.targets.behaviors, d.targets.behaviors, "{id}");
+                let errs: Vec<_> = v
+                    .validate()
+                    .into_iter()
+                    .filter(|e| e.field != "id")
+                    .collect();
+                assert!(errs.is_empty(), "{id}: {errs:?}");
+            }
+        }
+    }
+
+    #[test]
     fn difficulty_and_tuning_keep_decoys_and_score_rings() {
         for id in ["go-no-go", "precision-rings"] {
             let d = find(id);

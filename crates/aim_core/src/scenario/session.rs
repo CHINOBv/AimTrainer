@@ -5,13 +5,14 @@
 //! weapons, recoil and scoring live in the sibling `spawn`, `motion`, `weapon`, `recoil`
 //! and `scoring` modules.
 
-use super::def::{FireMode, ScenarioDef};
+use super::behavior::{self, BehaviorState, Situation};
+use super::def::{FireMode, ScenarioDef, Shape};
 use super::hit::{HitZone, Ray};
-use super::motion::MotionState;
+use super::motion::{Drive, MotionState};
 use super::recoil::RecoilState;
 use super::{scoring, spawn, weapon};
 use crate::games::valorant::{HumanoidDims, RecoilProfile, WeaponStats};
-use crate::math::{Vec3, ViewAngles};
+use crate::math::{Vec3, ViewAngles, angle_between_deg};
 use crate::movement::{self, LocalVelocity, MoveInput, MovementProfile};
 use crate::rng::Rng;
 use serde::{Deserialize, Serialize};
@@ -91,6 +92,11 @@ pub struct Target {
     pub decoy: bool,
     expires_at: Option<f32>,
     motion: MotionState,
+    /// Session time of the last damage taken (`-inf` before the first).
+    last_hit_at: f32,
+    /// Session time of the next `targets.regen` heal (`inf` without regeneration).
+    regen_at: f32,
+    behavior: BehaviorState,
 }
 
 impl Target {
@@ -101,7 +107,7 @@ impl Target {
 
     /// Current velocity in m/s.
     pub fn velocity(&self) -> Vec3 {
-        self.motion.velocity()
+        self.motion.velocity() + self.behavior.velocity()
     }
 
     /// How far into a crouch the target is: 0 standing, 1 fully crouched. Only
@@ -248,6 +254,8 @@ pub struct Session {
     last_shot_at: f32,
     ammo: f32,
     reload_until: f32,
+    /// Latest spawn points, newest last, kept only for `targets.spawn_rules`.
+    recent_spawns: Vec<Vec3>,
     /// Spray state when the scenario enables `weapon.recoil`.
     recoil: Option<RecoilState>,
 }
@@ -281,6 +289,7 @@ impl Session {
             last_shot_at: f32::NEG_INFINITY,
             ammo: 0.0,
             reload_until: f32::NEG_INFINITY,
+            recent_spawns: Vec::new(),
             recoil,
         };
         s.ammo = s.def.weapon.ammo.map_or(0.0, |a| a.clip);
@@ -357,6 +366,7 @@ impl Session {
 
         self.move_player(input.movement, dt);
         self.move_targets(dt);
+        let shots_before = self.stats.shots;
         match self.def.weapon.fire {
             FireMode::Click if input.fire_pressed => self.shoot(&mut events),
             // With recoil the weapon is full-auto: holding the button keeps firing.
@@ -364,6 +374,10 @@ impl Session {
             FireMode::Hold if input.fire_held => self.hold_fire(dt, &mut events),
             _ => {}
         }
+        if self.stats.shots > shots_before {
+            self.react_to_shot();
+        }
+        self.regenerate();
         self.expire(&mut events);
         self.refill(&mut events);
 
@@ -408,11 +422,69 @@ impl Session {
     fn move_targets(&mut self, dt: f32) {
         let now = self.time;
         let targets = &self.def.targets;
+        let reactive = targets.reactions.is_some() || !targets.behaviors.is_empty();
+        let seen_from = self.viewpoint();
         for t in &mut self.targets {
-            if t.is_visible(now) {
-                t.motion
-                    .step(&mut t.position, targets, &mut self.rng, now, dt);
+            if !t.is_visible(now) {
+                continue;
             }
+            if !reactive {
+                t.motion
+                    .step(&mut t.position, Drive::of(targets), &mut self.rng, now, dt);
+                continue;
+            }
+            let s = seen_from.situation(t, now);
+            let rule = t
+                .behavior
+                .select(&targets.behaviors, &targets.motion, &s, &mut t.motion);
+            if let Some(r) = &targets.reactions {
+                behavior::react(r, &mut t.behavior, &mut t.motion, &s, &mut self.rng);
+            }
+            let drive = Drive {
+                motion: rule
+                    .and_then(|r| r.motion.as_ref())
+                    .unwrap_or(&targets.motion),
+                speed_k: targets.speed_scale * rule.map_or(1.0, |r| r.speed_scale),
+                ..Drive::of(targets)
+            };
+            t.motion
+                .step(&mut t.position, drive, &mut self.rng, now, dt);
+            if !targets.behaviors.is_empty() {
+                let retreat_m = rule.map_or(0.0, |r| r.retreat_m);
+                let weapon = behavior::motion_weapon(drive.motion);
+                t.behavior.retreat(
+                    &mut t.position,
+                    &mut t.motion,
+                    retreat_m,
+                    weapon,
+                    drive.speed_k,
+                    dt,
+                );
+            }
+        }
+    }
+
+    /// Lets every visible target react to the shot just fired (`shot_juke_chance`).
+    fn react_to_shot(&mut self) {
+        let Some(r) = &self.def.targets.reactions else {
+            return;
+        };
+        let now = self.time;
+        let seen_from = self.viewpoint();
+        for t in self.targets.iter_mut().filter(|t| t.is_visible(now)) {
+            let s = seen_from.situation(t, now);
+            behavior::react_to_shot(r, &mut t.motion, &s, &mut self.rng);
+        }
+    }
+
+    /// What targets can perceive of the player this frame.
+    fn viewpoint(&self) -> Viewpoint {
+        Viewpoint {
+            eye: self.eye_position(),
+            view: self.view,
+            player_velocity: self.player_vel.to_world(self.view.yaw_deg),
+            dims: self.dims,
+            shape: self.def.targets.shape.clone(),
         }
     }
 
@@ -453,6 +525,41 @@ impl Session {
             .map_or(1.0, |f| rings.multiplier_at(f))
     }
 
+    /// Points multiplier of a hit on `zone` of target `idx` along `dir`: the score ring,
+    /// times the `scoring.decay` of the target's value since it appeared.
+    fn points_multiplier(&self, dir: Vec3, idx: usize, zone: HitZone) -> f32 {
+        let ring = self.ring_multiplier(dir, idx, zone);
+        match self.def.scoring.decay {
+            Some(decay) => ring * decay.multiplier_at(self.time - self.targets[idx].visible_at),
+            None => ring,
+        }
+    }
+
+    /// Bookkeeping when target `idx` takes damage: remember when, and restart its
+    /// regeneration interval when `targets.regen.reset_on_hit` is set.
+    fn on_damage(&mut self, idx: usize) {
+        let t = &mut self.targets[idx];
+        t.last_hit_at = self.time;
+        if let Some(r) = self.def.targets.regen.filter(|r| r.reset_on_hit) {
+            t.regen_at = self.time + r.interval_secs;
+        }
+    }
+
+    /// Heals every target whose `targets.regen` interval has elapsed, never above its
+    /// starting health.
+    fn regenerate(&mut self) {
+        let Some(r) = self.def.targets.regen else {
+            return;
+        };
+        let now = self.time;
+        for t in &mut self.targets {
+            while now >= t.regen_at {
+                t.health = (t.health + r.amount).min(t.max_health);
+                t.regen_at += r.interval_secs;
+            }
+        }
+    }
+
     fn shoot(&mut self, events: &mut Vec<SessionEvent>) {
         if !weapon::can_fire(&self.weapon, self.time, self.last_shot_at) || self.is_reloading() {
             return;
@@ -481,7 +588,7 @@ impl Session {
             self.reload_if_dry(events);
             return;
         }
-        let multiplier = self.ring_multiplier(dir, idx, zone);
+        let multiplier = self.points_multiplier(dir, idx, zone);
         scoring::record_hit(&mut self.stats, &self.def.scoring, zone, multiplier);
         if let (Some(b), Some(r)) = (bullet, &self.recoil) {
             let protected = r.profile().protected_bullets;
@@ -497,6 +604,7 @@ impl Session {
             moving,
         });
         self.targets[idx].health -= 1.0;
+        self.on_damage(idx);
         if self.targets[idx].health <= 0.0 {
             self.kill(idx, events);
         }
@@ -610,9 +718,10 @@ impl Session {
         let Some((idx, zone)) = self.hit_along(dir) else {
             return;
         };
-        let multiplier = self.ring_multiplier(dir, idx, zone);
+        let multiplier = self.points_multiplier(dir, idx, zone);
         scoring::record_on_target(&mut self.stats, &self.def.scoring, zone, dt, multiplier);
         self.targets[idx].health -= dt;
+        self.on_damage(idx);
         if self.targets[idx].health <= 0.0 {
             self.kill(idx, events);
         }
@@ -657,11 +766,20 @@ impl Session {
         let point = spawn::separated_point(
             &self.def.targets,
             &self.targets,
+            &self.recent_spawns,
             self.eye_position(),
             self.view,
             &self.dims,
             &mut self.rng,
         );
+        if let Some(rules) = &self.def.targets.spawn_rules {
+            self.recent_spawns.push(point);
+            let excess = self
+                .recent_spawns
+                .len()
+                .saturating_sub(rules.avoid_recent as usize);
+            self.recent_spawns.drain(..excess);
+        }
         let (facing_yaw_deg, lateral) = spawn::face_player(point, self.player_pos);
         let delay = self.rng.in_range(self.def.targets.appear_delay_secs);
         let visible_at = self.time + delay;
@@ -680,6 +798,43 @@ impl Session {
             decoy,
             expires_at: self.def.targets.lifetime_secs.map(|l| visible_at + l),
             motion: MotionState::new(point, lateral, visible_at),
+            last_hit_at: f32::NEG_INFINITY,
+            behavior: BehaviorState::new(lateral),
+            regen_at: self
+                .def
+                .targets
+                .regen
+                .map_or(f32::INFINITY, |r| visible_at + r.interval_secs),
+        }
+    }
+}
+
+/// Where the player is looking from and how he moves, as targets perceive it.
+struct Viewpoint {
+    eye: Vec3,
+    view: ViewAngles,
+    /// Player velocity in world space, m/s.
+    player_velocity: Vec3,
+    dims: HumanoidDims,
+    shape: Shape,
+}
+
+impl Viewpoint {
+    /// What target `t` perceives at time `now`.
+    fn situation(&self, t: &Target, now: f32) -> Situation {
+        let aim = spawn::aim_point(&self.shape, &self.dims, t.position);
+        let to_aim = aim - self.eye;
+        let crosshair = self.eye + self.view.direction() * to_aim.length();
+        let lateral = t.motion.lateral;
+        Situation {
+            now,
+            health_fraction: t.health / t.max_health,
+            since_hit_secs: now - t.last_hit_at,
+            alive_secs: now - t.visible_at,
+            crosshair_deg: angle_between_deg(self.view.direction(), to_aim),
+            crosshair_offset: (aim - crosshair).dot(lateral),
+            speed: t.velocity().length(),
+            player_lateral: self.player_velocity.dot(lateral),
         }
     }
 }
@@ -718,6 +873,10 @@ mod tests {
                 min_separation_deg: 5.0,
                 speed_scale: 1.0,
                 decoy_chance: 0.0,
+                spawn_rules: None,
+                regen: None,
+                reactions: None,
+                behaviors: Vec::new(),
             },
             scoring: ScoringDef::default(),
             difficulty: Default::default(),
@@ -1708,6 +1867,549 @@ mod tests {
         assert_eq!((st.decoy_waits, st.decoy_hits, st.expired), (1, 0, 0));
         assert_eq!(st.score, 0.0, "no expire penalty for a decoy");
         assert_eq!(s.success_rate(), 1.0, "waiting was the right call");
+    }
+
+    /// One frame of `dt` seconds looking along `view`, clicking when `fire` is set.
+    fn tick(s: &mut Session, dt: f32, view: ViewAngles, fire: bool) -> Vec<SessionEvent> {
+        s.update(FrameInput {
+            dt,
+            view,
+            fire_pressed: fire,
+            fire_held: fire,
+            ..Default::default()
+        })
+    }
+
+    /// A single static sphere of `health`, the only target alive.
+    fn lone_sphere(fire: FireMode, health: f32) -> ScenarioDef {
+        let mut def = sphere_def(fire, health);
+        def.targets.max_alive = 1;
+        def
+    }
+
+    fn regen(interval_secs: f32, amount: f32, reset_on_hit: bool) -> Option<RegenDef> {
+        Some(RegenDef {
+            interval_secs,
+            amount,
+            reset_on_hit,
+        })
+    }
+
+    const AWAY: ViewAngles = ViewAngles {
+        yaw_deg: 180.0,
+        pitch_deg: 0.0,
+    };
+
+    #[test]
+    fn regen_heals_a_target_every_interval_up_to_its_starting_health() {
+        let mut def = lone_sphere(FireMode::Click, 3.0);
+        def.targets.regen = regen(0.5, 1.0, false);
+        let mut s = Session::new(def, 2);
+        let t = s.targets().next().unwrap().clone();
+        let health = |s: &Session| s.targets().next().map(|t| t.health);
+        let on = aim_at(&s, t.position);
+        tick(&mut s, 0.1, on, true);
+        assert_eq!(health(&s), Some(2.0), "one hit");
+        tick(&mut s, 0.2, AWAY, false); // t = 0.3
+        assert_eq!(health(&s), Some(2.0));
+        tick(&mut s, 0.25, AWAY, false); // t = 0.55: the 0.5 s heal
+        assert_eq!(health(&s), Some(3.0));
+        for _ in 0..10 {
+            tick(&mut s, 0.2, AWAY, false);
+        }
+        assert_eq!(health(&s), Some(3.0), "never above the starting health");
+        let st = s.stats();
+        assert_eq!((st.shots, st.hits, st.kills), (1, 1, 0));
+        assert_eq!(st.score, 100.0);
+    }
+
+    #[test]
+    fn regen_with_reset_on_hit_waits_a_full_interval_after_the_last_hit() {
+        let mut def = lone_sphere(FireMode::Click, 3.0);
+        def.targets.regen = regen(0.5, 1.0, true);
+        let mut s = Session::new(def, 2);
+        let t = s.targets().next().unwrap().clone();
+        let health = |s: &Session| s.targets().next().map(|t| t.health);
+        let on = aim_at(&s, t.position);
+        tick(&mut s, 0.1, on, true);
+        tick(&mut s, 0.225, AWAY, false);
+        tick(&mut s, 0.225, AWAY, false); // t = 0.55: past the interval from spawn only
+        assert_eq!(
+            health(&s),
+            Some(2.0),
+            "the hit at 0.1 s restarted the interval"
+        );
+        tick(&mut s, 0.1, AWAY, false); // t = 0.65: 0.55 s after the hit
+        assert_eq!(health(&s), Some(3.0));
+    }
+
+    #[test]
+    fn regen_in_hold_mode_restores_seconds_of_health_off_target() {
+        let run = |regen_def| {
+            let mut def = lone_sphere(FireMode::Hold, 1.0);
+            def.targets.regen = regen_def;
+            let mut s = Session::new(def, 3);
+            let t = s.targets().next().unwrap().clone();
+            let on = aim_at(&s, t.position);
+            for _ in 0..50 {
+                tick(&mut s, 0.01, on, true);
+            }
+            let after_hold = s.targets().next().unwrap().health;
+            tick(&mut s, 0.25, AWAY, false);
+            let early = s.targets().next().unwrap().health;
+            tick(&mut s, 0.1, AWAY, false);
+            let late = s.targets().next().unwrap().health;
+            (after_hold, early, late, s.stats().on_target_secs)
+        };
+        let (held, early, late, on_target) = run(regen(0.3, 0.2, true));
+        assert!((held - 0.5).abs() < 1e-3, "{held}");
+        assert!(
+            (early - held).abs() < 1e-6,
+            "{early}: 0.25 s off target is not enough"
+        );
+        assert!((late - (held + 0.2)).abs() < 1e-3, "{late}");
+        assert!((on_target - 0.5).abs() < 1e-3);
+        let (held, early, late, _) = run(None);
+        assert_eq!((early, late), (held, held), "no regen without the block");
+    }
+
+    #[test]
+    fn score_decay_rewards_fast_click_kills() {
+        let mut def = lone_sphere(FireMode::Click, 1.0);
+        def.scoring.decay = Some(ScoreDecay {
+            window_secs: 1.0,
+            floor: 0.25,
+        });
+        let mut s = Session::new(def, 5);
+        let kill = |s: &mut Session, dt: f32| {
+            let t = s.targets().next().unwrap().clone();
+            let view = aim_at(s, t.position);
+            let ev = tick(s, dt, view, true);
+            assert!(
+                ev.iter()
+                    .any(|e| matches!(e, SessionEvent::Killed { id, .. } if *id == t.id))
+            );
+        };
+        for _ in 0..10 {
+            tick(&mut s, 0.05, AWAY, false);
+        }
+        kill(&mut s, 0.05); // age 0.55 s: 100 × (1 − 0.75 × 0.55) = 58.75
+        kill(&mut s, 0.2); // age 0.2 s: 85
+        tick(&mut s, 0.2, AWAY, false);
+        for _ in 0..9 {
+            tick(&mut s, 0.2, AWAY, false);
+        }
+        kill(&mut s, 0.1); // age 2.1 s: the floor, 25
+        let st = s.stats();
+        assert_eq!((st.shots, st.hits, st.kills), (3, 3, 3));
+        assert!((st.score - 168.75).abs() < 1e-2, "{}", st.score);
+    }
+
+    #[test]
+    fn score_decay_scales_hold_points_per_second() {
+        let run = |decay| {
+            let mut def = lone_sphere(FireMode::Hold, f32::INFINITY);
+            def.scoring.decay = decay;
+            let mut s = Session::new(def, 3);
+            let t = s.targets().next().unwrap().clone();
+            let on = aim_at(&s, t.position);
+            for _ in 0..100 {
+                tick(&mut s, 0.01, on, true);
+            }
+            s.stats().clone()
+        };
+        let decayed = run(Some(ScoreDecay {
+            window_secs: 1.0,
+            floor: 0.5,
+        }));
+        // The integral of 100 × (1 − 0.5 t) over one second.
+        assert!((decayed.score - 75.0).abs() < 0.5, "{}", decayed.score);
+        assert!((decayed.on_target_secs - 1.0).abs() < 1e-3);
+        let flat = run(None);
+        assert!((flat.score - 100.0).abs() < 1e-2, "{}", flat.score);
+    }
+
+    /// A lone sphere at eye height 12 m straight ahead, so its lateral axis is world +x.
+    fn duelist(motion: Motion, health: f32) -> ScenarioDef {
+        let mut def = lone_sphere(FireMode::Click, health);
+        def.duration_secs = 60.0;
+        def.targets.spawn = SpawnArea::Floor {
+            x: Range::fixed(0.0),
+            z: Range::fixed(-12.0),
+            height: Range::fixed(1.82),
+        };
+        def.targets.motion = motion;
+        def
+    }
+
+    /// A strafe that stops at its first decision and does not decide again for 100 s.
+    fn holding() -> Motion {
+        Motion::Strafe {
+            weapon: crate::games::valorant::Weapon::Vandal,
+            change_secs: Range::fixed(100.0),
+            stop_chance: 1.0,
+            max_offset: 3.0,
+        }
+    }
+
+    /// A strafe that keeps reversing every `secs` and never stops.
+    fn strafing(secs: f32) -> Motion {
+        Motion::Strafe {
+            weapon: crate::games::valorant::Weapon::Vandal,
+            change_secs: Range::fixed(secs),
+            stop_chance: 0.0,
+            max_offset: 3.0,
+        }
+    }
+
+    fn reactions() -> ReactionsDef {
+        ReactionsDef {
+            mirror_strafe_chance: 0.0,
+            oppose_strafe_chance: 0.0,
+            dodge_within_deg: 0.0,
+            shot_juke_chance: 0.0,
+            react_secs: Range::fixed(0.3),
+        }
+    }
+
+    fn lone(s: &Session) -> Target {
+        s.targets().next().expect("a target").clone()
+    }
+
+    /// `frames` frames of 10 ms along `view`.
+    fn look(s: &mut Session, view: ViewAngles, frames: u32) {
+        for _ in 0..frames {
+            tick(s, 0.01, view, false);
+        }
+    }
+
+    #[test]
+    fn a_target_dodges_away_when_the_crosshair_comes_close() {
+        let run = |reactions_def: Option<ReactionsDef>| {
+            let mut def = duelist(holding(), 1.0);
+            def.targets.reactions = reactions_def;
+            let mut s = Session::new(def, 4);
+            look(&mut s, AWAY, 10);
+            assert_eq!(lone(&s).position.x, 0.0, "holding still");
+            // 1° to the right of the target: the crosshair is on its +x side.
+            let right_of = lone(&s).position + Vec3::new(12.0 * 1f32.to_radians().tan(), 0.0, 0.0);
+            let view = aim_at(&s, right_of);
+            look(&mut s, view, 30);
+            (lone(&s), s.stats().clone())
+        };
+        let (t, st) = run(Some(ReactionsDef {
+            dodge_within_deg: 2.0,
+            ..reactions()
+        }));
+        assert!(
+            t.position.x < -0.2,
+            "moved away from the crosshair: {}",
+            t.position.x
+        );
+        assert!(t.velocity().x < 0.0);
+        assert_eq!((st.shots, st.hits), (0, 0));
+        let (t, _) = run(None);
+        assert_eq!(
+            (t.position.x, t.velocity().x),
+            (0.0, 0.0),
+            "no reaction without the block"
+        );
+    }
+
+    #[test]
+    fn a_target_jukes_when_the_player_fires() {
+        let run = |chance: f32| {
+            let mut def = duelist(holding(), 1.0);
+            def.targets.reactions = Some(ReactionsDef {
+                shot_juke_chance: chance,
+                ..reactions()
+            });
+            let mut s = Session::new(def, 4);
+            look(&mut s, AWAY, 10);
+            tick(&mut s, 0.01, AWAY, true);
+            look(&mut s, AWAY, 30);
+            (lone(&s), s.stats().clone())
+        };
+        let (t, st) = run(1.0);
+        assert!(t.position.x.abs() > 0.2, "{}", t.position.x);
+        assert_eq!((st.shots, st.hits), (1, 0));
+        let (t, st) = run(0.0);
+        assert_eq!(t.position.x, 0.0);
+        assert_eq!(st.shots, 1);
+    }
+
+    #[test]
+    fn a_target_mirrors_or_opposes_a_new_player_strafe() {
+        let run = |mirror: f32, oppose: f32| {
+            let mut def = duelist(holding(), 1.0);
+            def.player.movement = true;
+            def.player.bounds_x = Range::new(-5.0, 5.0);
+            def.targets.reactions = Some(ReactionsDef {
+                mirror_strafe_chance: mirror,
+                oppose_strafe_chance: oppose,
+                ..reactions()
+            });
+            let mut s = Session::new(def, 4);
+            look(&mut s, AWAY, 10);
+            for _ in 0..25 {
+                s.update(FrameInput {
+                    dt: 0.01,
+                    view: AWAY,
+                    movement: MoveInput {
+                        right: 1.0, // facing +z (yaw 180), the player's right is world -x
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                });
+            }
+            (lone(&s), s.player_position())
+        };
+        let (t, player) = run(1.0, 0.0);
+        assert!(player.x < -0.3, "{player:?}");
+        assert!(
+            t.velocity().x < 0.0 && t.position.x < 0.0,
+            "mirrors: {:?}",
+            t.position
+        );
+        let (t, _) = run(0.0, 1.0);
+        assert!(
+            t.velocity().x > 0.0 && t.position.x > 0.0,
+            "opposes: {:?}",
+            t.position
+        );
+        let (t, _) = run(0.0, 0.0);
+        assert_eq!(t.position.x, 0.0);
+    }
+
+    /// A scripted duel: strafe, sweep the crosshair across the target and fire.
+    fn scripted_duel(def: ScenarioDef, seed: u64) -> (Vec<Vec3>, Stats) {
+        let mut s = Session::new(def, seed);
+        let mut path = Vec::new();
+        for i in 0..600 {
+            let yaw = -6.0 + 12.0 * ((i % 120) as f32 / 120.0);
+            s.update(FrameInput {
+                dt: 0.01,
+                view: ViewAngles::new(yaw, 0.0),
+                fire_pressed: i % 37 == 0,
+                movement: MoveInput {
+                    right: if (i / 50) % 2 == 0 { 1.0 } else { -1.0 },
+                    ..Default::default()
+                },
+                ..Default::default()
+            });
+            path.extend(s.targets().map(|t| t.position));
+        }
+        (path, s.stats().clone())
+    }
+
+    fn react_duel_def() -> ScenarioDef {
+        let mut def = duelist(strafing(0.6), 3.0);
+        def.player.movement = true;
+        def.player.bounds_x = Range::new(-3.0, 3.0);
+        def.targets.reactions = Some(ReactionsDef {
+            mirror_strafe_chance: 0.4,
+            oppose_strafe_chance: 0.4,
+            dodge_within_deg: 2.0,
+            shot_juke_chance: 0.5,
+            react_secs: Range::new(0.2, 0.4),
+        });
+        def.targets.behaviors = vec![BehaviorRule {
+            when: BehaviorWhen {
+                damaged_within_secs: Some(1.0),
+                ..Default::default()
+            },
+            motion: None,
+            speed_scale: 1.5,
+            retreat_m: 2.0,
+        }];
+        def
+    }
+
+    #[test]
+    fn reactive_and_conditional_targets_are_deterministic_per_seed() {
+        let (a, sa) = scripted_duel(react_duel_def(), 8);
+        let (b, sb) = scripted_duel(react_duel_def(), 8);
+        assert_eq!((a.clone(), sa.clone()), (b, sb));
+        let (c, _) = scripted_duel(react_duel_def(), 9);
+        assert_ne!(a, c);
+        assert!(sa.shots > 10, "{}", sa.shots);
+    }
+
+    fn rule(when: BehaviorWhen) -> BehaviorRule {
+        BehaviorRule {
+            when,
+            motion: None,
+            speed_scale: 1.0,
+            retreat_m: 0.0,
+        }
+    }
+
+    /// Horizontal distance from the player's start to the target.
+    fn range_to(s: &Session) -> f32 {
+        lone(s).position.horizontal().length()
+    }
+
+    #[test]
+    fn a_rule_makes_a_target_retreat_under_half_health() {
+        let mut def = duelist(Motion::Static, 4.0);
+        def.targets.behaviors = vec![BehaviorRule {
+            retreat_m: 3.0,
+            ..rule(BehaviorWhen {
+                health_below: Some(0.5),
+                ..Default::default()
+            })
+        }];
+        let mut s = Session::new(def, 2);
+        for _ in 0..2 {
+            let view = aim_at(&s, lone(&s).position);
+            click(&mut s, view);
+        }
+        look(&mut s, AWAY, 100);
+        assert_eq!(lone(&s).health, 2.0);
+        assert!(
+            (range_to(&s) - 12.0).abs() < 1e-4,
+            "half health holds: {}",
+            range_to(&s)
+        );
+        let view = aim_at(&s, lone(&s).position);
+        click(&mut s, view);
+        look(&mut s, AWAY, 300);
+        let t = lone(&s);
+        assert_eq!(t.health, 1.0);
+        let range = range_to(&s);
+        assert!(
+            (14.8..=15.3).contains(&range),
+            "retreated about 3 m: {range}"
+        );
+        assert!(
+            t.velocity().length() < 1e-3,
+            "and stopped: {:?}",
+            t.velocity()
+        );
+        assert_eq!((s.stats().hits, s.stats().kills), (3, 0));
+    }
+
+    #[test]
+    fn a_rule_overrides_the_motion_while_recently_damaged_then_reverts() {
+        let mut def = duelist(Motion::Static, 3.0);
+        def.targets.behaviors = vec![BehaviorRule {
+            motion: Some(strafing(0.3)),
+            ..rule(BehaviorWhen {
+                damaged_within_secs: Some(0.5),
+                ..Default::default()
+            })
+        }];
+        let mut s = Session::new(def, 2);
+        look(&mut s, AWAY, 50);
+        assert_eq!(lone(&s).position.x, 0.0, "holds the angle");
+        let view = aim_at(&s, lone(&s).position);
+        tick(&mut s, 0.01, view, true);
+        look(&mut s, AWAY, 30);
+        assert!(lone(&s).position.x.abs() > 0.1, "strafes when hit");
+        look(&mut s, AWAY, 50);
+        let frozen = lone(&s);
+        look(&mut s, AWAY, 50);
+        assert_eq!(
+            lone(&s).position,
+            frozen.position,
+            "holds again once the hit is old"
+        );
+        assert_eq!(lone(&s).velocity(), Vec3::ZERO);
+        assert_eq!(lone(&s).health, 2.0);
+    }
+
+    #[test]
+    fn a_rule_scales_speed_once_the_target_has_lived_long_enough() {
+        let mut def = duelist(strafing(0.5), 1.0);
+        def.targets.behaviors = vec![BehaviorRule {
+            speed_scale: 2.0,
+            ..rule(BehaviorWhen {
+                alive_for_secs: Some(1.0),
+                ..Default::default()
+            })
+        }];
+        let mut s = Session::new(def, 2);
+        let top = |s: &mut Session, frames: u32| {
+            let mut max: f32 = 0.0;
+            for _ in 0..frames {
+                tick(s, 0.01, AWAY, false);
+                max = max.max(lone(s).velocity().length());
+            }
+            max
+        };
+        let early = top(&mut s, 95);
+        assert!(early <= 5.4 + 1e-3 && early > 4.0, "{early}");
+        top(&mut s, 30);
+        let late = top(&mut s, 200);
+        assert!(late > 7.0 && late <= 10.8 + 1e-3, "{late}");
+    }
+
+    #[test]
+    fn a_rule_reacts_to_the_crosshair_distance() {
+        let mut def = duelist(Motion::Static, 1.0);
+        def.targets.behaviors = vec![BehaviorRule {
+            motion: Some(strafing(0.3)),
+            ..rule(BehaviorWhen {
+                crosshair_within_deg: Some(3.0),
+                ..Default::default()
+            })
+        }];
+        let mut s = Session::new(def, 2);
+        look(&mut s, AWAY, 50);
+        assert_eq!(lone(&s).position.x, 0.0);
+        let view = aim_at(&s, lone(&s).position);
+        look(&mut s, view, 20);
+        assert!(lone(&s).position.x.abs() > 0.05, "{}", lone(&s).position.x);
+    }
+
+    #[test]
+    fn a_rule_reacts_to_the_target_speed() {
+        let run = |motion: Motion| {
+            let mut def = duelist(motion, 1.0);
+            def.targets.behaviors = vec![BehaviorRule {
+                retreat_m: 2.0,
+                ..rule(BehaviorWhen {
+                    speed_above: Some(3.0),
+                    ..Default::default()
+                })
+            }];
+            let mut s = Session::new(def, 2);
+            look(&mut s, AWAY, 200);
+            range_to(&s)
+        };
+        let fast = run(strafing(0.8));
+        assert!(fast > 13.5 && fast < 14.3, "{fast}");
+        assert!(
+            (run(holding()) - 12.0).abs() < 1e-4,
+            "a still target never retreats"
+        );
+    }
+
+    #[test]
+    fn the_first_matching_rule_wins() {
+        let mut def = duelist(strafing(0.5), 1.0);
+        let always = BehaviorWhen {
+            alive_for_secs: Some(0.0),
+            ..Default::default()
+        };
+        def.targets.behaviors = vec![
+            BehaviorRule {
+                speed_scale: 2.0,
+                ..rule(always.clone())
+            },
+            BehaviorRule {
+                retreat_m: 3.0,
+                ..rule(always)
+            },
+        ];
+        let mut s = Session::new(def, 2);
+        look(&mut s, AWAY, 200);
+        let t = lone(&s);
+        assert!(
+            (t.position.z + 12.0).abs() < 1e-4,
+            "no retreat: {:?}",
+            t.position
+        );
     }
 
     #[test]

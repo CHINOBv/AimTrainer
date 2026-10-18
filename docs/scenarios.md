@@ -44,6 +44,8 @@ lifetime_secs = 3.0          # optional; the target leaves if not killed
 appear_delay_secs = [0.0, 0.0]
 min_separation_deg = 0
 decoy_chance = 0             # go/no-go: share of spawns that are decoys, in [0, 1); needs lifetime_secs and fire = "click"
+regen = { interval_secs = 0.5, amount = 1, reset_on_hit = false }   # optional health regeneration
+spawn_rules = { avoid_last_deg = 10, min_flick_deg = 15 }          # optional spawn-pattern controls
 
 [scoring]                    # all optional
 head = 100                   # per hit (click) or per second (hold)
@@ -56,6 +58,7 @@ expire_penalty = 0
 burst_bonus = 0              # per hit within the weapon's protected bullets; needs weapon.recoil
 rings = { radius = [0.25, 0.5, 1.0], multiplier = [3.0, 2.0, 1.0] }   # optional score-zone rings
 decoy_penalty = 0            # per shot on a go/no-go decoy
+decay = { window_secs = 2.0, floor = 0.3 }   # optional: a target's value fades after it appears
 ```
 
 ### Go/no-go decoys
@@ -76,6 +79,29 @@ Decoys need `lifetime_secs`, so that they leave, and `fire = "click"`. Adaptive 
 `rings` makes a hit worth more the closer it lands to the center of a sphere or a humanoid head. The distance is the shot's perpendicular distance from the zone center, as a fraction of the zone radius (the sphere radius, or half the head size). A hit takes the multiplier of the innermost ring it falls in, so with the example above a dead-center sphere hit scores `sphere × 3`. A hit outside every ring, and every body or leg hit, scores the zone's flat points. In hold mode the multiplier scales the points per second.
 
 `radius` must be ascending fractions in (0, 1], with one `multiplier` (> 0) per radius. The built-in `precision-rings` uses them.
+
+### Health regeneration and score decay
+
+`targets.regen` heals damaged targets; `scoring.decay` makes a target worth less the longer it lives. Both are optional and off by default.
+
+```toml
+[targets]
+health = 1.5
+regen = { interval_secs = 0.3, amount = 0.2, reset_on_hit = true }
+
+[scoring]
+decay = { window_secs = 3.0, floor = 0.4 }
+```
+
+| Field | Meaning |
+|---|---|
+| `regen.interval_secs` | Seconds between heals, > 0. The first heal comes one interval after the target appears. |
+| `regen.amount` | Health restored per heal, > 0: hits in click mode, seconds in hold mode. A target never heals above its starting `health`, which must be finite. |
+| `regen.reset_on_hit` | Default `false`. When `true`, every bit of damage restarts the interval, so the target only heals after going `interval_secs` without being hit. In hold mode that means after the crosshair has been off it (or fire released) for that long. |
+| `decay.window_secs` | Seconds from the target appearing until its value reaches the floor, > 0. |
+| `decay.floor` | Fraction of the value left after the window, in [0, 1]. |
+
+The value falls linearly: a hit `age` seconds after the target appeared scores its points × `1 − (1 − floor) × min(age / window_secs, 1)`. It multiplies the score-ring multiplier, and in hold mode it scales the points per second. The built-in `regen-track` combines both: breaking off lets the sphere heal, and a slow kill earns less, so steady tracking pays twice.
 
 ### Play area and floor height
 
@@ -104,6 +130,24 @@ Recoil moves the bullets, not the camera. `simulate_spread` still adds running i
 | `around_crosshair` | `offset_deg`, `distance`, `pitch_limit_deg` (default `[-15, 30]`), `on_screen` (default `false`) | Spawns relative to where you aim right now. Use it for flicks (large offsets) and microcorrections (1–6°). `pitch_limit_deg` keeps every spawn inside a vertical band around the horizon, so chained flicks cannot drift into the sky or the floor. `on_screen = true` keeps every spawn inside VALORANT's view from the crosshair at spawn time, with a 4° margin: at most 47.5° sideways and ≈31.3° up or down (half of 103° × 70.53°, minus the margin). `offset_deg.max` must then be ≤ 47.5, and difficulty scaling clamps the offset to that limit. Humanoids only use the horizontal offset. |
 | `floor` | `x`, `z`, `height` | A world-space box. Use it for agents at realistic positions, or spheres at head height (`height = [1.8, 1.95]`). |
 
+### Spawn patterns
+
+`[targets.spawn_rules]` (optional) stops targets from appearing where the player expects them. All four controls default to off and can be combined:
+
+```toml
+[targets]
+spawn_rules = { avoid_last_deg = 15, avoid_recent = 2, min_flick_deg = 12, exclude_center = 0.25 }
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `avoid_last_deg` | `0` (off) | Blocks the last spawn point and every position within this angle of it, in [0, 180). A small angle only stops a target reappearing in the same place; a wider one also blocks the positions next to it. |
+| `avoid_recent` | `1` | How many of the latest spawn points `avoid_last_deg` blocks, 1–16. |
+| `min_flick_deg` | `0` (off) | Minimum angle between the crosshair at spawn time and the new target, in [0, 180): a minimum flick distance. |
+| `exclude_center` | `0` (off) | Keeps targets out of the middle of the area: a fraction in [0, 1) of each axis' half-width around its center. `angular` uses yaw and pitch (humanoids yaw only); `floor` uses x and z. With `around_crosshair` it is rejected, because `offset_deg.min` already keeps targets out of the middle. |
+
+Angles are measured from the eye between aim points (a humanoid's head, a sphere's center). A spawn that breaks a rule is redrawn together with `min_separation_deg`, up to 24 times; if every attempt breaks a rule, the last one is used, so a very strict combination is not guaranteed. The trainer uses positions, not a grid of spawn points, so "the last spawn point" and "the positions adjacent to it" are both an angle around the last position. The built-in `spread-flicks` uses all four controls.
+
 ### Motions
 
 | `kind` | Fields | Meaning |
@@ -122,6 +166,56 @@ The built-in `dodge-*` scenarios are dynamic clicking drills against evasive ene
 | `dodge-jump-spot` | jumps | Clicking an airborne head or pre-aiming the landing spot |
 | `dodge-peek` | jiggle peek, appears after a delay | Reacting to a peek without firing while the agent crosses at full speed |
 | `dodge-micro-spheres` | jukes on a head-sized sphere | Small corrections that do not overshoot into a reversal |
+
+### Reactive targets
+
+`targets.reactions` (optional) makes a `strafe` or `dodge` target answer the player. Each reaction sets the target's strafe direction and holds it for a `react_secs` draw before the motion decides again. Airborne `dodge` targets react only after they land.
+
+```toml
+[targets]
+motion = { kind = "strafe", change_secs = [0.5, 1.0], stop_chance = 0.8 }
+reactions = { mirror_strafe_chance = 0.3, oppose_strafe_chance = 0.3, dodge_within_deg = 2.5, shot_juke_chance = 0.35 }
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `mirror_strafe_chance` | `0` | When the player starts a strafe, the chance that the target strafes the same way. A new strafe is noticed when the player's speed along the target's side-to-side axis reaches 1 m/s in a new direction (an estimate, see `training-science.md`), so it needs `player.movement = true`. |
+| `oppose_strafe_chance` | `0` | The chance that it strafes the other way instead. Both share one roll, so their sum must be ≤ 1. |
+| `dodge_within_deg` | `0` (off) | When the crosshair comes within this angle of the target's aim point (head or sphere center), in [0, 90), the target moves away from the crosshair. It triggers again only after the crosshair has left that circle. |
+| `shot_juke_chance` | `0` | Whenever the player fires (click mode), the chance that every visible target jukes: it reverses, or, when standing still, moves away from the crosshair. |
+| `react_secs` | `[0.2, 0.4]` | How long a reaction holds, seconds (a positive range). |
+
+### Behaviour rules
+
+`[[targets.behaviors]]` (optional, at most 8) switches a target's behaviour on conditions. Every frame the first rule whose conditions all hold is in force; with none, the target uses `targets.motion`. The built-in `react-duel` "holds the angle, strafes when hit, retreats under 50% health":
+
+```toml
+[[targets.behaviors]]
+when = { health_below = 0.5 }
+retreat_m = 4
+
+[[targets.behaviors]]
+when = { damaged_within_secs = 1.5 }
+motion = { kind = "dodge", change_secs = [0.2, 0.45], juke_chance = 0.4 }
+```
+
+| Condition (`when`) | Holds when |
+|---|---|
+| `health_below` | Remaining health is below this fraction of the starting health, in (0, 1]. Never holds for `inf` health. |
+| `damaged_within_secs` | The target took damage within the last this many seconds (> 0). |
+| `alive_for_secs` | The target has been visible for at least this many seconds (≥ 0). |
+| `crosshair_within_deg` | The crosshair is within this angle of the target's aim point, in (0, 180). |
+| `speed_above` | The target moves faster than this many m/s (≥ 0). |
+
+A rule needs at least one condition and at least one override:
+
+| Override | Meaning |
+|---|---|
+| `motion` | A motion to use instead of `targets.motion`, written and validated like it. When a rule switch changes the motion, the new motion decides at once and movement it has no part in stops (for example a `static` override stops a strafe). |
+| `speed_scale` | Multiplier on movement speed, in [0.25, 4] (default 1), on top of in-run tuning. |
+| `retreat_m` | Move straight away from the player, with the motion's weapon movement physics (the Vandal's for `static` and `drift`), until the target has retreated this many meters in total, in [0, 20]. Its strafe lane moves back with it. |
+
+There is no line-of-sight condition: scenario targets always stand in the open. Arena bots, which can hide behind walls, live in `aim_world`. An airborne `dodge` target keeps its rule until it lands. Reactions and rules draw random numbers only when they are used, so other scenarios replay exactly as before.
 
 Clicking on the stop or reversal works because the target's lateral speed passes through zero there (inference from the movement model, not a measured training effect). The simulated aimer re-aims at the target every frame, so calibrate scores understate how much harder the motion makes these drills for a human.
 

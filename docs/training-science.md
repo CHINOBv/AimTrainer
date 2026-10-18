@@ -354,6 +354,32 @@ Why these values (estimates, not calibrated): fixing half the misses, rather tha
 - **Determinism:** missions depend only on the day, a per-install seed, the commitment and the recent runs. They are generated once per local day and then frozen, so a best set during the day does not move them. Changing the commitment regenerates the day.
 - **Evidence:** the 0.85/0.92/0.97 factors, the +0.08 mastery bonus, the 95% cap, the 5% headshot floor and the 10-run and 12-scenario windows are **estimates**, with no published source. The intent follows the Challenge Point Framework above: goals near, but not above, current ability. Personal-best goals are the player's own baseline, not a population norm.
 
+## Target behaviour and spawn patterns
+
+### Reactive targets and behaviour rules
+
+Scripted strafes are predictable: after a few runs the player learns the rhythm instead of reacting. Targets that answer the player's own strafe, crosshair and shots put the decision back on what the target does in response, which is closer to a real duel. Rules such as "strafes when hit, retreats under 50% health" give each engagement phases the player must read. This is a design choice inspired by Aim Lab's Creator Studio behaviours (`docs/feature-analysis.md`); no study measures its training effect (inference).
+
+Estimates, not sourced values:
+
+- **Strafe notice speed, 1 m/s.** About a fifth of the Vandal's 5.4 m/s run speed (`valorant-mechanics.md`), reached within a few hundredths of a second of pressing A or D. It ignores slow drifting but reacts almost at the key press, so mirroring targets are faster than a human opponent would be.
+- **Reaction hold, 0.2–0.4 s.** Long enough for a juke to cover visible distance at VALORANT acceleration, short enough that the motion takes over again within about one strafe.
+- **`react-duel` numbers** (chances 0.3/0.3/0.35, a 2.5° dodge circle, 1.5 s "recently hit", a 4 m retreat) were set by calibration.
+
+**Calibration caveat.** The simulated aimer re-aims at the target's current position every frame and never moves, so it neither triggers strafe mirroring nor suffers from jukes the way a human does. `react-duel` therefore calibrates at about 79% contender accuracy, near the top of the challenge-point band; expect a human to find it harder than that number suggests. A playtest should confirm the difficulty.
+
+### Spawn patterns (`spawn_rules`)
+
+Random spawns repeat by chance: in `spread-flicks` without rules, consecutive targets regularly land within a few degrees of each other or of the crosshair, so some "flicks" are no movement at all. Blocking recent spawn points, enforcing a minimum flick and emptying the middle of the area make every rep a real flick in a new direction. The rationale is variable practice: varying the movement within a session builds a more general skill than repeating one movement (schema theory, Schmidt 1975, *Psychological Review* 82(4), 225–260; the related interleaving evidence is cited under Routine design above). Applying it to spawn placement is inference, not a measured aim-training effect.
+
+The defaults in `spread-flicks` are estimates chosen by calibration, not sourced values: `avoid_last_deg = 15` with `avoid_recent = 2`, `min_flick_deg = 12` and `exclude_center = 0.25`. They keep contender accuracy at about 66%, the same as `flick-wide` (inside the challenge-point band, see Difficulty).
+
+### Health regeneration and score decay
+
+Plain hold scenarios pay the same per second whether time on target comes in one stretch or in many short touches. Regeneration with `reset_on_hit` changes that: damage only sticks if the crosshair returns within the interval, so the kill rate rewards unbroken contact, which is the tracking quality the drill is meant to build. Score decay adds a speed incentive on top of accuracy: every scenario already trades speed against accuracy (Fitts' law, above), and decay moves the scoring point towards speed. Neither effect has been measured as a training benefit; both are design choices (inference), and the idea comes from Aim Lab's scenario options (`docs/feature-analysis.md`).
+
+The numbers in `regen-track` are estimates set by calibration, not sourced values: health 1.5 s, a heal of 0.2 s every 0.3 s off target, and a value that fades to 40% over 3 s. A 0.35 m sphere at 10 m keeps contender accuracy at about 58%; with a 0.3 m sphere it fell to 48%, at the bottom of the challenge-point band.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.
