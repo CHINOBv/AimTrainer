@@ -7,7 +7,7 @@
 
 use crate::persistence::settings::Paths;
 use aim_core::analytics::codec;
-use aim_core::scenario::Recording;
+use aim_core::scenario::{Recording, parse_run_key_full};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -85,6 +85,21 @@ pub fn list(paths: &Paths) -> Vec<ReplayEntry> {
     let mut v = list_in(&replays_dir(paths));
     v.reverse();
     v
+}
+
+/// The entries saved before `current` on the same base scenario, in the order of `entries`
+/// (newest first for [`list`]). Variant keys (`micro-adjust@+0.50`, `micro-adjust~20s`)
+/// count as their base scenario.
+pub fn earlier_runs_of_same_scenario<'a>(
+    entries: &'a [ReplayEntry],
+    current: &ReplayEntry,
+) -> Vec<&'a ReplayEntry> {
+    let base = |e: &'a ReplayEntry| parse_run_key_full(&e.scenario_id).0;
+    let current_base = parse_run_key_full(&current.scenario_id).0;
+    entries
+        .iter()
+        .filter(|e| e.timestamp_millis < current.timestamp_millis && base(e) == current_base)
+        .collect()
 }
 
 /// Read and decode one replay.
@@ -220,6 +235,40 @@ mod tests {
         let bad = s.0.join("00000000000000000001-x.aimreplay");
         fs::write(&bad, b"not a replay").unwrap();
         assert_eq!(load(&bad).unwrap_err().kind(), io::ErrorKind::InvalidData);
+    }
+
+    fn entry(timestamp_millis: u64, scenario_id: &str) -> ReplayEntry {
+        ReplayEntry {
+            path: PathBuf::from(format!("/r/{timestamp_millis}-{scenario_id}.aimreplay")),
+            timestamp_millis,
+            scenario_id: scenario_id.to_owned(),
+        }
+    }
+
+    #[test]
+    fn earlier_runs_share_the_base_scenario_and_stay_newest_first() {
+        let entries = vec![
+            entry(60, "micro-adjust"),
+            entry(50, "micro-adjust@+0.50"),
+            entry(40, "flick-wide"),
+            entry(30, "micro-adjust~20s"),
+            entry(20, "micro-adjust-plus"),
+            entry(10, "micro-adjust@-1.00"),
+        ];
+        let ids =
+            |v: Vec<&ReplayEntry>| -> Vec<u64> { v.iter().map(|e| e.timestamp_millis).collect() };
+        assert_eq!(
+            ids(earlier_runs_of_same_scenario(&entries, &entries[1])),
+            vec![30, 10]
+        );
+        assert_eq!(
+            ids(earlier_runs_of_same_scenario(&entries, &entries[0])),
+            vec![50, 30, 10]
+        );
+        assert!(earlier_runs_of_same_scenario(&entries, &entries[2]).is_empty());
+        assert!(earlier_runs_of_same_scenario(&entries, &entries[5]).is_empty());
+        // The input list is left untouched.
+        assert_eq!(entries.len(), 6);
     }
 
     #[test]
