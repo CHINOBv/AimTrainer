@@ -2,6 +2,7 @@
 //! validation. Unlike the global hotkeys it is a bare in-window key, so keys gameplay
 //! already uses (WASD, Shift, Esc, Space) are refused.
 
+use crate::i18n::tr;
 use crate::platform::game_key;
 use crate::ui::atoms::{ERROR, WARN};
 use bevy_egui::egui::{self, Key};
@@ -29,15 +30,21 @@ pub fn restart_key_setting(ui: &mut egui::Ui, key_name: &mut String) {
         }
     }
     ui.horizontal(|ui| {
-        ui.label("Restart run");
+        ui.label(tr("Restart run"));
         if state.recording {
-            ui.label(egui::RichText::new("Press a key… (Esc to cancel)").color(WARN));
-            if ui.button("Cancel").clicked() {
+            ui.label(egui::RichText::new(tr("Press a key… (Esc to cancel)")).color(WARN));
+            if ui.button(tr("Cancel")).clicked() {
                 state = RowState::default();
             }
         } else {
-            ui.label(egui::RichText::new(game_key::label(key_name)).strong());
-            if ui.button("Record").clicked() {
+            // Key names ("Delete", "Space") stay as printed on the keyboard; only the
+            // placeholder for an unknown key is translated.
+            let shown = match game_key::key_code(key_name) {
+                Some(_) => game_key::label(key_name),
+                None => tr(game_key::label(key_name)),
+            };
+            ui.label(egui::RichText::new(shown).strong());
+            if ui.button(tr("Record")).clicked() {
                 state.recording = true;
                 state.problem = None;
             }
@@ -45,9 +52,9 @@ pub fn restart_key_setting(ui: &mut egui::Ui, key_name: &mut String) {
         if ui
             .add_enabled(
                 key_name != game_key::DEFAULT_RESTART,
-                egui::Button::new("Reset"),
+                egui::Button::new(tr("Reset")),
             )
-            .on_hover_text("Back to R")
+            .on_hover_text(tr("Back to R"))
             .clicked()
         {
             *key_name = game_key::DEFAULT_RESTART.to_owned();
@@ -56,11 +63,11 @@ pub fn restart_key_setting(ui: &mut egui::Ui, key_name: &mut String) {
     });
     let problem = state.problem.or_else(|| game_key::problem(key_name));
     if let Some(problem) = problem {
-        ui.small(egui::RichText::new(problem).color(ERROR));
+        ui.small(egui::RichText::new(tr(problem)).color(ERROR));
     }
-    ui.small(
+    ui.small(tr(
         "Restarts the scenario or arena instantly, keeping its difficulty; nothing is recorded.",
-    );
+    ));
     ui.data_mut(|d| d.insert_temp(id, state));
 }
 

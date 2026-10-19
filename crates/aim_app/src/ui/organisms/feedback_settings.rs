@@ -4,6 +4,7 @@
 use crate::audio::Clip;
 use crate::audio::synth::{HitSound, KillSound};
 use crate::game::feedback::{HitMarkerStyle, MarkerColor, TargetEffect};
+use crate::i18n::tr;
 use crate::persistence::settings::{
     FeelPreset, FeelSettings, HitFeedbackSettings, Settings, SoundSettings,
 };
@@ -44,8 +45,8 @@ pub fn feel_preset_picker(ui: &mut egui::Ui, feel: &mut FeelSettings) -> bool {
     ui.horizontal(|ui| {
         for (preset, label, hint) in FEEL_PRESETS {
             if ui
-                .selectable_label(feel.preset == preset, label)
-                .on_hover_text(hint)
+                .selectable_label(feel.preset == preset, tr(label))
+                .on_hover_text(tr(hint))
                 .clicked()
             {
                 apply_feel_preset(feel, preset);
@@ -77,10 +78,10 @@ pub fn audio_panel(
                 head,
             };
             ui.add_enabled_ui(sound.hit != HitSound::Off, |ui| {
-                if ui.button(PREVIEW).clicked() {
+                if ui.button(tr(PREVIEW)).clicked() {
                     preview = Some(clip(false));
                 }
-                if ui.button("Headshot").clicked() {
+                if ui.button(tr("Headshot")).clicked() {
                     preview = Some(clip(true));
                 }
             });
@@ -90,16 +91,16 @@ pub fn audio_panel(
                 s.label()
             });
             ui.add_enabled_ui(sound.kill != KillSound::Off, |ui| {
-                if ui.button(PREVIEW).clicked() {
+                if ui.button(tr(PREVIEW)).clicked() {
                     preview = Some(Clip::Kill(sound.kill));
                 }
             });
         });
         rows.block(ui, "Miss sound", |ui| {
             ui.horizontal(|ui| {
-                ui.checkbox(&mut sound.miss, "Miss sound");
+                ui.checkbox(&mut sound.miss, tr("Miss sound"));
                 if ui
-                    .add_enabled(sound.miss, egui::Button::new(PREVIEW))
+                    .add_enabled(sound.miss, egui::Button::new(tr(PREVIEW)))
                     .clicked()
                 {
                     preview = Some(Clip::Miss);
@@ -127,8 +128,8 @@ pub fn audio_panel(
             ),
         ] {
             rows.row(ui, label, |ui| {
-                ui.add(egui::Slider::new(value, 0..=100).suffix(" % of master"))
-                    .on_hover_text(hint);
+                ui.add(egui::Slider::new(value, 0..=100).suffix(tr(" % of master")))
+                    .on_hover_text(tr(hint));
             });
         }
 
@@ -227,7 +228,9 @@ fn hit_feedback(
         );
     });
     if !rows.searching() {
-        ui.small("Effects are short: a killed target lingers for the effect, at most 0.2 s.");
+        ui.small(tr(
+            "Effects are short: a killed target lingers for the effect, at most 0.2 s.",
+        ));
     }
 }
 
@@ -235,10 +238,12 @@ fn feel(ui: &mut egui::Ui, rows: &mut SettingsRows, feel: &mut FeelSettings) {
     rows.section(ui, "Game feel");
     rows.block(ui, "Feel preset Minimal Standard Juicy", |ui| {
         ui.horizontal(|ui| {
-            ui.label("Preset");
+            ui.label(tr("Preset"));
             feel_preset_picker(ui, feel);
         });
-        ui.small("A preset sets every effect below; you can then change single effects.");
+        ui.small(tr(
+            "A preset sets every effect below; you can then change single effects.",
+        ));
     });
     rows.check(
         ui,
@@ -248,9 +253,9 @@ fn feel(ui: &mut egui::Ui, rows: &mut SettingsRows, feel: &mut FeelSettings) {
     );
     if feel.distinct_markers && !rows.searching() {
         ui.horizontal(|ui| {
-            ui.colored_label(HEAD_MARKER, "■ head");
-            ui.colored_label(BODY_MARKER, "■ body");
-            ui.colored_label(DAMAGE_RED, "■ kill");
+            ui.colored_label(HEAD_MARKER, tr("■ head"));
+            ui.colored_label(BODY_MARKER, tr("■ body"));
+            ui.colored_label(DAMAGE_RED, tr("■ kill"));
         });
     }
     rows.check(
@@ -338,7 +343,7 @@ fn marker_preview(ui: &mut egui::Ui, fb: &HitFeedbackSettings, crosshair: Rgba) 
         crosshair,
         t,
     );
-    response.on_hover_text("Click to replay");
+    response.on_hover_text(tr("Click to replay"));
 }
 
 fn style_combo<T: Copy + PartialEq>(
@@ -349,10 +354,10 @@ fn style_combo<T: Copy + PartialEq>(
     label: impl Fn(T) -> &'static str,
 ) {
     egui::ComboBox::from_id_salt(salt)
-        .selected_text(label(*value))
+        .selected_text(tr(label(*value)))
         .show_ui(ui, |ui| {
             for &option in all {
-                ui.selectable_value(value, option, label(option));
+                ui.selectable_value(value, option, tr(label(option)));
             }
         });
 }

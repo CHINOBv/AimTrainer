@@ -6,7 +6,9 @@ pub mod radar;
 pub mod radial_wedges;
 pub mod sparkline;
 
+use crate::i18n::{Lang, language, tr};
 use crate::persistence::settings::Toggle;
+use aim_core::i18n::tr_in;
 use bevy_egui::egui;
 
 /// A short coloured label on a filled rounded background (a verdict such as "READY").
@@ -56,7 +58,7 @@ pub fn energy_text(
         format!(
             "{e:.0}{}{unit} · {}",
             if unit.is_empty() { "" } else { " " },
-            rank(e).unwrap_or_else(|| "Unranked".to_owned())
+            rank(e).unwrap_or_else(|| tr("Unranked").to_owned())
         )
     })
 }
@@ -80,9 +82,13 @@ pub enum RowVisibility {
 
 /// Settings rows filtered by a search. While searching, a section heading appears just
 /// before the section's first matching row, so sections without matches disappear.
+///
+/// Callers pass English labels, keywords and hints; the rows show them in the UI
+/// language and the search matches both the shown text and the English one.
 pub struct SettingsRows<'q> {
     query: &'q str,
     heading: Option<&'static str>,
+    lang: Lang,
 }
 
 impl<'q> SettingsRows<'q> {
@@ -90,6 +96,7 @@ impl<'q> SettingsRows<'q> {
         Self {
             query: query.trim(),
             heading: None,
+            lang: language(),
         }
     }
 
@@ -97,9 +104,15 @@ impl<'q> SettingsRows<'q> {
         !self.query.is_empty()
     }
 
-    /// Whether a row with `text` (its label plus any keywords) is drawn.
+    /// `en` in the rows' language.
+    fn tr<'t>(&self, en: &'t str) -> &'t str {
+        tr_in(self.lang, en)
+    }
+
+    /// Whether a row with English `text` (its label plus any keywords) is drawn: the
+    /// query must match its translation or the English text itself.
     pub fn admit(&mut self, text: &str) -> RowVisibility {
-        if matches_query(self.query, text) {
+        if matches_query(self.query, self.tr(text)) || matches_query(self.query, text) {
             RowVisibility::Shown(self.heading.take())
         } else {
             RowVisibility::Hidden
@@ -108,6 +121,7 @@ impl<'q> SettingsRows<'q> {
 
     /// Start a section: its heading now, or before its first match while searching.
     pub fn section(&mut self, ui: &mut egui::Ui, heading: &'static str) {
+        let heading = self.tr(heading);
         if self.searching() {
             self.heading = Some(heading);
         } else {
@@ -132,6 +146,7 @@ impl<'q> SettingsRows<'q> {
     /// A labelled row; `add` draws the controls after the label.
     pub fn row(&mut self, ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
         if self.show(ui, label) {
+            let label = self.tr(label);
             ui.horizontal(|ui| {
                 ui.label(label);
                 add(ui);
@@ -142,9 +157,9 @@ impl<'q> SettingsRows<'q> {
     /// A checkbox row.
     pub fn check(&mut self, ui: &mut egui::Ui, label: &str, value: &mut bool, hint: &str) {
         if self.show(ui, label) {
-            let response = ui.checkbox(value, label);
+            let response = ui.checkbox(value, self.tr(label));
             if !hint.is_empty() {
-                response.on_hover_text(hint);
+                response.on_hover_text(self.tr(hint));
             }
         }
     }
@@ -152,6 +167,7 @@ impl<'q> SettingsRows<'q> {
     /// An effect toggle: a checkbox plus its intensity slider.
     pub fn toggle(&mut self, ui: &mut egui::Ui, label: &str, toggle: &mut Toggle, hint: &str) {
         if self.show(ui, label) {
+            let (label, hint, intensity) = (self.tr(label), self.tr(hint), self.tr("intensity"));
             ui.horizontal(|ui| {
                 let response = ui.checkbox(&mut toggle.enabled, label);
                 if !hint.is_empty() {
@@ -161,7 +177,7 @@ impl<'q> SettingsRows<'q> {
                     toggle.enabled,
                     egui::Slider::new(&mut toggle.intensity_percent, INTENSITY_PERCENT)
                         .suffix(" %")
-                        .text("intensity"),
+                        .text(intensity),
                 );
             });
         }
@@ -206,6 +222,23 @@ mod tests {
         let mut all = SettingsRows::new("");
         assert!(!all.searching());
         assert_eq!(all.admit("Footsteps"), RowVisibility::Shown(None));
+    }
+
+    #[test]
+    fn search_matches_the_shown_spanish_label_and_the_english_one() {
+        let mut rows = SettingsRows {
+            lang: Lang::Es,
+            ..SettingsRows::new("ratón")
+        };
+        assert_eq!(rows.admit("Mouse DPI"), RowVisibility::Shown(None));
+        assert_eq!(rows.admit("Master volume"), RowVisibility::Hidden);
+        let mut rows = SettingsRows {
+            lang: Lang::Es,
+            ..SettingsRows::new("mouse")
+        };
+        assert_eq!(rows.admit("Mouse DPI"), RowVisibility::Shown(None));
+        let mut rows = SettingsRows::new("ratón");
+        assert_eq!(rows.admit("Mouse DPI"), RowVisibility::Hidden, "English UI");
     }
 
     #[test]
