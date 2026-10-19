@@ -1,17 +1,22 @@
-//! In-run HUD: crosshair, status, off-screen target arrows, movement meter, countdown and
-//! pause menu.
+//! In-run HUD: crosshair, status, off-screen target arrows, movement meter, countdown, pause
+//! menu, and the arena's game-feel effects (damage direction, kill feed, death screen, round
+//! transitions).
 
 use crate::game::AppState;
 use crate::game::MainCamera;
 use crate::game::SensDrill;
-use crate::game::arena::ArenaRun;
-use crate::game::feedback::HitMarkerStyle;
+use crate::game::arena::{ArenaFeedback, ArenaRun};
+use crate::game::feedback::{HitFrame, HitMarkerStyle, kill_flash_alpha, marker_look};
 use crate::overlay::Overlay;
-use crate::persistence::settings::Settings;
+use crate::persistence::settings::{Settings, Toggle};
 use crate::platform::game_key;
 use crate::ui::UiAction;
 use crate::ui::atoms::{crosshair, hit_marker};
 use crate::ui::navigation::Navigator;
+use crate::ui::organisms::damage_indicator::{self, RecentHits, screen_bearing};
+use crate::ui::organisms::death_screen::{self, DeathView, ShotSide, shot_side};
+use crate::ui::organisms::health_bar::{HealthBar, HealthGhost, low_hp_pulse};
+use crate::ui::organisms::kill_feed::{self, KillFeed};
 use crate::ui::organisms::radar_overlay::{self, RadarPanel};
 use crate::ui::organisms::{coaching_overlay, hud_panels};
 use aim_core::scenario::{RunKey, Tuning};
@@ -33,6 +38,16 @@ impl Plugin for HudPage {
         app.add_systems(
             EguiPrimaryContextPass,
             (hud, sens_drill_hud).run_if(in_state(AppState::Playing)),
+        )
+        .init_resource::<ArenaFx>()
+        .add_systems(OnEnter(AppState::Playing), reset_arena_fx)
+        .add_systems(
+            EguiPrimaryContextPass,
+            (
+                track_arena_fx.before(hud),
+                arena_fx_hud.after(track_arena_fx),
+            )
+                .run_if(in_state(AppState::Playing)),
         )
         .add_systems(
             EguiPrimaryContextPass,
@@ -65,10 +80,27 @@ fn hud(
     let restart = game_key::label(restart_name);
     let ctx = contexts.ctx_mut()?;
     if let Some(arena) = nav.arena() {
-        hit_feedback(ctx, &settings, arena.hit_flash);
-        hud_panels::arena_status(ctx, &arena.session, arena.damage_flash);
+        if settings.feel.arena_arrows
+            && !arena.paused
+            && let Ok(Projection::Perspective(p)) = camera.single()
+        {
+            let cam = hud_panels::ArrowCamera {
+                eye: arena.session.eye_position(),
+                view: arena.view,
+                vfov_deg: p.fov.to_degrees(),
+                aspect: p.aspect_ratio,
+            };
+            let points = hud_panels::arena_arrow_points(arena.session.bots());
+            hud_panels::offscreen_arrows(ctx, &points, &cam, settings.target_color);
+        }
+        hit_feedback(ctx, &settings, arena.hit_frame());
         if arena.countdown > 0.0 {
-            hud_panels::countdown(ctx, arena.countdown, restart);
+            hud_panels::countdown(
+                ctx,
+                arena.countdown,
+                restart,
+                settings.feel.round_transitions,
+            );
         }
         let action = arena
             .paused
@@ -90,9 +122,10 @@ fn hud(
             vfov_deg: p.fov.to_degrees(),
             aspect: p.aspect_ratio,
         };
-        hud_panels::offscreen_arrows(ctx, &run.session, &cam, settings.target_color);
+        let points = hud_panels::scenario_arrow_points(&run.session);
+        hud_panels::offscreen_arrows(ctx, &points, &cam, settings.target_color);
     }
-    hit_feedback(ctx, &settings, run.hit_flash);
+    hit_feedback(ctx, &settings, run.hit_frame());
     hud_panels::run_status(ctx, &run.session);
     // The session stands still during the countdown and the pause: hide the radar then, so
     // it is never on screen longer than `show_secs`.
@@ -107,7 +140,7 @@ fn hud(
         hud_panels::spray_meter(ctx, &run.session);
     }
     if run.countdown > 0.0 {
-        hud_panels::countdown(ctx, run.countdown, restart);
+        hud_panels::countdown(ctx, run.countdown, restart, settings.feel.round_transitions);
     }
     let def = run.session.def();
     let key = RunKey::parse(&def.id);
@@ -160,16 +193,33 @@ fn sens_drill_hud(
     Ok(())
 }
 
-/// The crosshair and the hit marker, `marker_secs_left` seconds before the marker ends.
-fn hit_feedback(ctx: &bevy_egui::egui::Context, settings: &Settings, marker_secs_left: f32) {
+/// The crosshair and the hit marker of `frame` (head, body and kill markers differ with
+/// `feel.distinct_markers`), the crosshair bloom and the arena kill flash.
+fn hit_feedback(ctx: &bevy_egui::egui::Context, settings: &Settings, frame: HitFrame) {
     let fb = &settings.hit_feedback;
-    let showing = marker_secs_left > 0.0;
-    let flash = showing && fb.marker == HitMarkerStyle::Flash;
-    crosshair::draw(ctx, &settings.crosshair, flash);
+    let showing = frame.marker_secs_left > 0.0;
+    let look = marker_look(
+        frame.marker,
+        fb.marker,
+        fb.marker_color,
+        settings.feel.distinct_markers,
+    );
+    let flash = (showing && fb.marker == HitMarkerStyle::Flash).then(|| {
+        let [r, g, b] = look.flash_rgb;
+        aim_core::crosshair::Rgba::opaque(r, g, b)
+    });
+    let bloom = if settings.feel.crosshair_bloom {
+        crosshair::bloom_px(frame.inaccuracy)
+    } else {
+        0
+    };
+    crosshair::draw(ctx, &settings.crosshair, flash, bloom);
     if showing {
-        let t = 1.0 - marker_secs_left / fb.marker_secs();
-        let color = settings.crosshair.color();
-        hit_marker::draw(ctx, fb.marker, fb.marker_color, color, t);
+        let t = 1.0 - frame.marker_secs_left / fb.marker_secs();
+        hit_marker::draw(ctx, &look, settings.crosshair.color(), t);
+    }
+    if frame.kill_flash_secs > 0.0 {
+        hit_marker::draw_kill_flash(ctx, kill_flash_alpha(frame.kill_flash_secs));
     }
 }
 
@@ -190,6 +240,205 @@ fn coaching_hud(
     Ok(())
 }
 
+/// Where the player stood and looked in a frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Pose {
+    eye: Vec3,
+    yaw_deg: f32,
+}
+
+/// The death screen's state: where the killing shot came from and how long ago.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Death {
+    side: Option<ShotSide>,
+    age: f32,
+}
+
+/// What the running arena reports for one frame, for [`ArenaFx::update`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ArenaFrame {
+    /// Seconds since the last frame; 0 while paused.
+    dt: f32,
+    pose: Pose,
+    health: f32,
+    /// Seconds of spawn protection left.
+    protection: f32,
+}
+
+/// The arena HUD's timed effects, fed by [`ArenaFeedback`]. Display state only: it decides
+/// no gameplay. Reset whenever `Playing` is entered (a new run or a restart).
+#[derive(Resource, Debug, Default)]
+pub struct ArenaFx {
+    /// Seconds the arena has been live, for pulses.
+    clock: f32,
+    hits: RecentHits,
+    kills: KillFeed,
+    ghost: HealthGhost,
+    death: Option<Death>,
+    go_age: Option<f32>,
+    end_age: Option<f32>,
+    /// The previous frame's pose. A death respawns the player within the frame, so the
+    /// killing shot's side is judged from where they stood before it.
+    pose: Option<Pose>,
+}
+
+impl ArenaFx {
+    fn update<'a>(
+        &mut self,
+        frame: ArenaFrame,
+        feedback: impl IntoIterator<Item = &'a ArenaFeedback>,
+    ) {
+        let dt = frame.dt;
+        self.clock += dt;
+        self.hits.advance(dt);
+        self.kills.advance(dt);
+        let age = |a: Option<f32>, secs: f32| a.map(|a| a + dt).filter(|a| *a < secs);
+        self.go_age = age(self.go_age, hud_panels::GO_SECS);
+        self.end_age = age(self.end_age, hud_panels::ROUND_END_SECS);
+        if let Some(d) = &mut self.death {
+            d.age += dt;
+        }
+        // The death screen lasts as long as the respawn's spawn protection.
+        self.death
+            .take_if(|d| d.age > 0.0 && frame.protection <= 0.0);
+        let before = self.pose.unwrap_or(frame.pose);
+        for f in feedback {
+            match *f {
+                ArenaFeedback::PlayerHit { from, damage, .. } => self.hits.push(from, damage),
+                ArenaFeedback::PlayerDied { from } => {
+                    self.hits.clear();
+                    self.kills.on_death();
+                    self.death = Some(Death {
+                        side: from.map(|from| {
+                            shot_side(screen_bearing(before.eye, before.yaw_deg, from))
+                        }),
+                        age: 0.0,
+                    });
+                }
+                ArenaFeedback::BotKilled {
+                    bot_id,
+                    headshot,
+                    streak,
+                } => self.kills.on_kill(bot_id, headshot, streak),
+                ArenaFeedback::RoundStarted => self.go_age = Some(0.0),
+                ArenaFeedback::RoundEnded => self.end_age = Some(0.0),
+                ArenaFeedback::CountdownTick { .. } | ArenaFeedback::BotFired { .. } => {}
+            }
+        }
+        self.ghost.update(frame.health, dt);
+        self.pose = Some(frame.pose);
+    }
+
+    fn health_bar(&self, health: f32, pulse: bool) -> HealthBar {
+        HealthBar {
+            health,
+            ghost: self.ghost.value().max(health),
+            max: aim_world::arena::PLAYER_HEALTH,
+            pulse: if pulse {
+                low_hp_pulse(health, self.clock)
+            } else {
+                0.0
+            },
+        }
+    }
+}
+
+/// An effect's intensity as a factor (1 = 100%).
+fn strength(t: Toggle) -> f32 {
+    f32::from(t.intensity_percent) / 100.0
+}
+
+fn reset_arena_fx(mut fx: ResMut<ArenaFx>) {
+    *fx = ArenaFx::default();
+}
+
+/// Feed this frame's arena feedback into [`ArenaFx`]. Effects stand still while paused.
+fn track_arena_fx(
+    time: Res<Time>,
+    arena: Option<Res<ArenaRun>>,
+    mut feedback: MessageReader<ArenaFeedback>,
+    mut fx: ResMut<ArenaFx>,
+) {
+    let Some(arena) = arena else {
+        feedback.clear();
+        return;
+    };
+    let s = &arena.session;
+    let eye = s.eye_position();
+    let frame = ArenaFrame {
+        dt: if arena.paused { 0.0 } else { time.delta_secs() },
+        pose: Pose {
+            eye: Vec3::new(eye.x, eye.y, eye.z),
+            yaw_deg: arena.view.yaw_deg,
+        },
+        health: s.player_health(),
+        protection: s.spawn_protection_secs(),
+    };
+    fx.update(frame, feedback.read());
+}
+
+/// The arena status (time, health, kills) and its game-feel overlays, each behind its
+/// `[feel]` setting.
+fn arena_fx_hud(
+    mut contexts: EguiContexts,
+    overlay: Res<Overlay>,
+    settings: Res<Settings>,
+    arena: Option<Res<ArenaRun>>,
+    fx: Res<ArenaFx>,
+) -> Result {
+    let Some(arena) = arena.filter(|_| overlay.visible) else {
+        return Ok(());
+    };
+    let ctx = contexts.ctx_mut()?;
+    let feel = &settings.feel;
+    let s = &arena.session;
+    let eye = s.eye_position();
+    let eye = Vec3::new(eye.x, eye.y, eye.z);
+    let yaw = arena.view.yaw_deg;
+    let extras = hud_panels::ArenaStatusExtras {
+        health_bar: feel
+            .health_bar
+            .then(|| fx.health_bar(s.player_health(), feel.low_hp_pulse)),
+        death_screen: feel.death_screen && fx.death.is_some(),
+    };
+    hud_panels::arena_status(ctx, s, &extras);
+    if feel.damage_vignette.enabled {
+        let alpha = damage_indicator::strongest_vignette(&fx.hits, strength(feel.damage_vignette));
+        damage_indicator::draw_vignette(ctx, alpha);
+    }
+    if feel.screen_punch.enabled {
+        damage_indicator::draw_punch(ctx, &fx.hits, eye, yaw, strength(feel.screen_punch));
+    }
+    if feel.damage_indicator.enabled {
+        let k = strength(feel.damage_indicator);
+        damage_indicator::draw_indicators(ctx, &fx.hits, eye, yaw, k);
+    }
+    if feel.kill_feed {
+        kill_feed::draw_feed(ctx, &fx.kills);
+    }
+    if feel.streak_banner {
+        kill_feed::draw_banner(ctx, &fx.kills);
+    }
+    if let Some(death) = fx.death.filter(|_| feel.death_screen) {
+        let view = DeathView {
+            side: death.side,
+            age: death.age,
+            respawn_secs: s.spawn_protection_secs(),
+        };
+        death_screen::draw(ctx, &view);
+    }
+    if feel.round_transitions {
+        if let Some(age) = fx.go_age {
+            hud_panels::go_pop(ctx, age);
+        }
+        if let Some(age) = fx.end_age {
+            let stats = s.stats();
+            hud_panels::round_end_banner(ctx, age, stats.kills, stats.deaths);
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use bevy::ecs::system::assert_is_system;
@@ -200,5 +449,73 @@ mod tests {
         assert_is_system::<(), Result, _>(super::hud);
         assert_is_system::<(), Result, _>(super::sens_drill_hud);
         assert_is_system::<(), Result, _>(super::coaching_hud);
+        assert_is_system::<(), Result, _>(super::arena_fx_hud);
+        assert_is_system::<(), (), _>(super::track_arena_fx);
+        assert_is_system::<(), (), _>(super::reset_arena_fx);
+    }
+
+    use super::{ArenaFeedback, ArenaFrame, ArenaFx, Pose, ShotSide};
+    use bevy::prelude::Vec3;
+
+    fn frame(yaw_deg: f32, health: f32, protection: f32) -> ArenaFrame {
+        ArenaFrame {
+            dt: 0.1,
+            pose: Pose {
+                eye: Vec3::new(0.0, 1.6, 0.0),
+                yaw_deg,
+            },
+            health,
+            protection,
+        }
+    }
+
+    #[test]
+    fn the_killing_shot_side_uses_the_pose_before_the_respawn() {
+        let mut fx = ArenaFx::default();
+        fx.update(frame(0.0, 100.0, 0.0), []);
+        let hit = ArenaFeedback::PlayerHit {
+            from: Vec3::new(5.0, 1.6, 0.0),
+            damage: 40.0,
+            zone: None,
+        };
+        fx.update(frame(0.0, 60.0, 0.0), [&hit]);
+        assert_eq!(fx.hits.iter().count(), 1);
+        // The respawn turned the player around within the frame of the death.
+        let died = ArenaFeedback::PlayerDied {
+            from: Some(Vec3::new(5.0, 1.6, 0.0)),
+        };
+        fx.update(frame(180.0, 100.0, 1.5), [&hit, &died]);
+        let death = fx.death.expect("death screen");
+        assert_eq!(death.side, Some(ShotSide::Right));
+        assert_eq!(fx.hits.iter().count(), 0, "a death clears the arcs");
+        assert_eq!(fx.ghost.value(), 100.0, "the respawn refills the ghost");
+        // It stays while the spawn protection lasts, then goes.
+        fx.update(frame(180.0, 100.0, 0.5), []);
+        assert!(fx.death.is_some());
+        fx.update(frame(180.0, 100.0, 0.0), []);
+        assert!(fx.death.is_none());
+    }
+
+    #[test]
+    fn kills_and_round_cues_start_their_effects() {
+        let mut fx = ArenaFx::default();
+        fx.update(frame(0.0, 100.0, 0.0), [&ArenaFeedback::RoundStarted]);
+        assert_eq!(fx.go_age, Some(0.0));
+        let kill = |bot_id, streak| ArenaFeedback::BotKilled {
+            bot_id,
+            headshot: true,
+            streak,
+        };
+        fx.update(frame(0.0, 100.0, 0.0), [&kill(1, 1), &kill(2, 2)]);
+        assert_eq!(fx.kills.lines().count(), 2);
+        assert_eq!(fx.kills.banner().map(|(t, _)| t), Some("Double"));
+        assert!(fx.go_age.is_some_and(|a| a > 0.0));
+        fx.update(frame(0.0, 100.0, 0.0), [&ArenaFeedback::RoundEnded]);
+        assert_eq!(fx.end_age, Some(0.0));
+        // A paused frame ages nothing.
+        let mut paused = frame(0.0, 100.0, 0.0);
+        paused.dt = 0.0;
+        fx.update(paused, []);
+        assert_eq!(fx.end_age, Some(0.0));
     }
 }

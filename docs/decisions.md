@@ -183,7 +183,7 @@ Full citations are in `docs/training-science.md`.
   - No audio files to license or ship, and nothing that could be mistaken for Riot sounds (D13).
   - No decoder dependency: only Bevy's `bevy_audio` feature (rodio and cpal, MIT/Apache-2.0). Bevy's `wav`/`vorbis` decoders are not enabled.
   - Clips are pure functions of their recipe, so they are unit-tested (length, silent start and end, peak, determinism).
-- **Latency:** a shot spawns a player for a pre-built clip in the same frame; nothing is synthesized or decoded while playing. Linux builds need the ALSA headers (`libasound2-dev`, `alsa-lib` on Arch).
+- **Latency:** a shot spawns a player for a pre-built clip in the same frame; nothing is synthesized or decoded while playing. Exception: positional sounds (perception cues, arena gunfire and footsteps) render a short stereo copy of a pre-built clip when they play, to apply the pan and rear muffle for the listener; the source clip is still synthesized once at startup. Linux builds need the ALSA headers (`libasound2-dev`, `alsa-lib` on Arch).
 
 ### D17 Subtle hit feedback
 

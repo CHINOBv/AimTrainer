@@ -1,37 +1,239 @@
-//! Scenario list grouped by category, and the details/play panel.
+//! Scenario list (search, filters, favourites, recent runs, then every category) and the
+//! details/play panel.
 
 use crate::persistence::history::History;
 use crate::persistence::library::Library;
 use crate::ui::UiAction;
-use crate::ui::molecules::scenario_item;
+use crate::ui::atoms::FAVORITE;
+use crate::ui::molecules::{matches_query, scenario_item};
 use crate::ui::organisms::history_chart::history_chart;
-use aim_core::scenario::{Category, FireMode, ScenarioDef};
+use aim_core::scenario::{Category, FireMode, ScenarioDef, parse_run_key};
+use aim_core::training::progress::RunRecord;
 use aim_core::training::store::RunStore;
 use bevy_egui::egui;
 
+/// Scenarios listed under "Recent".
+pub const RECENT_COUNT: usize = 5;
+
+/// What the scenario list shows. Kept for the session, not saved.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct ScenarioFilter {
+    /// Words matched against the name, description and category.
+    pub query: String,
+    pub category: Option<Category>,
+    pub fire: Option<FireMode>,
+    /// `Some(true)`: movement scenarios only; `Some(false)`: standing only.
+    pub movement: Option<bool>,
+    /// Only scenarios with phases (waves).
+    pub waves_only: bool,
+}
+
+impl ScenarioFilter {
+    pub fn matches(&self, def: &ScenarioDef) -> bool {
+        let text = format!("{} {} {}", def.name, def.description, def.category.label());
+        matches_query(&self.query, &text)
+            && self.category.is_none_or(|c| def.category == c)
+            && self.fire.is_none_or(|f| def.weapon.fire == f)
+            && self.movement.is_none_or(|m| def.player.movement == m)
+            && (!self.waves_only || def.phases.is_some())
+    }
+
+    /// True when anything narrows the list.
+    pub fn is_active(&self) -> bool {
+        *self != Self::default()
+    }
+}
+
+/// Add `id` to the favourites, or remove it when it is already one.
+pub fn toggle_favorite(favorites: &mut Vec<String>, id: &str) {
+    match favorites.iter().position(|f| f == id) {
+        Some(i) => {
+            favorites.remove(i);
+        }
+        None => favorites.push(id.to_owned()),
+    }
+}
+
+/// The last `count` distinct scenarios played, newest first, keeping only ids `known`
+/// accepts (a run key's level and tuning suffixes are dropped).
+pub fn recent_scenarios(
+    runs: &[RunRecord],
+    known: impl Fn(&str) -> bool,
+    count: usize,
+) -> Vec<String> {
+    let mut recent: Vec<String> = Vec::new();
+    for run in runs.iter().rev() {
+        if recent.len() >= count {
+            break;
+        }
+        let (id, _) = parse_run_key(&run.scenario);
+        if known(id) && !recent.iter().any(|r| r == id) {
+            recent.push(id.to_owned());
+        }
+    }
+    recent
+}
+
+/// Filter controls and the list. `favorites` is saved in the settings.
 pub fn scenario_list(
     ui: &mut egui::Ui,
     lib: &Library,
     history: &History,
     selected: &mut Option<String>,
+    filter: &mut ScenarioFilter,
+    favorites: &mut Vec<String>,
 ) {
-    egui::ScrollArea::vertical().show(ui, |ui| {
-        for cat in Category::ALL {
-            let items: Vec<&ScenarioDef> =
-                lib.scenarios.iter().filter(|d| d.category == cat).collect();
-            if items.is_empty() {
-                continue;
+    filter_controls(ui, filter);
+    ui.separator();
+    let mut toggled: Option<String> = None;
+    egui::ScrollArea::vertical()
+        .id_salt("scenario_list")
+        .show(ui, |ui| {
+            let mut row = |ui: &mut egui::Ui, d: &ScenarioDef| {
+                ui.horizontal(|ui| {
+                    let fav = favorites.contains(&d.id);
+                    let star = egui::RichText::new("★").color(if fav {
+                        FAVORITE
+                    } else {
+                        ui.visuals().weak_text_color()
+                    });
+                    let hint = if fav {
+                        "Remove from favourites"
+                    } else {
+                        "Add to favourites"
+                    };
+                    if ui
+                        .add(egui::Button::new(star).frame(false))
+                        .on_hover_text(hint)
+                        .clicked()
+                    {
+                        toggled = Some(d.id.clone());
+                    }
+                    let is_selected = selected.as_deref() == Some(d.id.as_str());
+                    if scenario_item(ui, &d.name, history.best(&d.id), is_selected) {
+                        *selected = Some(d.id.clone());
+                    }
+                });
+            };
+            let group = |ids: &[String]| -> Vec<&ScenarioDef> {
+                ids.iter()
+                    .filter_map(|id| lib.scenario(id))
+                    .filter(|d| filter.matches(d))
+                    .collect()
+            };
+            let favs = group(favorites);
+            if !favs.is_empty() {
+                ui.push_id("favourites", |ui| {
+                    ui.heading("★ Favourites");
+                    for d in favs {
+                        row(ui, d);
+                    }
+                });
+                ui.add_space(6.0);
             }
-            ui.heading(cat.label());
-            for d in items {
-                let is_selected = selected.as_deref() == Some(d.id.as_str());
-                if scenario_item(ui, &d.name, history.best(&d.id), is_selected) {
-                    *selected = Some(d.id.clone());
+            let recent = group(&recent_scenarios(
+                history.runs(),
+                |id| lib.scenario(id).is_some(),
+                RECENT_COUNT,
+            ));
+            if !recent.is_empty() {
+                ui.push_id("recent", |ui| {
+                    ui.heading("Recent");
+                    for d in recent {
+                        row(ui, d);
+                    }
+                });
+                ui.add_space(6.0);
+            }
+            let mut any = false;
+            for cat in Category::ALL {
+                let items: Vec<&ScenarioDef> = lib
+                    .scenarios
+                    .iter()
+                    .filter(|d| d.category == cat && filter.matches(d))
+                    .collect();
+                if items.is_empty() {
+                    continue;
                 }
+                any = true;
+                ui.push_id(cat.label(), |ui| {
+                    ui.heading(cat.label());
+                    for d in items {
+                        row(ui, d);
+                    }
+                });
+                ui.add_space(6.0);
             }
-            ui.add_space(6.0);
+            if !any {
+                ui.label("No scenario matches the filters.");
+            }
+        });
+    if let Some(id) = toggled {
+        toggle_favorite(favorites, &id);
+    }
+}
+
+fn filter_controls(ui: &mut egui::Ui, filter: &mut ScenarioFilter) {
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(&mut filter.query)
+                .hint_text("Search scenarios")
+                .desired_width(160.0),
+        );
+        if filter.is_active() && ui.small_button("Clear").clicked() {
+            *filter = ScenarioFilter::default();
         }
     });
+    ui.horizontal_wrapped(|ui| {
+        option_combo(
+            ui,
+            "filter_category",
+            &mut filter.category,
+            "Any category",
+            &Category::ALL,
+            |c| c.label(),
+        );
+        option_combo(
+            ui,
+            "filter_fire",
+            &mut filter.fire,
+            "Click or hold",
+            &[FireMode::Click, FireMode::Hold],
+            |f| match f {
+                FireMode::Click => "Click",
+                FireMode::Hold => "Hold to fire",
+            },
+        );
+        option_combo(
+            ui,
+            "filter_movement",
+            &mut filter.movement,
+            "Any movement",
+            &[true, false],
+            |m| if m { "Moving" } else { "Standing" },
+        );
+        ui.checkbox(&mut filter.waves_only, "Waves")
+            .on_hover_text("Only scenarios with phases (waves).");
+    });
+}
+
+/// A combo box whose first entry, `any`, clears the choice.
+fn option_combo<T: Copy + PartialEq>(
+    ui: &mut egui::Ui,
+    salt: &str,
+    value: &mut Option<T>,
+    any: &'static str,
+    all: &[T],
+    label: impl Fn(T) -> &'static str,
+) {
+    egui::ComboBox::from_id_salt(salt)
+        .selected_text(value.map_or(any, &label))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(value, None, any);
+            for &option in all {
+                ui.selectable_value(value, Some(option), label(option));
+            }
+        });
 }
 
 /// Runs drawn in the history chart, and listed as numbers under it.
@@ -95,4 +297,101 @@ pub fn scenario_details(
 pub fn empty_selection(ui: &mut egui::Ui) {
     ui.heading("Pick a scenario");
     ui.label("Esc pauses a run. Right mouse = ADS zoom for weapons with a scope.");
+    ui.label("Click ★ next to a scenario to pin it to Favourites.");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn def(id: &str) -> ScenarioDef {
+        aim_core::scenario::builtin::all()
+            .into_iter()
+            .find(|d| d.id == id)
+            .unwrap()
+    }
+
+    #[test]
+    fn search_matches_name_description_and_category_words() {
+        let flick = def("flick-headshot");
+        let by = |query: &str| ScenarioFilter {
+            query: query.into(),
+            ..ScenarioFilter::default()
+        };
+        assert!(by("").matches(&flick));
+        assert!(by(&flick.name.to_uppercase()).matches(&flick));
+        assert!(by("flicking").matches(&flick), "category label");
+        assert!(!by("zzz-no-such-word").matches(&flick));
+    }
+
+    #[test]
+    fn filters_narrow_by_category_fire_mode_movement_and_waves() {
+        let flick = def("flick-headshot");
+        let track = def("track-precise");
+        let strafe = def("counter-strafe");
+        let waves = def("phase-kill-race");
+
+        let category = ScenarioFilter {
+            category: Some(Category::Tracking),
+            ..ScenarioFilter::default()
+        };
+        assert!(category.matches(&track) && !category.matches(&flick));
+
+        let hold = ScenarioFilter {
+            fire: Some(FireMode::Hold),
+            ..ScenarioFilter::default()
+        };
+        assert_eq!(hold.matches(&track), track.weapon.fire == FireMode::Hold);
+        assert!(!hold.matches(&flick));
+
+        let moving = ScenarioFilter {
+            movement: Some(true),
+            ..ScenarioFilter::default()
+        };
+        assert!(moving.matches(&strafe) && !moving.matches(&flick));
+        let standing = ScenarioFilter {
+            movement: Some(false),
+            ..ScenarioFilter::default()
+        };
+        assert!(standing.matches(&flick) && !standing.matches(&strafe));
+
+        let wave = ScenarioFilter {
+            waves_only: true,
+            ..ScenarioFilter::default()
+        };
+        assert!(wave.matches(&waves) && !wave.matches(&flick));
+        assert!(wave.is_active() && !ScenarioFilter::default().is_active());
+    }
+
+    #[test]
+    fn favourites_toggle_on_and_off_without_duplicates() {
+        let mut favs = vec!["a".to_owned()];
+        toggle_favorite(&mut favs, "b");
+        assert_eq!(favs, ["a", "b"]);
+        toggle_favorite(&mut favs, "a");
+        assert_eq!(favs, ["b"]);
+        toggle_favorite(&mut favs, "b");
+        assert!(favs.is_empty());
+    }
+
+    #[test]
+    fn recent_lists_distinct_known_scenarios_newest_first() {
+        let run = |t: u64, key: &str| RunRecord {
+            timestamp: t,
+            scenario: key.into(),
+            score: 1.0,
+            duration_secs: 60.0,
+        };
+        let runs = [
+            run(1, "a"),
+            run(2, "b@+0.50"),
+            run(3, "gone"),
+            run(4, "a~20s"),
+            run(5, "c"),
+        ];
+        let known = |id: &str| id != "gone";
+        assert_eq!(recent_scenarios(&runs, known, 5), ["c", "a", "b"]);
+        assert_eq!(recent_scenarios(&runs, known, 2), ["c", "a"]);
+        assert!(recent_scenarios(&[], known, 5).is_empty());
+    }
 }
