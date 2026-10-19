@@ -32,6 +32,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - A **daily challenge** that everyone plays with the same seed.
   - **Compound daily missions** built from your own recent bests (for example "accuracy ≥ 75% AND kills ≥ 62"), with mastery missions and a low/medium/high commitment level.
 - **Feedback**
+  - A **visual results screen**: your score with its change against your personal best, a row of gauges (accuracy, plus reaction, overshoot and click delay for flick runs, or time on target, speed match and lag for tracking runs) coloured green, yellow or red by the recommendation thresholds, **one main fix** with a **Watch it** button that replays the run, and the miss compass, flick directions and pace drawn as charts. Hover any gauge, chart or the fix for the numbers and thresholds behind it; the full stats and every analysis panel sit under a collapsed **Details** section.
   - Flick and tracking analysis with explained recommendations.
   - **Run insights:** flicks by screen direction and distance, click timing, pace and stamina, target priority, tracking speed match and edge time, and firing while moving. In arenas: peek timing. A **miss compass** shows whether you miss above or below the head, and a **potential score** names the one fix worth the most points.
   - A **sensitivity suggestion** from your recent flicks' over/undershoot, with the evidence shown. It is applied only when you choose to.
@@ -84,7 +85,7 @@ The menu tabs (keys 1–9 switch tabs while no text field has focus):
 | Tab | What it holds |
 |---|---|
 | Today | Quick play (your last scenario) and Continue (a routine you started today), the day's method session, the daily challenge, daily missions |
-| Progress | Goal, readiness, fatigue, trend, per-skill strengths and trends, bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
+| Progress | Goal, readiness chips, fatigue, trend, per-skill bars with weekly sparklines (explanations on hover), bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
 | Scenarios | Search and filter (category, click or hold, moving or standing, waves); ★ pins a scenario to Favourites (saved as `favorites` in `settings.toml`); Recent lists your last 5 scenarios. Play, or play adaptively |
 | Routines | The routines (resume a split one), your personalized playlist |
 | Arenas | Deathmatch, site hold, angle clearing, jiggle-peek and pre-aim drills; a Practice button plays any arena with bots that never shoot |

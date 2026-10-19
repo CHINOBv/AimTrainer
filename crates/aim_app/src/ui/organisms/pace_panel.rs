@@ -27,6 +27,8 @@ pub struct PaceFlag {
 pub struct PaceReport {
     pub rows: Vec<(&'static str, String)>,
     pub flags: Vec<PaceFlag>,
+    /// Rate per second of each window, in time order (for the sparkline).
+    pub rates: Vec<f32>,
 }
 
 fn rate(unit: PaceUnit, per_sec: f32) -> String {
@@ -98,7 +100,11 @@ impl PaceReport {
                 ),
             });
         }
-        Self { rows, flags }
+        Self {
+            rows,
+            flags,
+            rates: pace.windows.iter().map(|w| w.rate_per_sec).collect(),
+        }
     }
 }
 
@@ -166,6 +172,7 @@ mod tests {
                         .to_owned(),
             }]
         );
+        assert_eq!(r.rates, [0.1, 0.4, 0.4, 0.4, 0.4, 0.4]);
     }
 
     #[test]

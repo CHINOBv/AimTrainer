@@ -3,7 +3,9 @@
 //! numbers behind it.
 
 use crate::ui::UiAction;
-use crate::ui::atoms::{BAD, GOOD, WARN, big};
+use crate::ui::atoms::{BAD, GOOD, Tone, WARN, big};
+use crate::ui::molecules::chip;
+use crate::ui::molecules::sparkline::sparkline;
 use crate::ui::organisms::history_chart::history_chart;
 use aim_core::analytics::BenchmarkProfile;
 use aim_core::analytics::profile::Verdict;
@@ -12,6 +14,12 @@ use aim_core::training::progress::{
     DailyGoal, FatigueSignal, PLATEAU_WEEKS, Plateau, Readiness, Warmth,
 };
 use bevy_egui::egui;
+
+const READINESS_HINT: &str =
+    "Today's best compared with the median of your daily bests over the last 30 days.";
+const SKILLS_HINT: &str = "Each benchmark subcategory compared with your average over the ones you played (provisional 15% margin). Bar: energy against your best subcategory; green strength, red weakness. Hover a row for the numbers and the weekly trend.";
+const SKILL_BAR_WIDTH_PX: f32 = 180.0;
+const TREND_WIDTH_PX: f32 = 90.0;
 
 pub struct ProgressModel {
     pub goal: DailyGoal,
@@ -77,26 +85,16 @@ pub fn progress_panel(ui: &mut egui::Ui, m: &ProgressModel) -> Option<UiAction> 
         }
 
         ui.add_space(10.0);
-        ui.label(big("Ready for ranked?", 20.0));
-        ui.small(
-            "Today's best compared with the median of your daily bests over the last 30 days.",
-        );
-        for (name, r) in &m.readiness {
-            let (label, color) = match r.warmth {
-                Warmth::Ready => ("READY", GOOD),
-                Warmth::Warming => ("WARMING UP", WARN),
-                Warmth::Cold => ("COLD", BAD),
-            };
-            ui.horizontal(|ui| {
-                ui.colored_label(color, label);
-                ui.label(format!(
-                    "{name}: today {:.0} vs usual {:.0} ({:.0}%)",
-                    r.today_best,
-                    r.baseline,
-                    r.ratio * 100.0
-                ));
-            });
-        }
+        ui.label(big("Ready for ranked?", 20.0))
+            .on_hover_text(READINESS_HINT);
+        ui.horizontal_wrapped(|ui| {
+            for (name, r) in &m.readiness {
+                let (label, tone) = readiness_chip(r.warmth);
+                chip(ui, label, tone.color()).on_hover_text(readiness_text(name, r));
+                ui.label(name).on_hover_text(readiness_text(name, r));
+                ui.add_space(8.0);
+            }
+        });
         for (id, name) in &m.readiness_missing {
             ui.horizontal(|ui| {
                 ui.label(format!(
@@ -188,19 +186,27 @@ pub fn plateau_text(p: &Plateau) -> String {
 /// with the changes of stimulus to try.
 pub fn plateau_section(ui: &mut egui::Ui, plateaus: &[Plateau]) {
     ui.add_space(10.0);
-    ui.label(big("Plateaus", 20.0));
-    ui.small(format!(
+    ui.label(big("Plateaus", 20.0)).on_hover_text(format!(
         "A subcategory you still play with no new personal best in {PLATEAU_WEEKS} weeks (an estimate, not a sourced threshold)."
     ));
     if plateaus.is_empty() {
-        ui.label("No plateau right now.");
+        chip(ui, "NO PLATEAU", GOOD);
         return;
     }
     for p in plateaus {
-        ui.colored_label(WARN, plateau_text(p));
-        for s in &p.suggestions {
-            ui.label(format!("  • {}", s.text()));
-        }
+        let tries: Vec<String> = p
+            .suggestions
+            .iter()
+            .map(|s| format!("• {}", s.text()))
+            .collect();
+        ui.horizontal(|ui| {
+            chip(ui, "PLATEAU", WARN);
+            ui.label(&p.subcategory).on_hover_text(format!(
+                "{}\n{}",
+                plateau_text(p),
+                tries.join("\n")
+            ));
+        });
     }
 }
 
@@ -235,43 +241,143 @@ pub fn skills_section(
 ) -> Option<UiAction> {
     let mut action = None;
     ui.add_space(10.0);
-    ui.label(big("Skills", 20.0));
-    ui.small(
-        "Each benchmark subcategory compared with your average over the ones you played (provisional 15% margin).",
-    );
-    for s in &profile.subcategories {
-        ui.horizontal(|ui| {
-            match s.verdict {
-                Some(Verdict::Strength) => {
-                    ui.colored_label(GOOD, "STRENGTH");
+    ui.label(big("Skills", 20.0)).on_hover_text(SKILLS_HINT);
+    let top = profile
+        .subcategories
+        .iter()
+        .filter_map(|s| s.energy)
+        .fold(0.0, f32::max);
+    egui::Grid::new("skill_bars")
+        .num_columns(4)
+        .spacing([8.0, 4.0])
+        .show(ui, |ui| {
+            for s in &profile.subcategories {
+                let bar = skill_bar(s, top);
+                let hint = match trend_text(s) {
+                    Some(t) => format!("{} ({})\n{}\n{t}", s.name, s.skill, s.explanation),
+                    None => format!("{} ({})\n{}", s.name, s.skill, s.explanation),
+                };
+                ui.label(&s.name).on_hover_text(&hint);
+                ui.add(
+                    egui::ProgressBar::new(bar.fraction)
+                        .desired_width(SKILL_BAR_WIDTH_PX)
+                        .fill(bar.tone.color())
+                        .text(bar.value),
+                )
+                .on_hover_text(&hint);
+                match sparkline(ui, &trend_points(s), TREND_WIDTH_PX, bar.tone.color()) {
+                    Some(r) => {
+                        r.on_hover_text(&hint);
+                    }
+                    None => {
+                        ui.label("");
+                    }
                 }
-                Some(Verdict::Weakness) => {
-                    ui.colored_label(BAD, "WEAKNESS");
+                if s.verdict == Some(Verdict::Weakness)
+                    && let Some(id) = s.scenario_ids.first()
+                {
+                    if ui
+                        .small_button("▶")
+                        .on_hover_text(format!("Practice {}", name_of(id)))
+                        .clicked()
+                    {
+                        action = Some(UiAction::StartScenario(id.clone()));
+                    }
+                } else {
+                    ui.label("");
                 }
-                None => {}
-            }
-            ui.label(&s.explanation);
-            if s.verdict == Some(Verdict::Weakness)
-                && let Some(id) = s.scenario_ids.first()
-                && ui
-                    .small_button("▶")
-                    .on_hover_text(format!("Practice {}", name_of(id)))
-                    .clicked()
-            {
-                action = Some(UiAction::StartScenario(id.clone()));
+                ui.end_row();
             }
         });
-        if let Some(text) = trend_text(s) {
-            ui.small(format!("{} ({}) · {text}", s.name, s.skill));
-            history_chart(ui, &trend_points(s));
-        }
-    }
     action
+}
+
+/// The readiness chip: its word and colour.
+pub fn readiness_chip(warmth: Warmth) -> (&'static str, Tone) {
+    match warmth {
+        Warmth::Ready => ("READY", Tone::Good),
+        Warmth::Warming => ("WARMING UP", Tone::Warn),
+        Warmth::Cold => ("COLD", Tone::Bad),
+    }
+}
+
+/// Hover text of a readiness chip: today against the usual, with the numbers.
+pub fn readiness_text(name: &str, r: &Readiness) -> String {
+    format!(
+        "{name}: today {:.0} vs usual {:.0} ({:.0}%)",
+        r.today_best,
+        r.baseline,
+        r.ratio * 100.0
+    )
+}
+
+/// One skill bar: how full (energy against the best subcategory), its colour and label.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SkillBar {
+    pub fraction: f32,
+    pub tone: Tone,
+    /// "250 energy" or "—" before any run.
+    pub value: String,
+}
+
+pub fn skill_bar(s: &SubcategoryStanding, top_energy: f32) -> SkillBar {
+    let tone = match s.verdict {
+        Some(Verdict::Strength) => Tone::Good,
+        Some(Verdict::Weakness) => Tone::Bad,
+        None => Tone::Neutral,
+    };
+    let fraction = match s.energy {
+        Some(e) if top_energy > 0.0 => (e / top_energy).clamp(0.0, 1.0),
+        _ => 0.0,
+    };
+    SkillBar {
+        fraction,
+        tone,
+        value: s
+            .energy
+            .map_or("—".to_owned(), |e| format!("{e:.0} energy")),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn readiness_is_a_coloured_chip_with_the_numbers_on_hover() {
+        assert_eq!(readiness_chip(Warmth::Ready), ("READY", Tone::Good));
+        assert_eq!(readiness_chip(Warmth::Warming), ("WARMING UP", Tone::Warn));
+        assert_eq!(readiness_chip(Warmth::Cold), ("COLD", Tone::Bad));
+        let r = Readiness {
+            scenario: "micro-adjust".into(),
+            baseline: 500.0,
+            today_best: 450.0,
+            ratio: 0.9,
+            warmth: Warmth::Warming,
+        };
+        assert_eq!(
+            readiness_text("Micro Adjust", &r),
+            "Micro Adjust: today 450 vs usual 500 (90%)"
+        );
+    }
+
+    #[test]
+    fn skill_bars_scale_to_the_best_subcategory_and_colour_by_verdict() {
+        let mut s = standing(vec![Some(150.0)]);
+        let bar = skill_bar(&s, 300.0);
+        assert_eq!(bar.fraction, 0.5);
+        assert_eq!(bar.tone, Tone::Neutral);
+        assert_eq!(bar.value, "150 energy");
+        s.verdict = Some(Verdict::Weakness);
+        assert_eq!(skill_bar(&s, 300.0).tone, Tone::Bad);
+        s.verdict = Some(Verdict::Strength);
+        assert_eq!(skill_bar(&s, 150.0).tone, Tone::Good);
+        assert_eq!(skill_bar(&s, 150.0).fraction, 1.0);
+        let unplayed = standing(vec![None]);
+        assert_eq!(skill_bar(&unplayed, 300.0).fraction, 0.0);
+        assert_eq!(skill_bar(&unplayed, 300.0).value, "—");
+        assert_eq!(skill_bar(&s, 0.0).fraction, 0.0, "no energy anywhere");
+    }
 
     #[test]
     fn plateau_lines_name_the_subcategory_and_the_weeks() {

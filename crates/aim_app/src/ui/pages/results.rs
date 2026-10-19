@@ -6,17 +6,21 @@ use crate::overlay::Overlay;
 use crate::persistence::library::Library;
 use crate::persistence::replays;
 use crate::persistence::settings::{Paths, Settings};
+use crate::ui::UiAction;
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::analysis_panel::RunReport;
+use crate::ui::organisms::replay_viewer::{ReplayViewerState, replay_viewer};
 use crate::ui::organisms::results_card::{ResultsContext, results_card};
+use crate::ui::organisms::results_visuals::{accuracy_gauge, score_hero};
 use aim_core::activity::ActivityKind;
 use aim_core::analytics::analyze;
+use aim_core::analytics::path::replay_path;
 use aim_core::scenario::Recording;
 use aim_core::sensitivity::Sensitivity;
 use aim_core::training::routine::PlannedRun;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 pub struct ResultsPage;
 
@@ -105,6 +109,7 @@ fn results(
     last: Option<Res<LastResult>>,
     overlay: Res<Overlay>,
     mut cache: Local<ReportCache>,
+    mut watch: Local<WatchWindow>,
     retry_ctx: RetryContext,
     mut nav: Navigator,
 ) -> Result {
@@ -122,6 +127,7 @@ fn results(
         return Ok(());
     };
     let report = cache.0.as_ref().map(|(_, r)| r);
+    let r = &last.result;
     let next_run = nav
         .routine()
         .and_then(|p| p.plan.get(p.index + 1))
@@ -162,11 +168,57 @@ fn results(
         next_run: next_run.as_deref(),
         space: retry_ctx.keys.just_pressed(KeyCode::Space),
         report,
+        hero: score_hero(r.score, last.previous_best, r.kills, r.kills_per_min),
+        gauges: std::iter::once(accuracy_gauge(r.accuracy))
+            .chain(report.iter().flat_map(|rep| rep.gauges.iter().cloned()))
+            .collect(),
     };
-    if let Some(action) = results_card(ctx, &last, &rc) {
-        nav.apply(action);
+    match results_card(ctx, &last, &rc) {
+        Some(UiAction::WatchMistakes) => watch.open(),
+        Some(action) => {
+            watch.open = false;
+            nav.apply(action);
+        }
+        None => {}
     }
+    watch.show(ctx, &retry_ctx.paths);
     Ok(())
+}
+
+const WATCH_TITLE: &str = "Replay";
+
+/// The replay window "Watch it" opens. For now it is the replay viewer on the newest saved
+/// replay (the run just finished); a dedicated mistake player will replace it.
+#[derive(Default)]
+struct WatchWindow {
+    open: bool,
+    viewer: ReplayViewerState,
+}
+
+impl WatchWindow {
+    /// Open it on the newest replay (a fresh viewer selects the first, newest, entry).
+    fn open(&mut self) {
+        *self = Self {
+            open: true,
+            viewer: ReplayViewerState::default(),
+        };
+    }
+
+    fn show(&mut self, ctx: &egui::Context, paths: &Paths) {
+        if !self.open {
+            return;
+        }
+        let Self { open, viewer } = self;
+        egui::Window::new(WATCH_TITLE)
+            .open(open)
+            .default_size([440.0, 560.0])
+            .show(ctx, |ui| {
+                let entries = replays::list(paths);
+                replay_viewer(ui, viewer, &entries, |e| {
+                    replays::load(&e.path).ok().map(|r| replay_path(&r))
+                });
+            });
+    }
 }
 
 #[cfg(test)]

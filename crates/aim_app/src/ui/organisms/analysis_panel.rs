@@ -5,6 +5,7 @@
 
 use crate::ui::UiAction;
 use crate::ui::atoms::{GOOD, WARN};
+use crate::ui::molecules::gauge::GaugeModel;
 use crate::ui::molecules::stat_row;
 use crate::ui::organisms::audio_cue_panel::AudioCueReport;
 use crate::ui::organisms::decision_panel::DecisionReport;
@@ -13,8 +14,9 @@ use crate::ui::organisms::miss_compass::MissCompassGrid;
 use crate::ui::organisms::moving_panel::MovingReport;
 use crate::ui::organisms::perception_panel::{DetectionReport, RadarRecallReport};
 use crate::ui::organisms::potential_tip::PotentialLine;
+use crate::ui::organisms::results_visuals::{MainFix, analysis_gauges, main_fix};
 use aim_core::analytics::damage::{DamageEfficiency, TtkSpread};
-use aim_core::analytics::{RunAnalysis, SkillProfile};
+use aim_core::analytics::{RunAnalysis, SkillProfile, rules};
 use bevy_egui::egui;
 
 use crate::ui::organisms::pace_panel::{PaceReport, pace_panel};
@@ -25,6 +27,8 @@ pub const MAX_RECOMMENDATIONS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Advice {
+    /// The metric and its value, one short line ("Overshoot rate 42%").
+    pub headline: String,
     /// Metric, value and threshold that triggered it, in plain English.
     pub explanation: String,
     pub tip: String,
@@ -60,6 +64,10 @@ pub struct RunReport {
     pub ttk_spread: Option<String>,
     /// Damage dealt against damage available, for hold runs and multi-hit targets.
     pub damage_efficiency: Option<String>,
+    /// Gauges for the run's main skill, coloured by the recommendation thresholds.
+    pub gauges: Vec<GaugeModel>,
+    /// The one fix the results card leads with (set by [`RunReport::new`]).
+    pub main_fix: Option<MainFix>,
 }
 
 pub(crate) fn ms(secs: f32) -> String {
@@ -161,6 +169,7 @@ impl RunReport {
             .filter_map(|f| f.recommendation.as_ref().map(|r| (f, r)))
             .take(MAX_RECOMMENDATIONS)
             .map(|(f, r)| Advice {
+                headline: format!("{} {}", f.metric.label(), f.metric.format(f.value)),
                 explanation: f.explanation.clone(),
                 tip: r.tip.clone(),
                 practice: r
@@ -170,7 +179,7 @@ impl RunReport {
                     .collect(),
             })
             .collect();
-        Self {
+        let mut report = Self {
             title,
             metrics,
             strengths,
@@ -193,7 +202,11 @@ impl RunReport {
                 .damage_efficiency
                 .as_ref()
                 .map(damage_efficiency_text),
-        }
+            gauges: analysis_gauges(analysis, &rules::builtin::rules().rules),
+            main_fix: None,
+        };
+        report.main_fix = Some(main_fix(&report));
+        report
     }
 }
 
@@ -398,6 +411,26 @@ mod tests {
         assert!(radar.decision.is_some(), "the go/no-go section stays");
         let plain = report("flick-wide", 1);
         assert_eq!((plain.detection, plain.radar_recall), (None, None));
+    }
+
+    #[test]
+    fn every_analysed_run_gets_gauges_and_one_main_fix() {
+        let r = report("flick-wide", 0);
+        assert!(!r.gauges.is_empty());
+        let fix = r
+            .main_fix
+            .as_ref()
+            .expect("RunReport::new sets the main fix");
+        assert_eq!(*fix, main_fix(&r));
+        let first = r.advice.first().expect("recruit has a weakness");
+        // The headline is the metric and value that open the explanation.
+        assert!(
+            first
+                .explanation
+                .starts_with(&format!("{} is ", first.headline)),
+            "{first:?}"
+        );
+        assert!(report("track-precise", 2).main_fix.is_some());
     }
 
     #[test]

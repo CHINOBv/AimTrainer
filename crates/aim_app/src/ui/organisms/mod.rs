@@ -35,6 +35,7 @@ pub mod replay_compare;
 pub mod replay_viewer;
 pub mod restart_key_setting;
 pub mod results_card;
+pub mod results_visuals;
 pub mod routine_list;
 pub mod scenario_browser;
 pub mod sens_converter;

@@ -154,6 +154,8 @@ impl Navigator<'_, '_> {
             UiAction::Quit => {
                 self.commands.write_message(AppExit::Success);
             }
+            // The results page opens its replay window itself; nothing to navigate.
+            UiAction::WatchMistakes => {}
         }
     }
 

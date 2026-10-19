@@ -364,7 +364,9 @@ Why 10 misses and 65% (estimates, not calibrated): with no bias, 3 of the 8 sect
 
 ### Potential score (one tip)
 
-`aim_core::analytics::potential` estimates the score a click run would have reached if its single costliest weakness were fixed. The results card shows only that one fix, above the advice list, as "Fix X → about Y points (+Z%)", followed by the assumption behind it. Hold runs get no tip.
+`aim_core::analytics::potential` estimates the score a click run would have reached if its single costliest weakness were fixed. The results card leads with that one fix as its **main fix** card, "Fix X → about Y points (+Z%)", with the assumption behind it on hover. Hold runs get no tip; when a run has no tip, the main fix is its most severe recommendation instead.
+
+**Results gauges.** The gauges on the results card colour a metric with the same recommendation rules (`content/rules/recommendations.toml`): red past a weakness threshold, green past a strength threshold, yellow in between when the metric also has a strength to reach, and green when it only has a weakness to avoid and stays clear of it. Accuracy has no rule, so its gauge is a neutral blue. The colours are as provisional as the thresholds. How full a ring is shows the value against a fixed display scale (500 ms for reaction, 400 ms for click delay, 100% for shares); the scale is a drawing choice, not a target.
 
 **Model.** In a run that ends on time, wasted seconds are converted into points at the run's own pace: `points per second = final score ÷ elapsed time`. A run that ends at its kills or is endless (`[end]`, see `scenarios.md`) gains no points from saved seconds, because finishing sooner adds no kills there; only the miss penalties won back count, so such runs usually get a misses tip or none. The final score already includes penalties, so this pace is conservative. Each fix is priced on its own, and only the largest gain is shown:
 

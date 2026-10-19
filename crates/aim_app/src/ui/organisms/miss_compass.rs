@@ -35,6 +35,10 @@ pub struct MissCompassGrid {
     pub busiest: Vec<(usize, usize)>,
     /// "Above 6 · below 3 of 10 misses".
     pub split_note: String,
+    /// Misses per direction, clockwise from up (for the radial chart).
+    pub counts: [u32; 8],
+    /// Indexes into `counts` holding the most misses.
+    pub busiest_wedges: Vec<usize>,
 }
 
 impl MissCompassGrid {
@@ -57,9 +61,15 @@ impl MissCompassGrid {
                 }
             })
         });
+        let counts: [u32; 8] = std::array::from_fn(|i| compass.count(Compass::ALL[i]));
+        let busiest_wedges = (0..counts.len())
+            .filter(|&i| counts[i] > 0 && counts[i] == most)
+            .collect();
         Self {
             rows,
             busiest,
+            counts,
+            busiest_wedges,
             split_note: format!(
                 "Above {} · below {} of {} misses",
                 compass.above(),
@@ -107,5 +117,14 @@ mod tests {
         assert_eq!(g.rows[2], ["0", "2", "0"]);
         assert_eq!(g.busiest, [(2, 1)]);
         assert_eq!(g.split_note, "Above 1 · below 2 of 4 misses");
+    }
+
+    #[test]
+    fn the_radial_chart_counts_run_clockwise_from_up() {
+        let c = MissCompass::from_offsets([(0.0, -1.0), (0.0, -1.0), (-1.0, 1.0), (1.0, 0.0)]);
+        let g = MissCompassGrid::new(&c);
+        // Up, up-right, right, down-right, down, down-left, left, up-left.
+        assert_eq!(g.counts, [0, 0, 1, 0, 2, 0, 0, 1]);
+        assert_eq!(g.busiest_wedges, [4]);
     }
 }
