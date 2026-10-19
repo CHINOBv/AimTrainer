@@ -115,12 +115,15 @@ fn append_line(path: &Path, line: &str) -> io::Result<()> {
 /// file is rewritten through a temporary file and a rename, so a crash leaves either the
 /// old or the new file. A file that does not start with a history header is left alone.
 fn upgrade_header(path: &Path) -> io::Result<()> {
-    let src = fs::read_to_string(path)?;
-    let (first, rest) = src.split_once('\n').unwrap_or((&src, ""));
-    let first = first.trim_end_matches('\r');
+    // Only line 1 is read on every run end; the whole file only on the one-time upgrade.
+    let mut first = String::new();
+    io::BufRead::read_line(&mut io::BufReader::new(fs::File::open(path)?), &mut first)?;
+    let first = first.trim_end_matches(['\r', '\n']);
     if first == HEADER || !first.starts_with(HEADER_PREFIX) {
         return Ok(());
     }
+    let src = fs::read_to_string(path)?;
+    let rest = src.split_once('\n').map_or("", |(_, rest)| rest);
     let tmp = path.with_extension("csv.tmp");
     fs::write(&tmp, format!("{HEADER}\n{rest}"))?;
     fs::rename(&tmp, path).inspect_err(|_| {
