@@ -5,6 +5,7 @@
 
 use super::dpi_check::DpiMeter;
 use super::{hotkey_settings, restart_key_setting};
+use crate::i18n::{Lang, labels, tr};
 use crate::persistence::settings::{EnemyHighlight, Settings, TargetVisibility};
 use crate::ui::molecules::SettingsRows;
 use aim_core::crosshair::{
@@ -44,10 +45,16 @@ impl SettingsTab {
         (SettingsTab::Keys, "Keys"),
         (SettingsTab::Training, "Training"),
     ];
+
+    /// [`SettingsTab::ALL`] with its labels in the current language.
+    pub fn localized() -> [(SettingsTab, &'static str); 7] {
+        labels(&Self::ALL)
+    }
 }
 
 /// Put every setting shown on `tab` back to its default. Settings on other tabs, and
-/// state that is not a preference (favourites, the first-run flag), are kept.
+/// state that is not a preference (favourites, the first-run flag), are kept. The
+/// language is kept too, so a reset never switches the UI language under the player.
 pub fn reset_section(settings: &mut Settings, tab: SettingsTab) {
     let d = Settings::default();
     match tab {
@@ -172,6 +179,24 @@ pub fn crosshair_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mu
         "Crosshair preset color outlines center dot inner outer lines thickness length offset opacity VALORANT code import export",
         |ui| crosshair_editor(ui, &mut settings.crosshair),
     );
+}
+
+/// The UI language selector, at the top of the Overlay tab. Language names are always
+/// written in their own language, so a player can find theirs whatever is selected.
+pub fn language_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mut Settings) {
+    rows.section(ui, tr("Language"));
+    rows.block(ui, "Language Idioma English Español", |ui| {
+        ui.horizontal(|ui| {
+            ui.label(tr("Language"));
+            egui::ComboBox::from_id_salt("language")
+                .selected_text(settings.language.native_name())
+                .show_ui(ui, |ui| {
+                    for lang in Lang::ALL {
+                        ui.selectable_value(&mut settings.language, lang, lang.native_name());
+                    }
+                });
+        });
+    });
 }
 
 pub fn overlay_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mut Settings) {

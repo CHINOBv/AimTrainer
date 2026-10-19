@@ -193,6 +193,19 @@ Full citations are in `docs/training-science.md`.
 - **Cost:** every effect material is built once; effects swap handles and scale transforms, and a ring burst is one short-lived entity.
 - **The old behavior** (the crosshair turning white on a hit) is kept as the "Crosshair flash" marker style.
 
+### D18 English and Spanish UI
+
+- **The request:** a Spanish UI next to English.
+- **Decision:** the English source text is the translation key. Spanish lives in flat TOML tables, one file per area (`locales/es/<area>.toml`), embedded with `include_str!` and merged on first use. A missing entry shows the English text. Guide: [`i18n.md`](i18n.md).
+- **Why:**
+  - English output stays byte-identical, so the hundreds of tests that pin English strings need no change, and untranslated text degrades to English instead of a key name.
+  - One file per area lets several people translate different areas at once without editing a shared file.
+  - No new dependency: `toml` and `serde` are already in the workspace. Fluent or gettext would add a crate and a second string format for a two-language UI. There is no plural engine; the guide shows how to write around plurals.
+- **Where the language lives:** `aim_core::i18n` is pure (`tr_in(lang, en)`), because the core has no globals or hidden inputs. The current language is an atomic in `aim_app::i18n`, set at startup and whenever the settings change, so `'static` label tables and view functions translate with `tr(en)` without threading the language through every call. Tests never set it; they use the `*_in` functions.
+- **Lookup:** `tr` returns `&'static str` for a `&'static str` key (the merged catalog is leaked once), so APIs that take `'static` labels keep working.
+- **Kept in English:** everything sent to the AI coach or over MCP, files, logs and identifiers.
+- **Limitation:** one English text has one Spanish translation; a word that needs two must get a more specific English source text.
+
 ## Known limitations
 
 | Limitation | Impact |

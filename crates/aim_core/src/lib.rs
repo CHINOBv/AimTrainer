@@ -12,6 +12,7 @@ pub mod coach;
 pub mod crosshair;
 pub mod fov;
 pub mod games;
+pub mod i18n;
 pub mod math;
 pub mod movement;
 pub mod profile;

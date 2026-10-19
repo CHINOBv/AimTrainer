@@ -91,7 +91,7 @@ The menu tabs (keys 1–9 switch tabs while no text field has focus):
 | Arenas | Deathmatch (also with mixed bot squads or an adaptive duel ladder), site hold, angle clearing, jiggle-peek and pre-aim drills; a Practice button plays any arena with bots that never shoot |
 | Benchmark | Your benchmark energy and ranks, at novice, intermediate or advanced tier |
 | Tools | Sensitivity converter (360°, monitor distance 0/75/100%), sensitivity finder, system check |
-| Settings | Sub-tabs: Sensitivity (DPI check, profile code), Crosshair, Feedback (hit feedback, game feel), Audio, Overlay, Keys, Training. A search box filters every section; each sub-tab has a reset to defaults. Changes save automatically ("Saved ✔") |
+| Settings | Sub-tabs: Sensitivity (DPI check, profile code), Crosshair, Feedback (hit feedback, game feel), Audio, Overlay (with the UI language: English or Español, see `docs/i18n.md`), Keys, Training. A search box filters every section; each sub-tab has a reset to defaults. Changes save automatically ("Saved ✔") |
 | Coach | The optional AI coach (off until you enable it): pick a provider (OpenAI-compatible such as OpenAI, OpenCode, Ollama or LM Studio; Anthropic; or your own installed CLI), store the API key in the OS keyring, preview exactly what is sent, chat ("Analyse my stats", "Recommend a routine"), then validate, play and save the scenarios it generates (labelled uncalibrated). "Forget everything" wipes its memory. See `docs/coach.md` |
 
 ## Command line

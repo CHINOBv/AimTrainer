@@ -24,6 +24,9 @@ mod tests {
     /// Every non-ASCII symbol the UI strings use.
     const UI_SYMBOLS: &str = "→▶↻·≈±°—…–✔⏵≤−×▲▼⚠↗↖↙↘÷";
 
+    /// Every Spanish letter and punctuation mark outside ASCII.
+    const SPANISH_CHARS: &str = "áéíóúñ¿¡üÁÉÍÓÚÑÜ";
+
     /// What egui draws for a character no font in the chain has (an empty box).
     const REPLACEMENT: char = '◻';
 
@@ -31,7 +34,7 @@ mod tests {
     ///
     /// `has_glyph` cannot be used: it reports `false` for any character that lives in the
     /// same face as the replacement glyph (NotoEmoji), such as `▶`.
-    fn missing_glyphs(fonts: FontDefinitions) -> Vec<char> {
+    fn missing_glyphs(fonts: FontDefinitions, chars: &str) -> Vec<char> {
         let ctx = Context::default();
         ctx.set_fonts(fonts);
         // Fonts load on the first pass; the texture delta is irrelevant without a renderer.
@@ -45,20 +48,28 @@ mod tests {
                 galley.rows[0].glyphs[0].uv_rect
             };
             let replacement = uv(REPLACEMENT);
-            UI_SYMBOLS
-                .chars()
-                .filter(|&c| uv(c) == replacement)
-                .collect()
+            chars.chars().filter(|&c| uv(c) == replacement).collect()
         })
     }
 
     #[test]
     fn default_fonts_lack_the_arrow() {
-        assert!(missing_glyphs(FontDefinitions::default()).contains(&'→'));
+        assert!(missing_glyphs(FontDefinitions::default(), UI_SYMBOLS).contains(&'→'));
     }
 
     #[test]
     fn proportional_font_renders_every_ui_symbol() {
-        assert_eq!(missing_glyphs(font_definitions()), Vec::<char>::new());
+        assert_eq!(
+            missing_glyphs(font_definitions(), UI_SYMBOLS),
+            Vec::<char>::new()
+        );
+    }
+
+    #[test]
+    fn proportional_font_renders_every_spanish_character() {
+        assert_eq!(
+            missing_glyphs(font_definitions(), SPANISH_CHARS),
+            Vec::<char>::new()
+        );
     }
 }
