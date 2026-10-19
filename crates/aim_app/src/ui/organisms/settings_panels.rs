@@ -5,7 +5,8 @@
 
 use super::dpi_check::DpiMeter;
 use super::{hotkey_settings, restart_key_setting};
-use crate::persistence::settings::{EnemyHighlight, Settings, TargetVisibility};
+use crate::i18n::{Lang, labels, tr, tr_fmt, tr_named};
+use crate::persistence::settings::{COUNTDOWN_RANGE, EnemyHighlight, Settings, TargetVisibility};
 use crate::ui::molecules::SettingsRows;
 use aim_core::crosshair::{
     CUSTOM_COLOR_INDEX, Crosshair, DOT_THICKNESS_PX, ERROR_MULTIPLIER_MAX, LINE_THICKNESS_MAX_PX,
@@ -44,10 +45,16 @@ impl SettingsTab {
         (SettingsTab::Keys, "Keys"),
         (SettingsTab::Training, "Training"),
     ];
+
+    /// [`SettingsTab::ALL`] with its labels in the current language.
+    pub fn localized() -> [(SettingsTab, &'static str); 7] {
+        labels(&Self::ALL)
+    }
 }
 
 /// Put every setting shown on `tab` back to its default. Settings on other tabs, and
-/// state that is not a preference (favourites, the first-run flag), are kept.
+/// state that is not a preference (favourites, the first-run flag), are kept. The
+/// language is kept too, so a reset never switches the UI language under the player.
 pub fn reset_section(settings: &mut Settings, tab: SettingsTab) {
     let d = Settings::default();
     match tab {
@@ -79,6 +86,7 @@ pub fn reset_section(settings: &mut Settings, tab: SettingsTab) {
             settings.warmup_minutes = d.warmup_minutes;
             settings.personal_warmup = d.personal_warmup;
             settings.daily_goal_minutes = d.daily_goal_minutes;
+            settings.countdown_secs = d.countdown_secs;
             settings.mission_commitment = d.mission_commitment;
             settings.arena_coaching = d.arena_coaching;
             settings.sens_randomizer = d.sens_randomizer;
@@ -134,12 +142,14 @@ pub fn sensitivity_panel(
     });
     let s = settings.sensitivity;
     rows.block(ui, "cm/360 in/360 eDPI degrees per count", |ui| {
-        ui.label(format!(
-            "{:.2} cm/360  ·  {:.2} in/360  ·  eDPI {:.0}  ·  {:.5}°/count",
-            s.cm_per_360(),
-            s.inches_per_360(),
-            s.edpi(),
-            s.deg_per_count()
+        ui.label(tr_fmt(
+            "{} cm/360  ·  {} in/360  ·  eDPI {}  ·  {}°/count",
+            &[
+                &format!("{:.2}", s.cm_per_360()),
+                &format!("{:.2}", s.inches_per_360()),
+                &format!("{:.0}", s.edpi()),
+                &format!("{:.5}", s.deg_per_count()),
+            ],
         ));
     });
     if *dpi_target == 0 {
@@ -147,7 +157,7 @@ pub fn sensitivity_panel(
     }
     rows.row(ui, "Change DPI to", |ui| {
         ui.add(egui::DragValue::new(dpi_target).speed(10).range(50..=64000));
-        if ui.button("keep cm/360").clicked() {
+        if ui.button(tr("keep cm/360")).clicked() {
             settings.sensitivity = s.with_dpi(*dpi_target);
         }
     });
@@ -155,13 +165,13 @@ pub fn sensitivity_panel(
         ui,
         "Measure DPI check verify raw input mouse acceleration ruler",
         |ui| {
-            ui.collapsing("Measure DPI (verify raw input)", |ui| {
+            ui.collapsing(tr("Measure DPI (verify raw input)"), |ui| {
                 super::dpi_check::dpi_check(ui, settings, meter);
             });
         },
     );
     if !rows.searching() {
-        ui.small("Converting from another game? Use the Tools tab.");
+        ui.small(tr("Converting from another game? Use the Tools tab."));
     }
 }
 
@@ -172,6 +182,24 @@ pub fn crosshair_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mu
         "Crosshair preset color outlines center dot inner outer lines thickness length offset opacity VALORANT code import export",
         |ui| crosshair_editor(ui, &mut settings.crosshair),
     );
+}
+
+/// The UI language selector, at the top of the Overlay tab. Language names are always
+/// written in their own language, so a player can find theirs whatever is selected.
+pub fn language_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mut Settings) {
+    rows.section(ui, "Language");
+    rows.block(ui, "Language Idioma English Español", |ui| {
+        ui.horizontal(|ui| {
+            ui.label(tr("Language"));
+            egui::ComboBox::from_id_salt("language")
+                .selected_text(settings.language.native_name())
+                .show_ui(ui, |ui| {
+                    for lang in Lang::ALL {
+                        ui.selectable_value(&mut settings.language, lang, lang.native_name());
+                    }
+                });
+        });
+    });
 }
 
 pub fn overlay_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mut Settings) {
@@ -227,7 +255,7 @@ pub fn keys_panel(
         "Global hotkeys toggle overlay queue warm-up buy-phase micro drill Wayland Hyprland",
         |ui| {
             hotkey_settings::hotkey_settings(ui, settings, recording_hotkey);
-            ui.label("Wayland/Hyprland: bind `aimtrainer toggle`, `aimtrainer warmup` and `aimtrainer micro` in your compositor (see README).");
+            ui.label(tr("Wayland/Hyprland: bind `aimtrainer toggle`, `aimtrainer warmup` and `aimtrainer micro` in your compositor (see README)."));
         },
     );
 }
@@ -245,10 +273,10 @@ pub fn training_panel(
         ui.add(
             egui::DragValue::new(&mut settings.warmup_minutes)
                 .range(1..=30)
-                .suffix(" min"),
+                .suffix(tr(" min")),
         );
-        ui.checkbox(&mut settings.personal_warmup, "Use my personal dose")
-            .on_hover_text("When on, the queue warm-up lasts as long as your scores need to level off, once there is enough history. Off keeps the length set here.");
+        ui.checkbox(&mut settings.personal_warmup, tr("Use my personal dose"))
+            .on_hover_text(tr("When on, the queue warm-up lasts as long as your scores need to level off, once there is enough history. Off keeps the length set here."));
         if settings.personal_warmup {
             ui.label(personal_warmup_text(dose));
         }
@@ -257,13 +285,21 @@ pub fn training_panel(
         ui.add(
             egui::DragValue::new(&mut settings.daily_goal_minutes)
                 .range(5.0..=120.0)
-                .suffix(" min"),
+                .suffix(tr(" min")),
         );
+    });
+    rows.row(ui, "Start countdown", |ui| {
+        ui.add(
+            egui::Slider::new(&mut settings.countdown_secs, COUNTDOWN_RANGE)
+                .step_by(0.5)
+                .suffix(" s"),
+        )
+        .on_hover_text(tr("Seconds before a run starts; 0 starts at once. In movement scenarios you can walk into position during it, and the run starts from where you are and how fast you move at GO."));
     });
     rows.row(ui, "Mission commitment", |ui| {
         for c in Commitment::ALL {
-            ui.selectable_value(&mut settings.mission_commitment, c, c.label())
-                .on_hover_text("Low: 2 missions a day. Medium: 3, one of them mastery. High: 4, two mastery, closer to your bests. Changing it regenerates today's missions.");
+            ui.selectable_value(&mut settings.mission_commitment, c, c.label_in(crate::i18n::language()))
+                .on_hover_text(tr("Low: 2 missions a day. Medium: 3, one of them mastery. High: 4, two mastery, closer to your bests. Changing it regenerates today's missions."));
         }
     });
     rows.check(
@@ -285,36 +321,45 @@ pub fn breaks_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, b: &mut BreakPol
         ui.add(
             egui::DragValue::new(&mut b.continuous_minutes)
                 .range(10..=240)
-                .suffix(" min of play"),
+                .suffix(tr(" min of play")),
         );
     });
     rows.row(ui, "Break length", |ui| {
         ui.add(
             egui::DragValue::new(&mut b.break_minutes)
                 .range(1..=60)
-                .suffix(" min"),
+                .suffix(tr(" min")),
         )
-        .on_hover_text("Time away from runs that counts as a break and resets the count.");
+        .on_hover_text(tr(
+            "Time away from runs that counts as a break and resets the count.",
+        ));
     });
     rows.row(ui, "Weekly cap", |ui| {
         ui.add(
             egui::DragValue::new(&mut b.weekly_cap_minutes)
                 .range(30..=5000)
-                .suffix(" min / 7 days"),
+                .suffix(tr(" min / 7 days")),
         )
-        .on_hover_text("An informational note when your aim training in the last 7 days reaches this. The default (about 1 h a day) is an estimate.");
+        .on_hover_text(tr("An informational note when your aim training in the last 7 days reaches this. The default (about 1 h a day) is an estimate."));
     });
 }
 
 /// The personal warm-up line shown next to the queue warm-up length.
 pub fn personal_warmup_text(dose: Option<&WarmupDose>) -> String {
     match dose {
-        Some(d) => format!(
-            "Personal warm-up: {:.0} min (from {} sessions), used instead of this length",
-            d.minutes, d.sessions
+        Some(d) => tr_named(
+            "Personal warm-up: {minutes} min (from {sessions} sessions), used instead of this length",
+            &[
+                ("minutes", &format!("{:.0}", d.minutes)),
+                ("sessions", &d.sessions),
+            ],
         ),
-        None => format!(
-            "Personal warm-up: not enough data yet ({MIN_DOSE_SESSIONS} sessions of {MIN_SESSION_RUNS}+ runs)"
+        None => tr_named(
+            "Personal warm-up: not enough data yet ({sessions} sessions of {runs}+ runs)",
+            &[
+                ("sessions", &MIN_DOSE_SESSIONS),
+                ("runs", &MIN_SESSION_RUNS),
+            ],
         ),
     }
 }
@@ -322,34 +367,34 @@ pub fn personal_warmup_text(dose: Option<&WarmupDose>) -> String {
 /// The sensitivity randomiser drill. It only scales the look while playing; the saved
 /// sensitivity is never changed.
 fn sens_randomizer(ui: &mut egui::Ui, cfg: &mut RandomizerConfig) {
-    ui.checkbox(&mut cfg.enabled, "Sensitivity randomiser drill")
-        .on_hover_text("Every interval your look sensitivity changes to a random multiplier within the range. Your saved sensitivity is never changed. No study shows it helps; use it as an occasional robustness drill.");
+    ui.checkbox(&mut cfg.enabled, tr("Sensitivity randomiser drill"))
+        .on_hover_text(tr("Every interval your look sensitivity changes to a random multiplier within the range. Your saved sensitivity is never changed. No study shows it helps; use it as an occasional robustness drill."));
     if !cfg.enabled {
         return;
     }
     ui.horizontal(|ui| {
         let range = MIN_MULTIPLIER..=MAX_MULTIPLIER;
-        ui.label("Range ×");
+        ui.label(tr("Range ×"));
         ui.add(
             egui::DragValue::new(&mut cfg.min)
                 .range(range.clone())
                 .speed(0.01)
                 .fixed_decimals(2),
         );
-        ui.label("to ×");
+        ui.label(tr("to ×"));
         ui.add(
             egui::DragValue::new(&mut cfg.max)
                 .range(range)
                 .speed(0.01)
                 .fixed_decimals(2),
         );
-        ui.label("every");
+        ui.label(tr("every"));
         ui.add(
             egui::DragValue::new(&mut cfg.interval_secs)
                 .range(MIN_INTERVAL_SECS..=120.0)
                 .suffix(" s"),
         );
-        ui.label("easing");
+        ui.label(tr("easing"));
         let max_ease = cfg.interval_secs.max(MIN_INTERVAL_SECS);
         ui.add(
             egui::DragValue::new(&mut cfg.smoothing_secs)
@@ -364,38 +409,38 @@ fn sens_randomizer(ui: &mut egui::Ui, cfg: &mut RandomizerConfig) {
 /// environment tint.
 fn target_visibility(ui: &mut egui::Ui, settings: &mut Settings) {
     ui.horizontal(|ui| {
-        ui.label("Enemy highlight");
+        ui.label(tr("Enemy highlight"));
         let current = EnemyHighlight::of(settings.target_color);
         egui::ComboBox::from_id_salt("enemy-highlight")
-            .selected_text(current.label())
+            .selected_text(tr(current.label()))
             .show_ui(ui, |ui| {
                 for (h, rgb) in EnemyHighlight::PRESETS {
-                    if ui.selectable_label(current == h, h.label()).clicked() {
+                    if ui.selectable_label(current == h, tr(h.label())).clicked() {
                         settings.target_color = rgb;
                     }
                 }
-                ui.add_enabled(false, egui::Button::selectable(current == EnemyHighlight::Custom, "Custom (pick a colour above)"));
+                ui.add_enabled(false, egui::Button::selectable(current == EnemyHighlight::Custom, tr("Custom (pick a colour above)")));
             });
     })
     .response
-    .on_hover_text("VALORANT's enemy highlight options. Purple suits tritanopia; yellow suits deuteranopia and protanopia.");
+    .on_hover_text(tr("VALORANT's enemy highlight options. Purple suits tritanopia; yellow suits deuteranopia and protanopia."));
     let vis = &mut settings.target_visibility;
     ui.horizontal(|ui| {
-        ui.checkbox(&mut vis.outline, "Target outline");
+        ui.checkbox(&mut vis.outline, tr("Target outline"));
         ui.add_enabled_ui(vis.outline, |ui| {
             ui.color_edit_button_rgb(&mut vis.outline_color);
             ui.add(
                 egui::Slider::new(&mut vis.outline_percent, TargetVisibility::OUTLINE_PERCENT)
                     .suffix("%")
-                    .text("thickness"),
+                    .text(tr("thickness")),
             );
         });
     })
     .response
-    .on_hover_text("A solid rim around every target (never on decoys). Applies to targets spawned after the change.");
+    .on_hover_text(tr("A solid rim around every target (never on decoys). Applies to targets spawned after the change."));
     ui.horizontal(|ui| {
         let mut tinted = vis.environment_tint.is_some();
-        if ui.checkbox(&mut tinted, "Environment tint").changed() {
+        if ui.checkbox(&mut tinted, tr("Environment tint")).changed() {
             vis.environment_tint = tinted.then_some([0.35, 0.4, 0.5]);
         }
         if let Some(tint) = vis.environment_tint.as_mut() {
@@ -403,7 +448,9 @@ fn target_visibility(ui: &mut egui::Ui, settings: &mut Settings) {
         }
     })
     .response
-    .on_hover_text("Colour of the floor grid and play area, to raise contrast with the targets.");
+    .on_hover_text(tr(
+        "Colour of the floor grid and play area, to raise contrast with the targets.",
+    ));
 }
 
 /// Text and feedback of the "Import VALORANT code" field, kept in egui memory.
@@ -415,17 +462,20 @@ struct ImportState {
 
 fn crosshair_editor(ui: &mut egui::Ui, ch: &mut Crosshair) {
     ui.horizontal(|ui| {
-        ui.label("Preset");
+        ui.label(tr("Preset"));
         egui::ComboBox::from_id_salt("crosshair_preset")
             .selected_text(
                 preset::all()
                     .iter()
                     .find(|p| p.crosshair() == *ch)
-                    .map_or("custom", |p| p.name.as_str()),
+                    .map_or(tr("custom"), |p| tr(&p.name)),
             )
             .show_ui(ui, |ui| {
                 for p in preset::all() {
-                    if ui.selectable_label(p.crosshair() == *ch, &p.name).clicked() {
+                    if ui
+                        .selectable_label(p.crosshair() == *ch, tr(&p.name))
+                        .clicked()
+                    {
                         *ch = p.crosshair();
                     }
                 }
@@ -434,18 +484,18 @@ fn crosshair_editor(ui: &mut egui::Ui, ch: &mut Crosshair) {
     code_import_export(ui, ch);
 
     egui::Grid::new("crosshair").num_columns(2).show(ui, |ui| {
-        ui.label("Color");
+        ui.label(tr("Color"));
         ui.horizontal(|ui| {
             let name = PRESET_COLORS
                 .get(usize::from(ch.color_index))
-                .map_or("Custom", |(n, _)| *n);
+                .map_or(tr("Custom"), |(n, _)| tr(n));
             egui::ComboBox::from_id_salt("crosshair_color")
                 .selected_text(name)
                 .show_ui(ui, |ui| {
                     for (i, (n, _)) in PRESET_COLORS.iter().enumerate() {
-                        ui.selectable_value(&mut ch.color_index, i as u8, *n);
+                        ui.selectable_value(&mut ch.color_index, i as u8, tr(n));
                     }
-                    ui.selectable_value(&mut ch.color_index, CUSTOM_COLOR_INDEX, "Custom");
+                    ui.selectable_value(&mut ch.color_index, CUSTOM_COLOR_INDEX, tr("Custom"));
                 });
             if ch.color_index == CUSTOM_COLOR_INDEX {
                 let c = ch.custom_color;
@@ -458,7 +508,7 @@ fn crosshair_editor(ui: &mut egui::Ui, ch: &mut Crosshair) {
         });
         ui.end_row();
 
-        ui.checkbox(&mut ch.outlines, "Outlines");
+        ui.checkbox(&mut ch.outlines, tr("Outlines"));
         ui.horizontal(|ui| {
             ui.add_enabled_ui(ch.outlines, |ui| {
                 ui.add(
@@ -470,7 +520,7 @@ fn crosshair_editor(ui: &mut egui::Ui, ch: &mut Crosshair) {
         });
         ui.end_row();
 
-        ui.checkbox(&mut ch.center_dot, "Center dot");
+        ui.checkbox(&mut ch.center_dot, tr("Center dot"));
         ui.horizontal(|ui| {
             ui.add_enabled_ui(ch.center_dot, |ui| {
                 ui.add(egui::Slider::new(&mut ch.dot_thickness_px, DOT_THICKNESS_PX).text("px"));
@@ -479,29 +529,34 @@ fn crosshair_editor(ui: &mut egui::Ui, ch: &mut Crosshair) {
         });
         ui.end_row();
     });
-    ui.collapsing("Inner lines", |ui| {
+    ui.collapsing(tr("Inner lines"), |ui| {
         lines_editor(ui, "inner", &mut ch.inner, LineLimits::INNER)
     });
-    ui.collapsing("Outer lines", |ui| {
+    ui.collapsing(tr("Outer lines"), |ui| {
         lines_editor(ui, "outer", &mut ch.outer, LineLimits::OUTER)
     });
-    ui.collapsing("Code-only options (not simulated)", |ui| {
-        ui.label("Kept so VALORANT codes round-trip; the trainer draws a static crosshair.");
+    ui.collapsing(tr("Code-only options (not simulated)"), |ui| {
+        ui.label(tr(
+            "Kept so VALORANT codes round-trip; the trainer draws a static crosshair.",
+        ));
         ui.checkbox(
             &mut ch.fade_with_firing_error,
-            "Fade crosshair with firing error",
+            tr("Fade crosshair with firing error"),
         );
-        ui.checkbox(&mut ch.show_spectated, "Show spectated player's crosshair");
+        ui.checkbox(
+            &mut ch.show_spectated,
+            tr("Show spectated player's crosshair"),
+        );
         ui.checkbox(
             &mut ch.override_firing_offset,
-            "Override firing error offset with crosshair offset",
+            tr("Override firing error offset with crosshair offset"),
         );
         for (name, lines) in [("Inner", &mut ch.inner), ("Outer", &mut ch.outer)] {
             ui.horizontal(|ui| {
-                ui.label(name);
-                ui.checkbox(&mut lines.movement_error, "movement error");
+                ui.label(tr(name));
+                ui.checkbox(&mut lines.movement_error, tr("movement error"));
                 ui.add(error_multiplier(&mut lines.movement_error_multiplier));
-                ui.checkbox(&mut lines.firing_error, "firing error");
+                ui.checkbox(&mut lines.firing_error, tr("firing error"));
                 ui.add(error_multiplier(&mut lines.firing_error_multiplier));
             });
         }
@@ -511,7 +566,7 @@ fn crosshair_editor(ui: &mut egui::Ui, ch: &mut Crosshair) {
 fn opacity_slider(value: &mut f64) -> egui::Slider<'_> {
     egui::Slider::new(value, 0.0..=1.0)
         .step_by(0.001)
-        .text("opacity")
+        .text(tr("opacity"))
 }
 
 fn error_multiplier(value: &mut f64) -> egui::DragValue<'_> {
@@ -522,36 +577,36 @@ fn error_multiplier(value: &mut f64) -> egui::DragValue<'_> {
 }
 
 fn lines_editor(ui: &mut egui::Ui, salt: &str, lines: &mut Lines, limits: LineLimits) {
-    ui.checkbox(&mut lines.show, "Show");
+    ui.checkbox(&mut lines.show, tr("Show"));
     ui.add_enabled_ui(lines.show, |ui| {
         egui::Grid::new(("crosshair_lines", salt))
             .num_columns(2)
             .show(ui, |ui| {
-                ui.label("Thickness (px)");
+                ui.label(tr("Thickness (px)"));
                 ui.add(egui::Slider::new(
                     &mut lines.thickness_px,
                     0..=LINE_THICKNESS_MAX_PX,
                 ));
                 ui.end_row();
-                ui.label("Length (px)");
+                ui.label(tr("Length (px)"));
                 ui.add(egui::Slider::new(
                     &mut lines.length_px,
                     0..=limits.max_length_px,
                 ));
                 ui.end_row();
-                ui.checkbox(&mut lines.separate_vertical, "Vertical length");
+                ui.checkbox(&mut lines.separate_vertical, tr("Vertical length"));
                 ui.add_enabled(
                     lines.separate_vertical,
                     egui::Slider::new(&mut lines.vertical_length_px, 0..=limits.max_length_px),
                 );
                 ui.end_row();
-                ui.label("Offset (px)");
+                ui.label(tr("Offset (px)"));
                 ui.add(egui::Slider::new(
                     &mut lines.offset_px,
                     0..=limits.max_offset_px,
                 ));
                 ui.end_row();
-                ui.label("Opacity");
+                ui.label(tr("Opacity"));
                 ui.add(opacity_slider(&mut lines.opacity));
                 ui.end_row();
             });
@@ -564,13 +619,13 @@ fn code_import_export(ui: &mut egui::Ui, ch: &mut Crosshair) {
         .data_mut(|d| d.get_temp::<ImportState>(id))
         .unwrap_or_default();
     ui.horizontal(|ui| {
-        ui.label("Import VALORANT code");
+        ui.label(tr("Import VALORANT code"));
         ui.add(
             egui::TextEdit::singleline(&mut import.text)
                 .hint_text("0;P;c;5;h;0;…")
                 .desired_width(220.0),
         );
-        if ui.button("Apply").clicked() {
+        if ui.button(tr("Apply")).clicked() {
             import.message = Some(match code::parse(&import.text) {
                 Ok(parsed) => {
                     *ch = parsed;
@@ -583,12 +638,12 @@ fn code_import_export(ui: &mut egui::Ui, ch: &mut Crosshair) {
     });
     match &import.message {
         Some(Ok(())) => {
-            ui.label("Imported the primary crosshair.");
+            ui.label(tr("Imported the primary crosshair."));
         }
         Some(Err(e)) => {
             ui.colored_label(
                 ui.visuals().error_fg_color,
-                format!("Could not import: {e}"),
+                tr_fmt("Could not import: {}", &[e]),
             );
         }
         None => {}
@@ -597,9 +652,9 @@ fn code_import_export(ui: &mut egui::Ui, ch: &mut Crosshair) {
 
     let exported = code::encode(ch);
     ui.horizontal(|ui| {
-        ui.label("Your code");
+        ui.label(tr("Your code"));
         ui.add(egui::TextEdit::singleline(&mut exported.as_str()).desired_width(220.0));
-        if ui.button("Copy code").clicked() {
+        if ui.button(tr("Copy code")).clicked() {
             ui.ctx().copy_text(exported.clone());
         }
     });
@@ -622,6 +677,55 @@ mod tests {
         assert!(personal_warmup_text(None).contains("not enough data"));
     }
 
+    #[test]
+    fn settings_text_has_spanish_translations_and_english_stays() {
+        use aim_core::i18n::{tr_in, tr_named_in};
+        assert_eq!(tr_in(Lang::Es, "Mouse DPI"), "DPI del ratón");
+        assert_eq!(
+            tr_in(Lang::Es, "Gameplay already uses this key."),
+            "El juego ya usa esta tecla."
+        );
+        assert_eq!(tr_in(Lang::En, "Mouse DPI"), "Mouse DPI");
+        assert_eq!(
+            tr_named_in(
+                Lang::Es,
+                "Personal warm-up: {minutes} min (from {sessions} sessions), used instead of this length",
+                &[("minutes", &"7"), ("sessions", &4)],
+            ),
+            "Calentamiento personal: 7 min (de 4 sesiones), se usa en lugar de esta duración"
+        );
+    }
+
+    #[test]
+    fn texts_from_other_modules_shown_here_have_spanish_translations() {
+        use aim_core::i18n::tr_in;
+        assert!(tr_in(Lang::Es, EVIDENCE_NOTE).starts_with("Las molestias"));
+        for p in preset::all() {
+            assert_ne!(
+                tr_in(Lang::Es, &p.name),
+                p.name,
+                "crosshair preset {}",
+                p.name
+            );
+        }
+        for (h, _) in EnemyHighlight::PRESETS {
+            assert_ne!(tr_in(Lang::Es, h.label()), h.label());
+        }
+        assert_eq!(tr_in(Lang::Es, "unbound"), "sin asignar");
+    }
+
+    #[test]
+    fn spanish_search_finds_keyword_blocks() {
+        use crate::ui::molecules::matches_query;
+        use aim_core::i18n::tr_in;
+        let block = "Crosshair preset color outlines center dot inner outer lines thickness length offset opacity VALORANT code import export";
+        assert!(matches_query("grosor", tr_in(Lang::Es, block)));
+        assert!(matches_query(
+            "idioma",
+            tr_in(Lang::Es, "Language Idioma English Español")
+        ));
+    }
+
     /// Every preference changed away from its default.
     fn changed() -> Settings {
         use crate::persistence::settings::FeelPreset;
@@ -638,6 +742,7 @@ mod tests {
             warmup_minutes: 9,
             personal_warmup: false,
             daily_goal_minutes: 50.0,
+            countdown_secs: 1.0,
             target_color: [0.0, 1.0, 0.0],
             offscreen_arrows: false,
             mission_commitment: Commitment::High,

@@ -125,7 +125,7 @@ pub(super) fn face_player(point: Vec3, player_pos: Vec3) -> (f32, Vec3) {
 
 fn sample_point(def: &TargetsDef, eye: Vec3, view: ViewAngles, rng: &mut Rng) -> Vec3 {
     let humanoid = matches!(def.shape, Shape::Humanoid { .. });
-    let mut p = match def.spawn {
+    let p = match def.spawn {
         SpawnArea::Angular {
             yaw_deg,
             pitch_deg,
@@ -181,13 +181,46 @@ fn sample_point(def: &TargetsDef, eye: Vec3, view: ViewAngles, rng: &mut Rng) ->
             Vec3::new(rng.in_range(x), rng.in_range(height), rng.in_range(z))
         }
     };
-    match def.shape {
+    settle(&def.shape, p)
+}
+
+/// `p` moved onto the floor for its shape: humanoids stand on it, and spheres and capsules
+/// never sink through it.
+fn settle(shape: &Shape, mut p: Vec3) -> Vec3 {
+    match *shape {
         Shape::Humanoid { .. } => p.y = 0.0,
         // A capsule never spawns through the floor.
         Shape::Capsule { height, .. } => p.y = p.y.max(MIN_SPHERE_HEIGHT).max(height / 2.0),
         Shape::Sphere { .. } => p.y = p.y.max(MIN_SPHERE_HEIGHT),
     }
     p
+}
+
+/// A spider-shot rim target (`targets.spider`): `ring` degrees away from the centre target
+/// at `centre`, seen from `eye`, in a random direction and at the same distance.
+/// Humanoids step left or right on the floor, at the same horizontal distance.
+pub(super) fn ring_point(
+    shape: &Shape,
+    dims: &HumanoidDims,
+    centre: Vec3,
+    eye: Vec3,
+    ring: Range,
+    rng: &mut Rng,
+) -> Vec3 {
+    let offset = rng.in_range(ring);
+    let p = if matches!(shape, Shape::Humanoid { .. }) {
+        let to = (centre - eye).horizontal();
+        let yaw = ViewAngles::from_direction(to).yaw_deg + offset * rng.sign();
+        eye + ViewAngles::new(yaw, 0.0).direction() * to.length()
+    } else {
+        let aim = aim_point(shape, dims, centre);
+        let to = aim - eye;
+        let phi = rng.next_f32() * std::f32::consts::TAU;
+        let rim = ViewAngles::from_direction(to).rotated(offset * phi.cos(), offset * phi.sin());
+        // The aim point sits on the ring; the position keeps its offset from the aim point.
+        eye + rim.direction() * to.length() - (aim - centre)
+    };
+    settle(shape, p)
 }
 
 /// Where a sphere spawned around the crosshair may land.

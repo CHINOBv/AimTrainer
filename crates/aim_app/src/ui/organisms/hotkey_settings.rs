@@ -1,6 +1,7 @@
 //! Global hotkey rows: current combination, "Record" (press the combination), "Clear",
 //! and inline validation (unknown key, bare key, duplicates).
 
+use crate::i18n::tr;
 use crate::persistence::settings::Settings;
 use crate::platform::hotkey;
 use crate::platform::hotkey_spec::{self, Combo};
@@ -28,28 +29,35 @@ pub fn hotkey_settings(ui: &mut egui::Ui, settings: &mut Settings, recording: &m
     let problems = hotkey_spec::problems(&specs.each_ref().map(String::as_str), hotkey::is_known);
     egui::Grid::new("hotkeys").num_columns(3).show(ui, |ui| {
         for (slot, name) in SLOTS.iter().enumerate() {
-            ui.label(*name);
+            ui.label(tr(name));
             if *recording == Some(slot) {
                 ui.label(
-                    egui::RichText::new(
+                    egui::RichText::new(tr(
                         "Press Ctrl/Alt/Shift + a key, or an F-key… (Esc to cancel)",
-                    )
+                    ))
                     .color(WARN),
                 );
             } else {
-                ui.label(egui::RichText::new(hotkey_spec::label(&specs[slot])).strong());
+                // Key combinations stay as typed; only "Not set" is translated.
+                let label = hotkey_spec::label(&specs[slot]);
+                let shown = if specs[slot].trim().is_empty() {
+                    tr(&label)
+                } else {
+                    &label
+                };
+                ui.label(egui::RichText::new(shown).strong());
             }
             ui.horizontal(|ui| {
                 if *recording == Some(slot) {
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr("Cancel")).clicked() {
                         *recording = None;
                     }
-                } else if ui.button("Record").clicked() {
+                } else if ui.button(tr("Record")).clicked() {
                     *recording = Some(slot);
                 }
                 if ui
-                    .add_enabled(!specs[slot].is_empty(), egui::Button::new("Clear"))
-                    .on_hover_text("Disable this hotkey")
+                    .add_enabled(!specs[slot].is_empty(), egui::Button::new(tr("Clear")))
+                    .on_hover_text(tr("Disable this hotkey"))
                     .clicked()
                 {
                     slot_spec(settings, slot).clear();

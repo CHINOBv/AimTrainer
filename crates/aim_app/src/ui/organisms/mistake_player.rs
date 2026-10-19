@@ -11,6 +11,7 @@
 //! extent are pure and tested. Painting has no automated tests.
 
 use super::replay_viewer::{paint_grid, plot_frame, to_screen};
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::ui::atoms::{BAD, GOOD, WARN};
 use aim_core::analytics::mistakes::{self, Mistake, MistakeKind, PathPoint};
 use aim_core::scenario::Recording;
@@ -60,12 +61,17 @@ mod text {
         }
     }
 
+    use super::{tr_fmt, tr_named};
+
     pub fn counter(index: usize, count: usize) -> String {
-        format!("Mistake {} of {count}", index + 1)
+        tr_fmt("Mistake {} of {}", &[&(index + 1), &count])
     }
 
     pub fn step(number: usize, title: &str) -> String {
-        format!("Step {number} of 4: {title}")
+        tr_named(
+            "Step {number} of 4: {title}",
+            &[("number", &number), ("title", &super::tr(title))],
+        )
     }
 }
 
@@ -285,12 +291,25 @@ pub enum PlayerAction {
 
 /// Draw the player. Returns [`PlayerAction::Close`] when the user closes it.
 pub fn mistake_player(ui: &mut egui::Ui, state: &mut MistakePlayerState) -> Option<PlayerAction> {
+    mistake_player_with(ui, state, |_, _, _| {})
+}
+
+/// [`mistake_player`] with `below_tip` drawn under the template tip, given the shown
+/// mistake and its index (the results page adds "Ask the coach why" there).
+pub fn mistake_player_with(
+    ui: &mut egui::Ui,
+    state: &mut MistakePlayerState,
+    below_tip: impl FnOnce(&mut egui::Ui, usize, &Mistake),
+) -> Option<PlayerAction> {
     let mut action = None;
     let count = state.mistakes.len();
     ui.horizontal(|ui| {
         if !state.is_empty() {
             if ui
-                .add_enabled(state.index > 0, egui::Button::new(text::PREVIOUS_MISTAKE))
+                .add_enabled(
+                    state.index > 0,
+                    egui::Button::new(tr(text::PREVIOUS_MISTAKE)),
+                )
                 .clicked()
             {
                 state.select(state.index - 1);
@@ -299,28 +318,28 @@ pub fn mistake_player(ui: &mut egui::Ui, state: &mut MistakePlayerState) -> Opti
             if ui
                 .add_enabled(
                     state.index + 1 < count,
-                    egui::Button::new(text::NEXT_MISTAKE),
+                    egui::Button::new(tr(text::NEXT_MISTAKE)),
                 )
                 .clicked()
             {
                 state.select(state.index + 1);
             }
         }
-        if ui.button(text::CLOSE).clicked() {
+        if ui.button(tr(text::CLOSE)).clicked() {
             action = Some(PlayerAction::Close);
         }
     });
     let Some(m) = state.current().cloned() else {
-        ui.small(text::NO_MISTAKES);
+        ui.small(tr(text::NO_MISTAKES));
         return action;
     };
-    ui.colored_label(BAD, m.kind.label());
+    ui.colored_label(BAD, m.kind.label_in(crate::i18n::language()));
 
     let step = state.step();
     let i = step.number() - 1;
     ui.horizontal(|ui| {
         if ui
-            .add_enabled(step.previous().is_some(), egui::Button::new(text::BACK))
+            .add_enabled(step.previous().is_some(), egui::Button::new(tr(text::BACK)))
             .clicked()
             && let Some(s) = step.previous()
         {
@@ -328,20 +347,21 @@ pub fn mistake_player(ui: &mut egui::Ui, state: &mut MistakePlayerState) -> Opti
         }
         ui.strong(text::step(step.number(), text::STEP_TITLES[i]));
         if ui
-            .add_enabled(step.next().is_some(), egui::Button::new(text::NEXT))
+            .add_enabled(step.next().is_some(), egui::Button::new(tr(text::NEXT)))
             .clicked()
             && let Some(s) = step.next()
         {
             state.set_step(s);
         }
     });
-    ui.small(text::STEP_HINTS[i]);
+    ui.small(tr(text::STEP_HINTS[i]));
 
     let step = state.step();
     if step == Step::Tip {
         egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.label(&m.tip);
+            ui.label(m.tip_in(crate::i18n::language()));
         });
+        below_tip(ui, state.index, &m);
     } else {
         playback_controls(ui, state);
     }
@@ -352,7 +372,7 @@ pub fn mistake_player(ui: &mut egui::Ui, state: &mut MistakePlayerState) -> Opti
     }
     plot(ui, &m, step, state.clock.t);
     if step == Step::Corrected {
-        ui.small(text::GHOST);
+        ui.small(tr(text::GHOST));
     }
     action
 }
@@ -365,13 +385,13 @@ fn playback_controls(ui: &mut egui::Ui, state: &mut MistakePlayerState) {
         } else {
             text::PLAY
         };
-        if ui.button(label).clicked() {
+        if ui.button(tr(label)).clicked() {
             state.clock.toggle(window);
         }
-        if ui.button(text::RESTART).clicked() {
+        if ui.button(tr(text::RESTART)).clicked() {
             state.clock = Clock::start(window, state.clock.speed);
         }
-        ui.label(text::SPEED);
+        ui.label(tr(text::SPEED));
         for speed in SPEEDS {
             ui.selectable_value(&mut state.clock.speed, speed, format!("{speed}×"));
         }
@@ -445,13 +465,13 @@ fn plot(ui: &mut egui::Ui, m: &Mistake, step: Step, t: f32) {
             painter.text(
                 p + vec2(0.0, -14.0),
                 Align2::CENTER_BOTTOM,
-                text::marker(m.kind),
+                tr(text::marker(m.kind)),
                 FontId::proportional(13.0),
                 BAD,
             );
         }
     }
-    response.on_hover_text(text::HOVER);
+    response.on_hover_text(tr(text::HOVER));
 }
 
 /// The mistake player for the replay selected in the replay viewer.
@@ -495,12 +515,12 @@ pub fn saved_replay_mistakes(
     }
     match &mut state.player {
         None => {
-            if ui.button(text::OPEN_SAVED).clicked() {
+            if ui.button(tr(text::OPEN_SAVED)).clicked() {
                 state.open(load);
             }
         }
         Some(None) => {
-            ui.colored_label(BAD, text::UNREADABLE);
+            ui.colored_label(BAD, tr(text::UNREADABLE));
         }
         Some(Some(player)) => {
             if mistake_player(ui, player) == Some(PlayerAction::Close) {
@@ -644,5 +664,32 @@ mod tests {
         assert!(saved.player.is_some(), "same replay keeps it");
         saved.sync(Some(Path::new("/r/2-x.aimreplay")));
         assert!(saved.player.is_none());
+    }
+
+    #[test]
+    fn the_player_chrome_reads_in_spanish() {
+        use aim_core::i18n::{Lang, tr_fmt_in, tr_in, tr_named_in};
+        let title = tr_in(Lang::Es, text::STEP_TITLES[1]);
+        assert_eq!(
+            tr_named_in(
+                Lang::Es,
+                "Step {number} of 4: {title}",
+                &[("number", &2), ("title", &title)]
+            ),
+            "Paso 2 de 4: Dónde salió mal"
+        );
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "Mistake {} of {}", &[&1, &3]),
+            "Error 1 de 3"
+        );
+        assert_eq!(
+            tr_in(Lang::Es, text::marker(MistakeKind::LateClick)),
+            "aquí estabas sobre el objetivo, pero no hiciste clic"
+        );
+        assert_eq!(text::counter(0, 3), "Mistake 1 of 3");
+        assert_eq!(
+            text::step(2, "Where it went wrong"),
+            "Step 2 of 4: Where it went wrong"
+        );
     }
 }

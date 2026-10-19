@@ -11,8 +11,8 @@ simulate_spread = true
 
 [player]
 movement = true
-bounds_x = [-8.0, 8.0]
-bounds_z = [-2.0, 5.0]
+bounds_x = [-16.0, 16.0]
+bounds_z = [-3.0, 8.0]
 
 [targets]
 shape = { kind = "humanoid", head_only = true }

@@ -5,6 +5,7 @@
 //! [`AudioCueAnalysis`](aim_core::analytics::audio_cue::AudioCueAnalysis); the view only lays
 //! it out.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::ui::atoms::WARN;
 use crate::ui::molecules::stat_row;
 use crate::ui::organisms::analysis_panel::ms;
@@ -60,7 +61,7 @@ impl AudioCueReport {
         let mut worst: Option<((usize, usize), f32)> = None;
         let rows = std::array::from_fn(|r| {
             std::array::from_fn(|c| match LAYOUT[r][c] {
-                None => CENTER.to_owned(),
+                None => tr(CENTER).to_owned(),
                 Some(b) => {
                     let Some((s, error)) = a
                         .by_bearing
@@ -82,24 +83,27 @@ impl AudioCueReport {
             metrics,
             rows,
             worst: worst.map(|(cell, _)| cell),
-            note: format!(
-                "Error {:.1} s after each sound (or at your first shot); turn time until the \
-                 crosshair moves towards it at {TURN_ONSET_DEG_PER_SEC:.0}°/s. Estimates.",
-                ERROR_AT_SECS
+            note: tr_fmt(
+                "Error {} s after each sound (or at your first shot); turn time until the \
+                 crosshair moves towards it at {}°/s. Estimates.",
+                &[
+                    &format!("{ERROR_AT_SECS:.1}"),
+                    &format!("{TURN_ONSET_DEG_PER_SEC:.0}"),
+                ],
             ),
         }
     }
 }
 
 pub fn audio_cue_panel(ui: &mut egui::Ui, report: &AudioCueReport) {
-    egui::CollapsingHeader::new(TITLE)
+    egui::CollapsingHeader::new(tr(TITLE))
         .default_open(true)
         .show(ui, |ui| {
             egui::Grid::new("audio_cue_metrics")
                 .num_columns(2)
                 .show(ui, |ui| {
                     for (label, value) in &report.metrics {
-                        stat_row(ui, label, value.as_str());
+                        stat_row(ui, tr(label), value.as_str());
                     }
                 });
             egui::Grid::new("audio_cue_grid")

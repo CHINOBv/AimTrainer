@@ -8,6 +8,7 @@
 
 use super::stats::median;
 use super::trace::{CueSample, Sample};
+use crate::i18n::{Lang, tr_in};
 use crate::math::{angle_between_deg, wrap_degrees};
 
 /// Seconds after a cue at which its angular error is measured, unless the player shoots
@@ -69,6 +70,11 @@ impl Bearing {
             Bearing::Left => "left",
             Bearing::FrontLeft => "front-left",
         }
+    }
+
+    /// [`Bearing::label`] in `lang`.
+    pub fn label_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.label())
     }
 
     /// The bin of a horizontal angle from the view to the source, degrees (positive to the
@@ -371,5 +377,12 @@ mod tests {
         let mut silent = run(&yaws, 0, 90.0, None);
         silent[0].cues.clear();
         assert_eq!(analyze(&silent), None);
+    }
+
+    #[test]
+    fn bearing_labels_are_shown_in_spanish() {
+        assert_eq!(Bearing::BackLeft.label_in(Lang::En), "back-left");
+        assert_eq!(Bearing::BackLeft.label_in(Lang::Es), "atrás-izquierda");
+        assert_eq!(Bearing::Front.label_in(Lang::Es), "frente");
     }
 }

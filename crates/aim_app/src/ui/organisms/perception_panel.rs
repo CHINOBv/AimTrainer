@@ -4,6 +4,7 @@
 //! [`DetectionReport`] and [`RadarRecallReport`] are plain text built from the core's
 //! [`DetectionAnalysis`] and [`RadarRecall`]; the views only lay them out.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::ui::atoms::WARN;
 use crate::ui::molecules::stat_row;
 use crate::ui::organisms::analysis_panel::{ms, pct};
@@ -47,7 +48,7 @@ impl DetectionReport {
         let mut metrics = vec![
             (
                 "Flashes seen",
-                format!("{} of {}", d.detected(), d.flashes()),
+                tr_fmt("{} of {}", &[&d.detected(), &d.flashes()]),
             ),
             ("False alarms (click, no flash)", d.false_alarms.to_string()),
             ("Blank trials", d.blank_trials.to_string()),
@@ -105,7 +106,7 @@ impl RadarRecallReport {
 }
 
 pub fn detection_panel(ui: &mut egui::Ui, report: &DetectionReport) {
-    egui::CollapsingHeader::new(DETECTION_TITLE)
+    egui::CollapsingHeader::new(tr(DETECTION_TITLE))
         .default_open(true)
         .show(ui, |ui| {
             metrics_grid(ui, "detection_metrics", &report.metrics);
@@ -124,12 +125,12 @@ pub fn detection_panel(ui: &mut egui::Ui, report: &DetectionReport) {
                         ui.end_row();
                     }
                 });
-            ui.small(GRID_NOTE);
+            ui.small(tr(GRID_NOTE));
         });
 }
 
 pub fn radar_recall_panel(ui: &mut egui::Ui, report: &RadarRecallReport) {
-    egui::CollapsingHeader::new(RADAR_TITLE)
+    egui::CollapsingHeader::new(tr(RADAR_TITLE))
         .default_open(true)
         .show(ui, |ui| metrics_grid(ui, "radar_metrics", &report.metrics));
 }
@@ -137,7 +138,7 @@ pub fn radar_recall_panel(ui: &mut egui::Ui, report: &RadarRecallReport) {
 fn metrics_grid(ui: &mut egui::Ui, id: &str, metrics: &[(&'static str, String)]) {
     egui::Grid::new(id).num_columns(2).show(ui, |ui| {
         for (label, value) in metrics {
-            stat_row(ui, label, value.as_str());
+            stat_row(ui, tr(label), value.as_str());
         }
     });
 }

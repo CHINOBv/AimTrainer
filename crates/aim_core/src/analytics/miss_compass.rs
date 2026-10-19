@@ -6,6 +6,7 @@
 //! See "Miss compass" in `docs/training-science.md`.
 
 use super::trace::{Sample, tangent_offset_deg};
+use crate::i18n::{Lang, tr_in};
 
 /// Fewer misses than this give no above/below share for the rules (provisional).
 pub const MIN_MISSES_FOR_BIAS: u32 = 10;
@@ -59,6 +60,11 @@ impl Compass {
             Compass::Left => "left",
             Compass::UpLeft => "up-left",
         }
+    }
+
+    /// [`Compass::label`] in `lang`.
+    pub fn label_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.label())
     }
 
     /// The direction of a screen-space offset, degrees (`.0` positive right, `.1` positive
@@ -324,5 +330,12 @@ mod tests {
             let one = MissCompass::from_offsets([tangent_offset_deg(t.aim_point, s.view)]);
             assert_eq!(one.misses(), 1, "{id}");
         }
+    }
+
+    #[test]
+    fn compass_labels_are_shown_in_spanish() {
+        assert_eq!(Compass::Down.label_in(Lang::En), "down");
+        assert_eq!(Compass::Down.label_in(Lang::Es), "abajo");
+        assert_eq!(Compass::UpRight.label_in(Lang::Es), "arriba-derecha");
     }
 }

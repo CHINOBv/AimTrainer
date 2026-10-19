@@ -4,6 +4,7 @@ use crate::audio::SoundPreview;
 use crate::game::AppState;
 use crate::game::FinderState;
 use crate::game::{ActiveRoutine, start_run};
+use crate::i18n::{tr, tr_fmt};
 use crate::overlay::{Overlay, background};
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::coach::context::{ContextData, load_context};
@@ -39,7 +40,8 @@ use crate::ui::organisms::today_panel::{
     TodayAction, TodayModel,
 };
 use crate::ui::organisms::{
-    arena_list, benchmark_panel, feedback_settings, first_run, routine_list, scenario_browser,
+    arena_list, benchmark_panel, feedback_settings, first_run, movement_lab, routine_list,
+    scenario_browser,
 };
 use aim_core::fov;
 use aim_core::scenario::ScenarioDef;
@@ -156,10 +158,16 @@ fn continue_position(
         .cloned()
 }
 
+/// Scenarios tab entry to the Movement Lab.
+const LAB_BUTTON: &str = "Movement Lab";
+const LAB_HINT: &str = "Build your own movement drill: enemy motion, count, spawn distance and frequency, your movement area and weapon.";
+
 #[derive(Resource, Default)]
 struct MenuState {
     tab: Tab,
     selected: Option<String>,
+    /// The Movement Lab is shown instead of the selected scenario (Scenarios tab).
+    lab_open: bool,
     dpi_target: u32,
     meter: DpiMeter,
     profile_import: ProfileImport,
@@ -218,42 +226,44 @@ impl<T> HistoryCache<T> {
 fn settings_page(root: &mut egui::Ui, state: &mut MenuState, cfg: &mut SettingsAccess) {
     egui::Panel::top("settings_tabs").show(root, |ui| {
         ui.horizontal(|ui| {
-            ui.label("Search");
+            ui.label(tr("Search"));
             ui.add(
                 egui::TextEdit::singleline(&mut state.settings_query)
-                    .hint_text("Search settings")
+                    .hint_text(tr("Search settings"))
                     .desired_width(180.0),
             );
-            if !state.settings_query.is_empty() && ui.small_button("Clear").clicked() {
+            if !state.settings_query.is_empty() && ui.small_button(tr("Clear")).clicked() {
                 state.settings_query.clear();
             }
             ui.separator();
-            tab_bar(ui, &mut state.settings_tab, &SettingsTab::ALL);
+            tab_bar(ui, &mut state.settings_tab, &SettingsTab::localized());
         });
         let searching = !state.settings_query.trim().is_empty();
         ui.horizontal(|ui| {
             if searching {
-                ui.small("Showing matches from every section.");
+                ui.small(tr("Showing matches from every section."));
             } else if state.confirm_reset == Some(state.settings_tab) {
-                ui.label("Reset this section to its defaults?");
-                if ui.button("Reset").clicked() {
+                ui.label(tr("Reset this section to its defaults?"));
+                if ui.button(tr("Reset")).clicked() {
                     settings_panels::reset_section(&mut cfg.settings, state.settings_tab);
                     state.confirm_reset = None;
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(tr("Cancel")).clicked() {
                     state.confirm_reset = None;
                 }
-            } else if ui.button("Reset section to defaults").clicked() {
+            } else if ui.button(tr("Reset section to defaults")).clicked() {
                 state.confirm_reset = Some(state.settings_tab);
             }
         });
     });
     // Pinned below the rows, which scroll.
     egui::Panel::bottom("settings_footer").show(root, |ui| {
-        ui.small(format!(
-            "Settings file: {}  ·  VALORANT FOV: {:.2}° vertical (103° horizontal at 16:9, Hor+)",
-            cfg.paths.settings_file.display(),
-            fov::valorant_vertical_fov_deg()
+        ui.small(tr_fmt(
+            "Settings file: {}  ·  VALORANT FOV: {}° vertical (103° horizontal at 16:9, Hor+)",
+            &[
+                &cfg.paths.settings_file.display(),
+                &format!("{:.2}", fov::valorant_vertical_fov_deg()),
+            ],
         ));
     });
     egui::CentralPanel::default().show(root, |ui| {
@@ -303,7 +313,10 @@ fn settings_section(
                 cfg.sound_previews.write(SoundPreview(clip));
             }
         }
-        SettingsTab::Overlay => settings_panels::overlay_panel(ui, rows, settings),
+        SettingsTab::Overlay => {
+            settings_panels::language_panel(ui, rows, settings);
+            settings_panels::overlay_panel(ui, rows, settings);
+        }
         SettingsTab::Keys => {
             settings_panels::keys_panel(ui, rows, settings, &mut cfg.hotkey_capture.recording)
         }
@@ -414,13 +427,13 @@ fn menu(
         ui.horizontal(|ui| {
             ui.strong("CustomAimTrainer");
             ui.separator();
-            tab_bar(ui, &mut state.tab, &TABS);
+            tab_bar(ui, &mut state.tab, &crate::i18n::labels(&TABS));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Quit").clicked() {
+                if ui.button(tr("Quit")).clicked() {
                     action = Some(UiAction::Quit);
                 }
                 if saved {
-                    ui.colored_label(GOOD, "Saved ✔");
+                    ui.colored_label(GOOD, tr("Saved ✔"));
                     // Repaint so the message disappears without waiting for input.
                     ui.ctx()
                         .request_repaint_after(std::time::Duration::from_millis(250));
@@ -439,7 +452,7 @@ fn menu(
 
     if !lib.errors.is_empty() {
         egui::Panel::bottom("errors").show(&mut root, |ui| {
-            ui.colored_label(ERROR, "Some files failed to load:");
+            ui.colored_label(ERROR, tr("Some files failed to load:"));
             for e in &lib.errors {
                 ui.monospace(e);
             }
@@ -465,7 +478,7 @@ fn menu(
                         today_action = today_panel::today_panel(ui, &model).or(today_action.take())
                     }
                     None => {
-                        ui.label("No weekly training method is available.");
+                        ui.label(tr("No weekly training method is available."));
                     }
                 }
             });
@@ -556,8 +569,8 @@ fn menu(
                         &mut cfg.settings,
                     );
                     ui.separator();
-                    ui.heading("Replays");
-                    ui.small("Your crosshair path around each target: overshoot, corrections and misses at a glance.");
+                    ui.heading(tr("Replays"));
+                    ui.small(tr("Your crosshair path around each target: overshoot, corrections and misses at a glance."));
                     replay_viewer::replay_viewer(ui, &mut state.replays, &entries, |e| {
                         replays::load(&e.path).ok().map(|r| aim_core::analytics::path::replay_path(&r))
                     });
@@ -579,11 +592,20 @@ fn menu(
                 .show(&mut root, |ui| {
                     // Pinned below the list, which scrolls and would otherwise push it off-screen.
                     egui::Panel::bottom("custom_scenarios").show(ui, |ui| {
-                        ui.small(format!(
+                        if ui
+                            .selectable_label(state.lab_open, tr(LAB_BUTTON))
+                            .on_hover_text(tr(LAB_HINT))
+                            .clicked()
+                        {
+                            state.lab_open = true;
+                            state.selected = None;
+                        }
+                        ui.small(tr_fmt(
                             "Custom scenarios: {}",
-                            cfg.paths.scenarios_dir.display()
+                            &[&cfg.paths.scenarios_dir.display()],
                         ));
                     });
+                    let picked = state.selected.clone();
                     scenario_browser::scenario_list(
                         ui,
                         lib,
@@ -592,8 +614,18 @@ fn menu(
                         &mut state.scenario_filter,
                         &mut cfg.settings.favorites,
                     );
+                    // Picking a scenario in the list leaves the lab.
+                    if state.selected.is_some() && state.selected != picked {
+                        state.lab_open = false;
+                    }
                 });
             egui::CentralPanel::default().show(&mut root, |ui| {
+                if state.lab_open {
+                    let lab = &mut cfg.settings.movement_lab;
+                    let best = history.best(&lab.to_def().id);
+                    action = action.take().or(movement_lab::movement_lab(ui, lab, best));
+                    return;
+                }
                 match state.selected.as_deref().and_then(|id| lib.scenario(id)) {
                     Some(def) => {
                         action = action.take().or(scenario_browser::scenario_details(
@@ -610,9 +642,9 @@ fn menu(
         Tab::Routines => {
             // Pinned below the list, which scrolls and would otherwise push it off-screen.
             egui::Panel::bottom("custom_routines").show(&mut root, |ui| {
-                ui.small(format!(
+                ui.small(tr_fmt(
                     "Custom routines: {}",
-                    cfg.paths.routines_dir.display()
+                    &[&cfg.paths.routines_dir.display()],
                 ));
             });
             egui::CentralPanel::default().show(&mut root, |ui| {
@@ -665,7 +697,7 @@ fn menu(
                 egui::ScrollArea::vertical()
                     .id_salt("tools")
                     .show(ui, |ui| {
-                        ui.heading("Sensitivity converter");
+                        ui.heading(tr("Sensitivity converter"));
                         let converter = state.converter.get_or_insert_with(|| {
                             ConverterState::from_sensitivity(cfg.settings.sensitivity)
                         });
@@ -1187,7 +1219,7 @@ fn today_model(
         }
     };
     Some(TodayModel {
-        weekday: weekday.label(),
+        weekday: weekday.label_in(crate::i18n::language()),
         method_name: method.name.clone(),
         method_description: method.description.clone(),
         credit: method.credit.clone(),
@@ -1249,7 +1281,7 @@ fn missions_model(
 ) -> MissionsModel {
     let list = missions.0.today.as_ref().map_or(&[][..], |d| &d.missions);
     MissionsModel {
-        commitment: commitment.label(),
+        commitment: commitment.label_in(crate::i18n::language()),
         missions: list
             .iter()
             .map(|m| MissionModel {
@@ -1257,7 +1289,11 @@ fn missions_model(
                 scenario_name: lib
                     .scenario(&m.scenario)
                     .map_or(m.scenario.clone(), |d| d.name.clone()),
-                conditions: m.conditions.iter().map(|c| c.describe()).collect(),
+                conditions: m
+                    .conditions
+                    .iter()
+                    .map(|c| c.describe_in(crate::i18n::language()))
+                    .collect(),
                 mastery: m.mastery,
                 done: m.done,
                 best_met: m.best_met,
@@ -1394,6 +1430,71 @@ mod tests {
         assert_eq!(e.readiness, Some(Warmth::Warming));
         assert!(e.fatigued);
         assert!(e.validate().is_ok());
+    }
+
+    #[test]
+    fn tab_labels_are_spanish_in_spanish_and_unchanged_in_english() {
+        use crate::i18n::{Lang, labels_in};
+        let names = |table: &[(Tab, &'static str)]| table.iter().map(|t| t.1).collect::<Vec<_>>();
+        assert_eq!(labels_in(Lang::En, &TABS), TABS);
+        assert_eq!(
+            names(&labels_in(Lang::Es, &TABS)),
+            [
+                "Hoy",
+                "Progreso",
+                "Escenarios",
+                "Rutinas",
+                "Arenas",
+                "Evaluación",
+                "Herramientas",
+                "Ajustes",
+                "Entrenador",
+            ]
+        );
+        let settings_names =
+            |table: &[(SettingsTab, &'static str)]| table.iter().map(|t| t.1).collect::<Vec<_>>();
+        assert_eq!(labels_in(Lang::En, &SettingsTab::ALL), SettingsTab::ALL);
+        assert_eq!(
+            settings_names(&labels_in(Lang::Es, &SettingsTab::ALL)),
+            [
+                "Sensibilidad",
+                "Mira",
+                "Efectos",
+                "Audio",
+                "Superposición",
+                "Teclas",
+                "Entrenamiento",
+            ]
+        );
+        assert_eq!(aim_core::i18n::tr_in(Lang::Es, "Language"), "Idioma");
+        assert_eq!(aim_core::i18n::tr_in(Lang::En, "Language"), "Language");
+    }
+
+    #[test]
+    fn menu_text_is_spanish_in_spanish_and_unchanged_in_english() {
+        use crate::i18n::Lang;
+        use aim_core::i18n::{tr_fmt_in, tr_in, tr_named_in};
+        assert_eq!(tr_in(Lang::Es, LAB_BUTTON), "Laboratorio de movimiento");
+        assert_eq!(tr_in(Lang::Es, "Daily challenge"), "Desafío diario");
+        assert_eq!(tr_in(Lang::Es, "▶  Play"), "▶  Jugar");
+        assert_eq!(tr_in(Lang::Es, "Back"), "Atrás");
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "{} runs · ≈{} min", &[&12, &"9"]),
+            "12 partidas · ≈9 min"
+        );
+        assert_eq!(
+            tr_named_in(
+                Lang::Es,
+                "⏵ Continue {name} (run {next}/{total})",
+                &[("name", &"Warm-up"), ("next", &3), ("total", &10)],
+            ),
+            "⏵ Continuar Warm-up (partida 3/10)"
+        );
+        assert_eq!(
+            tr_fmt_in(Lang::En, "{} runs · ≈{} min", &[&12, &"9"]),
+            "12 runs · ≈9 min"
+        );
+        assert_eq!(tr_in(Lang::En, "Daily challenge"), "Daily challenge");
     }
 
     #[test]

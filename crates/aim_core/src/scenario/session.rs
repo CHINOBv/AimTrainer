@@ -11,11 +11,12 @@ use super::def::{FireMode, FloorAction, Motion, MotionProfile, ScenarioDef, Shap
 use super::hit::{HitZone, Ray};
 use super::motion::{Drive, MotionState};
 use super::phase::{self, FailReason, PhaseRun, RunEnd, RunOutcome};
+use super::prestart;
 use super::recoil::RecoilState;
 use super::{scoring, spawn, weapon};
 use crate::games::valorant::{HumanoidDims, RecoilProfile, WeaponStats};
 use crate::math::{Vec3, ViewAngles, angle_between_deg};
-use crate::movement::{self, LocalVelocity, MoveInput, MovementProfile};
+use crate::movement::{LocalVelocity, MoveInput, MovementProfile};
 use crate::rng::Rng;
 use serde::{Deserialize, Serialize};
 
@@ -214,6 +215,9 @@ pub struct Stats {
     /// Detection drills only: blank trials (no flash) that ran their course.
     #[serde(default)]
     pub blank_trials: u32,
+    /// Stop-timing scenarios only: hits that earned the `scoring.stop_window` bonus.
+    #[serde(default)]
+    pub stop_hits: u32,
 }
 
 impl Stats {
@@ -316,6 +320,13 @@ pub struct Session {
     shrink_base: f32,
     /// A ballistic target with `on_floor = "fail"` landed: the run fails.
     dropped: bool,
+    /// Session time of the last frame the player moved faster than the accuracy speed
+    /// limit (`-inf` before the first), for `scoring.stop_window`.
+    last_moving_at: f32,
+    /// Spider-shot drills: where the last centre target spawned.
+    spider_centre: Option<Vec3>,
+    /// Spider-shot drills: spawns so far; even counts spawn a centre target.
+    spider_spawns: u64,
 }
 
 impl Session {
@@ -329,7 +340,8 @@ impl Session {
             .then(|| def.weapon.kind.recoil())
             .flatten()
             .map(|r| RecoilState::new(r, weapon.first_shot_spread_deg));
-        let start = Vec3::new(0.0, def.player.elevation, 0.0);
+        let start = prestart::start_position(&def.player);
+        let start_velocity = prestart::start_velocity(&def.player);
         let mut s = Self {
             def,
             rng: Rng::new(seed),
@@ -339,7 +351,7 @@ impl Session {
             next_id: 1,
             stats: Stats::default(),
             player_pos: start,
-            player_vel: LocalVelocity::default(),
+            player_vel: start_velocity,
             view: ViewAngles::default(),
             profile,
             weapon,
@@ -356,6 +368,9 @@ impl Session {
             radar_until: f32::NEG_INFINITY,
             dropped: false,
             shrink_base: 0.0,
+            last_moving_at: f32::NEG_INFINITY,
+            spider_centre: None,
+            spider_spawns: 0,
         };
         s.ammo = s.def.weapon.ammo.map_or(0.0, |a| a.clip);
         if let Some(first) = s.def.phases.as_ref().and_then(|p| p.first()) {
@@ -568,26 +583,17 @@ impl Session {
         if !self.def.player.movement {
             return;
         }
-        self.player_vel = movement::step(&self.profile, self.player_vel, input, dt);
-        let yaw = self.view.yaw_deg;
-        let mut world = self.player_vel.to_world(yaw);
-        let next = self.player_pos + world * dt;
-        let (bx, bz) = (self.def.player.bounds_x, self.def.player.bounds_z);
-        let clamped = Vec3::new(
-            next.x.clamp(bx.min, bx.max),
-            self.def.player.elevation,
-            next.z.clamp(bz.min, bz.max),
+        (self.player_pos, self.player_vel) = prestart::walk(
+            &self.def.player,
+            &self.profile,
+            (self.player_pos, self.player_vel),
+            input,
+            self.view.yaw_deg,
+            dt,
         );
-        // Hitting an edge of the play area behaves like a wall: only the velocity pushing
-        // into it is lost, so the player keeps sliding along the edge.
-        if clamped.x != next.x {
-            world.x = 0.0;
+        if !self.is_accurate() {
+            self.last_moving_at = self.time;
         }
-        if clamped.z != next.z {
-            world.z = 0.0;
-        }
-        self.player_vel = LocalVelocity::from_world(world, yaw);
-        self.player_pos = clamped;
     }
 
     fn move_targets(&mut self, dt: f32) {
@@ -791,6 +797,12 @@ impl Session {
         }
         let multiplier = self.points_multiplier(dir, idx, zone);
         scoring::record_hit(&mut self.stats, &self.def.scoring, zone, multiplier);
+        if let Some(w) = self.def.scoring.stop_window
+            && !moving
+            && self.time - self.last_moving_at <= w.secs
+        {
+            scoring::record_stop_hit(&mut self.stats, w);
+        }
         if let (Some(b), Some(r)) = (bullet, &self.recoil) {
             let protected = r.profile().protected_bullets;
             scoring::record_bullet_hit(&mut self.stats, &self.def.scoring, b, protected);
@@ -1100,11 +1112,24 @@ impl Session {
     /// after a random `appear_delay_secs`.
     fn spawn_target(&mut self, reveal_at: Option<f32>) -> Target {
         let detection = self.perception().is_some_and(Perception::is_detection);
+        // Spider drills: every other spawn is a rim target around the last centre target.
+        let spider_ring = self.def.targets.spider.map(|s| s.ring_deg);
+        let rim = spider_ring.is_some() && self.spider_spawns % 2 == 1;
+        let rim_around = self.spider_centre.filter(|_| rim);
         let point = if detection {
             cue::flash_point(
                 &self.def.targets.spawn,
                 self.eye_position(),
                 self.view,
+                &mut self.rng,
+            )
+        } else if let (Some(ring), Some(centre)) = (spider_ring, rim_around) {
+            spawn::ring_point(
+                &self.def.targets.shape,
+                &self.dims,
+                centre,
+                self.eye_position(),
+                ring,
                 &mut self.rng,
             )
         } else {
@@ -1118,6 +1143,12 @@ impl Session {
                 &mut self.rng,
             )
         };
+        if spider_ring.is_some() {
+            if !rim {
+                self.spider_centre = Some(point);
+            }
+            self.spider_spawns += 1;
+        }
         if let Some(rules) = &self.def.targets.spawn_rules {
             self.recent_spawns.push(point);
             let excess = self
@@ -1282,6 +1313,7 @@ mod tests {
                 perception: None,
                 shrink_per_kill: None,
                 motion_profiles: Vec::new(),
+                spider: None,
             },
             scoring: ScoringDef::default(),
             difficulty: Default::default(),
@@ -2843,5 +2875,210 @@ mod tests {
         assert_eq!((st.expired, st.decoy_waits), (1, 0));
         assert_eq!(st.score, -50.0);
         assert_eq!(s.success_rate(), 0.0);
+    }
+
+    /// A big sphere fixed straight ahead at 10 m, a player free to strafe, and a stop
+    /// window of `secs` worth `bonus` points.
+    fn stop_window_def(secs: f32, bonus: f32) -> ScenarioDef {
+        let mut def = lone_sphere(FireMode::Click, 1.0);
+        def.targets.shape = Shape::Sphere { radius: 0.6 };
+        def.targets.spawn = SpawnArea::Angular {
+            yaw_deg: Range::fixed(0.0),
+            pitch_deg: Range::fixed(0.0),
+            distance: Range::fixed(10.0),
+            grid: None,
+        };
+        def.player = PlayerDef {
+            movement: true,
+            bounds_x: Range::new(-50.0, 50.0),
+            bounds_z: Range::new(-1.0, 1.0),
+            ..PlayerDef::default()
+        };
+        def.scoring.stop_window = Some(StopWindow { secs, bonus });
+        def
+    }
+
+    /// Strafes right at full speed for 0.4 s.
+    fn strafe(s: &mut Session) {
+        let run = MoveInput {
+            right: 1.0,
+            ..Default::default()
+        };
+        for _ in 0..40 {
+            s.update(FrameInput {
+                dt: 0.01,
+                movement: run,
+                ..Default::default()
+            });
+        }
+    }
+
+    /// Strafes, releases the keys and steps until the player is accurate again.
+    fn strafe_and_stop(s: &mut Session) {
+        strafe(s);
+        while !s.is_accurate() {
+            s.update(FrameInput {
+                dt: 0.01,
+                ..Default::default()
+            });
+        }
+    }
+
+    /// Fires one shot at the only target, keeping the movement keys `movement`.
+    fn shoot_lone(s: &mut Session, movement: MoveInput) -> Vec<SessionEvent> {
+        let t = s.targets().next().unwrap().clone();
+        let view = aim_at(
+            s,
+            spawn::aim_point(&s.def().targets.shape, s.dims(), t.position),
+        );
+        s.update(FrameInput {
+            dt: 0.01,
+            view,
+            fire_pressed: true,
+            fire_held: true,
+            movement,
+        })
+    }
+
+    #[test]
+    fn stop_window_rewards_hits_fired_soon_after_an_accurate_stop() {
+        let mut s = Session::new(stop_window_def(0.3, 50.0), 3);
+        strafe_and_stop(&mut s);
+        shoot_lone(&mut s, MoveInput::default());
+        assert_eq!((s.stats().hits, s.stats().stop_hits), (1, 1));
+        assert!(
+            (s.stats().score - 150.0).abs() < 1e-3,
+            "{}",
+            s.stats().score
+        );
+
+        strafe_and_stop(&mut s);
+        for _ in 0..40 {
+            s.update(FrameInput {
+                dt: 0.01,
+                ..Default::default()
+            });
+        }
+        shoot_lone(&mut s, MoveInput::default());
+        assert_eq!((s.stats().hits, s.stats().stop_hits), (2, 1));
+        assert!(
+            (s.stats().score - 250.0).abs() < 1e-3,
+            "{}",
+            s.stats().score
+        );
+    }
+
+    #[test]
+    fn stop_window_pays_nothing_to_players_who_never_moved_or_shoot_while_moving() {
+        let mut s = Session::new(stop_window_def(0.3, 50.0), 3);
+        shoot_lone(&mut s, MoveInput::default());
+        assert_eq!((s.stats().hits, s.stats().stop_hits), (1, 0));
+        assert!(
+            (s.stats().score - 100.0).abs() < 1e-3,
+            "{}",
+            s.stats().score
+        );
+
+        strafe(&mut s);
+        let run = MoveInput {
+            right: 1.0,
+            ..Default::default()
+        };
+        shoot_lone(&mut s, run);
+        let st = s.stats();
+        assert_eq!((st.hits, st.moving_shots, st.stop_hits), (2, 1, 0));
+        assert!((st.score - 200.0).abs() < 1e-3, "{}", st.score);
+    }
+
+    #[test]
+    fn every_bullet_of_a_short_burst_inside_the_window_earns_the_stop_bonus() {
+        let mut def = stop_window_def(0.35, 20.0);
+        def.weapon.recoil = true;
+        def.targets.health = 10.0;
+        let mut s = Session::new(def, 3);
+        strafe_and_stop(&mut s);
+        let t = s.targets().next().unwrap().clone();
+        let view = aim_at(&s, t.position);
+        // Hold the trigger for 0.6 s: about six bullets, of which the first ones fall
+        // inside the 0.35 s window.
+        for _ in 0..60 {
+            frame(&mut s, view, true);
+        }
+        let st = s.stats();
+        assert!(st.shots >= 5, "{}", st.shots);
+        assert!(st.stop_hits >= 3 && st.stop_hits < st.shots, "{st:?}");
+    }
+
+    /// A sphere centre fixed at yaw 0, pitch 10, 12 m away, with spider spawns `ring` away.
+    fn spider_def(ring: Range) -> ScenarioDef {
+        let mut def = lone_sphere(FireMode::Click, 1.0);
+        def.targets.spawn = SpawnArea::Angular {
+            yaw_deg: Range::fixed(0.0),
+            pitch_deg: Range::fixed(10.0),
+            distance: Range::fixed(12.0),
+            grid: None,
+        };
+        def.targets.spider = Some(SpiderDef { ring_deg: ring });
+        def
+    }
+
+    /// Kills the only target `n` times and returns where each one stood.
+    fn spider_positions(def: ScenarioDef, seed: u64, n: usize) -> Vec<Vec3> {
+        let mut s = Session::new(def, seed);
+        let mut out = Vec::new();
+        for _ in 0..n {
+            out.push(s.targets().next().unwrap().position);
+            let ev = shoot_lone(&mut s, MoveInput::default());
+            assert!(ev.iter().any(|e| matches!(e, SessionEvent::Killed { .. })));
+            s.update(FrameInput {
+                dt: 0.2,
+                ..Default::default()
+            });
+        }
+        out
+    }
+
+    #[test]
+    fn spider_spawns_alternate_between_the_centre_and_a_ring_around_it() {
+        let def = spider_def(Range::new(6.0, 10.0));
+        let eye = Session::new(def.clone(), 4).eye_position();
+        let centre = ViewAngles::new(0.0, 10.0).direction();
+        let positions = spider_positions(def.clone(), 4, 8);
+        for (i, p) in positions.iter().enumerate() {
+            let angle = angle_between_deg(centre, *p - eye);
+            assert!(((*p - eye).length() - 12.0).abs() < 1e-3, "{i}: {p:?}");
+            if i % 2 == 0 {
+                assert!(angle < 0.01, "spawn {i} should be the centre: {angle}°");
+            } else {
+                assert!((5.99..=10.01).contains(&angle), "spawn {i}: {angle}°");
+            }
+        }
+        let rims: Vec<Vec3> = positions.iter().skip(1).step_by(2).copied().collect();
+        assert!(rims.windows(2).any(|w| (w[0] - w[1]).length() > 0.1));
+        assert_eq!(
+            positions,
+            spider_positions(def, 4, 8),
+            "deterministic per seed"
+        );
+    }
+
+    #[test]
+    fn spider_humanoids_step_sideways_from_the_centre_on_the_floor() {
+        let mut def = spider_def(Range::fixed(8.0));
+        def.targets.shape = Shape::Humanoid { head_only: false };
+        let eye = Session::new(def.clone(), 6).eye_position();
+        let positions = spider_positions(def, 6, 6);
+        let centre = positions[0];
+        for (i, p) in positions.iter().enumerate() {
+            assert_eq!(p.y, 0.0, "{i}");
+            let flat = |v: Vec3| (v - eye).horizontal();
+            assert!(
+                (flat(*p).length() - flat(centre).length()).abs() < 1e-3,
+                "{i}"
+            );
+            let angle = angle_between_deg(flat(centre), flat(*p));
+            let want = if i % 2 == 0 { 0.0 } else { 8.0 };
+            assert!((angle - want).abs() < 0.01, "{i}: {angle}°");
+        }
     }
 }

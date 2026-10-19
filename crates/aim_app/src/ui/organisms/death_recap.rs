@@ -2,6 +2,7 @@
 //! numbers (who saw whom first, crosshair placement at first sight, first-shot time or
 //! moving shots). The data comes from `aim_world::arena::DeathRecap`; this only draws it.
 
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::ui::atoms::{BAD, GOOD, WARN, big};
 use aim_world::arena::{
     BotRole, DeathCause, DeathRecap, RECAP_PLACEMENT_DEG, RECAP_SLOW_SHOT_SECS,
@@ -51,21 +52,21 @@ fn ms(secs: f32) -> String {
 
 fn headline(r: &DeathRecap) -> String {
     match r.cause {
-        DeathCause::MovingShots => format!(
-            "Shooting while moving ({} of {} shots)",
-            r.moving_shots, r.shots
+        DeathCause::MovingShots => tr_named(
+            "Shooting while moving ({moving} of {shots} shots)",
+            &[("moving", &r.moving_shots), ("shots", &r.shots)],
         ),
-        DeathCause::Placement => format!(
-            "Crosshair {:.0}° off when it appeared",
-            r.crosshair_error_deg.unwrap_or_default()
+        DeathCause::Placement => tr_fmt(
+            "Crosshair {}° off when it appeared",
+            &[&format!("{:.0}", r.crosshair_error_deg.unwrap_or_default())],
         ),
         DeathCause::SlowShot => match r.first_shot_delay_secs {
-            Some(d) => format!("First shot {} after seeing it", ms(d)),
-            None => "Never fired after seeing it".into(),
+            Some(d) => tr_fmt("First shot {} after seeing it", &[&ms(d)]),
+            None => tr("Never fired after seeing it").into(),
         },
-        DeathCause::Unseen => "Shot by an enemy you never saw".into(),
-        DeathCause::Deadline => "Too slow: it lived past the deadline".into(),
-        DeathCause::Outaimed => "Placed and quick: lost the aim duel".into(),
+        DeathCause::Unseen => tr("Shot by an enemy you never saw").into(),
+        DeathCause::Deadline => tr("Too slow: it lived past the deadline").into(),
+        DeathCause::Outaimed => tr("Placed and quick: lost the aim duel").into(),
     }
 }
 
@@ -83,9 +84,9 @@ fn grade(value: f32, good: f32, bad: f32) -> Color32 {
 /// The card for a recap.
 pub fn view(r: &DeathRecap) -> RecapView {
     let eye = match (r.crosshair_error_deg.is_some(), r.saw_first) {
-        (false, _) => ("Unseen".to_string(), BAD),
-        (true, true) => ("Saw first".to_string(), GOOD),
-        (true, false) => ("Seen first".to_string(), BAD),
+        (false, _) => (tr("Unseen").to_string(), BAD),
+        (true, true) => (tr("Saw first").to_string(), GOOD),
+        (true, false) => (tr("Seen first").to_string(), BAD),
     };
     let mut chips = vec![Chip {
         icon: Icon::Eye,
@@ -102,7 +103,10 @@ pub fn view(r: &DeathRecap) -> RecapView {
     if r.cause == DeathCause::MovingShots {
         chips.push(Chip {
             icon: Icon::Run,
-            text: format!("{}/{} moving", r.moving_shots, r.shots),
+            text: tr_named(
+                "{moving}/{shots} moving",
+                &[("moving", &r.moving_shots), ("shots", &r.shots)],
+            ),
             color: BAD,
         });
     } else if r.crosshair_error_deg.is_some() {
@@ -114,7 +118,7 @@ pub fn view(r: &DeathRecap) -> RecapView {
             },
             None => Chip {
                 icon: Icon::Clock,
-                text: "no shot".into(),
+                text: tr("no shot").into(),
                 color: BAD,
             },
         });
@@ -122,13 +126,15 @@ pub fn view(r: &DeathRecap) -> RecapView {
     RecapView {
         headline: headline(r),
         chips,
-        detail: format!(
-            "{} {} · {:.0} m · dealt {:.0} / took {:.0}",
-            r.killer_skill,
-            role_name(r.killer_role),
-            r.distance_m,
-            r.damage_dealt,
-            r.damage_taken
+        detail: tr_named(
+            "{skill} {role} · {distance} m · dealt {dealt} / took {taken}",
+            &[
+                ("skill", &tr(r.killer_skill)),
+                ("role", &tr(role_name(r.killer_role))),
+                ("distance", &format!("{:.0}", r.distance_m)),
+                ("dealt", &format!("{:.0}", r.damage_dealt)),
+                ("taken", &format!("{:.0}", r.damage_taken)),
+            ],
         ),
     }
 }
@@ -278,5 +284,37 @@ mod tests {
         let v = view(&unseen);
         assert_eq!(v.chips.len(), 1);
         assert_eq!(v.chips[0].text, "Unseen");
+    }
+
+    #[test]
+    fn the_card_text_reads_in_spanish() {
+        use aim_core::i18n::{Lang, tr_fmt_in, tr_in, tr_named_in};
+        assert_eq!(
+            tr_named_in(
+                Lang::Es,
+                "Shooting while moving ({moving} of {shots} shots)",
+                &[("moving", &3), ("shots", &4)]
+            ),
+            "Disparaste en movimiento (3 de 4 disparos)"
+        );
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "Crosshair {}° off when it appeared", &[&18]),
+            "Crosshair a 18° cuando apareció"
+        );
+        assert_eq!(tr_in(Lang::Es, "Seen first"), "Te vio primero");
+        assert_eq!(
+            tr_named_in(
+                Lang::Es,
+                "{skill} {role} · {distance} m · dealt {dealt} / took {taken}",
+                &[
+                    ("skill", &tr_in(Lang::Es, "veteran")),
+                    ("role", &tr_in(Lang::Es, "bot")),
+                    ("distance", &12),
+                    ("dealt", &40),
+                    ("taken", &160),
+                ]
+            ),
+            "bot veterano · 12 m · infligido 40 / recibido 160"
+        );
     }
 }

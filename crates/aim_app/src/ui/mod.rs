@@ -73,6 +73,8 @@ pub enum UiAction {
     StartAdaptive(String),
     /// Play a routine that is not in the library (e.g. the personalized playlist).
     StartRoutineDef(Box<RoutineDef>),
+    /// Play a Movement Lab drill generated from these settings (its own history key).
+    StartLab(aim_core::scenario::lab::LabSettings),
     /// Play a built-in arena (deathmatch or angle clearing on an original map).
     StartArena(String),
     /// Play a built-in arena as practice: bots move as usual but never shoot.

@@ -6,6 +6,7 @@
 //! thresholds are documented constants, shown to the player with the numbers behind them.
 
 use super::benchmark::{BenchmarkDef, BenchmarkResult};
+use crate::i18n::{Lang, tr_in};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -387,6 +388,11 @@ impl PlateauSuggestion {
             }
         }
     }
+
+    /// [`PlateauSuggestion::text`] in `lang`.
+    pub fn text_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.text())
+    }
 }
 
 /// A benchmark subcategory still trained but without a new personal best for a while.
@@ -663,5 +669,13 @@ mod tests {
             plateaus(&b, &old, NOW, PLATEAU_WEEKS).is_empty(),
             "not played recently: a break, not a plateau"
         );
+    }
+
+    #[test]
+    fn plateau_suggestions_are_shown_in_spanish() {
+        for s in PlateauSuggestion::ALL {
+            assert_eq!(s.text_in(Lang::En), s.text());
+            assert_ne!(s.text_in(Lang::Es), s.text(), "{s:?}");
+        }
     }
 }

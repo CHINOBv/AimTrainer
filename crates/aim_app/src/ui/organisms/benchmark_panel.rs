@@ -1,5 +1,6 @@
 //! Benchmark energies per subcategory, with a tier selector and a play button per scenario.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::ui::UiAction;
 use crate::ui::atoms::WARN;
 use crate::ui::molecules::energy_text;
@@ -18,26 +19,26 @@ pub fn benchmark_panel(
         .id_salt("benchmark")
         .show(ui, |ui| {
             for b in benchmarks {
-                ui.heading(&b.name);
-                ui.label(&b.description);
+                ui.heading(tr(&b.name));
+                ui.label(tr(&b.description));
                 if !b.calibrated {
-                    ui.colored_label(WARN, "Provisional thresholds (simulated players).");
+                    ui.colored_label(WARN, tr("Provisional thresholds (simulated players)."));
                 }
                 let view = tier_selector(ui, b);
                 let b = view.as_ref().unwrap_or(b);
-                let rank = |e: f32| b.rank_for(e).map(str::to_owned);
+                let rank = |e: f32| b.rank_for(e).map(|r| tr(r).to_owned());
                 let res = b.evaluate(bests);
                 let overall = match res.overall {
-                    Some(e) => energy_text(Some(e), "energy", rank),
-                    None => "— (score every subcategory)".to_owned(),
+                    Some(e) => energy_text(Some(e), tr("energy"), rank),
+                    None => tr("— (score every subcategory)").to_owned(),
                 };
-                ui.strong(format!("Overall: {overall}"));
+                ui.strong(tr_fmt("Overall: {}", &[&overall]));
                 egui::Grid::new(&b.id)
                     .striped(true)
                     .num_columns(4)
                     .show(ui, |ui| {
                         for (sub, r) in b.subcategories.iter().zip(&res.subcategories) {
-                            ui.label(format!("{} / {}", sub.skill, sub.name));
+                            ui.label(format!("{} / {}", tr(&sub.skill), tr(&sub.name)));
                             ui.label(energy_text(r.energy, "", rank));
                             for s in &sub.scenarios {
                                 let best = bests
@@ -68,10 +69,13 @@ fn tier_selector(ui: &mut egui::Ui, b: &BenchmarkDef) -> Option<BenchmarkDef> {
         .filter(|id| b.tier(id).is_some())
         .unwrap_or_else(|| default.id.clone());
     ui.horizontal(|ui| {
-        ui.label("Tier:");
+        ui.label(tr("Tier:"));
         for t in &b.tiers {
-            ui.selectable_value(&mut selected, t.id.clone(), &t.name)
-                .on_hover_text(format!("Difficulty level {:+.1}", t.level));
+            ui.selectable_value(&mut selected, t.id.clone(), tr(&t.name))
+                .on_hover_text(tr_fmt(
+                    "Difficulty level {}",
+                    &[&format!("{:+.1}", t.level)],
+                ));
         }
     });
     ui.data_mut(|d| d.insert_temp(key, selected.clone()));

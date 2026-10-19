@@ -3,6 +3,7 @@
 //! panel caches it per set of replays, shows the evidence and applies only the overall
 //! multiplier when the player asks.
 
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::persistence::settings::Settings;
 use crate::ui::atoms::{GOOD, WARN};
 use aim_core::analytics::sens_suggest::{
@@ -65,19 +66,29 @@ pub fn suggested_sensitivity(current: Sensitivity, multiplier: f32) -> Sensitivi
 }
 
 fn bias_text(bias: f32) -> String {
-    let side = if bias >= 0.0 { "past" } else { "short of" };
-    format!("{:.0}% {side} the target", bias.abs() * 100.0)
+    let template = if bias >= 0.0 {
+        "{}% past the target"
+    } else {
+        "{}% short of the target"
+    };
+    tr_fmt(template, &[&format!("{:.0}", bias.abs() * 100.0)])
 }
 
 fn axis_line(name: &str, axis: Option<AxisSuggestion>) -> String {
     match axis {
-        Some(a) => format!(
-            "{name}: first movements end {} on average ({} flicks) → ×{:.2}",
-            bias_text(a.mean_bias),
-            a.samples,
-            a.multiplier
+        Some(a) => tr_named(
+            "{name}: first movements end {bias} on average ({samples} flicks) → ×{multiplier}",
+            &[
+                ("name", &tr(name)),
+                ("bias", &bias_text(a.mean_bias)),
+                ("samples", &a.samples),
+                ("multiplier", &format!("{:.2}", a.multiplier)),
+            ],
         ),
-        None => format!("{name}: fewer than {MIN_SENS_FLICKS} measured flicks"),
+        None => tr_named(
+            "{name}: fewer than {min} measured flicks",
+            &[("name", &tr(name)), ("min", &MIN_SENS_FLICKS)],
+        ),
     }
 }
 
@@ -87,57 +98,70 @@ pub fn sens_suggestion(
     state: &mut SensSuggestionState,
     settings: &mut Settings,
 ) {
-    ui.heading("Sensitivity suggestion");
-    ui.small(format!(
-        "From where your first movement ends in your last {RECENT_RUNS} click runs: consistent \
+    ui.heading(tr("Sensitivity suggestion"));
+    ui.small(tr_fmt(
+        "From where your first movement ends in your last {} click runs: consistent \
          overshoot suggests a lower sensitivity, undershoot a higher one. Nothing changes unless you \
-         apply it. Complements the sensitivity finder in Tools."
+         apply it. Complements the sensitivity finder in Tools.",
+        &[&RECENT_RUNS],
     ));
     let Some(s) = state.suggestion else {
-        ui.label(format!(
-            "Not enough data yet: needs {MIN_SENS_FLICKS} measured flicks ({} click runs analyzed).",
-            state.runs
+        ui.label(tr_named(
+            "Not enough data yet: needs {min} measured flicks ({runs} click runs analyzed).",
+            &[("min", &MIN_SENS_FLICKS), ("runs", &state.runs)],
         ));
         return;
     };
-    ui.label(format!(
+    ui.label(tr_fmt(
         "Overall: first movements end {} on average ({} flicks from {} runs).",
-        bias_text(s.mean_bias),
-        s.samples,
-        state.runs
+        &[&bias_text(s.mean_bias), &s.samples, &state.runs],
     ));
     ui.small(axis_line("Horizontal", s.horizontal));
-    ui.small(format!(
+    ui.small(tr_fmt(
         "{} (information only: mouse look uses one sensitivity for both axes)",
-        axis_line("Vertical", s.vertical)
+        &[&axis_line("Vertical", s.vertical)],
     ));
-    ui.small(format!(
-        "Multipliers are clamped to ×{MAX_DECREASE_MULTIPLIER:.2}–×{MAX_INCREASE_MULTIPLIER:.2}; \
-         within ±{:.0}% means no change. Thresholds are provisional.",
-        NO_CHANGE_BAND * 100.0
+    ui.small(tr_named(
+        "Multipliers are clamped to ×{low}–×{high}; \
+         within ±{band}% means no change. Thresholds are provisional.",
+        &[
+            ("low", &format!("{MAX_DECREASE_MULTIPLIER:.2}")),
+            ("high", &format!("{MAX_INCREASE_MULTIPLIER:.2}")),
+            ("band", &format!("{:.0}", NO_CHANGE_BAND * 100.0)),
+        ],
     ));
     if !s.suggests_change() {
-        ui.colored_label(GOOD, format!("No change needed (×{:.2}).", s.multiplier));
+        ui.colored_label(
+            GOOD,
+            tr_fmt(
+                "No change needed (×{}).",
+                &[&format!("{:.2}", s.multiplier)],
+            ),
+        );
         return;
     }
     let rec = state.shown_sensitivity(settings.sensitivity, s.multiplier);
-    let text = format!(
-        "{}: ×{:.2} = {:.1} cm/360 ({} {:.3} at {} DPI)",
-        if state.applied.is_some() {
-            "Applied"
-        } else {
-            "Suggested"
-        },
-        s.multiplier,
-        rec.cm_per_360(),
-        rec.game.display_name(),
-        rec.value,
-        rec.dpi
+    let template = if state.applied.is_some() {
+        "Applied: ×{multiplier} = {cm} cm/360 ({game} {value} at {dpi} DPI)"
+    } else {
+        "Suggested: ×{multiplier} = {cm} cm/360 ({game} {value} at {dpi} DPI)"
+    };
+    let text = tr_named(
+        template,
+        &[
+            ("multiplier", &format!("{:.2}", s.multiplier)),
+            ("cm", &format!("{:.1}", rec.cm_per_360())),
+            ("game", &rec.game.display_name()),
+            ("value", &format!("{:.3}", rec.value)),
+            ("dpi", &rec.dpi),
+        ],
     );
     ui.colored_label(WARN, text);
     if state.applied.is_some() {
-        ui.small("Play a few click runs before trusting a new suggestion.");
-    } else if ui.button("Apply overall multiplier").clicked() {
+        ui.small(tr(
+            "Play a few click runs before trusting a new suggestion.",
+        ));
+    } else if ui.button(tr("Apply overall multiplier")).clicked() {
         settings.sensitivity = rec;
         state.applied = Some(rec);
     }
@@ -192,5 +216,19 @@ mod tests {
         // The settings now hold the applied value; it must not be multiplied again.
         let shown = state.shown_sensitivity(applied, 0.9);
         assert!((shown.cm_per_360() - applied.cm_per_360()).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_suggestion_reads_in_spanish() {
+        use aim_core::i18n::{Lang, tr_fmt_in, tr_in};
+        assert_eq!(
+            tr_in(Lang::Es, "Sensitivity suggestion"),
+            "Sugerencia de sensibilidad"
+        );
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "{}% past the target", &[&12]),
+            "12% más allá del objetivo"
+        );
+        assert_eq!(bias_text(-0.12), "12% short of the target");
     }
 }

@@ -15,6 +15,7 @@ use aim_ai::{
     ApiKey, CoachConfig, EnvStore, KeySource, KeyringStore, ProviderKind, SecretStore,
     SqliteMemory, lookup_key,
 };
+use aim_core::coach::debrief::{self, Debrief, MistakeDigest, MistakeWhy, RunDigest};
 use aim_core::coach::{CoachContext, Message, ToolEnv, Turn, drills, run_turn};
 use aim_core::scenario::ScenarioDef;
 use aim_core::training::benchmark::BenchmarkDef;
@@ -176,6 +177,31 @@ pub fn run_request(request: TurnRequest) -> Result<Turn, String> {
         MAX_STEPS,
     )
     .map_err(|e| e.to_string())
+}
+
+/// Everything one "Coach's take" needs, owned so it can move to a worker thread.
+#[derive(Debug, Clone)]
+pub struct DebriefRequest {
+    /// The provider settings.
+    pub config: CoachConfig,
+    /// The run's digest, exactly what is sent.
+    pub digest: RunDigest,
+    /// Scenario ids the coach may suggest.
+    pub drill_ids: Vec<String>,
+}
+
+/// Ask the coach once for its take on a run: one tool-free call, no retries, the reply
+/// validated by the core. Blocking: call it off the frame.
+pub fn run_debrief_request(request: DebriefRequest) -> Result<Debrief, String> {
+    let mut model = model(&request.config)?;
+    debrief::run_debrief(&mut *model, &request.digest, &request.drill_ids)
+        .map_err(|e| e.to_string())
+}
+
+/// Ask the coach once why one mistake happened. Blocking: call it off the frame.
+pub fn run_why_request(config: CoachConfig, digest: MistakeDigest) -> Result<MistakeWhy, String> {
+    let mut model = model(&config)?;
+    debrief::run_mistake_why(&mut *model, &digest).map_err(|e| e.to_string())
 }
 
 fn open_memory(path: &Path) -> Result<SqliteMemory, String> {
@@ -348,6 +374,27 @@ mod tests {
     fn a_disabled_coach_sends_nothing() {
         let off = CoachConfig::default();
         let err = test_connection(&off).unwrap_err();
+        assert!(err.contains("off"), "{err}");
+        let digest = RunDigest::new(
+            "micro-adjust",
+            aim_core::scenario::Category::Flicking,
+            debrief::Metrics(vec![("accuracy_pct".into(), 50.0)]),
+        );
+        let err = run_debrief_request(DebriefRequest {
+            config: off.clone(),
+            digest,
+            drill_ids: vec!["micro-adjust".into()],
+        })
+        .unwrap_err();
+        assert!(err.contains("off"), "{err}");
+        let mistake = MistakeDigest {
+            scenario_id: "micro-adjust".into(),
+            category: aim_core::scenario::Category::Flicking,
+            kind: "Overflick".into(),
+            hit: false,
+            metrics: debrief::Metrics::default(),
+        };
+        let err = run_why_request(off, mistake).unwrap_err();
         assert!(err.contains("off"), "{err}");
     }
 }

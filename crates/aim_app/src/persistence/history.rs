@@ -431,6 +431,20 @@ mod tests {
     }
 
     #[test]
+    fn lab_results_keep_their_own_best_and_never_touch_built_in_bests() {
+        let dir = scratch("lab");
+        let paths = paths_in(&dir);
+        let mut h = History::load(&paths);
+        h.record(&result("counter-strafe", 100.0, 60.0));
+        let lab = aim_core::scenario::lab::LabSettings::default().to_def().id;
+        h.record(&result(&lab, 999.0, 60.0));
+        let reloaded = History::load(&paths);
+        assert_eq!(reloaded.best("counter-strafe"), Some(100.0));
+        assert_eq!(reloaded.best(&lab), Some(999.0));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn old_rows_load_with_an_empty_snapshot() {
         let dir = scratch("old");
         let paths = paths_in(&dir);

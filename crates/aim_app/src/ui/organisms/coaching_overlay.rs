@@ -2,6 +2,7 @@
 //! nearest exposed corner, and movement accuracy. It only draws the pure values of
 //! `aim_world::arena::Coaching`; no automated test covers the drawing.
 
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::ui::atoms::{BAD, GOOD};
 use aim_world::arena::{COACH_CORNER_TOLERANCE_DEG, COACH_HEAD_LEVEL_TOLERANCE_DEG, Coaching};
 use bevy_egui::egui::{self, Align2, Color32, FontId, RichText};
@@ -21,11 +22,11 @@ fn state(good: bool) -> Color32 {
 /// "+2.1° high", "-0.4° low" or "on head level".
 fn head_level_text(error_deg: f32) -> String {
     if error_deg.abs() <= COACH_HEAD_LEVEL_TOLERANCE_DEG {
-        format!("Head level: on ({error_deg:+.1}°)")
+        tr_fmt("Head level: on ({}°)", &[&format!("{error_deg:+.1}")])
     } else if error_deg > 0.0 {
-        format!("Head level: {error_deg:+.1}° high")
+        tr_fmt("Head level: {}° high", &[&format!("{error_deg:+.1}")])
     } else {
-        format!("Head level: {error_deg:+.1}° low")
+        tr_fmt("Head level: {}° low", &[&format!("{error_deg:+.1}")])
     }
 }
 
@@ -34,7 +35,7 @@ pub fn coaching_overlay(ctx: &egui::Context, c: &Coaching) {
         .anchor(Align2::LEFT_CENTER, [24.0, 0.0])
         .interactable(false)
         .show(ctx, |ui| {
-            ui.label(RichText::new(TITLE).small().strong());
+            ui.label(RichText::new(tr(TITLE)).small().strong());
             match (c.head_level_error_deg, c.corner_offset_deg) {
                 (Some(error), Some(offset)) => {
                     ui.horizontal(|ui| {
@@ -46,21 +47,31 @@ pub fn coaching_overlay(ctx: &egui::Context, c: &Coaching) {
                             );
                             ui.colored_label(
                                 state(c.on_corner() == Some(true)),
-                                format!(
-                                    "Nearest corner: {offset:.0}° away (hold within {COACH_CORNER_TOLERANCE_DEG:.0}°)"
+                                tr_named(
+                                    "Nearest corner: {offset}° away (hold within {tolerance}°)",
+                                    &[
+                                        ("offset", &format!("{offset:.0}")),
+                                        ("tolerance", &format!("{COACH_CORNER_TOLERANCE_DEG:.0}")),
+                                    ],
                                 ),
                             );
                         });
                     });
                 }
                 _ => {
-                    ui.label(NO_CORNER);
+                    ui.label(tr(NO_CORNER));
                 }
             }
             let movement = if c.accurate {
-                ACCURATE.to_string()
+                tr(ACCURATE).to_string()
             } else {
-                format!("{MOVING} {:.1} m/s", c.speed)
+                tr_named(
+                    "{moving} {speed} m/s",
+                    &[
+                        ("moving", &tr(MOVING)),
+                        ("speed", &format!("{:.1}", c.speed)),
+                    ],
+                )
             };
             ui.label(
                 RichText::new(movement)

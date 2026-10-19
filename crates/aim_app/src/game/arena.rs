@@ -8,9 +8,10 @@ use super::{
     AppState, LastResult, MainCamera, PlayerInput, TargetVisual, WorldAssets, apply_look,
     frame_input, place_camera, spawn_visual, unlit,
 };
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::overlay::Overlay;
 use crate::persistence::history::History;
-use crate::persistence::settings::Settings;
+use crate::persistence::settings::{DEFAULT_COUNTDOWN_SECS, Settings};
 use aim_core::math::ViewAngles;
 use aim_core::scenario::{HitZone, Shape};
 use aim_core::training::store::RunStore;
@@ -22,7 +23,6 @@ use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-const COUNTDOWN_SECS: f32 = 3.0;
 /// How long the end-of-round banner holds before the results open, seconds, when round
 /// transitions are on. A design choice: long enough to read, short enough not to drag.
 const END_HOLD_SECS: f32 = 0.8;
@@ -126,12 +126,13 @@ fn hold_left(left: f32, dt: f32) -> Option<f32> {
 }
 
 /// The cue for a countdown frame that went from `before` to `after` seconds left.
-fn countdown_cue(before: f32, after: f32) -> Option<ArenaFeedback> {
+/// `total` is the countdown's full length.
+fn countdown_cue(before: f32, after: f32, total: f32) -> Option<ArenaFeedback> {
     if after <= 0.0 {
         return (before > 0.0).then_some(ArenaFeedback::RoundStarted);
     }
     let seconds_left = after.ceil() as u32;
-    let first_frame = before >= COUNTDOWN_SECS && after < before;
+    let first_frame = before >= total && after < before;
     (first_frame || seconds_left < before.ceil() as u32)
         .then_some(ArenaFeedback::CountdownTick { seconds_left })
 }
@@ -141,6 +142,8 @@ pub struct ArenaRun {
     pub session: ArenaSession,
     pub view: ViewAngles,
     pub countdown: f32,
+    /// The countdown's full length, once taken from the settings on the first frame.
+    countdown_secs: Option<f32>,
     pub paused: bool,
     pub zoomed: bool,
     /// Seconds left on the hit-marker flash.
@@ -163,7 +166,8 @@ impl ArenaRun {
         Self {
             session,
             view,
-            countdown: COUNTDOWN_SECS,
+            countdown: DEFAULT_COUNTDOWN_SECS,
+            countdown_secs: None,
             paused: false,
             zoomed: false,
             hit_flash: 0.0,
@@ -173,6 +177,15 @@ impl ArenaRun {
             bots: HashMap::new(),
             struck: Vec::new(),
             translator: FeedbackTranslator::default(),
+        }
+    }
+
+    /// Take the countdown length, `secs`, from the settings. Only the first call counts, so
+    /// it can run every frame; 0 starts the round at once.
+    pub fn arm_countdown(&mut self, secs: f32) {
+        if self.countdown_secs.is_none() {
+            self.countdown_secs = Some(secs);
+            self.countdown = secs;
         }
     }
 
@@ -327,31 +340,39 @@ impl ArenaFinisher<'_, '_> {
         self.history.record(&result);
         let stats = run.session.stats();
         let mut notes = super::progress_notes(&self.history, self.settings.daily_goal_minutes);
-        notes.extend([format!(
-            "Kills {} · deaths {} · damage taken {:.0}",
-            stats.kills, stats.deaths, stats.damage_taken
+        notes.extend([tr_named(
+            "Kills {kills} · deaths {deaths} · damage taken {damage}",
+            &[
+                ("kills", &stats.kills),
+                ("deaths", &stats.deaths),
+                ("damage", &format!("{:.0}", stats.damage_taken)),
+            ],
         )]);
         if let Some(e) = stats.median_crosshair_error_deg() {
-            notes.push(format!(
-                "Crosshair placement: median {e:.1}° from the head when an enemy appeared (lower is better; under ~5° means pre-aimed)"
+            notes.push(tr_fmt(
+                "Crosshair placement: median {}° from the head when an enemy appeared (lower is better; under ~5° means pre-aimed)",
+                &[&format!("{e:.1}")],
             ));
         }
         if let Some(h) = stats.median_head_level_error_deg() {
-            notes.push(format!(
-                "Head level: median {h:.1}° above or below the head at first sight"
+            notes.push(tr_fmt(
+                "Head level: median {}° above or below the head at first sight",
+                &[&format!("{h:.1}")],
             ));
         }
         if let Some(d) = stats.median_first_shot_delay_secs() {
-            notes.push(format!(
-                "Peek: median {:.0} ms from first sight to your first shot ({} engagements)",
-                d * 1000.0,
-                stats.first_shot_delays_secs.len()
+            notes.push(tr_named(
+                "Peek: median {ms} ms from first sight to your first shot ({count} engagements)",
+                &[
+                    ("ms", &format!("{:.0}", d * 1000.0)),
+                    ("count", &stats.first_shot_delays_secs.len()),
+                ],
             ));
         }
         if let Some(e) = stats.median_exposure_secs() {
-            notes.push(format!(
-                "Exposure: median {:.0} ms in sight of an enemy before the kill or breaking line of sight (lower is safer)",
-                e * 1000.0
+            notes.push(tr_fmt(
+                "Exposure: median {} ms in sight of an enemy before the kill or breaking line of sight (lower is safer)",
+                &[&format!("{:.0}", e * 1000.0)],
             ));
         }
         if let aim_world::arena::ArenaMode::AngleClear {
@@ -359,43 +380,60 @@ impl ArenaFinisher<'_, '_> {
             ..
         } = run.session.def().mode
         {
-            notes.push(format!(
-                "Pre-aimed {} of {} enemies (within {t:.0}° at first sight)",
-                stats.pre_aimed,
-                stats.crosshair_errors_deg.len()
+            notes.push(tr_named(
+                "Pre-aimed {aimed} of {total} enemies (within {tolerance}° at first sight)",
+                &[
+                    ("aimed", &stats.pre_aimed),
+                    ("total", &stats.crosshair_errors_deg.len()),
+                    ("tolerance", &format!("{t:.0}")),
+                ],
             ));
         }
         if let Some(o) = run.session.objective() {
             notes.push(if o.lost {
-                format!(
-                    "Site lost: an attacker captured it with {} of {} attackers left",
-                    o.attackers_left, o.attackers
+                tr_named(
+                    "Site lost: an attacker captured it with {left} of {total} attackers left",
+                    &[("left", &o.attackers_left), ("total", &o.attackers)],
                 )
             } else {
-                format!(
-                    "Site held: {} of {} attackers killed",
-                    o.attackers - o.attackers_left,
-                    o.attackers
+                tr_named(
+                    "Site held: {killed} of {total} attackers killed",
+                    &[
+                        ("killed", &(o.attackers - o.attackers_left)),
+                        ("total", &o.attackers),
+                    ],
                 )
             });
         }
         if let Some(a) = run.session.adaptive() {
-            notes.push(format!(
-                "Adaptive bots: ended at {}, peaked at {} ({} steps up, {} down)",
-                a.skill, a.peak, a.steps_up, a.steps_down
+            notes.push(tr_named(
+                "Adaptive bots: ended at {skill}, peaked at {peak} ({up} steps up, {down} down)",
+                &[
+                    ("skill", &tr(a.skill)),
+                    ("peak", &tr(a.peak)),
+                    ("up", &a.steps_up),
+                    ("down", &a.steps_down),
+                ],
             ));
         }
         if let Some((cause, n)) = stats.top_death_cause() {
-            notes.push(format!(
-                "Most deaths: {} ({n} of {})",
-                death_cause_name(cause),
-                stats.deaths
+            notes.push(tr_named(
+                "Most deaths: {cause} ({n} of {deaths})",
+                &[
+                    ("cause", &tr(death_cause_name(cause))),
+                    ("n", &n),
+                    ("deaths", &stats.deaths),
+                ],
             ));
         }
         if let Some(d) = run.session.def().mode.deadline() {
-            notes.push(format!(
-                "Deadline {:.1} s: {} kills before it, {} deadline hits taken",
-                d.secs, stats.deadline_kills, stats.deadline_hits
+            notes.push(tr_named(
+                "Deadline {secs} s: {kills} kills before it, {hits} deadline hits taken",
+                &[
+                    ("secs", &format!("{:.1}", d.secs)),
+                    ("kills", &stats.deadline_kills),
+                    ("hits", &stats.deadline_hits),
+                ],
             ));
         }
         self.commands.insert_resource(LastResult {
@@ -418,6 +456,7 @@ fn tick(
     mut feedback: MessageWriter<ShotFeedback>,
     mut arena_feedback: MessageWriter<ArenaFeedback>,
 ) {
+    run.arm_countdown(finisher.settings.countdown_secs());
     if run.paused {
         return;
     }
@@ -434,7 +473,8 @@ fn tick(
     if run.countdown > 0.0 {
         let before = run.countdown;
         run.countdown -= dt;
-        if let Some(cue) = countdown_cue(before, run.countdown) {
+        let total = run.countdown_secs.unwrap_or(DEFAULT_COUNTDOWN_SECS);
+        if let Some(cue) = countdown_cue(before, run.countdown, total) {
             arena_feedback.write(cue);
         }
         return;
@@ -753,9 +793,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn the_countdown_ticks_each_second_then_starts_the_round_once() {
-        let mut countdown = COUNTDOWN_SECS;
+    /// Every cue of a countdown of `total` seconds played at 60 FPS.
+    fn countdown_cues(total: f32) -> Vec<ArenaFeedback> {
+        let mut countdown = total;
         let mut cues = Vec::new();
         for _ in 0..400 {
             if countdown <= 0.0 {
@@ -763,10 +803,15 @@ mod tests {
             }
             let before = countdown;
             countdown -= 1.0 / 60.0;
-            cues.extend(countdown_cue(before, countdown));
+            cues.extend(countdown_cue(before, countdown, total));
         }
+        cues
+    }
+
+    #[test]
+    fn the_countdown_ticks_each_second_then_starts_the_round_once() {
         assert_eq!(
-            cues,
+            countdown_cues(DEFAULT_COUNTDOWN_SECS),
             [
                 ArenaFeedback::CountdownTick { seconds_left: 3 },
                 ArenaFeedback::CountdownTick { seconds_left: 2 },
@@ -774,6 +819,25 @@ mod tests {
                 ArenaFeedback::RoundStarted,
             ]
         );
+    }
+
+    #[test]
+    fn a_shorter_countdown_beeps_its_own_seconds_and_zero_skips_it() {
+        assert_eq!(
+            countdown_cues(1.5),
+            [
+                ArenaFeedback::CountdownTick { seconds_left: 2 },
+                ArenaFeedback::CountdownTick { seconds_left: 1 },
+                ArenaFeedback::RoundStarted,
+            ]
+        );
+        let (def, map) = aim_world::arena::builtin::load("yard-deathmatch")
+            .unwrap()
+            .unwrap();
+        let mut run = ArenaRun::new(ArenaSession::new(def, map, 1).unwrap());
+        run.arm_countdown(0.0);
+        run.arm_countdown(4.0);
+        assert_eq!(run.countdown, 0.0, "only the first length counts");
     }
 
     #[test]

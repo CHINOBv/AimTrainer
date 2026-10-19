@@ -1,0 +1,84 @@
+# Spanish UI text for the "coach" area. Keys are the exact English source text.
+# See docs/i18n.md before editing.
+# Only the Coach tab chrome: the chat, prompts and tool output sent to models stay English.
+
+# Header and opt-in
+"AI coach" = "Coach de IA"
+"Enable the AI coach (sends your stats summary and the chat to the provider you pick)" = "Activar el coach de IA (envía el resumen de tus estadísticas y el chat al proveedor que elijas)"
+"Off by default. While it is off, nothing is sent. Only aggregates are sent: no raw traces, file paths or names." = "Desactivado por defecto. Mientras esté desactivado, no se envía nada. Solo se envían datos agregados: ni trazas en bruto, ni rutas de archivos, ni nombres."
+
+# Provider
+"Provider" = "Proveedor"
+"OpenAI-compatible" = "Compatible con OpenAI"
+"CLI delegate" = "Delegado CLI"
+"OpenCode (pay-as-you-go)" = "OpenCode (pago por uso)"
+"Base URL" = "URL base"
+"default: https://api.anthropic.com" = "por defecto: https://api.anthropic.com"
+"Model" = "Modelo"
+"model id, e.g. llama3.1 or claude-sonnet-5-5" = "id del modelo, p. ej. llama3.1 o claude-sonnet-5-5"
+"API key" = "Clave de API"
+"Key env var" = "Variable de entorno de la clave"
+"optional fallback, e.g. OPENAI_API_KEY" = "alternativa opcional, p. ej. OPENAI_API_KEY"
+"Command" = "Comando"
+"Pick your installed CLI:" = "Elige tu CLI instalada:"
+"Codex calls the coach's tools through aimtrainer-mcp, so it sees your stats summary. Claude Code and OpenCode are text only. Each uses its own sign-in." = "Codex usa las herramientas del coach a través de aimtrainer-mcp, así que ve el resumen de tus estadísticas. Claude Code y OpenCode son solo texto. Cada uno usa su propio inicio de sesión."
+"Timeout" = "Tiempo de espera"
+"Test connection" = "Probar conexión"
+"Enable the coach and fix the settings first." = "Primero activa el coach y corrige los ajustes."
+"Testing…" = "Probando…"
+"Connected. Reply: {}" = "Conectado. Respuesta: {}"
+
+# API key
+"Checking the OS keyring…" = "Comprobando el llavero del sistema…"
+"Key stored in OS keyring" = "Clave guardada en el llavero del sistema"
+"Key from env {}" = "Clave de la variable de entorno {}"
+"No key stored (local servers need none)" = "No hay clave guardada (los servidores locales no la necesitan)"
+"OS keyring unavailable: {}" = "Llavero del sistema no disponible: {}"
+"OS keyring: {}" = "Llavero del sistema: {}"
+"paste a key to store it" = "pega una clave para guardarla"
+"Store in keyring" = "Guardar en el llavero"
+"Forget key" = "Olvidar clave"
+
+# Preview
+"Preview what is sent" = "Vista previa de lo que se envía"
+"The CLI delegate never receives this: it sees only the chat." = "El delegado CLI nunca recibe esto: solo ve el chat."
+"This exact JSON is what the model receives when it calls list_stats, plus the chat and the coach's instructions." = "Este JSON exacto es lo que recibe el modelo cuando llama a list_stats, además del chat y las instrucciones del coach."
+"Refresh" = "Actualizar"
+"{} bytes" = "{} bytes"
+"Preparing your stats summary…" = "Preparando el resumen de tus estadísticas…"
+
+# Chat
+"Chat" = "Chat"
+"Enable the coach first." = "Primero activa el coach."
+"Fix the provider settings first." = "Primero corrige los ajustes del proveedor."
+"Your stats summary is still being prepared." = "El resumen de tus estadísticas aún se está preparando."
+"Wait for the current answer." = "Espera la respuesta actual."
+"Analyse my stats" = "Analizar mis estadísticas"
+"Recommend a routine" = "Recomendar una rutina"
+"New chat" = "Nuevo chat"
+"You: {}" = "Tú: {}"
+"Used {}" = "Usó {}"
+" ({} returned an error)" = " ({} devolvió un error)"
+"Ask the coach…" = "Pregúntale al coach…"
+"Send" = "Enviar"
+"The coach is thinking…" = "El coach está pensando…"
+"Cancel" = "Cancelar"
+"Cancelled." = "Cancelado."
+"The coach was still calling tools after {} steps and stopped. Ask again, more specifically." = "El coach seguía llamando herramientas después de {} pasos y se detuvo. Vuelve a preguntar, de forma más concreta."
+
+# Generated scenarios
+"Generated scenarios" = "Escenarios generados"
+"Uncalibrated: the coach's numbers are estimates. Check, play, then save the ones you like." = "Sin calibrar: los números del coach son estimaciones. Valida, juega y guarda los que te gusten."
+"Valid and playable (simulated contender scored {})" = "Válido y jugable (el aspirante simulado obtuvo {})"
+"Saved to {} (listed under Scenarios after a restart)" = "Guardado en {} (aparece en Escenarios tras reiniciar)"
+"Validate" = "Validar"
+"Play" = "Jugar"
+"Save" = "Guardar"
+
+# Memory
+"Memory" = "Memoria"
+"What the coach remembers about your goals and habits stays on this computer: {}" = "Lo que el coach recuerda sobre tus objetivos y hábitos se queda en este equipo: {}"
+"Forgetting…" = "Olvidando…"
+"Delete every note the coach kept?" = "¿Borrar todas las notas que guardó el coach?"
+"Forget everything" = "Olvidarlo todo"
+"The coach's memory is empty." = "La memoria del coach está vacía."

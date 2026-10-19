@@ -4,11 +4,10 @@
 //! [`PotentialLine`] is plain text built from the core's
 //! [`PotentialTip`](aim_core::analytics::potential::PotentialTip); the view only draws it.
 
+use crate::i18n::tr_fmt;
 use crate::ui::atoms::GOOD;
 use aim_core::analytics::potential::PotentialTip;
 use bevy_egui::egui;
-
-const ESTIMATE_NOTE: &str = "Estimate:";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PotentialLine {
@@ -21,13 +20,18 @@ pub struct PotentialLine {
 impl PotentialLine {
     pub fn new(tip: &PotentialTip) -> Self {
         Self {
-            headline: format!(
-                "Fix {} → about {:.0} points (+{:.0}%)",
-                tip.gain.fix.label(),
-                tip.potential_score(),
-                tip.gain_share() * 100.0
+            headline: tr_fmt(
+                "Fix {} → about {} points (+{}%)",
+                &[
+                    &tip.gain.fix.label_in(crate::i18n::language()),
+                    &format!("{:.0}", tip.potential_score()),
+                    &format!("{:.0}", tip.gain_share() * 100.0),
+                ],
             ),
-            assumption: format!("{ESTIMATE_NOTE} {}.", tip.gain.assumption()),
+            assumption: tr_fmt(
+                "Estimate: {}.",
+                &[&tip.gain.assumption_in(crate::i18n::language())],
+            ),
         }
     }
 }

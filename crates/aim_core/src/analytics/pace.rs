@@ -8,6 +8,7 @@
 
 use super::stats::mean;
 use super::trace::Sample;
+use crate::i18n::{Lang, tr_in};
 
 /// Number of equal time windows a run is split into.
 pub const WINDOWS: usize = 6;
@@ -41,6 +42,11 @@ impl PaceUnit {
             PaceUnit::Kills => "kills",
             PaceUnit::Score => "points",
         }
+    }
+
+    /// [`PaceUnit::noun`] in `lang`.
+    pub fn noun_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.noun())
     }
 }
 
@@ -348,5 +354,12 @@ mod tests {
         assert!(close(s.start_ratio.unwrap(), (0.25 + 1.0) / 2.0));
         assert!(close(s.stamina_ratio.unwrap(), (1.6 + 1.0) / 2.0));
         assert_eq!(PaceSummary::from_runs(&[]), None);
+    }
+
+    #[test]
+    fn unit_nouns_are_shown_in_spanish() {
+        assert_eq!(PaceUnit::Kills.noun_in(Lang::En), "kills");
+        assert_eq!(PaceUnit::Kills.noun_in(Lang::Es), "bajas");
+        assert_eq!(PaceUnit::Score.noun_in(Lang::Es), "puntos");
     }
 }

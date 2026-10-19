@@ -33,6 +33,8 @@ movement = false             # WASD with VALORANT movement for the weapon
 bounds_x = [-5.0, 5.0]       # play area for the player's feet (meters); start at origin facing -Z
 bounds_z = [-1.0, 1.0]       # +Z is behind the player, so a larger max leaves room to step back
 elevation = 0.0              # player's floor above the targets' floor (meters), within [-3, 6]
+# start = [0.0, 0.0]         # optional: where the feet start, [x, z] in meters, inside the bounds
+# start_velocity = [0.0, 0.0] # optional: velocity at the start, [right, forward] in m/s (player frame)
 
 [targets]
 shape = { kind = "sphere", radius = 0.15 }        # or { kind = "humanoid", head_only = true }, or a capsule (see below)
@@ -48,6 +50,7 @@ regen = { interval_secs = 0.5, amount = 1, reset_on_hit = false }   # optional h
 spawn_rules = { avoid_last_deg = 10, min_flick_deg = 15 }          # optional spawn-pattern controls
 perception = { kind = "sound_cue", sound = "footsteps", reveal_after_secs = 0.8 }   # optional perception drill
 shrink_per_kill = { factor = 0.97, floor = 0.5 }                  # optional: every kill shrinks spheres
+spider = { ring_deg = [6, 16] }                                    # optional spider shot: centre and ring spawns alternate
 
 [scoring]                    # all optional
 head = 100                   # per hit (click) or per second (hold)
@@ -62,6 +65,7 @@ rings = { radius = [0.25, 0.5, 1.0], multiplier = [3.0, 2.0, 1.0] }   # optional
 decoy_penalty = 0            # per shot on a go/no-go decoy
 decay = { window_secs = 2.0, floor = 0.3 }   # optional: a target's value fades after it appears
 accuracy_mult = "none"       # "linear" or "sqrt": the final score × accuracy (or its square root)
+stop_window = { secs = 0.3, bonus = 40 }     # optional: bonus per hit fired soon after an accurate stop; needs player.movement
 
 [view]                       # optional
 fov_lock = [60, 80]          # vertical FOV in degrees: a fixed value (60) or a [min, max] clamp
@@ -178,7 +182,9 @@ Behaviour rules still override the profile in force. `reactions` need every prof
 
 ### Play area and floor height
 
-With `movement = true`, the player's feet stay inside `bounds_x` and `bounds_z`; pushing into an edge stops only that direction, so you slide along it. The edges are drawn as low, see-through strips on the floor, a few centimeters high, so they never block the view. The built-in movement drills use `counter-strafe` x [−8, 8], z [−2, 5] and `strafe-shot` x [−7, 7], z [−3, 5].
+With `movement = true`, the player's feet stay inside `bounds_x` and `bounds_z`; pushing into an edge stops only that direction, so you slide along it. The edges are drawn as low, see-through strips on the floor, a few centimeters high, so they never block the view. The built-in movement drills use `counter-strafe` x [−16, 16], z [−3, 8] and `strafe-shot` x [−16, 16], z [−4, 8] (widened from about ±8 m so a full ADAD rhythm fits without hitting an edge).
+
+`start` and `start_velocity` are optional and default to the origin and standing still. The trainer writes them into the run's copy of the definition when the start countdown ends: in a movement scenario you can walk and look around during the countdown (firing does nothing until GO), and the run begins from where you stand and how fast you are moving at GO. Saved replays embed that copy, so they replay the run exactly. `start` must lie inside `bounds_x` and `bounds_z`; `start_velocity` must be finite and is in the player's own frame (`right`, `forward`), turning with the view like all player velocity. A new run of a movement scenario always clears both fields and starts its countdown from the origin, so leave them out of your own files; a scenario without movement keeps its `start` as written.
 
 `elevation` raises (or lowers, when negative) the player's floor; targets keep theirs at 0. The trainer draws a translucent slab at that height under the play area. You can also change it during a run: press Esc, set **Floor height** in 0.5 m steps, and choose **Apply and restart**. The run restarts at the same difficulty and duration, and a routine stays at the same run.
 
@@ -214,6 +220,35 @@ With `recoil = true`, holding the fire button fires full-auto at the weapon's fi
 Recoil moves the bullets, not the camera. `simulate_spread` still adds running inaccuracy on top. The run then also records bursts, average burst length, the share of first bullets, and hits by bullet index (1, 2–3, 4–6, 7+). The per-bullet angles are estimates; see `valorant-mechanics.md`.
 
 `recoil` requires `fire = "click"` and `kind = "vandal"` or `"phantom"`, and `burst_bonus` above 0 requires `recoil`.
+
+### Stop-timing reward
+
+`scoring.stop_window` rewards shooting right after a stop, the moment a counter-strafe is meant to create:
+
+```toml
+[scoring]
+moving_shot_penalty = 50
+stop_window = { secs = 0.3, bonus = 40 }
+```
+
+A hit fired while accurate (at or below 27.5% of run speed for rifles), at most `secs` after the last frame the player moved faster than that, scores `bonus` extra points. Shots fired while moving never earn it, and a player who has not moved yet has no stop to time. Every bullet of a burst that lands inside the window earns it, so with `weapon.recoil` a 2–4 bullet burst right after the stop does and a long spray runs past the window. The run counts these hits as `stop_hits`.
+
+`secs` must be in (0, 2] and `bonus` ≥ 0. It needs `player.movement = true` and `fire = "click"`. The window length is a design choice, not a VALORANT value: a counter-strafe takes ≈0.16 s (`valorant-mechanics.md`), so 0.25–0.4 s leaves time to settle the crosshair without waiting. The built-in movement drills use it, and `burst-strafe` combines it with `burst_bonus`.
+
+### Spider shot
+
+`targets.spider` alternates two kinds of spawn, one target at a time:
+
+```toml
+[targets]
+spawn = { kind = "floor", x = [0, 0], z = [-14, -14], height = [1.9, 1.9] }
+max_alive = 1
+spider = { ring_deg = [4, 10] }
+```
+
+The 1st, 3rd, 5th… target is the centre, drawn from `spawn` as usual; a spawn area of one point gives a fixed centre. Every other target is a rim target `ring_deg` away from the last centre target, seen from the player's eye when it spawns, in a random direction (humanoids step left or right) and at the same distance. So the player flicks out, then back to the centre, every time. With `player.movement` the angle is measured from where the player stands, so a world-fixed centre (a `floor` point) stays put while the player moves.
+
+`ring_deg` is a [min, max] within (0, 60]. `spider` needs `max_alive = 1`, no decoys and no perception drill; `min_separation_deg` and `spawn_rules` apply only to the centre draws. The built-ins are `spider-web` (standing) and `spider-strafe` (moving, scored with `stop_window`).
 
 ### Spawn areas
 
@@ -574,6 +609,29 @@ During a library scenario run, press Esc to tune its targets, from 50% to 200% i
 A tuned run is stored under its own key (`%s80d120v150`: size, distance and speed percentages); the default 100/100/100 adds no suffix. Tuned runs never move the adaptive level, even when started adaptively, and never count for the benchmark, which reads only exact untuned keys. The results screen lists the tuning, and the HUD shows a "tuned" tag.
 
 Target speed is stored in the definition as `targets.speed_scale` (default 1, allowed 0.25–4), which every motion reads. Scenario files normally leave it out.
+
+### Movement Lab
+
+The **Movement Lab** (Scenarios tab, below the list) builds a movement drill from a few settings instead of a file. `aim_core::scenario::lab::LabSettings::to_def` turns them into an ordinary `ScenarioDef` made of the blocks on this page, so it validates and plays like any scenario.
+
+| Setting | Allowed | Becomes |
+|---|---|---|
+| Enemy motion | static, strafe, dodge | `targets.motion` (`strafe` or `dodge` with the lab weapon's run speed, `max_offset = 3`) |
+| Speed | 50–150% | `targets.speed_scale` (strafe and dodge only) |
+| Direction changes | every 0.2–2 s | `change_secs`, a random 60–140% of the value |
+| Dodge style | light, medium, heavy | `juke_chance` / `stop_chance` / `crouch_chance`: 0.2/0.15/0.05, 0.5/0.25/0.1, 0.7/0.25/0.25 |
+| Enemies at once | 1–6 | `targets.max_alive` (6° apart when more than one) |
+| Shape | head only, full body | `humanoid` with `head_only` |
+| Spawn distance | 5–50 m | `floor` spawn `z = [-max, -min]` |
+| Lateral spread | ±1–20 m | `floor` spawn `x` |
+| Appear delay | 0–3 s | `appear_delay_secs = [value / 2, value]` |
+| Lifetime | 0.5–10 s, or until killed | `lifetime_secs` (and a 50-point `expire_penalty`), or none |
+| Player movement and area | on/off, ±2–20 m wide, 0–12 m deep | `player.movement`, `bounds_x`, `bounds_z` centered on the start (default ±16 m × 8 m) |
+| Weapon, spread, length | Classic, Vandal, Phantom, Guardian, Operator; 15–180 s | `weapon.kind`, `weapon.simulate_spread`, `duration_secs` |
+
+Out-of-range values (for example from a hand-edited `settings.toml`) are clamped. Every miss costs 10 points and, when you can move, every shot fired while moving costs 50.
+
+The generated id is `lab-` plus the content hash of the definition, so the same settings always share one history key and personal best, and lab results never mix with the built-in scenarios. The last settings are saved as `[movement_lab]` in `settings.toml`, and Retry on the results screen replays the same drill.
 
 ### Sizing targets realistically
 

@@ -34,6 +34,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/burst-control.toml"),
     ),
     (
+        "burst-strafe.toml",
+        include_str!("../../../../content/scenarios/burst-strafe.toml"),
+    ),
+    (
         "close-strafe-heads.toml",
         include_str!("../../../../content/scenarios/close-strafe-heads.toml"),
     ),
@@ -44,6 +48,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "counter-strafe.toml",
         include_str!("../../../../content/scenarios/counter-strafe.toml"),
+    ),
+    (
+        "crouch-duel.toml",
+        include_str!("../../../../content/scenarios/crouch-duel.toml"),
     ),
     (
         "demo-ballistic.toml",
@@ -76,6 +84,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "demo-shrink.toml",
         include_str!("../../../../content/scenarios/demo-shrink.toml"),
+    ),
+    (
+        "depth-brake.toml",
+        include_str!("../../../../content/scenarios/depth-brake.toml"),
     ),
     (
         "diag-drifters.toml",
@@ -130,6 +142,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/flick-wide.toml"),
     ),
     (
+        "flinch-stop.toml",
+        include_str!("../../../../content/scenarios/flinch-stop.toml"),
+    ),
+    (
         "fly-switch.toml",
         include_str!("../../../../content/scenarios/fly-switch.toml"),
     ),
@@ -140,6 +156,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "go-no-go.toml",
         include_str!("../../../../content/scenarios/go-no-go.toml"),
+    ),
+    (
+        "head-rail-run.toml",
+        include_str!("../../../../content/scenarios/head-rail-run.toml"),
     ),
     (
         "hop-field.toml",
@@ -184,6 +204,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "mini-phase.toml",
         include_str!("../../../../content/scenarios/mini-phase.toml"),
+    ),
+    (
+        "mirror-duel.toml",
+        include_str!("../../../../content/scenarios/mirror-duel.toml"),
     ),
     (
         "orbit-track.toml",
@@ -282,12 +306,28 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/sound-turn.toml"),
     ),
     (
+        "spider-strafe.toml",
+        include_str!("../../../../content/scenarios/spider-strafe.toml"),
+    ),
+    (
+        "spider-web.toml",
+        include_str!("../../../../content/scenarios/spider-web.toml"),
+    ),
+    (
         "spray-transfer.toml",
         include_str!("../../../../content/scenarios/spray-transfer.toml"),
     ),
     (
         "spread-flicks.toml",
         include_str!("../../../../content/scenarios/spread-flicks.toml"),
+    ),
+    (
+        "spread-gate.toml",
+        include_str!("../../../../content/scenarios/spread-gate.toml"),
+    ),
+    (
+        "squad-strafe.toml",
+        include_str!("../../../../content/scenarios/squad-strafe.toml"),
     ),
     (
         "static-headline.toml",
@@ -300,6 +340,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "strafe-shot.toml",
         include_str!("../../../../content/scenarios/strafe-shot.toml"),
+    ),
+    (
+        "stutter-ladder.toml",
+        include_str!("../../../../content/scenarios/stutter-ladder.toml"),
     ),
     (
         "switch-evasive-small.toml",
@@ -393,5 +437,117 @@ mod tests {
             assert_eq!(format!("{}.toml", def.id), *file, "file name must match id");
             assert!(ids.insert(def.id.clone()), "duplicate id {}", def.id);
         }
+    }
+
+    /// Every piece of built-in content text the UI shows as-is: names, descriptions,
+    /// routine notes, benchmark ranks and tiers, method credit, arena and map text and
+    /// angle labels. Arenas and maps belong to `aim_world`, so their files are read here.
+    fn shown_content_text() -> Vec<(String, String)> {
+        use crate::crosshair::preset;
+        use crate::training::{benchmark, method, routine};
+        let mut out: Vec<(String, String)> = Vec::new();
+        let mut push = |at: &str, text: &str| {
+            if !text.trim().is_empty() {
+                // A CRLF checkout gives CRLF line breaks; catalog keys use LF (see `tr_in`).
+                out.push((at.to_owned(), text.replace("\r\n", "\n")));
+            }
+        };
+        for d in all() {
+            push(&d.id, &d.name);
+            push(&d.id, &d.description);
+        }
+        for r in routine::builtin::all() {
+            push(&r.id, &r.name);
+            push(&r.id, &r.description);
+            for b in &r.blocks {
+                push(&r.id, &b.note);
+            }
+        }
+        for b in benchmark::builtin::all() {
+            push(&b.id, &b.name);
+            push(&b.id, &b.description);
+            b.ranks.iter().for_each(|x| push(&b.id, x));
+            b.tiers.iter().for_each(|t| push(&b.id, &t.name));
+            b.subcategories.iter().for_each(|s| push(&b.id, &s.name));
+        }
+        for m in method::builtin::all() {
+            push(&m.id, &m.name);
+            push(&m.id, &m.description);
+            push(&m.id, &m.credit);
+            m.tiers.iter().for_each(|t| push(&m.id, &t.name));
+        }
+        for p in preset::all() {
+            push(&p.id, &p.name);
+        }
+        for dir in ["arenas", "maps"] {
+            let path = format!("{}/../../content/{dir}", env!("CARGO_MANIFEST_DIR"));
+            let mut files: Vec<_> = std::fs::read_dir(&path)
+                .unwrap_or_else(|e| panic!("{path}: {e}"))
+                .map(|e| e.unwrap().path())
+                .collect();
+            files.sort();
+            for file in files {
+                let at = file.display().to_string();
+                let src = std::fs::read_to_string(&file).unwrap();
+                let table: toml::Table = toml::from_str(&src).unwrap();
+                let text = |t: &toml::Table, key: &str| {
+                    t.get(key).and_then(|v| v.as_str()).unwrap_or("").to_owned()
+                };
+                push(&at, &text(&table, "name"));
+                push(&at, &text(&table, "description"));
+                if let Some(angles) = table.get("angles").and_then(|a| a.as_array()) {
+                    for angle in angles.iter().filter_map(|a| a.as_table()) {
+                        push(&at, &text(angle, "label"));
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// `text` as a TOML basic string, for the missing-entry report.
+    fn quoted(text: &str) -> String {
+        let escaped = text
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n");
+        format!("\"{escaped}\"")
+    }
+
+    #[test]
+    fn every_shown_content_text_has_a_spanish_entry() {
+        let catalog: std::collections::BTreeMap<String, String> =
+            toml::from_str(include_str!("../../../../locales/es/content.toml")).unwrap();
+        let shown = shown_content_text();
+        let texts: HashSet<&str> = shown.iter().map(|(_, t)| t.as_str()).collect();
+        let stale: Vec<&String> = catalog
+            .keys()
+            .filter(|k| !texts.contains(k.as_str()))
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "entries for text no content shows: {stale:?}"
+        );
+        let mut seen = HashSet::new();
+        let missing: Vec<String> = shown
+            .into_iter()
+            .filter(|(_, text)| !catalog.contains_key(text) && seen.insert(text.clone()))
+            .map(|(at, text)| format!("# {at}\n{} = \"\"", quoted(&text)))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "{} content texts have no entry in locales/es/content.toml:\n{}",
+            missing.len(),
+            missing.join("\n")
+        );
+    }
+
+    #[test]
+    fn content_text_is_shown_in_spanish_and_english_is_unchanged() {
+        use crate::i18n::{Lang, tr_in};
+        let track = all().into_iter().find(|d| d.id == "adjust-track").unwrap();
+        assert_eq!(tr_in(Lang::En, &track.description), track.description);
+        assert_ne!(tr_in(Lang::Es, &track.description), track.description);
+        assert_eq!(tr_in(Lang::Es, "Recruit"), "Recluta");
     }
 }

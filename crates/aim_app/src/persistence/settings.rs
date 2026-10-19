@@ -3,6 +3,7 @@
 use crate::audio::synth::{HitSound, KillSound};
 use crate::game::feedback::{HitMarkerStyle, MarkerColor, TargetEffect};
 use aim_core::crosshair::{CUSTOM_COLOR_INDEX, Crosshair, PRESET_COLORS, Rgba};
+use aim_core::i18n::Lang;
 use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::randomizer::RandomizerConfig;
 use aim_core::training::ergonomics::BreakPolicy;
@@ -62,6 +63,9 @@ impl Paths {
 #[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// UI language. Old files and unknown codes load as English.
+    #[serde(deserialize_with = "deserialize_language")]
+    pub language: Lang,
     /// Your in-game sensitivity. Rotation uses its exact degrees per count.
     pub sensitivity: Sensitivity,
     /// VALORANT "ADS sensitivity multiplier" (1.0 = 100% horizontal monitor match).
@@ -81,6 +85,10 @@ pub struct Settings {
     pub micro_hotkey: String,
     /// In-window key that restarts the current run (a `KeyCode` name, e.g. "KeyR").
     pub restart_key: String,
+    /// Seconds of countdown before a run starts, within [`COUNTDOWN_RANGE`] (0 starts at
+    /// once). Movement scenarios let the player move during it. Read it through
+    /// [`Settings::countdown_secs`].
+    pub countdown_secs: f32,
     /// Length of the queue warm-up, minutes.
     pub warmup_minutes: u32,
     /// Size the queue warm-up by the player's personal dose when there is enough history.
@@ -115,10 +123,43 @@ pub struct Settings {
     /// settings file yet); a file without this key comes from an existing player.
     #[serde(default = "first_run_done_in_old_files")]
     pub first_run_done: bool,
+    /// The last Movement Lab settings (`[movement_lab]`).
+    #[serde(deserialize_with = "deserialize_movement_lab")]
+    pub movement_lab: aim_core::scenario::lab::LabSettings,
 }
 
 fn first_run_done_in_old_files() -> bool {
     true
+}
+
+/// An unknown language code (`language = "fr"`) falls back to English instead of
+/// resetting every setting.
+fn deserialize_language<'de, D>(deserializer: D) -> Result<Lang, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = toml::Value::deserialize(deserializer)?;
+    Ok(value.try_into().unwrap_or_else(|_| {
+        bevy::log::warn!("unknown language in the settings; using English");
+        Lang::En
+    }))
+}
+
+/// Allowed start countdown, seconds.
+pub const COUNTDOWN_RANGE: std::ops::RangeInclusive<f32> = 0.0..=5.0;
+/// The start countdown of files written before it was configurable, seconds.
+pub const DEFAULT_COUNTDOWN_SECS: f32 = 3.0;
+
+impl Settings {
+    /// The start countdown in seconds, held inside [`COUNTDOWN_RANGE`]; a value that is
+    /// not a number falls back to [`DEFAULT_COUNTDOWN_SECS`].
+    pub fn countdown_secs(&self) -> f32 {
+        if self.countdown_secs.is_nan() {
+            return DEFAULT_COUNTDOWN_SECS;
+        }
+        self.countdown_secs
+            .clamp(*COUNTDOWN_RANGE.start(), *COUNTDOWN_RANGE.end())
+    }
 }
 
 /// An invalid `[coach]` table (for example one holding an `api_key`, which
@@ -152,6 +193,22 @@ where
     Ok(policy.unwrap_or_else(|| {
         bevy::log::warn!("invalid [breaks] settings; using the default break policy");
         BreakPolicy::default()
+    }))
+}
+
+/// An invalid `[movement_lab]` table (a wrong type, or not a table) resets only the lab to
+/// its defaults instead of every setting. Out-of-range numbers are kept: the lab clamps
+/// them when it builds the drill.
+fn deserialize_movement_lab<'de, D>(
+    deserializer: D,
+) -> Result<aim_core::scenario::lab::LabSettings, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = toml::Value::deserialize(deserializer)?;
+    Ok(value.try_into().unwrap_or_else(|_| {
+        bevy::log::warn!("invalid [movement_lab] settings; using the lab defaults");
+        aim_core::scenario::lab::LabSettings::default()
     }))
 }
 
@@ -473,6 +530,7 @@ impl Default for FeelSettings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            language: Lang::En,
             sensitivity: Sensitivity::default(),
             ads_multiplier: 1.0,
             crosshair: Crosshair::default(),
@@ -483,6 +541,7 @@ impl Default for Settings {
             warmup_hotkey: "ctrl+shift+F9".to_owned(),
             micro_hotkey: "ctrl+shift+F8".to_owned(),
             restart_key: crate::platform::game_key::DEFAULT_RESTART.to_owned(),
+            countdown_secs: DEFAULT_COUNTDOWN_SECS,
             warmup_minutes: 5,
             personal_warmup: true,
             daily_goal_minutes: 30.0,
@@ -499,6 +558,7 @@ impl Default for Settings {
             coach: aim_ai::CoachConfig::default(),
             breaks: BreakPolicy::default(),
             first_run_done: false,
+            movement_lab: aim_core::scenario::lab::LabSettings::default(),
         }
     }
 }
@@ -666,6 +726,30 @@ mod tests {
     }
 
     #[test]
+    fn language_is_english_for_old_settings_files_and_round_trips() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(old.language, Lang::En);
+        let unknown: Settings = toml::from_str(
+            "language = \"fr\"
+fullscreen = false",
+        )
+        .unwrap();
+        assert_eq!(
+            unknown.language,
+            Lang::En,
+            "an unknown code keeps the other settings"
+        );
+        assert!(!unknown.fullscreen);
+        let spanish = Settings {
+            language: Lang::Es,
+            ..Settings::default()
+        };
+        let text = toml::to_string_pretty(&spanish).unwrap();
+        assert!(text.contains("language = \"es\""), "{text}");
+        assert_eq!(toml::from_str::<Settings>(&text).unwrap(), spanish);
+    }
+
+    #[test]
     fn offscreen_arrows_default_on_for_old_settings_files() {
         let settings: Settings = toml::from_str("fullscreen = false").unwrap();
         assert!(settings.offscreen_arrows);
@@ -683,6 +767,23 @@ mod tests {
         };
         let back: Settings = toml::from_str(&toml::to_string(&on).unwrap()).unwrap();
         assert!(back.arena_coaching);
+    }
+
+    #[test]
+    fn the_countdown_is_three_seconds_for_old_settings_files_and_held_in_range() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(old.countdown_secs(), 3.0);
+        let quick: Settings = toml::from_str("countdown_secs = 1.5").unwrap();
+        assert_eq!(quick.countdown_secs(), 1.5);
+        let back: Settings = toml::from_str(&toml::to_string(&quick).unwrap()).unwrap();
+        assert_eq!(back.countdown_secs(), 1.5);
+        for (stored, used) in [(0.0, 0.0), (-2.0, 0.0), (9.0, 5.0), (f32::NAN, 3.0)] {
+            let s = Settings {
+                countdown_secs: stored,
+                ..Settings::default()
+            };
+            assert_eq!(s.countdown_secs(), used, "{stored}");
+        }
     }
 
     #[test]
@@ -973,6 +1074,50 @@ mod tests {
         assert_eq!(ch.color_index, CUSTOM_COLOR_INDEX);
         assert_eq!(ch.custom_color, Rgba::opaque(255, 128, 0));
         assert!(!ch.outlines);
+    }
+
+    #[test]
+    fn movement_lab_uses_the_defaults_for_old_settings_files_and_round_trips() {
+        use aim_core::scenario::lab::{LabMotion, LabSettings};
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(old.movement_lab, LabSettings::default());
+        assert!(!old.fullscreen, "the rest of the file still loads");
+        let custom = Settings {
+            movement_lab: LabSettings {
+                motion: LabMotion::Dodge,
+                max_alive: 5,
+                until_killed: true,
+                ..LabSettings::default()
+            },
+            ..Settings::default()
+        };
+        let text = toml::to_string_pretty(&custom).unwrap();
+        assert!(text.contains("[movement_lab]"), "{text}");
+        let back: Settings = toml::from_str(&text).unwrap();
+        assert_eq!(back.movement_lab, custom.movement_lab);
+        let partial = Settings::parse("[movement_lab]\nmax_alive = 4\n");
+        assert_eq!(partial.movement_lab.max_alive, 4);
+        assert_eq!(
+            partial.movement_lab.motion,
+            LabMotion::Strafe,
+            "missing keys default"
+        );
+    }
+
+    #[test]
+    fn an_invalid_movement_lab_table_resets_only_the_lab() {
+        for table in [
+            "[movement_lab]\nmax_alive = \"many\"\n",
+            "movement_lab = 3\n",
+        ] {
+            let settings = Settings::parse(&format!("fullscreen = false\n{table}"));
+            assert_eq!(
+                settings.movement_lab,
+                aim_core::scenario::lab::LabSettings::default(),
+                "{table}"
+            );
+            assert!(!settings.fullscreen, "other settings survive: {table}");
+        }
     }
 
     #[test]

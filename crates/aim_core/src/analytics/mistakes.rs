@@ -14,6 +14,7 @@
 use super::flick::{self, Flick, FlickKind, FlickSpan, OVERSHOOT_RADII, along_error_deg, unit};
 use super::rules::{Metric, Rule, Verdict, builtin::rules};
 use super::trace::{self, Sample, tangent_offset_deg};
+use crate::i18n::{Lang, tr_in, tr_named_in};
 use crate::math::{ViewAngles, angle_between_deg, wrap_degrees};
 use crate::rng::Rng;
 use crate::scenario::{FireMode, Recording};
@@ -75,6 +76,11 @@ impl MistakeKind {
             MistakeKind::SlowReaction => "Slow reaction",
             MistakeKind::LateClick => "Late click",
         }
+    }
+
+    /// [`MistakeKind::label`] in `lang`.
+    pub fn label_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.label())
     }
 }
 
@@ -360,89 +366,114 @@ fn build(
         player,
         corrected,
     };
-    m.tip = tip(&m, limits);
+    m.tip = tip(Lang::En, &m, limits);
     m
 }
 
-/// Screen direction of a flick as a word ("right", "up-left", ...).
-fn direction_word((x, y): (f32, f32)) -> &'static str {
-    const WORDS: [&str; 8] = [
-        "right",
-        "up-right",
-        "up",
-        "up-left",
-        "left",
-        "down-left",
-        "down",
-        "down-right",
+/// "this 30° flick right" in `lang`: one template per screen direction, so a translation
+/// can place the direction where its grammar needs it.
+fn flick_phrase(lang: Lang, distance_deg: f32, (x, y): (f32, f32)) -> String {
+    const TEMPLATES: [&str; 8] = [
+        "this {deg}° flick right",
+        "this {deg}° flick up-right",
+        "this {deg}° flick up",
+        "this {deg}° flick up-left",
+        "this {deg}° flick left",
+        "this {deg}° flick down-left",
+        "this {deg}° flick down",
+        "this {deg}° flick down-right",
     ];
     let angle = y.atan2(x).to_degrees().rem_euclid(360.0);
-    WORDS[((angle + 22.5) / 45.0) as usize % 8]
+    let template = TEMPLATES[((angle + 22.5) / 45.0) as usize % 8];
+    tr_named_in(lang, template, &[("deg", &format!("{distance_deg:.0}"))])
 }
 
-fn plural(n: u32, word: &str) -> String {
+/// "1 correction" or "3 corrections" in `lang`.
+fn corrections_phrase(lang: Lang, n: u32) -> String {
     if n == 1 {
-        format!("1 {word}")
+        tr_in(lang, "1 correction").to_owned()
     } else {
-        format!("{n} {word}s")
+        tr_named_in(lang, "{n} corrections", &[("n", &n)])
+    }
+}
+
+impl Mistake {
+    /// [`Mistake::tip`] in `lang`, built from the same numbers and the built-in rules'
+    /// thresholds. In English it equals `tip` for every mistake found by [`mistakes`].
+    pub fn tip_in(&self, lang: Lang) -> String {
+        tip(lang, self, &Limits::from_rules())
     }
 }
 
 /// The tip for `m`: names the mistake, its amount and where it happened, then what to change.
-fn tip(m: &Mistake, limits: &Limits) -> String {
-    let flick = format!(
-        "this {:.0}° flick {}",
-        m.distance_deg,
-        direction_word(m.direction_deg)
-    );
-    let back = if m.corrections > 0 {
-        format!(
-            ", then needed {} to come back",
-            plural(m.corrections, "correction")
-        )
-    } else {
-        String::new()
+fn tip(lang: Lang, m: &Mistake, limits: &Limits) -> String {
+    let flick = flick_phrase(lang, m.distance_deg, m.direction_deg);
+    let back = match m.corrections {
+        0 => String::new(),
+        1 => tr_in(lang, ", then needed 1 correction to come back").to_owned(),
+        n => tr_named_in(
+            lang,
+            ", then needed {n} corrections to come back",
+            &[("n", &n)],
+        ),
     };
-    let ms = |s: Option<f32>| s.map_or(0.0, |s| s * 1000.0);
-    let limit_ms = |r: Option<&Rule>| r.map_or(0.0, |r| r.threshold * 1000.0);
-    match m.kind {
-        MistakeKind::Overflick => format!(
-            "Overflick: on {flick} your first movement ended {:.1} target radii past the \
-             center, {:.2}° beyond the far edge{back}. Start braking earlier: aim to stop on \
+    let ms = |s: Option<f32>| format!("{:.0}", s.map_or(0.0, |s| s * 1000.0));
+    let limit_ms = |r: Option<&Rule>| format!("{:.0}", r.map_or(0.0, |r| r.threshold * 1000.0));
+    let edge = format!("{:.2}", m.edge_error_deg.unwrap_or(0.0));
+    let (template, args): (&str, Vec<(&str, String)>) = match m.kind {
+        MistakeKind::Overflick => (
+            "Overflick: on {flick} your first movement ended {radii} target radii past the \
+             center, {edge}° beyond the far edge{back}. Start braking earlier: aim to stop on \
              the near half of the target and let one small correction finish the shot. If \
              most of your flicks overshoot, try a slightly lower sensitivity.",
-            m.error_radii.unwrap_or(0.0),
-            m.edge_error_deg.unwrap_or(0.0),
+            vec![
+                ("radii", format!("{:.1}", m.error_radii.unwrap_or(0.0))),
+                ("edge", edge),
+            ],
         ),
-        MistakeKind::Underflick => format!(
-            "Underflick: on {flick} your first movement stopped {:.1} target radii short of \
-             the center, {:.2}° before the near edge{back}. Commit to the full distance: move \
+        MistakeKind::Underflick => (
+            "Underflick: on {flick} your first movement stopped {radii} target radii short of \
+             the center, {edge}° before the near edge{back}. Commit to the full distance: move \
              through to the target in one motion instead of creeping up on it.",
-            -m.error_radii.unwrap_or(0.0),
-            m.edge_error_deg.unwrap_or(0.0),
+            vec![
+                ("radii", format!("{:.1}", -m.error_radii.unwrap_or(0.0))),
+                ("edge", edge),
+            ],
         ),
-        MistakeKind::ExtraCorrections => format!(
-            "Extra corrections: on {flick} you needed {} after the first movement (more than \
-             {:.0} is a lot). Make the first movement land on the target: slow its end \
-             slightly and keep it to one small correction at most.",
-            plural(m.corrections, "correction"),
-            limits.corrections.map_or(0.0, |r| r.threshold),
+        MistakeKind::ExtraCorrections => (
+            "Extra corrections: on {flick} you needed {corrections} after the first movement \
+             (more than {limit} is a lot). Make the first movement land on the target: slow its \
+             end slightly and keep it to one small correction at most.",
+            vec![
+                ("corrections", corrections_phrase(lang, m.corrections)),
+                (
+                    "limit",
+                    format!("{:.0}", limits.corrections.map_or(0.0, |r| r.threshold)),
+                ),
+            ],
         ),
-        MistakeKind::SlowReaction => format!(
-            "Slow reaction: you started {flick} {:.0} ms after the target appeared (more than \
-             {:.0} ms is slow). Keep your crosshair at head height and your grip relaxed, and \
+        MistakeKind::SlowReaction => (
+            "Slow reaction: you started {flick} {ms} ms after the target appeared (more than \
+             {limit} ms is slow). Keep your crosshair at head height and your grip relaxed, and \
              start moving the moment you see the target; small errors can be corrected.",
-            ms(m.delay_secs),
-            limit_ms(limits.reaction),
+            vec![
+                ("ms", ms(m.delay_secs)),
+                ("limit", limit_ms(limits.reaction)),
+            ],
         ),
-        MistakeKind::LateClick => format!(
-            "Late click: on {flick} your crosshair was on the target for {:.0} ms before you \
-             clicked (more than {:.0} ms is hesitation). Click as soon as the crosshair reaches \
-             the target; trust the flick instead of checking it.",
-            ms(m.delay_secs),
-            limit_ms(limits.click_delay),
+        MistakeKind::LateClick => (
+            "Late click: on {flick} your crosshair was on the target for {ms} ms before you \
+             clicked (more than {limit} ms is hesitation). Click as soon as the crosshair \
+             reaches the target; trust the flick instead of checking it.",
+            vec![
+                ("ms", ms(m.delay_secs)),
+                ("limit", limit_ms(limits.click_delay)),
+            ],
         ),
-    }
+    };
+    let mut named: Vec<(&str, &dyn std::fmt::Display)> = vec![("flick", &flick), ("back", &back)];
+    named.extend(args.iter().map(|(k, v)| (*k, v as &dyn std::fmt::Display)));
+    tr_named_in(lang, template, &named)
 }
 
 /// The target's aim point over time, from the player's segment: interpolated between
@@ -922,5 +953,28 @@ mod tests {
         }
         let hold = record("track-precise", AimerProfile::PRESETS[0], 3);
         assert!(from_recording(&hold).is_empty());
+    }
+
+    #[test]
+    fn tips_are_shown_in_spanish_and_english_is_unchanged() {
+        let mut kinds = std::collections::HashSet::new();
+        for preset in AimerProfile::PRESETS {
+            for m in from_recording(&record("flick-wide", preset, 3)) {
+                assert_eq!(m.tip_in(Lang::En), m.tip);
+                let es = m.tip_in(Lang::Es);
+                let prefix = match m.kind {
+                    MistakeKind::Overflick => "Overflick: en este flick de ",
+                    MistakeKind::Underflick => "Underflick: en este flick de ",
+                    MistakeKind::ExtraCorrections => "Correcciones de más: en este flick de ",
+                    MistakeKind::SlowReaction => "Reacción lenta: empezaste este flick de ",
+                    MistakeKind::LateClick => "Clic tardío: en este flick de ",
+                };
+                assert!(es.starts_with(prefix), "{es}");
+                assert!(!es.contains('{'), "{es}");
+                kinds.insert(m.kind.label_in(Lang::Es));
+            }
+        }
+        assert!(kinds.contains("Reacción lenta"), "{kinds:?}");
+        assert_eq!(MistakeKind::LateClick.label_in(Lang::En), "Late click");
     }
 }

@@ -10,6 +10,7 @@ use super::flick::FlickSummary;
 use super::miss_compass::MissCompass;
 use super::moving::MovingSummary;
 use super::tracking::TrackingSummary;
+use crate::i18n::{Lang, tr_in};
 use serde::Deserialize;
 
 use super::pace::PaceSummary;
@@ -84,6 +85,11 @@ impl Metric {
             Metric::MissBelowShare => "Misses below the aim point",
             Metric::MissAboveShare => "Misses above the aim point",
         }
+    }
+
+    /// [`Metric::label`] in `lang`.
+    pub fn label_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.label())
     }
 
     /// Value formatted with its unit.
@@ -164,6 +170,11 @@ impl Direction {
             Direction::Above => "above",
             Direction::Below => "below",
         }
+    }
+
+    /// [`Direction::word`] in `lang`.
+    pub fn word_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.word())
     }
 }
 
@@ -616,6 +627,29 @@ pub(crate) mod tests {
         let r: Vec<&str> = routines.iter().map(String::as_str).collect();
         let errs = builtin::rules().validate(&s, &r);
         assert!(errs.is_empty(), "{errs:?}");
+    }
+
+    #[test]
+    fn every_builtin_meaning_and_tip_has_a_spanish_entry() {
+        let catalog: std::collections::BTreeMap<String, String> =
+            toml::from_str(include_str!("../../../../locales/es/rules.toml")).unwrap();
+        for rule in &builtin::rules().rules {
+            assert!(catalog.contains_key(&rule.meaning), "{}", rule.meaning);
+            if let Some(rec) = &rule.recommendation {
+                assert!(catalog.contains_key(&rec.tip), "{}", rec.tip);
+            }
+        }
+    }
+
+    #[test]
+    fn metric_labels_and_directions_are_shown_in_spanish() {
+        assert_eq!(Metric::OvershootRate.label_in(Lang::En), "Overshoot rate");
+        assert_eq!(
+            Metric::ReactionTime.label_in(Lang::Es),
+            "Tiempo de reacción mediano"
+        );
+        assert_eq!(Direction::Above.word_in(Lang::Es), "por encima");
+        assert_eq!(Direction::Below.word_in(Lang::En), "below");
     }
 
     #[test]

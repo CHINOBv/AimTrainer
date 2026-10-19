@@ -3,6 +3,7 @@
 //! [`DecisionReport`] is the plain data the panel shows, built from the core's
 //! [`DecisionSummary`]; the panel only lays it out.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::ui::atoms::{GOOD, WARN};
 use crate::ui::molecules::stat_row;
 use aim_core::analytics::decision::{DecisionSummary, FALSE_ALARM_THRESHOLD, MISS_THRESHOLD};
@@ -46,19 +47,17 @@ impl DecisionReport {
             verdicts.push(if d.is_impulsive() {
                 (
                     true,
-                    format!(
+                    tr_fmt(
                         "Decoys shot {} is above the {} threshold: confirm the target before you click.",
-                        pct(r),
-                        pct(FALSE_ALARM_THRESHOLD)
+                        &[&pct(r), &pct(FALSE_ALARM_THRESHOLD)],
                     ),
                 )
             } else {
                 (
                     false,
-                    format!(
+                    tr_fmt(
                         "Decoys shot {} is within the {} threshold.",
-                        pct(r),
-                        pct(FALSE_ALARM_THRESHOLD)
+                        &[&pct(r), &pct(FALSE_ALARM_THRESHOLD)],
                     ),
                 )
             });
@@ -66,10 +65,9 @@ impl DecisionReport {
         if let Some(r) = d.miss_rate.filter(|_| d.is_hesitant()) {
             verdicts.push((
                 true,
-                format!(
+                tr_fmt(
                     "Targets missed {} is above the {} threshold: commit to a target once you see it.",
-                    pct(r),
-                    pct(MISS_THRESHOLD)
+                    &[&pct(r), &pct(MISS_THRESHOLD)],
                 ),
             ));
         }
@@ -79,14 +77,14 @@ impl DecisionReport {
 
 /// Draw the go/no-go section.
 pub fn decision_panel(ui: &mut egui::Ui, report: &DecisionReport) {
-    egui::CollapsingHeader::new(TITLE)
+    egui::CollapsingHeader::new(tr(TITLE))
         .default_open(true)
         .show(ui, |ui| {
             egui::Grid::new("decision_metrics")
                 .num_columns(2)
                 .show(ui, |ui| {
                     for (label, value) in &report.metrics {
-                        stat_row(ui, label, value.as_str());
+                        stat_row(ui, tr(label), value.as_str());
                     }
                 });
             for (warn, text) in &report.verdicts {
@@ -96,7 +94,7 @@ pub fn decision_panel(ui: &mut egui::Ui, report: &DecisionReport) {
                     ui.colored_label(GOOD, format!("✔ {text}"));
                 }
             }
-            ui.small(THRESHOLD_NOTE);
+            ui.small(tr(THRESHOLD_NOTE));
         });
 }
 

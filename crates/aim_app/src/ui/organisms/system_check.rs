@@ -1,5 +1,6 @@
 //! System check: things that silently ruin aim training (low FPS, vsync, acceleration).
 
+use crate::i18n::{tr, tr_named};
 use crate::ui::atoms::{BAD, GOOD, WARN};
 use bevy_egui::egui;
 
@@ -13,7 +14,7 @@ pub struct SystemModel {
 }
 
 pub fn system_check(ui: &mut egui::Ui, m: &SystemModel) {
-    ui.heading("System check");
+    ui.heading(tr("System check"));
     match m.frames {
         Some((fps, low, ms)) => {
             let color = if low >= 144.0 {
@@ -25,20 +26,27 @@ pub fn system_check(ui: &mut egui::Ui, m: &SystemModel) {
             };
             ui.colored_label(
                 color,
-                format!("{fps:.0} FPS average · {low:.0} FPS 1% low · {ms:.2} ms per frame"),
+                tr_named(
+                    "{fps} FPS average · {low} FPS 1% low · {ms} ms per frame",
+                    &[
+                        ("fps", &format!("{fps:.0}")),
+                        ("low", &format!("{low:.0}")),
+                        ("ms", &format!("{ms:.2}")),
+                    ],
+                ),
             );
             if low < 144.0 {
-                ui.small("1% lows under your monitor's refresh rate add visible stutter; close background apps or lower the window size.");
+                ui.small(tr("1% lows under your monitor's refresh rate add visible stutter; close background apps or lower the window size."));
             }
         }
         None => {
-            ui.label("Measuring frame times…");
+            ui.label(tr("Measuring frame times…"));
         }
     }
     let check = |ui: &mut egui::Ui, ok: bool, text: &str| {
         ui.colored_label(
             if ok { GOOD } else { WARN },
-            format!("{} {text}", if ok { "✔" } else { "!" }),
+            format!("{} {}", if ok { "✔" } else { "!" }, tr(text)),
         );
     };
     check(
@@ -52,11 +60,13 @@ pub fn system_check(ui: &mut egui::Ui, m: &SystemModel) {
         "Borderless fullscreen (consistent frame pacing)",
     );
     ui.add_space(4.0);
-    ui.label("Mouse input is read raw (unaccelerated counts); confirm with the DPI check above.");
+    ui.label(tr(
+        "Mouse input is read raw (unaccelerated counts); confirm with the DPI check above.",
+    ));
     if m.windows {
-        ui.label("Windows: turn off \"Enhance pointer precision\" for the desktop; the trainer and VALORANT use raw input either way.");
+        ui.label(tr("Windows: turn off \"Enhance pointer precision\" for the desktop; the trainer and VALORANT use raw input either way."));
     }
     if m.wayland {
-        ui.label("Wayland: raw counts come from the relative-pointer protocol, unaffected by compositor acceleration.");
+        ui.label(tr("Wayland: raw counts come from the relative-pointer protocol, unaffected by compositor acceleration."));
     }
 }

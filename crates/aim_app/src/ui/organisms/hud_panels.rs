@@ -1,6 +1,7 @@
 //! In-run overlays: run status, movement accuracy meter, spray meter, countdown, pause
 //! window.
 
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::ui::UiAction;
 use crate::ui::atoms::{BAD, GOOD, WARN, big, pop};
 use crate::ui::organisms::health_bar::{self, HealthBar};
@@ -18,22 +19,28 @@ pub fn run_status(ctx: &egui::Context, s: &Session) {
                 ui.label(big(format!("{:.1}", s.remaining()), 28.0));
                 let key = RunKey::parse(&s.def().id);
                 if key.level != 0.0 {
-                    ui.small(format!("difficulty {:+.2}", key.level));
+                    ui.small(tr_fmt("difficulty {}", &[&format!("{:+.2}", key.level)]));
                 }
                 if !key.tuning.is_default() {
-                    ui.small(RichText::new("tuned").color(WARN))
+                    ui.small(RichText::new(tr("tuned")).color(WARN))
                         .on_hover_text(crate::game::tuning_text(&key.tuning));
                 }
-                ui.label(format!(
-                    "{}  ·  score {:.0}  ·  {accuracy:.0}% acc  ·  {} kills",
-                    s.def().name,
-                    stats.score.max(0.0),
-                    stats.kills
+                ui.label(tr_named(
+                    "{name}  ·  score {score}  ·  {accuracy}% acc  ·  {kills} kills",
+                    &[
+                        ("name", &tr(&s.def().name)),
+                        ("score", &format!("{:.0}", stats.score.max(0.0))),
+                        ("accuracy", &format!("{accuracy:.0}")),
+                        ("kills", &stats.kills),
+                    ],
                 ));
                 if hold {
-                    ui.label(format!(
-                        "on target {:.1}s / firing {:.1}s",
-                        stats.on_target_secs, stats.hold_secs
+                    ui.label(tr_fmt(
+                        "on target {}s / firing {}s",
+                        &[
+                            &format!("{:.1}", stats.on_target_secs),
+                            &format!("{:.1}", stats.hold_secs),
+                        ],
                     ));
                 }
                 let names: Vec<&str> = s
@@ -41,7 +48,7 @@ pub fn run_status(ctx: &egui::Context, s: &Session) {
                     .phases
                     .iter()
                     .flatten()
-                    .map(|p| p.name.as_str())
+                    .map(|p| tr(p.name.as_str()))
                     .collect();
                 if let Some(text) =
                     progress_label(s.phase_index(), &names, s.def().end, stats.kills)
@@ -57,7 +64,7 @@ pub fn run_status(ctx: &egui::Context, s: &Session) {
 fn progress_label(phase: Option<usize>, names: &[&str], end: RunEnd, kills: u32) -> Option<String> {
     let phase = phase.filter(|_| !names.is_empty()).map(|i| {
         let name = names.get(i).copied().unwrap_or_default();
-        let head = format!("phase {}/{}", i + 1, names.len());
+        let head = tr_fmt("phase {}/{}", &[&(i + 1), &names.len()]);
         if name.is_empty() {
             head
         } else {
@@ -65,7 +72,10 @@ fn progress_label(phase: Option<usize>, names: &[&str], end: RunEnd, kills: u32)
         }
     });
     let goal = match end {
-        RunEnd::Kills { kills: goal } => Some(format!("{kills}/{goal} kills")),
+        RunEnd::Kills { kills: goal } => Some(tr_named(
+            "{kills}/{goal} kills",
+            &[("kills", &kills), ("goal", &goal)],
+        )),
         RunEnd::Time | RunEnd::Endless => None,
     };
     match (phase, goal) {
@@ -77,9 +87,9 @@ fn progress_label(phase: Option<usize>, names: &[&str], end: RunEnd, kills: u32)
 pub fn movement_meter(ctx: &egui::Context, s: &Session) {
     let limit = s.movement_profile().accuracy_speed_limit();
     let (text, color) = if s.is_accurate() {
-        ("ACCURATE", GOOD)
+        (tr("ACCURATE"), GOOD)
     } else {
-        ("MOVING", BAD)
+        (tr("MOVING"), BAD)
     };
     egui::Area::new(egui::Id::new("speed"))
         .anchor(Align2::CENTER_BOTTOM, [0.0, -40.0])
@@ -91,10 +101,13 @@ pub fn movement_meter(ctx: &egui::Context, s: &Session) {
                         .strong()
                         .font(FontId::proportional(20.0)),
                 );
-                ui.label(format!(
-                    "{:.2} m/s  (accurate ≤ {limit:.2})  ·  moving shots {}",
-                    s.player_speed(),
-                    s.stats().moving_shots
+                ui.label(tr_named(
+                    "{speed} m/s  (accurate ≤ {limit})  ·  moving shots {shots}",
+                    &[
+                        ("speed", &format!("{:.2}", s.player_speed())),
+                        ("limit", &format!("{limit:.2}")),
+                        ("shots", &s.stats().moving_shots),
+                    ],
                 ));
             });
         });
@@ -115,30 +128,36 @@ pub fn spray_meter(ctx: &egui::Context, s: &Session) {
             ui.vertical(|ui| {
                 if bullet == 0 {
                     ui.label(
-                        RichText::new("READY")
+                        RichText::new(tr("READY"))
                             .color(GOOD)
                             .strong()
                             .font(FontId::proportional(20.0)),
                     );
-                    ui.label("next shot: first bullet");
+                    ui.label(tr("next shot: first bullet"));
                 } else {
                     let color = if bullet < protected { GOOD } else { BAD };
                     ui.label(
-                        RichText::new(format!("BULLET {bullet}"))
+                        RichText::new(tr_fmt("BULLET {}", &[&bullet]))
                             .color(color)
                             .strong()
                             .font(FontId::proportional(20.0)),
                     );
-                    ui.label(format!(
-                        "reset in {remaining:.2}s  ·  protected {protected}"
+                    ui.label(tr_named(
+                        "reset in {remaining}s  ·  protected {protected}",
+                        &[
+                            ("remaining", &format!("{remaining:.2}")),
+                            ("protected", &protected),
+                        ],
                     ));
                 }
                 let st = s.stats();
-                ui.small(format!(
-                    "bursts {}  ·  avg {:.1}  ·  first bullets {:.0}%",
-                    st.bursts,
-                    st.avg_burst_len(),
-                    st.first_bullet_share() * 100.0
+                ui.small(tr_named(
+                    "bursts {bursts}  ·  avg {avg}  ·  first bullets {first}%",
+                    &[
+                        ("bursts", &st.bursts),
+                        ("avg", &format!("{:.1}", st.avg_burst_len())),
+                        ("first", &format!("{:.0}", st.first_bullet_share() * 100.0)),
+                    ],
                 ));
             });
         });
@@ -160,7 +179,7 @@ pub fn countdown(ctx: &egui::Context, secs: f32, restart: &str, animate: bool) {
                     big(format!("{}", secs.ceil() as i32), 56.0 * scale)
                         .color(egui::Color32::WHITE.gamma_multiply(alpha)),
                 );
-                ui.small(format!("{restart}: restart"));
+                ui.small(tr_fmt("{}: restart", &[&restart]));
             });
         });
 }
@@ -188,7 +207,7 @@ pub fn go_pop(ctx: &egui::Context, age: f32) {
         .anchor(Align2::CENTER_CENTER, [0.0, -80.0])
         .interactable(false)
         .show(ctx, |ui| {
-            ui.label(big("GO", 64.0 * scale).color(GOOD.gamma_multiply(alpha)));
+            ui.label(big(tr("GO"), 64.0 * scale).color(GOOD.gamma_multiply(alpha)));
         });
 }
 
@@ -204,10 +223,16 @@ pub fn round_end_banner(ctx: &egui::Context, age: f32, kills: u32, deaths: u32) 
         .interactable(false)
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                ui.label(big("ROUND OVER", 48.0 * scale).color(WARN.gamma_multiply(alpha)));
+                ui.label(big(tr("ROUND OVER"), 48.0 * scale).color(WARN.gamma_multiply(alpha)));
                 ui.label(
-                    big(format!("{kills} kills · {deaths} deaths"), 20.0)
-                        .color(egui::Color32::WHITE.gamma_multiply(alpha)),
+                    big(
+                        tr_named(
+                            "{kills} kills · {deaths} deaths",
+                            &[("kills", &kills), ("deaths", &deaths)],
+                        ),
+                        20.0,
+                    )
+                    .color(egui::Color32::WHITE.gamma_multiply(alpha)),
                 );
             });
         });
@@ -240,28 +265,29 @@ pub fn pause_window(
     pick: Option<RestartPick>,
 ) -> Option<UiAction> {
     let mut action = None;
-    egui::Window::new("Paused")
+    egui::Window::new(tr("Paused"))
+        .id(egui::Id::new("Paused"))
         .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
         .collapsible(false)
         .resizable(false)
         .show(ctx, |ui| {
-            ui.label(description);
+            ui.label(tr(description));
             ui.separator();
             if let Some(pick) = pick {
                 action = restart_options(ui, pick);
                 ui.separator();
             }
-            if ui.button("Resume (Esc)").clicked() {
+            if ui.button(tr("Resume (Esc)")).clicked() {
                 action = Some(UiAction::Resume);
             }
             if ui
-                .button(format!("Restart ({restart})"))
-                .on_hover_text("Start this run again as it is; nothing is recorded")
+                .button(tr_fmt("Restart ({})", &[&restart]))
+                .on_hover_text(tr("Start this run again as it is; nothing is recorded"))
                 .clicked()
             {
                 action = Some(UiAction::Restart);
             }
-            if ui.button("Quit to menu").clicked() {
+            if ui.button(tr("Quit to menu")).clicked() {
                 action = Some(UiAction::BackToMenu);
             }
         });
@@ -279,7 +305,7 @@ fn restart_options(ui: &mut egui::Ui, pick: RestartPick) -> Option<UiAction> {
     } = pick;
     let range = aim_core::scenario::def::ELEVATION_RANGE;
     ui.horizontal(|ui| {
-        ui.label("Floor height");
+        ui.label(tr("Floor height"));
         if ui.small_button("−").clicked() {
             *elevation = (*elevation - FLOOR_STEP).max(range.min);
         }
@@ -288,31 +314,35 @@ fn restart_options(ui: &mut egui::Ui, pick: RestartPick) -> Option<UiAction> {
             *elevation = (*elevation + FLOOR_STEP).min(range.max);
         }
     });
-    ui.small("Your floor relative to the targets' floor.");
+    ui.small(tr("Your floor relative to the targets' floor."));
     ui.add_space(4.0);
     egui::Grid::new("tuning").num_columns(2).show(ui, |ui| {
-        ui.add_enabled_ui(size_applies, |ui| ui.label("Target size"))
+        ui.add_enabled_ui(size_applies, |ui| ui.label(tr("Target size")))
             .response
-            .on_disabled_hover_text("Agents keep their VALORANT size; use Distance instead.");
+            .on_disabled_hover_text(tr("Agents keep their VALORANT size; use Distance instead."));
         ui.add_enabled_ui(size_applies, |ui| percent_stepper(ui, &mut tuning.size_pct));
         ui.end_row();
-        ui.label("Distance");
+        ui.label(tr("Distance"));
         percent_stepper(ui, &mut tuning.distance_pct);
         ui.end_row();
-        ui.label("Target speed");
+        ui.label(tr("Target speed"));
         percent_stepper(ui, &mut tuning.speed_pct);
         ui.end_row();
     });
     if !size_applies {
-        ui.small("Agents keep their VALORANT size; change Distance instead.");
+        ui.small(tr(
+            "Agents keep their VALORANT size; change Distance instead.",
+        ));
     }
-    ui.small("Tuned runs are saved apart and never move your adaptive level or benchmark.");
+    ui.small(tr(
+        "Tuned runs are saved apart and never move your adaptive level or benchmark.",
+    ));
     let mut action = None;
     ui.horizontal(|ui| {
         if ui
             .add_enabled(
                 !tuning.is_default(),
-                egui::Button::new("Reset to scenario defaults"),
+                egui::Button::new(tr("Reset to scenario defaults")),
             )
             .clicked()
         {
@@ -320,7 +350,7 @@ fn restart_options(ui: &mut egui::Ui, pick: RestartPick) -> Option<UiAction> {
         }
         let changed = (*elevation - current_elevation).abs() > 1e-3 || *tuning != current_tuning;
         if ui
-            .add_enabled(changed, egui::Button::new("Apply and restart"))
+            .add_enabled(changed, egui::Button::new(tr("Apply and restart")))
             .clicked()
         {
             action = Some(UiAction::RestartTuned {
@@ -357,9 +387,9 @@ fn spawn_note(ctx: &egui::Context, s: &aim_world::arena::ArenaSession) {
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 if s.stats().deaths > 0 {
-                    ui.label(big("You died · respawned", 26.0).color(BAD));
+                    ui.label(big(tr("You died · respawned"), 26.0).color(BAD));
                 }
-                ui.label(format!("Spawn protection {left:.1} s"));
+                ui.label(tr_fmt("Spawn protection {} s", &[&format!("{left:.1}")]));
             });
         });
 }
@@ -386,30 +416,38 @@ pub fn arena_status(
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.label(big(format!("{:.1}", s.remaining()), 28.0));
-                ui.label(format!(
-                    "{}  ·  {} kills  ·  {} deaths",
-                    s.def().name,
-                    stats.kills,
-                    stats.deaths
+                ui.label(tr_named(
+                    "{name}  ·  {kills} kills  ·  {deaths} deaths",
+                    &[
+                        ("name", &tr(&s.def().name)),
+                        ("kills", &stats.kills),
+                        ("deaths", &stats.deaths),
+                    ],
                 ));
                 if s.is_practice() {
-                    ui.colored_label(GOOD, "PRACTICE · bots don't shoot");
+                    ui.colored_label(GOOD, tr("PRACTICE · bots don't shoot"));
                 }
                 if let Some(a) = s.adaptive() {
-                    ui.label(format!("Bots: {} (peak {})", a.skill, a.peak));
+                    ui.label(tr_named(
+                        "Bots: {skill} (peak {peak})",
+                        &[("skill", &a.skill), ("peak", &a.peak)],
+                    ));
                 }
                 if let Some(o) = s.objective() {
                     let site = if o.capture_progress > 0.0 {
-                        RichText::new(format!("SITE CONTESTED {:.0}%", o.capture_progress * 100.0))
-                            .color(BAD)
-                            .strong()
+                        RichText::new(tr_fmt(
+                            "SITE CONTESTED {}%",
+                            &[&format!("{:.0}", o.capture_progress * 100.0)],
+                        ))
+                        .color(BAD)
+                        .strong()
                     } else {
-                        RichText::new("Site held").color(GOOD)
+                        RichText::new(tr("Site held")).color(GOOD)
                     };
                     ui.label(site);
-                    ui.label(format!(
-                        "{} of {} attackers left",
-                        o.attackers_left, o.attackers
+                    ui.label(tr_named(
+                        "{left} of {total} attackers left",
+                        &[("left", &o.attackers_left), ("total", &o.attackers)],
                     ));
                 }
             });
@@ -430,7 +468,7 @@ pub fn arena_status(
                 );
             }
             if !s.is_accurate() {
-                ui.colored_label(BAD, "MOVING");
+                ui.colored_label(BAD, tr("MOVING"));
             }
         });
     if !extras.death_screen {
@@ -674,5 +712,32 @@ mod offscreen_tests {
         // A diagonal hits the nearer (top) edge first on a wide screen.
         let p = edge_point(r, PI / 4.0, 10.0);
         assert!((p.y - 10.0).abs() < 1e-3 && p.x > 100.0, "{p:?}");
+    }
+}
+
+#[cfg(test)]
+mod i18n_tests {
+    use aim_core::i18n::{Lang, tr_fmt_in, tr_in, tr_named_in};
+
+    #[test]
+    fn the_hud_reads_in_spanish() {
+        assert_eq!(tr_in(Lang::Es, "Paused"), "En pausa");
+        assert_eq!(tr_in(Lang::Es, "ROUND OVER"), "FIN DE LA RONDA");
+        assert_eq!(tr_fmt_in(Lang::Es, "phase {}/{}", &[&2, &5]), "fase 2/5");
+        assert_eq!(
+            tr_named_in(
+                Lang::Es,
+                "{kills} kills · {deaths} deaths",
+                &[("kills", &7), ("deaths", &2)]
+            ),
+            "7 bajas · 2 muertes"
+        );
+        assert_eq!(tr_fmt_in(Lang::Es, "You ▶ Bot {}", &[&3]), "Tú ▶ Bot 3");
+        assert_eq!(
+            tr_in(Lang::Es, "Shot from ← left"),
+            "Disparo desde la ← izquierda"
+        );
+        // English stays the source text.
+        assert_eq!(tr_fmt_in(Lang::En, "phase {}/{}", &[&2, &5]), "phase 2/5");
     }
 }

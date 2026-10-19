@@ -3,6 +3,7 @@
 //! navigation.
 
 use crate::game::{LastResult, RoutineProgress};
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::ui::UiAction;
 use crate::ui::molecules::gauge::GaugeModel;
 use crate::ui::molecules::stat_row;
@@ -46,31 +47,31 @@ fn details(ui: &mut egui::Ui, r: &RunResult, report: Option<&RunReport>) -> Opti
         .max_height(ANALYSIS_MAX_HEIGHT_PX)
         .show(ui, |ui| {
             egui::Grid::new("stats").num_columns(2).show(ui, |ui| {
-                stat_row(ui, "Accuracy", format!("{:.1}%", r.accuracy * 100.0));
+                stat_row(ui, tr("Accuracy"), format!("{:.1}%", r.accuracy * 100.0));
                 stat_row(
                     ui,
-                    "Kills",
+                    tr("Kills"),
                     format!("{} ({:.1}/min)", r.kills, r.kills_per_min),
                 );
                 if let Some(t) = r.avg_time_to_kill {
-                    stat_row(ui, "Avg time to kill", format!("{:.0} ms", t * 1000.0));
+                    stat_row(ui, tr("Avg time to kill"), format!("{:.0} ms", t * 1000.0));
                 }
                 if let Some(spread) = report.and_then(|rep| rep.ttk_spread.as_ref()) {
-                    stat_row(ui, "Time to kill (median)", spread.as_str());
+                    stat_row(ui, tr("Time to kill (median)"), spread.as_str());
                 }
                 if let Some(e) = report.and_then(|rep| rep.damage_efficiency.as_ref()) {
-                    stat_row(ui, "Damage efficiency", e.as_str());
+                    stat_row(ui, tr("Damage efficiency"), e.as_str());
                 }
                 stat_row(
                     ui,
-                    "Headshot rate",
+                    tr("Headshot rate"),
                     format!("{:.1}%", r.headshot_rate * 100.0),
                 );
                 if r.moving_shots > 0 {
-                    stat_row(ui, "Moving shots", r.moving_shots.to_string());
+                    stat_row(ui, tr("Moving shots"), r.moving_shots.to_string());
                 }
                 if r.expired > 0 {
-                    stat_row(ui, "Targets missed (expired)", r.expired.to_string());
+                    stat_row(ui, tr("Targets missed (expired)"), r.expired.to_string());
                 }
             });
             let Some(report) = report else {
@@ -112,14 +113,14 @@ fn proof_button(ui: &mut egui::Ui, rec: &Recording, result: &RunResult) {
     let id = egui::Id::new(("proof-status", rec.seed, rec.inputs.len()));
     ui.horizontal(|ui| {
         if ui
-            .button("Copy proof code")
-            .on_hover_text("A code a friend can paste in Progress → Verify a proof to replay this run and confirm its score.")
+            .button(tr("Copy proof code"))
+            .on_hover_text(tr("A code a friend can paste in Progress → Verify a proof to replay this run and confirm its score."))
             .clicked()
         {
             let status = match proof_code(rec, result) {
                 Ok(code) => {
                     ui.ctx().copy_text(code);
-                    "Proof code copied to the clipboard.".to_owned()
+                    tr("Proof code copied to the clipboard.").to_owned()
                 }
                 Err(e) => e,
             };
@@ -131,19 +132,24 @@ fn proof_button(ui: &mut egui::Ui, rec: &Recording, result: &RunResult) {
     });
 }
 
+/// A section the page draws inside the card (the AI coach's take), returning its clicks.
+pub type CardSection<'a> = &'a mut dyn FnMut(&mut egui::Ui) -> Option<UiAction>;
+
 pub fn results_card(
     ctx: &egui::Context,
     last: &LastResult,
     rc: &ResultsContext,
+    coach: Option<CardSection>,
 ) -> Option<UiAction> {
+    let mut coach = coach;
     let r = &last.result;
     let mut action = None;
-    egui::Window::new("Results")
+    egui::Window::new(tr("Results"))
         .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
         .collapsible(false)
         .resizable(false)
         .show(ctx, |ui| {
-            ui.heading(&last.name);
+            ui.heading(tr(&last.name));
             let can_watch = last
                 .recording
                 .as_ref()
@@ -160,8 +166,13 @@ pub fn results_card(
             for note in &last.notes {
                 ui.label(note);
             }
+            if let Some(section) = coach.as_mut()
+                && let Some(a) = section(ui)
+            {
+                action = Some(a);
+            }
             ui.separator();
-            egui::CollapsingHeader::new(DETAILS)
+            egui::CollapsingHeader::new(tr(DETAILS))
                 .default_open(false)
                 .show(ui, |ui| {
                     if let Some(a) = details(ui, r, rc.report) {
@@ -173,33 +184,44 @@ pub fn results_card(
                 });
             ui.separator();
             if let Some(p) = rc.routine {
-                ui.label(format!("{} · run {}/{}", p.name, p.index + 1, p.plan.len()));
+                ui.label(tr_named(
+                    "{routine} · run {n}/{total}",
+                    &[
+                        ("routine", &tr(&p.name)),
+                        ("n", &(p.index + 1)),
+                        ("total", &p.plan.len()),
+                    ],
+                ));
                 if let Some(note) = p
                     .plan
                     .get(p.index + 1)
                     .map(|n| &n.note)
                     .filter(|n| !n.is_empty())
                 {
-                    ui.small(format!("Next: {note}"));
+                    ui.small(tr_fmt("Next: {}", &[&tr(note)]));
                 }
             }
             ui.horizontal(|ui| {
                 if let Some(name) = rc.next_run {
-                    if ui.button(format!("▶ Next: {name} (Space)")).clicked() || rc.space {
+                    if ui
+                        .button(tr_fmt("▶ Next: {} (Space)", &[&tr(name)]))
+                        .clicked()
+                        || rc.space
+                    {
                         action = Some(UiAction::NextRoutineRun);
                     }
                 } else if let Some(level) = last.adaptive_next {
                     let base = aim_core::scenario::parse_run_key(&r.scenario_id)
                         .0
                         .to_owned();
-                    ui.label(format!("Adaptive level → {level:+.2}"));
-                    if ui.button("▶ Next adaptive run (Space)").clicked() || rc.space {
+                    ui.label(tr_fmt("Adaptive level → {}", &[&format!("{level:+.2}")]));
+                    if ui.button(tr("▶ Next adaptive run (Space)")).clicked() || rc.space {
                         action = Some(UiAction::StartAdaptive(base));
                     }
-                } else if ui.button("↻ Retry (Space)").clicked() || rc.space {
+                } else if ui.button(tr("↻ Retry (Space)")).clicked() || rc.space {
                     action = Some(rc.retry.clone());
                 }
-                if ui.button("Menu").clicked() {
+                if ui.button(tr("Menu")).clicked() {
                     action = Some(UiAction::BackToMenu);
                 }
             });

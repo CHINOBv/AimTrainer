@@ -38,6 +38,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - A **sensitivity suggestion** from your recent flicks' over/undershoot, with the evidence shown. It is applied only when you choose to.
   - A **replay viewer** of your crosshair path: the trail is coloured by speed, and it has a hit/miss heatmap and a side-by-side comparison with an earlier run.
   - **Mistake replays**, one mistake at a time: your whole flick, then the exact moment it went wrong in slow motion (for example, where an overflick passed the target), a tip for that flick, and a realistic corrected example drawn over your path. Open them with **Watch it** on the results screen, or from a saved replay on the Progress page.
+  - **Coach's take** (optional, with the AI coach enabled): on the results screen, **Ask the coach** sends the run's numbers once and shows one to three points that cite those numbers, plus an optional drill from the library to play; in the mistake replays, **Ask the coach why** explains one mistake with a cue. Replies whose numbers, metric keys or drill do not match the run are rejected, and the rule-based fix and tip always stay. See `docs/coach.md`.
   - Benchmark trends and personal bests, and a **plateau detector** on the Progress page: a benchmark subcategory you keep playing with no new personal best in 3 weeks gets suggestions for a change of stimulus (a variant, a sensitivity variation, a switch of emphasis or a lighter week).
   - Offline **post-match analysis** of official match files.
   - **Verifiable score proofs**: copy a run's proof code from the results screen; a friend pastes it on the Progress page and their trainer replays the run to confirm the score, with no server.
@@ -74,6 +75,8 @@ On Windows, install Rust with rustup and run `cargo build --release`. The binary
 | Shoot | Left mouse button (hold for tracking scenarios) |
 | ADS zoom (weapons that have a scope) | Right mouse button |
 | Move (movement scenarios) | WASD, Shift to walk |
+| Get into position before the run (movement scenarios: move and look during the countdown; shots wait for GO, and the run starts from where you stand and how fast you move) | WASD during the countdown |
+| Countdown length (0–5 s in 0.5 s steps, default 3; 0 starts at once; also arenas) | Settings → Training → Start countdown (`countdown_secs`) |
 | Pause / resume | Esc |
 | Restart the run as it is (scenarios and arenas, also paused or in the countdown; keeps an adaptive run's level and records nothing) | R (Settings → Keys) |
 | Change your floor height (scenario pause menu) | Floor height −/+ (0.5 m steps), then Apply and restart |
@@ -86,12 +89,12 @@ The menu tabs (keys 1–9 switch tabs while no text field has focus):
 |---|---|
 | Today | Quick play (your last scenario) and Continue (a routine you started today), the day's method session, the daily challenge, daily missions |
 | Progress | Goal, readiness chips, fatigue, trend, per-skill bars with weekly sparklines (explanations on hover), bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
-| Scenarios | Search and filter (category, click or hold, moving or standing, waves); ★ pins a scenario to Favourites (saved as `favorites` in `settings.toml`); Recent lists your last 5 scenarios. Play, or play adaptively |
+| Scenarios | Search and filter (category, click or hold, moving or standing, waves); ★ pins a scenario to Favourites (saved as `favorites` in `settings.toml`); Recent lists your last 5 scenarios. Play, or play adaptively. **Movement Lab** (below the list) builds your own movement drill: enemy motion (static, strafe, dodge) and speed, enemies at once, head or body, spawn distance and spread, appear delay and lifetime, your movement area, weapon and length; it remembers your last settings and keeps each drill's results apart (see `docs/scenarios.md`) |
 | Routines | The routines (resume a split one), your personalized playlist |
 | Arenas | Deathmatch (also with mixed bot squads or an adaptive duel ladder), site hold, angle clearing, jiggle-peek and pre-aim drills; a Practice button plays any arena with bots that never shoot |
 | Benchmark | Your benchmark energy and ranks, at novice, intermediate or advanced tier |
 | Tools | Sensitivity converter (360°, monitor distance 0/75/100%), sensitivity finder, system check |
-| Settings | Sub-tabs: Sensitivity (DPI check, profile code), Crosshair, Feedback (hit feedback, game feel), Audio, Overlay, Keys, Training. A search box filters every section; each sub-tab has a reset to defaults. Changes save automatically ("Saved ✔") |
+| Settings | Sub-tabs: Sensitivity (DPI check, profile code), Crosshair, Feedback (hit feedback, game feel), Audio, Overlay (with the UI language: English or Español, see `docs/i18n.md`), Keys, Training. A search box filters every section; each sub-tab has a reset to defaults. Changes save automatically ("Saved ✔") |
 | Coach | The optional AI coach (off until you enable it): pick a provider (OpenAI-compatible such as OpenAI, OpenCode, Ollama or LM Studio; Anthropic; or your own installed CLI), store the API key in the OS keyring, preview exactly what is sent, chat ("Analyse my stats", "Recommend a routine"), then validate, play and save the scenarios it generates (labelled uncalibrated). "Forget everything" wipes its memory. See `docs/coach.md` |
 
 ## Command line

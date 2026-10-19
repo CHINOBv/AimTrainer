@@ -93,6 +93,10 @@ Two of these values are approximate: the Classic's spread and the Guardian/Opera
 
 **Spread model (`session.rs`, used only when `simulate_spread = true`):** spread = first-shot spread + run spread × (how far the speed is between the accuracy threshold and the run speed). This is a linear approximation. It shows why stopping before you shoot matters, but it does not reproduce Riot's internal curve.
 
+| Value | Used as | Confidence | Source |
+|---|---|---|---|
+| All rifles: walk inaccuracy 3, run inaccuracy 6 (patch 9.10; were 2 and 5). Riot gives no unit | Run inaccuracy 6 matches the rifles' `run_spread_deg` = 6°, read as degrees. Walk inaccuracy is not a separate value: walking (≈0.6 × run speed) lands at ≈45% of the way from the accuracy limit to run speed, so the linear model gives ≈2.7° of run spread (≈2.9° with the Vandal's first-shot spread), close to 3 | approximate (the unit and the curve between walk and run are not published) | https://playvalorant.com/en-us/news/game-updates/valorant-patch-notes-9-10/ |
+
 ## Recoil
 
 Used only when a scenario sets `weapon.recoil = true` (`valorant::RecoilProfile`, `scenario/recoil.rs`). Research: `docs/research/recoil.md` (2026-10-17).
