@@ -6,12 +6,24 @@ use super::def::ScenarioDef;
 /// Embedded built-in scenario files as `(file name, TOML source)`.
 pub const SOURCES: &[(&str, &str)] = &[
     (
+        "adjust-track.toml",
+        include_str!("../../../../content/scenarios/adjust-track.toml"),
+    ),
+    (
         "ammo-discipline.toml",
         include_str!("../../../../content/scenarios/ammo-discipline.toml"),
     ),
     (
         "angle-flyers.toml",
         include_str!("../../../../content/scenarios/angle-flyers.toml"),
+    ),
+    (
+        "angle-hold-peek.toml",
+        include_str!("../../../../content/scenarios/angle-hold-peek.toml"),
+    ),
+    (
+        "arc-follow.toml",
+        include_str!("../../../../content/scenarios/arc-follow.toml"),
     ),
     (
         "burst-control.toml",
@@ -98,6 +110,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/dynamic-strafe-heads.toml"),
     ),
     (
+        "fade-track.toml",
+        include_str!("../../../../content/scenarios/fade-track.toml"),
+    ),
+    (
         "flick-headshot.toml",
         include_str!("../../../../content/scenarios/flick-headshot.toml"),
     ),
@@ -108,6 +124,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "fly-switch.toml",
         include_str!("../../../../content/scenarios/fly-switch.toml"),
+    ),
+    (
+        "four-shrink.toml",
+        include_str!("../../../../content/scenarios/four-shrink.toml"),
     ),
     (
         "go-no-go.toml",
@@ -126,6 +146,14 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/jitter-switch.toml"),
     ),
     (
+        "ground-reactive.toml",
+        include_str!("../../../../content/scenarios/ground-reactive.toml"),
+    ),
+    (
+        "head-strafe-track.toml",
+        include_str!("../../../../content/scenarios/head-strafe-track.toml"),
+    ),
+    (
         "long-range-heads.toml",
         include_str!("../../../../content/scenarios/long-range-heads.toml"),
     ),
@@ -138,8 +166,28 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/mini-regen-switch.toml"),
     ),
     (
+        "micro-cluster.toml",
+        include_str!("../../../../content/scenarios/micro-cluster.toml"),
+    ),
+    (
+        "micro-pace.toml",
+        include_str!("../../../../content/scenarios/micro-pace.toml"),
+    ),
+    (
+        "mini-phase.toml",
+        include_str!("../../../../content/scenarios/mini-phase.toml"),
+    ),
+    (
+        "orbit-track.toml",
+        include_str!("../../../../content/scenarios/orbit-track.toml"),
+    ),
+    (
         "peek-reaction.toml",
         include_str!("../../../../content/scenarios/peek-reaction.toml"),
+    ),
+    (
+        "peek-track.toml",
+        include_str!("../../../../content/scenarios/peek-track.toml"),
     ),
     (
         "phase-kill-race.toml",
@@ -202,6 +250,18 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/skeet-arcs.toml"),
     ),
     (
+        "sky-reactive.toml",
+        include_str!("../../../../content/scenarios/sky-reactive.toml"),
+    ),
+    (
+        "smooth-xyz.toml",
+        include_str!("../../../../content/scenarios/smooth-xyz.toml"),
+    ),
+    (
+        "snap-reflex.toml",
+        include_str!("../../../../content/scenarios/snap-reflex.toml"),
+    ),
+    (
         "sound-turn.toml",
         include_str!("../../../../content/scenarios/sound-turn.toml"),
     ),
@@ -248,6 +308,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "tempo-movers.toml",
         include_str!("../../../../content/scenarios/tempo-movers.toml"),
+    ),
+    (
+        "thin-glide.toml",
+        include_str!("../../../../content/scenarios/thin-glide.toml"),
     ),
     (
         "track-close-strafe.toml",

@@ -1,0 +1,22 @@
+# Idea credit: the thin humanoid strafe-tracking VALORANT stability drills of the Voltaic
+# VALORANT playlists. Original scenario: no file, name or value was copied.
+id = "head-strafe-track"
+name = "Head Strafe Track"
+category = "tracking"
+description = """
+Stability tracking. A very thin capsule with a small head does fast, short A/D strafes.
+Head time scores twice body time: stay on the head through every reversal."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "capsule", radius = 0.1, height = 1.5, head = { radius = 0.11, offset = 0.9 } }
+spawn = { kind = "angular", yaw_deg = [-10.0, 10.0], pitch_deg = [0.0, 0.0], distance = [12.0, 16.0] }
+motion = { kind = "strafe", weapon = "vandal", change_secs = [0.15, 0.4], stop_chance = 0.2, max_offset = 1.2 }
+health = inf
+
+[scoring]
+head = 100   # points per second on target
+body = 50

@@ -1,0 +1,18 @@
+# Idea credit: the tight-cluster VALORANT micro drills of the Voltaic VALORANT playlists.
+# Original scenario: no file, name or value was copied.
+id = "micro-cluster"
+name = "Micro Cluster"
+category = "microcorrection"
+description = """
+Micro flicks. Three tiny spheres sit on a tight 3 x 4 grid just above the crosshair.
+Kill them one after another with small, exact corrections."""
+duration_secs = 60
+
+[targets]
+shape = { kind = "sphere", radius = 0.1 }
+spawn = { kind = "angular", yaw_deg = [-4.0, 4.0], pitch_deg = [2.0, 7.0], distance = [10.0, 10.0], grid = { rows = 3, cols = 4 } }
+max_alive = 3
+min_separation_deg = 1.5
+
+[scoring]
+miss_penalty = 15

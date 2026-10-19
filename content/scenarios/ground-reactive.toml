@@ -1,0 +1,21 @@
+# Idea credit: the ground strafing reactive-tracking drills of the Voltaic reactive-tracking slot.
+# Original scenario: no file, name or value was copied.
+id = "ground-reactive"
+name = "Ground Reactive"
+category = "tracking"
+description = """
+Reactive tracking. A capsule strafes on the ground in every direction, left, right, towards and
+away from you, with fast jukes and stops. Hold fire and react to each change instead of predicting."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "capsule", radius = 0.25, height = 1.5 }
+spawn = { kind = "angular", yaw_deg = [-10.0, 10.0], pitch_deg = [0.0, 0.0], distance = [12.0, 14.0] }
+motion = { kind = "dodge", weapon = "vandal", change_secs = [0.2, 0.5], juke_chance = 0.3, stop_chance = 0.2, max_offset = 3.0, depth = { change_secs = [0.3, 0.8], distance = [9.0, 16.0] } }
+health = inf
+
+[scoring]
+body = 100   # points per second on target

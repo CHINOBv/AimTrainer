@@ -1,0 +1,26 @@
+# Idea credit: the peek-tracking VALORANT stability drills of the Voltaic VALORANT playlists.
+# Original scenario: no file, name or value was copied.
+# Approximation: there is no cover. Each capsule appears after a short wait, strafes out and
+# back, and vanishes after 3 s, as if it ducked back behind an angle.
+id = "peek-track"
+name = "Peek Track"
+category = "tracking"
+description = """
+Stability tracking. A capsule peeks out, strafes back and forth and ducks away after 3 s.
+Get on it as it appears and track it until it leaves."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "capsule", radius = 0.3, height = 1.7, head = { radius = 0.14, offset = 0.95 } }
+spawn = { kind = "angular", yaw_deg = [-15.0, 15.0], pitch_deg = [0.0, 0.0], distance = [14.0, 18.0] }
+motion = { kind = "strafe", weapon = "vandal", change_secs = [0.5, 1.0], stop_chance = 0.5, max_offset = 1.5 }
+health = inf
+lifetime_secs = 3.0
+appear_delay_secs = [0.2, 0.5]
+
+[scoring]
+head = 100   # points per second on target
+body = 40

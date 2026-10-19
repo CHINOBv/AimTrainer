@@ -1,0 +1,28 @@
+# Idea credit: the "gauntlet" style tracking drills where the target fades away on its own.
+# Original scenario: no file, name or value was copied.
+# Approximation: the engine has no self-draining health (regen amounts must be positive).
+# Each target instead lives 3 s, and its points per second fade to 10% over that time
+# (scoring.decay), so the score is the damage dealt before it fades. Killing it (1.5 s on
+# target) ends it early and brings the next one sooner.
+id = "fade-track"
+name = "Fade Track"
+category = "tracking"
+description = """
+Tracking under a clock. Each sphere fades out within 3 s, and its value fades with it.
+Get on it at once and stay on it: the points come from the time on target before it is gone."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.3 }
+spawn = { kind = "angular", yaw_deg = [-20.0, 20.0], pitch_deg = [0.0, 12.0], distance = [11.0, 11.0] }
+motion = { kind = "drift", speed = [1.5, 4.0], change_secs = [0.4, 0.9], max_offset = 3.0 }
+health = 1.5
+lifetime_secs = 3.0
+appear_delay_secs = [0.3, 0.6]
+
+[scoring]
+sphere = 100   # points per second on target
+decay = { window_secs = 3.0, floor = 0.1 }
