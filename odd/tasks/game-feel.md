@@ -73,3 +73,16 @@ Rules: game rules stay in `aim_core`/`aim_world`; the app draws and plays only. 
     - the animated countdown also plays before scenarios;
     - the end-of-round hold is 0.8 s in the app run state;
     - arena bloom is movement-only.
+- L4 (2026-10-18) Independent verifier: S1–S4 and S6 pass; S5 was partial on one blocker, now fixed.
+  - **B1:** number keys switched tabs while the restart-key row was recording from a Settings search. Fix: `bare_key_rows_shown` disables number keys on the Keys sub-tab or during any search. RED was observed first (missing function).
+  - The README intensity wording was corrected.
+  - Invariants:
+    - arena stats are byte-identical to baseline over 8 arenas × 3 seeds × 2 play styles;
+    - settings files written by baseline load with identical values;
+    - hit/kill/miss sounds and markers are unchanged at the defaults with `distinct_markers` off;
+    - no effect moves the camera.
+  - Advisories kept:
+    - `distinct_markers` defaults on (a visible change, documented);
+    - round stings are arena-only;
+    - the multi-kill window is duplicated in HUD and audio;
+    - the death screen may flash for one frame in a zero-protection arena.
