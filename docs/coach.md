@@ -1,6 +1,23 @@
 # AI coach
 
-The coach's rules live in `aim_core::coach` (player context, knowledge base, drill generation and the tool registry). Adapters expose them; this page covers the MCP server. The plan and its status are in `odd/tasks/ai-coach.md`.
+The coach's rules live in `aim_core::coach` (player context, knowledge base, drill generation and the tool registry). Adapters expose them: the trainer's Coach tab and the MCP server. The plan and its status are in `odd/tasks/ai-coach.md`.
+
+## In the trainer (Coach tab)
+
+The Coach tab (key 9) is off until you tick **Enable the AI coach**. While it is off, nothing is sent anywhere.
+
+1. **Pick a provider** under *Provider*:
+   - **OpenAI-compatible:** click a base URL preset (OpenAI, OpenCode pay-as-you-go, Ollama, LM Studio) or type one, then type a model id.
+   - **Anthropic:** type a model id; the base URL defaults to `https://api.anthropic.com`.
+   - **CLI delegate:** click Codex, Claude Code or OpenCode to use your own installed, signed-in CLI. It is text only: it cannot call the tools, so it never sees your stats summary.
+2. **Add a key** (not needed for Ollama, LM Studio or a CLI). Paste it and click **Store in keyring**. The field is cleared at once and the key is never shown again; the page only says "Key stored in OS keyring" or, when you name an environment variable in *Key env var*, "Key from env VAR". **Forget key** removes it from the keyring. Each provider has its own key, and each OpenAI-compatible base URL too.
+3. **Test connection** sends a one-line prompt without tools and shows the reply or the error.
+4. **Preview what is sent** shows the exact `CoachContext::to_prompt_json()` text the model receives when it calls `list_stats`. It holds aggregates only (skill findings, flick directions, miss compass, pace, potential score, benchmark energy, recent runs, missions, readiness, fatigue), built from your history and your newest 20 replays. **Refresh** rebuilds it; it also rebuilds after each new run.
+5. **Chat.** Type a message, or click **Analyse my stats** or **Recommend a routine**. Each answer lists the tools the coach used and any that failed. **Cancel** stops waiting (a request already sent still runs to its timeout in the background). **New chat** clears the conversation; it is never saved to disk.
+6. **Generated scenarios** appear as cards. **Validate** re-checks the definition and the playability gate (a simulated player must score). **Play** starts it at once. **Save** writes `<id>.toml` to your custom scenarios folder with an "Uncalibrated" header comment; an existing file is never replaced, and the scenario appears under Scenarios after a restart.
+7. **Memory.** *Forget everything* (asks for confirmation) deletes every note in `coach.db`.
+
+Every request, keyring access, replay analysis and file write runs on a background thread; the page shows a spinner and never blocks the frame. The settings are the `[coach]` table of `settings.toml` (see below). A `[coach]` table that fails to load (for example one with an `api_key` line) resets only the coach, switched off, and the next save removes the offending line.
 
 ## MCP server (`aimtrainer-mcp`)
 
@@ -190,7 +207,7 @@ Keys never go into settings files: `CoachConfig` has no key field, and a setting
 
 - The coach is off until the player enables it and picks a provider.
 - Only what the core puts in `CoachContext` is sent: aggregates such as skill scores, flick directions, the miss compass, pace, recent run summaries and missions. Raw traces, file paths, account names and machine names are never sent.
-- The S5 settings page will show a preview of exactly what is sent.
+- The Coach tab's *Preview what is sent* shows exactly what is sent.
 - Local servers (Ollama, LM Studio) keep everything on the machine.
 - Plain `http://` is accepted only for `localhost`, `127.0.0.1` and `[::1]`. Any other host must use `https://`.
 

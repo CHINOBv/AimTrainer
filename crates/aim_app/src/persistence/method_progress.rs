@@ -131,6 +131,7 @@ mod tests {
             routines_dir: dir.join("routines"),
             benchmarks_dir: dir.join("benchmarks"),
             history_file: dir.join("history.csv"),
+            coach_memory_file: dir.join("coach.db"),
         };
         let lib = aim_core::scenario::builtin::all();
         let routine = aim_core::training::routine::builtin::all()

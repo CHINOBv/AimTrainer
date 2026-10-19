@@ -75,7 +75,7 @@ On Windows, install Rust with rustup and run `cargo build --release`. The binary
 | Tune target size, distance and speed (scenario pause menu; tuned runs are saved apart and never move the adaptive level or the benchmark) | Size / Distance / Target speed −/+ (10% steps, 50–200%), then Apply and restart; Reset to scenario defaults |
 | Retry or next routine run (on the results screen) | Space |
 
-The menu tabs (keys 1–8 switch tabs while no text field has focus):
+The menu tabs (keys 1–9 switch tabs while no text field has focus):
 
 | Tab | What it holds |
 |---|---|
@@ -87,6 +87,7 @@ The menu tabs (keys 1–8 switch tabs while no text field has focus):
 | Benchmark | Your benchmark energy and ranks, at novice, intermediate or advanced tier |
 | Tools | Sensitivity converter (360°, monitor distance 0/75/100%), sensitivity finder, system check |
 | Settings | Sub-tabs: Sensitivity (DPI check, profile code), Crosshair, Feedback (hit feedback, game feel), Audio, Overlay, Keys, Training. A search box filters every section; each sub-tab has a reset to defaults. Changes save automatically ("Saved ✔") |
+| Coach | The optional AI coach (off until you enable it): pick a provider (OpenAI-compatible such as OpenAI, OpenCode, Ollama or LM Studio; Anthropic; or your own installed CLI), store the API key in the OS keyring, preview exactly what is sent, chat ("Analyse my stats", "Recommend a routine"), then validate, play and save the scenarios it generates (labelled uncalibrated). "Forget everything" wipes its memory. See `docs/coach.md` |
 
 ## Command line
 
