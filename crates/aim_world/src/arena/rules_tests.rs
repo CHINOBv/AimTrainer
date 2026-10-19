@@ -9,7 +9,7 @@ use aim_core::movement::MoveInput;
 use aim_core::scenario::FrameInput;
 
 /// One veteran bot that never shoots, with `extra` TOML appended to `[mode]`.
-fn ruled(extra: &str) -> ArenaDef {
+pub(super) fn ruled(extra: &str) -> ArenaDef {
     ArenaDef::load(&format!(
         r#"
 id = "duel"
@@ -32,7 +32,7 @@ bots_shoot_back = false
 
 /// Shoots the bot's chest on each of the `at` frames (1-based), idles otherwise. Records
 /// the living bot's feet and whether it is in the player's sight, per frame.
-fn shoot_at(s: &mut ArenaSession, at: &[usize], secs: f32) -> (Vec<Vec3>, Vec<bool>) {
+pub(super) fn shoot_at(s: &mut ArenaSession, at: &[usize], secs: f32) -> (Vec<Vec3>, Vec<bool>) {
     let (mut feet, mut seen) = (Vec::new(), Vec::new());
     let mut frame = 0;
     run(s, secs, |s| {
@@ -54,7 +54,7 @@ fn shoot_at(s: &mut ArenaSession, at: &[usize], secs: f32) -> (Vec<Vec3>, Vec<bo
     (feet, seen)
 }
 
-fn max_abs_x(feet: &[Vec3]) -> f32 {
+pub(super) fn max_abs_x(feet: &[Vec3]) -> f32 {
     feet.iter().fold(0.0f32, |m, p| m.max(p.x.abs()))
 }
 
@@ -145,7 +145,7 @@ fn a_speed_multiplier_slows_the_bot() {
 
 /// The open room with a head-high box east of the player and two waypoints on the west
 /// side: a player who walks east to x = 8 is hidden from the bot spawn by the box.
-fn hide_room() -> MapDef {
+pub(super) fn hide_room() -> MapDef {
     MapDef::load(
         r#"
 id = "duel-room"
@@ -186,7 +186,7 @@ links = ["south"]
 
 /// Waits 2 s, walks east for 1.6 s and stands still. Returns the bot's feet and the
 /// player's feet per frame.
-fn walk_east_and_hide(rules: &str) -> (Vec<Vec3>, Vec<Vec3>) {
+pub(super) fn walk_east_and_hide(rules: &str) -> (Vec<Vec3>, Vec<Vec3>) {
     let mut s = ArenaSession::new(ruled(rules), hide_room(), 3).unwrap();
     let (mut bot, mut player) = (Vec::new(), Vec::new());
     let mut frame = 0;

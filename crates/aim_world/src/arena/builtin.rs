@@ -21,6 +21,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/arenas/corridor-jiggle.toml"),
     ),
     (
+        "corridor-ladder.toml",
+        include_str!("../../../../content/arenas/corridor-ladder.toml"),
+    ),
+    (
         "corridor-reactive.toml",
         include_str!("../../../../content/arenas/corridor-reactive.toml"),
     ),
@@ -35,6 +39,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "yard-deathmatch.toml",
         include_str!("../../../../content/arenas/yard-deathmatch.toml"),
+    ),
+    (
+        "yard-squad.toml",
+        include_str!("../../../../content/arenas/yard-squad.toml"),
     ),
 ];
 

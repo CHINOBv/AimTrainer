@@ -213,6 +213,19 @@ behavior = "retreat"          # hold | peek | strafe | retreat (optional)
 speed_multiplier = 1.0        # optional, (0, 2]: scales run speed and acceleration
 ```
 
+```toml
+[[mode.squad]]                # optional: bot personalities, one entry per group
+role = "pusher"               # roamer | pusher | angle_holder | jiggle_peeker
+skill = "veteran"             # optional: this group's aimer preset, default bot_skill
+count = 1                     # optional, default 1; the counts must add up to `bots`
+
+[mode.adaptive]               # optional: the bots' skill follows the player's streaks
+min_skill = "recruit"         # weakest preset it steps down to
+max_skill = "elite"           # strongest preset it steps up to (bot_skill must lie in between)
+kills_to_step_up = 3          # optional, default 3: kills in a row without dying
+deaths_to_step_down = 2       # optional, default 2: deaths in a row without a kill
+```
+
 Rule conditions (all optional; at most `MAX_RULES` = 16 rules; not allowed with `[mode.objective]`):
 
 | Condition | Holds when |
@@ -230,6 +243,19 @@ Rule conditions (all optional; at most `MAX_RULES` = 16 rules; not allowed with 
 | `peek` | Walks along `MapDef::path` to where it last noticed the player, or was shot from, until it sees them and stops to fight. On arrival it forgets the spot and roams. |
 | `strafe` | Strafes (ADAD) while it fights, as with `bot_strafe`, instead of falling back when shot. |
 | `retreat` | Falls back to the nearest cover spot (`MapDef::cover_from`) out of sight of where it last knew the player to be, holding its fire while it runs, and stays hidden there until it sees the player. With no cover within `RETREAT_MAX_ROUTE_M` it holds its ground. |
+
+Squad roles (not allowed with `[mode.objective]`) give each bot slot a personality. Slots are filled in entry order and keep their role and skill when the bot respawns. A role is a fixed set of the rules above, checked after the arena's own `[[mode.rules]]`, plus strafing:
+
+| Role | What the bot does |
+|---|---|
+| `roamer` | The plain roaming bot of the bot model below. |
+| `pusher` | While it cannot see the player it walks to where it last noticed them or was shot from (`peek`); while it can, it strafes (`strafe`) and never falls back. Before it has met the player it roams. |
+| `angle_holder` | Holds the angle from its spawn without moving (`hold`); under half health it falls back to cover and stays hidden until it sees the player (`retreat`). |
+| `jiggle_peeker` | Roams, strafes (ADAD) in every fight as with `bot_strafe`, falls back to cover when shot and re-peeks. |
+
+A squad entry's `skill` replaces `bot_skill` for its bots. An arena without `[[mode.squad]]` behaves exactly as before.
+
+The adaptive ladder starts the bots at `bot_skill`. Every `kills_to_step_up` kills in a row without a death step the bots up one preset (recruit, contender, veteran, elite), never above `max_skill`; every `deaths_to_step_down` deaths in a row without a kill step them down one, never below `min_skill`. A kill resets the death count and a death resets the kill count; a step also starts its count again. The new preset applies to the next flick every bot plans, except bots with their own squad `skill`. It only counts kills and deaths, so it draws no random numbers and the run stays deterministic. `ArenaSession::adaptive()` reports the current and peak preset and the steps taken; the HUD shows "Bots: veteran (peak elite)" and the results notes summarize the climb. The streak lengths are design choices, not VALORANT values. The death recap names the killer's role.
 
 A rule without `behavior` only changes the speed. When no rule holds, the bot behaves as described in the bot model below. Rules only read what the bot could know (its health, its own sight, the last place it saw the player), never the player's position through walls; distance and player speed are a simplification, read directly. Evaluating rules draws no random numbers.
 
@@ -280,6 +306,23 @@ Once the player first sees a bot life, a clock starts. If the bot is still alive
 
 At the first frame each bot life becomes visible to the player, the arena records the angle in degrees between the player's view direction and the bot's head (`ArenaStats::crosshair_errors_deg`); `ArenaStats::median_crosshair_error_deg` summarizes it. A player who pre-aims where the head appears scores close to 0°; one who looks elsewhere scores tens of degrees. It trains pre-aim and head-level placement (roadmap Phase 7). The vertical part of the same error, how far the crosshair was above or below head level in degrees of pitch, is recorded in `ArenaStats::head_level_errors_deg` (`median_head_level_error_deg`). In an angle clear with `pre_aim_tolerance_deg`, each bot life first seen within that many degrees counts in `ArenaStats::pre_aimed`. A perfectly pre-aimed angle still measures a few degrees, because the head is first seen while only partly out of cover (about 3° on the `angles-lab` doorway), so 5° is a sensible tolerance.
 
+### Death recap
+
+Every death records why it happened (`ArenaStats::death_recaps`, `ArenaSession::last_death()`). Each bot keeps a log of the current player life, cleared at every respawn: when it first came into the player's sight and the crosshair error at that moment, when it first noticed the player, the player's first shot after seeing it, the player's shots while it was in sight (and how many were moving shots), and the damage both ways. When that bot kills the player the log becomes a `DeathRecap` with the killer's id and skill, the distance, whether the player saw it first (the same frame counts as first), those numbers and one main `DeathCause`, the first of these that applies:
+
+| Cause | When |
+|---|---|
+| `Unseen` | The killer was never in the player's line of sight this life. |
+| `Deadline` | The killing blow was a shoot-back deadline's sure shot. |
+| `MovingShots` | More than half the player's shots during the fight were moving shots. |
+| `Placement` | The crosshair was at least `RECAP_PLACEMENT_DEG` (10°) from the killer's head when it appeared. |
+| `SlowShot` | The first shot came at least `RECAP_SLOW_SHOT_SECS` (0.5 s) after first sight, or never. |
+| `Outaimed` | None of the above: placed, quick and still, and the bot still won the duel. |
+
+Both thresholds are design choices, not VALORANT values: 10° is twice the pre-aim tolerance, and 0.5 s is a human visual reaction (about 0.25 s) plus a short flick. Sight is line of sight to the head, as for the crosshair placement metric. Recording draws no random numbers, so runs are unchanged.
+
+While the player is respawn-protected, the HUD shows a recap card under the death screen: the cause as one line with its number, and three drawn icons (saw first or seen first, the crosshair error, the first-shot time or the moving shots). The results notes name the most common cause ("Most deaths: crosshair placement (3 of 5)"). The card drawing has no automated test.
+
 ### Live coaching overlay
 
 The **Live coaching overlay** checkbox on the Arenas tab (off by default, saved in settings as `arena_coaching`) shows, while an arena runs, what the post-run crosshair placement metric measures, live. `ArenaSession::coaching()` computes the values each frame as a pure read (it changes nothing and draws no random number); the app only draws them:
@@ -313,3 +356,5 @@ Corners come from the box geometry only, so a corner counts even if no bot would
 | `outpost-site-hold` | `signal-outpost` | Site hold: 6 contender attackers, 2 at a time, strafing and shooting back; capture 3 s within 2.5 m; 90 s. |
 | `lanes-deathmatch` | `freight-lanes` | Deathmatch, 3 contender bots that strafe and shoot back, 120 s. |
 | `corridor-reactive` | `duel-corridor` | Reactive duels: 2 contender bots that shoot back. They copy (35%) or oppose (35%) the player's strafe, juke when the crosshair is within 4° (50%) or the player fires; they hold long angles beyond 20 m, strafe for 1.5 s after a hit and retreat under half health. Shoot-back deadline 1.5 s (40 damage, −25 points). 90 s. |
+| `yard-squad` | `training-yard` | Mixed-squad free-for-all, 5 bots that shoot back: 2 contender roamers, a veteran pusher, a contender angle holder and a contender jiggle peeker. 120 s. |
+| `corridor-ladder` | `duel-corridor` | Adaptive duel ladder: 2 bots that strafe and shoot back, starting at contender; 3 kills in a row step them up and 2 deaths in a row step them down, between recruit and elite. 120 s. |

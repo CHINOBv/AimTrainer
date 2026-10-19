@@ -6,6 +6,8 @@ use super::behavior::{
     PLAYER_STRAFE_MIN_SPEED, PeekSense, Phase, Push, Retreat, RetreatSense, Strafe, react_strafe,
 };
 use super::def::{BehaviorRule, BotBehavior, ReactiveBots};
+use super::recap::DuelLog;
+use super::squad::BotRole;
 use crate::map::{AngleMarker, DEFAULT_PLAYER_RADIUS, MapDef};
 use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::{Range, Vec3, ViewAngles, angle_between_deg};
@@ -159,6 +161,14 @@ pub(crate) struct Bot {
     /// Eye of the player where the bot last noticed them or was shot from: where a
     /// peeking bot walks and what a retreating bot hides from.
     pub last_known_player: Option<Vec3>,
+    /// What this bot and the player did to each other during the current player life,
+    /// for the death recap.
+    pub duel: DuelLog,
+    /// The squad role, when the arena gives bots roles: extra behavior rules after the
+    /// arena's own, and strafing.
+    pub role: Option<BotRole>,
+    /// The bot's own aimer preset (a squad entry's `skill`); `None` uses the arena's.
+    pub aimer: Option<AimerProfile>,
 }
 
 impl Bot {
@@ -186,6 +196,9 @@ impl Bot {
             spawned_at: 0.0,
             last_hit_at: f32::NEG_INFINITY,
             last_known_player: None,
+            duel: DuelLog::default(),
+            role: None,
+            aimer: None,
         }
     }
 
@@ -221,7 +234,9 @@ impl Bot {
         let strafing = match behavior {
             Some(BotBehavior::Hold) => false,
             Some(BotBehavior::Strafe) => true,
-            _ => ctx.bot_strafe || ctx.reactive.is_some(),
+            _ => {
+                ctx.bot_strafe || ctx.reactive.is_some() || self.role.is_some_and(BotRole::strafes)
+            }
         };
         self.careful_fire = strafing;
         let strafe = if strafing {
@@ -313,8 +328,9 @@ impl Bot {
         }
     }
 
-    /// The first behavior rule whose conditions all hold this frame. Only roaming bots
-    /// follow rules (validation keeps them away from site attackers).
+    /// The first behavior rule whose conditions all hold this frame: the arena's rules,
+    /// then the squad role's. Only roaming bots follow rules (validation keeps them away
+    /// from site attackers).
     fn active_rule<'r>(&self, ctx: &Ctx<'r>, sees: bool) -> Option<&'r BehaviorRule> {
         if !matches!(self.brain, Brain::Roam { .. }) {
             return None;
@@ -333,7 +349,8 @@ impl Bot {
                 && w.player_speed_above.is_none_or(|v| ctx.player_speed > v)
                 && w.player_speed_below.is_none_or(|v| ctx.player_speed < v)
         };
-        ctx.rules.iter().find(|r| holds(r))
+        let role: &'r [BehaviorRule] = self.role.map_or(&[], BotRole::rules);
+        ctx.rules.iter().chain(role).find(|r| holds(r))
     }
 
     /// Plan a juke one reaction time from now, unless one is already pending.

@@ -8,6 +8,7 @@ pub mod break_banner;
 pub mod coach_panel;
 pub mod coaching_overlay;
 pub mod damage_indicator;
+pub mod death_recap;
 pub mod death_screen;
 pub mod decision_panel;
 pub mod dpi_check;

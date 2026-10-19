@@ -3,7 +3,7 @@
 # deathmatch-style play at head level; this routine puts both in one session.
 id = "aim-and-duel"
 name = "Aim and Duel"
-description = "Ten minutes of clicking and switching drills, then two shortened deathmatches and an angle-clearing run on original maps."
+description = "Ten minutes of clicking and switching drills, then two shortened deathmatches, a mixed-squad deathmatch and an angle-clearing run on original maps."
 
 [[blocks]]
 scenario = "track-precise"
@@ -25,6 +25,12 @@ arena = "yard-deathmatch"
 runs = 2
 duration_secs = 90.0
 note = "Now with bots: pre-aim head height, take first-shot duels."
+
+[[blocks]]
+arena = "yard-squad"
+runs = 1
+duration_secs = 90.0
+note = "Mixed personalities: read who you fight and change your peek."
 
 [[blocks]]
 arena = "angles-lab-clear"

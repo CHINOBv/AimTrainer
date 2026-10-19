@@ -12,12 +12,17 @@ mod behavior;
 mod bot;
 pub mod builtin;
 mod coaching;
+#[cfg(test)]
+mod deathmatch_tests;
 mod def;
 #[cfg(test)]
 mod duel_tests;
+mod ladder;
+mod recap;
 #[cfg(test)]
 mod rules_tests;
 mod session;
+mod squad;
 #[cfg(test)]
 mod tests;
 
@@ -33,8 +38,11 @@ pub use def::{
     PRACTICE_SUFFIX, ReactiveBots, RuleConditions, ShootBackDeadline, SiteObjective, bot_profile,
     split_practice,
 };
+pub use ladder::{AdaptiveLadder, AdaptiveStatus};
+pub use recap::{DeathCause, DeathRecap, RECAP_PLACEMENT_DEG, RECAP_SLOW_SHOT_SECS};
 pub use session::{
     ArenaEvent, ArenaSession, ArenaStats, BOT_WEAPON, BotView, DEATH_POINTS, HEADSHOT_BONUS,
     KILL_POINTS, ObjectiveStatus, PLAYER_HEALTH, PRE_AIM_POINTS, RESPAWN_GRACE_SECS,
     SITE_HELD_BONUS,
 };
+pub use squad::{BotRole, SquadEntry};
