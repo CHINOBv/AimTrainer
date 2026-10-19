@@ -3,6 +3,7 @@
 //! [`RunReport`] is the plain data the panel shows, built once per result from the core
 //! analysis; the panel itself only lays it out and turns "practice" clicks into actions.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::ui::UiAction;
 use crate::ui::atoms::{GOOD, WARN};
 use crate::ui::molecules::gauge::GaugeModel;
@@ -94,7 +95,7 @@ impl RunReport {
         let title = if let Some(f) = flicks {
             push(
                 "Flicks",
-                Some(format!("{} ({} hit)", f.flicks, pct(f.hit_rate))),
+                Some(tr_fmt("{} ({} hit)", &[&f.flicks, &pct(f.hit_rate)])),
             );
             push("Reaction (median)", f.median_reaction_secs.map(ms));
             push("Movement time (median)", f.median_movement_secs.map(ms));
@@ -132,16 +133,16 @@ impl RunReport {
             push(
                 "Behind the target",
                 t.lag_ratio.map(|r| {
-                    let side = t
-                        .mean_along_error_deg
-                        .map_or(String::new(), |e| format!(" (mean {e:+.2}°)"));
+                    let side = t.mean_along_error_deg.map_or(String::new(), |e| {
+                        tr_fmt(" (mean {}°)", &[&format!("{e:+.2}")])
+                    });
                     format!("{}{side}", pct(r))
                 }),
             );
             push(
                 "Reaction to direction changes",
                 t.median_reversal_response_secs
-                    .map(|s| format!("{} over {} reversals", ms(s), t.reversals)),
+                    .map(|s| tr_fmt("{} over {} reversals", &[&ms(s), &t.reversals])),
             );
             push(
                 "Speed match",
@@ -150,7 +151,7 @@ impl RunReport {
                         .speed_under_ratio
                         .zip(t.speed_over_ratio)
                         .map_or(String::new(), |(u, o)| {
-                            format!(" (too slow {} / too fast {})", pct(u), pct(o))
+                            tr_fmt(" (too slow {} / too fast {})", &[&pct(u), &pct(o)])
                         });
                     format!("{}{split}", pct(m))
                 }),
@@ -171,11 +172,11 @@ impl RunReport {
             .map(|(f, r)| Advice {
                 headline: format!("{} {}", f.metric.label(), f.metric.format(f.value)),
                 explanation: f.explanation.clone(),
-                tip: r.tip.clone(),
+                tip: tr(&r.tip).to_owned(),
                 practice: r
                     .scenario_ids
                     .iter()
-                    .filter_map(|id| name_of(id).map(|n| (id.clone(), n)))
+                    .filter_map(|id| name_of(id).map(|n| (id.clone(), tr(&n).to_owned())))
                     .collect(),
             })
             .collect();
@@ -212,30 +213,35 @@ impl RunReport {
 
 /// "412 ms (IQR 150 ms, 12 kills)": the median time to kill and how much it varies.
 pub fn ttk_spread_text(s: &TtkSpread) -> String {
-    format!(
+    tr_fmt(
         "{} (IQR {}, {} kills)",
-        ms(s.median_secs),
-        ms(s.iqr_secs()),
-        s.kills
+        &[&ms(s.median_secs), &ms(s.iqr_secs()), &s.kills],
     )
 }
 
 /// "75% (30 of 40)": damage dealt against damage available.
 pub fn damage_efficiency_text(e: &DamageEfficiency) -> String {
-    format!("{} ({:.0} of {:.0})", pct(e.ratio()), e.done, e.possible)
+    tr_fmt(
+        "{} ({} of {})",
+        &[
+            &pct(e.ratio()),
+            &format!("{:.0}", e.done),
+            &format!("{:.0}", e.possible),
+        ],
+    )
 }
 
 /// Draw the report. Returns an action when a "practice" button is clicked.
 pub fn analysis_panel(ui: &mut egui::Ui, report: &RunReport) -> Option<UiAction> {
     let mut action = None;
-    egui::CollapsingHeader::new(report.title)
+    egui::CollapsingHeader::new(tr(report.title))
         .default_open(true)
         .show(ui, |ui| {
             egui::Grid::new("analysis_metrics")
                 .num_columns(2)
                 .show(ui, |ui| {
                     for (label, value) in &report.metrics {
-                        stat_row(ui, label, value.as_str());
+                        stat_row(ui, tr(label), value.as_str());
                     }
                 });
             for s in &report.strengths {
@@ -247,19 +253,21 @@ pub fn analysis_panel(ui: &mut egui::Ui, report: &RunReport) -> Option<UiAction>
                 ui.label(a.tip.as_str());
                 ui.horizontal_wrapped(|ui| {
                     for (id, name) in &a.practice {
-                        if ui.small_button(format!("Practice: {name}")).clicked() {
+                        if ui.small_button(tr_fmt("Practice: {}", &[name])).clicked() {
                             action = Some(UiAction::StartScenario(id.clone()));
                         }
                     }
                 });
             }
             if report.strengths.is_empty() && report.advice.is_empty() {
-                ui.small("No metric crossed a threshold in this run.");
+                ui.small(tr("No metric crossed a threshold in this run."));
             }
             if let Some(grid) = &report.directions {
                 flick_directions(ui, grid);
             }
-            ui.small("Thresholds are provisional until calibrated on player data.");
+            ui.small(tr(
+                "Thresholds are provisional until calibrated on player data.",
+            ));
         });
     if let Some(pace) = &report.pace {
         pace_panel(ui, pace);

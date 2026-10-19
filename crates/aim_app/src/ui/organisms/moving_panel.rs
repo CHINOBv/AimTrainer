@@ -5,6 +5,7 @@
 //! it out. The rule that judges these numbers is shown with the other findings in the
 //! analysis panel.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::ui::molecules::stat_row;
 use crate::ui::organisms::analysis_panel::{ms, pct};
 use aim_core::analytics::MovingAnalysis;
@@ -41,11 +42,13 @@ impl MovingReport {
         if let Some(share) = s.counter_strafe_share {
             rows.push((
                 "Stopped before firing after moving",
-                format!(
+                tr_fmt(
                     "{} of {} ({})",
-                    s.counter_strafed_shots,
-                    s.after_movement_shots,
-                    pct(share)
+                    &[
+                        &s.counter_strafed_shots,
+                        &s.after_movement_shots,
+                        &pct(share),
+                    ],
                 ),
             ));
         }
@@ -54,9 +57,12 @@ impl MovingReport {
         }
         Self {
             rows,
-            definition: format!(
-                "Moving = above {limit:.2} m/s (the accuracy limit). After moving = moving within {:.0} ms before the shot.",
-                AFTER_MOVEMENT_WINDOW_SECS * 1000.0
+            definition: tr_fmt(
+                "Moving = above {} m/s (the accuracy limit). After moving = moving within {} ms before the shot.",
+                &[
+                    &format!("{limit:.2}"),
+                    &format!("{:.0}", AFTER_MOVEMENT_WINDOW_SECS * 1000.0),
+                ],
             ),
         }
     }
@@ -64,14 +70,14 @@ impl MovingReport {
 
 /// Draw the report.
 pub fn moving_panel(ui: &mut egui::Ui, report: &MovingReport) {
-    egui::CollapsingHeader::new("Firing while moving")
+    egui::CollapsingHeader::new(tr("Firing while moving"))
         .default_open(true)
         .show(ui, |ui| {
             egui::Grid::new("moving_metrics")
                 .num_columns(2)
                 .show(ui, |ui| {
                     for (label, value) in &report.rows {
-                        stat_row(ui, label, value.as_str());
+                        stat_row(ui, tr(label), value.as_str());
                     }
                 });
             ui.small(report.definition.as_str());

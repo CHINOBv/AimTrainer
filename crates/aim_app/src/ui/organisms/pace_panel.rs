@@ -1,6 +1,7 @@
 //! Pace and stamina section of the run analysis: the rate per time window, the best and
 //! worst window, and the start and stamina flags with the threshold behind each.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::ui::atoms::{GOOD, WARN};
 use crate::ui::molecules::stat_row;
 use aim_core::analytics::pace::{
@@ -73,19 +74,17 @@ impl PaceReport {
             if pace.slow_start() {
                 flags.push(PaceFlag {
                     good: false,
-                    text: format!(
+                    text: tr_fmt(
                         "Slow start: opening pace {} of the rest of the run (below the {} threshold).",
-                        pct(r),
-                        pct(SLOW_START_RATIO)
+                        &[&pct(r), &pct(SLOW_START_RATIO)],
                     ),
                 });
             } else if pace.strong_start() {
                 flags.push(PaceFlag {
                     good: true,
-                    text: format!(
+                    text: tr_fmt(
                         "Strong start: opening pace {} of the rest of the run (above the {} threshold).",
-                        pct(r),
-                        pct(STRONG_START_RATIO)
+                        &[&pct(r), &pct(STRONG_START_RATIO)],
                     ),
                 });
             }
@@ -93,10 +92,9 @@ impl PaceReport {
         if let Some(r) = pace.stamina_ratio().filter(|_| pace.stamina_drop()) {
             flags.push(PaceFlag {
                 good: false,
-                text: format!(
+                text: tr_fmt(
                     "Stamina drop: late pace {} of the early run (below the {} threshold).",
-                    pct(r),
-                    pct(STAMINA_DROP_RATIO)
+                    &[&pct(r), &pct(STAMINA_DROP_RATIO)],
                 ),
             });
         }
@@ -110,21 +108,21 @@ impl PaceReport {
 
 /// Draw the pace section.
 pub fn pace_panel(ui: &mut egui::Ui, report: &PaceReport) {
-    egui::CollapsingHeader::new(TITLE)
+    egui::CollapsingHeader::new(tr(TITLE))
         .default_open(true)
         .show(ui, |ui| {
             egui::Grid::new("pace_metrics")
                 .num_columns(2)
                 .show(ui, |ui| {
                     for (label, value) in &report.rows {
-                        stat_row(ui, label, value.as_str());
+                        stat_row(ui, tr(label), value.as_str());
                     }
                 });
             for f in &report.flags {
                 ui.colored_label(if f.good { GOOD } else { WARN }, &f.text);
             }
             if report.flags.is_empty() {
-                ui.small(EVEN);
+                ui.small(tr(EVEN));
             }
         });
 }

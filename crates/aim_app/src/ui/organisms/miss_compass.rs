@@ -4,6 +4,7 @@
 //! [`MissCompassGrid`] is plain text built from the core's
 //! [`MissCompass`](aim_core::analytics::miss_compass::MissCompass); the view only lays it out.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::ui::atoms::WARN;
 use aim_core::analytics::miss_compass::{Compass, MissCompass};
 use bevy_egui::egui;
@@ -70,18 +71,16 @@ impl MissCompassGrid {
             busiest,
             counts,
             busiest_wedges,
-            split_note: format!(
+            split_note: tr_fmt(
                 "Above {} · below {} of {} misses",
-                compass.above(),
-                compass.below(),
-                compass.misses()
+                &[&compass.above(), &compass.below(), &compass.misses()],
             ),
         }
     }
 }
 
 pub fn miss_compass(ui: &mut egui::Ui, grid: &MissCompassGrid) {
-    egui::CollapsingHeader::new(TITLE)
+    egui::CollapsingHeader::new(tr(TITLE))
         .default_open(true)
         .show(ui, |ui| {
             egui::Grid::new("miss_compass")
@@ -100,7 +99,7 @@ pub fn miss_compass(ui: &mut egui::Ui, grid: &MissCompassGrid) {
                     }
                 });
             ui.label(grid.split_note.as_str());
-            ui.small(HINT);
+            ui.small(tr(HINT));
         });
 }
 
