@@ -25,7 +25,7 @@ Branches: `feat/movement-space` (done inline), then one per unit in `../CustomAi
 | ID | Specs | Route | Status | Commit |
 |---|---|---|---|---|
 | T1 | S2 | inline | done | d9ea9d6 |
-| T2 | S1, S3, S4 | delegated (parallel writer, worktree `movement-drills`) | pending | |
+| T2 | S1, S3, S4 | delegated (parallel writer, worktree `movement-drills`) | done (playtest pending) | a652747, 5622ee7 |
 | T3 | S5 | delegated (parallel writer, worktree `movement-lab`) | pending | |
 | T4 | S6 | delegated (parallel writer, worktree `ai-debrief`) | pending | |
 | T5 | S7 foundation | delegated (parallel writer, worktree `i18n-core`) | pending | |
@@ -42,3 +42,4 @@ Route evidence: T2-T5 are independent units with disjoint main surfaces, each se
 - L4: AI research. Grounding: send a byte-capped digest with stable metric keys; require citations; validate numbers, ids and lengths deterministically; no silent retries. Reuse `ChatModel::complete(messages, &[])`, `Job<T>` and `model(config)`; cache per `ResultKey`. `Mistake.player/corrected` are raw paths and must not be sent.
 - L5: i18n map. ~880 UI literals and ~290 `format!` in `aim_app/src/ui`; `'static` label tables (`TABS`, `SettingsTab::ALL`, `rows.section`); view models hold preformatted text; core builds `Finding.explanation`, `Mistake.tip`, `Metric::label()`; content TOML has names/descriptions/notes; ~340 exact-English assertions; `Settings` uses struct-level `#[serde(default)]`; no i18n crate; egui default fonts likely cover Latin-1.
 - L6 (parent): S2 done in d9ea9d6, reviewed and approved.
+- L7 (2026-10-19, T2 writer): New blocks `scoring.stop_window = { secs, bonus }` (bonus per hit fired while accurate within `secs` of the last moving frame; needs `player.movement` and click fire) and `targets.spider = { ring_deg }` (alternating centre/rim spawns; needs `max_alive = 1`), RED→GREEN through `Session`, off by default with no RNG draws, PINNED sim results unchanged (a652747). Eleven scenarios: S1 `stutter-ladder`, `mirror-duel`, `head-rail-run`, `depth-brake`, `crouch-duel`, `flinch-stop`, `spread-gate`; S3 `burst-strafe` (recoil + `burst_bonus` + stop window), `squad-strafe` (three strafing/dodging agents) plus the moving enemies of `mirror-duel`/`crouch-duel`; S4 `spider-web` (standing) and `spider-strafe` (world-fixed centre, stop bonus 60 > hit 40). Routine `movement-builder` (≈23 min). Patch 9.10 row added to `valorant-mechanics.md` (run 6 = `run_spread_deg`; walk 3 ≈ linear model 2.7–2.9°, approximate). Calibrate: all eleven recruit < contender < veteran < elite, contender accuracy 0.63–0.81; the simulated aimer never moves, so movement scoring is unmeasured (5622ee7). Mouse/movement feel needs a playtest.
