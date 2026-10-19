@@ -95,6 +95,9 @@ struct Weave {
     form: WaveForm,
     /// Position in the cycle, in cycles.
     phase: f32,
+    /// Height of the line it weaves around, m. The height is set from it each frame, so
+    /// a crest or trough cut by the floor clearance never shifts the line.
+    centre_y: f32,
 }
 
 /// The chances and timings a [`Motion::Dodge`] target decides with.
@@ -355,12 +358,17 @@ impl MotionState {
                 // Speed tuning plays the same path faster: lateral speed and frequency × k.
                 if now >= self.next_change_at {
                     let side = rng.sign();
+                    let speed = rng.in_range(*speed) * speed_k * side;
+                    let amplitude = rng.in_range(*amplitude);
+                    let frequency_hz = rng.in_range(*frequency_hz) * speed_k;
+                    let phase = rng.next_f32();
                     self.weave = Some(Weave {
-                        speed: rng.in_range(*speed) * speed_k * side,
-                        amplitude: rng.in_range(*amplitude),
-                        frequency_hz: rng.in_range(*frequency_hz) * speed_k,
+                        speed,
+                        amplitude,
+                        frequency_hz,
                         form: *form,
-                        phase: rng.next_f32(),
+                        phase,
+                        centre_y: position.y - amplitude * form.at(phase),
                     });
                     self.next_change_at = f32::INFINITY;
                 }
@@ -632,10 +640,9 @@ impl MotionState {
         if side.abs() >= max_offset && side * w.speed > 0.0 {
             w.speed = -w.speed;
         }
-        let next = w.phase + w.frequency_hz * dt;
-        let rise = w.amplitude * (w.form.at(next) - w.form.at(w.phase));
-        w.phase = next.rem_euclid(1.0);
-        *position += self.lateral * (w.speed * dt) + Vec3::UP * rise;
+        w.phase = (w.phase + w.frequency_hz * dt).rem_euclid(1.0);
+        *position += self.lateral * (w.speed * dt);
+        position.y = w.centre_y + w.amplitude * w.form.at(w.phase);
         if !humanoid {
             position.y = position.y.max(MIN_SPHERE_HEIGHT);
         }
@@ -1130,6 +1137,19 @@ mod tests {
         assert!(steady(&zigzag) >= 190, "{zigzag:?}");
         let sine = vertical_steps(&wave(""));
         assert!(steady(&sine) < 100, "a sine eases into its turns");
+    }
+
+    #[test]
+    fn a_wave_clipped_by_the_floor_keeps_its_centre_line() {
+        // 1 m up with a 1.5 m amplitude: every trough is cut at the floor clearance.
+        let motion = r#"{ kind = "wave", speed = [0, 0], amplitude = [1.5, 1.5], frequency_hz = [1, 1], max_offset = 50 }"#;
+        let mut s = Session::new(def(SPHERE, POINT, motion), 4);
+        let (path, _) = run(&mut s, 1000, 0.01);
+        let ys: Vec<f32> = path.iter().map(|p| p.unwrap().y).collect();
+        let peak = |cycle: &[f32]| cycle.iter().cloned().fold(f32::MIN, f32::max);
+        let (first, last) = (peak(&ys[..100]), peak(&ys[900..]));
+        assert!((last - first).abs() < 0.02, "peaks drift: {first} → {last}");
+        assert!(ys.iter().all(|y| *y >= 0.3 - 1e-4), "stays above the floor");
     }
 
     #[test]
