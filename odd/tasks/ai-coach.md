@@ -70,3 +70,14 @@ Rules:
   - The MCP keeps notes in the same `coach.db` (opened lazily).
   - The writer's busy-timeout concern was checked: rusqlite already sets a 5 s busy timeout, now pinned by a test.
   - T6 (ChatGPT plan login) is deferred: it depends on OpenAI confirming that an open-source local app is eligible for the official preview; no workaround via Codex credentials.
+- L5 (2026-10-18) Independent verifier: S1, S2, S4, S5 and S6 pass and S3 is correctly deferred; no blockers.
+  - Fixed from its advisories, test first:
+    - Windows device names (con/nul/aux/prn/com1-9/lpt1-9) are refused as scenario ids;
+    - settings parse errors log only the line number, never the text (a hand-typed key could be quoted);
+    - the CLI delegate drops earlier tool results, so stats never reach a CLI after a provider switch.
+  - Advisories kept:
+    - the Anthropic keyring account is not tied to the base URL;
+    - MCP-saved TOML from model text lacks an Uncalibrated header;
+    - the MCP returns the absolute saved path;
+    - lowercase-only custom ids pass the privacy filter;
+    - aws-lc-sys needs a C toolchain when cross-compiling.
