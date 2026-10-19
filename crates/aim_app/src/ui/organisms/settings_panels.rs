@@ -3,6 +3,7 @@
 //! overlay, keys and training. Rows go through [`SettingsRows`] so the search can filter
 //! them.
 
+use super::dpi_check::DpiMeter;
 use super::{hotkey_settings, restart_key_setting};
 use crate::persistence::settings::{EnemyHighlight, Settings, TargetVisibility};
 use crate::ui::molecules::SettingsRows;
@@ -85,23 +86,6 @@ pub fn reset_section(settings: &mut Settings, tab: SettingsTab) {
     }
 }
 
-/// Raw mouse counts accumulated while the DPI check runs.
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct DpiMeter {
-    pub active: bool,
-    pub x: f64,
-    pub y: f64,
-}
-
-impl DpiMeter {
-    /// Ruler distance the player is asked to move, in cm.
-    pub const DISTANCE_CM: f64 = 10.0;
-
-    pub fn measured_dpi(&self) -> f64 {
-        self.x.abs() / (Self::DISTANCE_CM / 2.54)
-    }
-}
-
 /// Game picker that keeps the physical sensitivity (cm/360) when the game changes.
 pub fn game_combo(ui: &mut egui::Ui, settings: &mut Settings) {
     let s = &mut settings.sensitivity;
@@ -166,34 +150,15 @@ pub fn sensitivity_panel(
             settings.sensitivity = s.with_dpi(*dpi_target);
         }
     });
-    rows.block(ui, "DPI check verify raw input mouse acceleration", |ui| {
-        ui.collapsing("DPI check (verify raw input)", |ui| {
-            ui.label(format!(
-                "Press Start, move the mouse exactly {} cm to the right along a ruler, then Stop.",
-                DpiMeter::DISTANCE_CM
-            ));
-            ui.horizontal(|ui| {
-                if ui
-                    .button(if meter.active { "Stop" } else { "Start" })
-                    .clicked()
-                {
-                    if !meter.active {
-                        *meter = DpiMeter::default();
-                    }
-                    meter.active = !meter.active;
-                }
-                ui.label(format!(
-                    "counts {:.0}  →  measured DPI ≈ {:.0} (configured {})",
-                    meter.x,
-                    meter.measured_dpi(),
-                    s.dpi
-                ));
+    rows.block(
+        ui,
+        "Measure DPI check verify raw input mouse acceleration ruler",
+        |ui| {
+            ui.collapsing("Measure DPI (verify raw input)", |ui| {
+                super::dpi_check::dpi_check(ui, settings, meter);
             });
-            ui.label(
-                "Expect a match within a few %. A large mismatch means wrong DPI or OS acceleration.",
-            );
-        });
-    });
+        },
+    );
     if !rows.searching() {
         ui.small("Converting from another game? Use the Tools tab.");
     }
@@ -650,17 +615,6 @@ mod tests {
             "Personal warm-up: 7 min (from 4 sessions), used instead of this length"
         );
         assert!(personal_warmup_text(None).contains("not enough data"));
-    }
-
-    #[test]
-    fn dpi_meter_converts_counts_over_ten_centimeters() {
-        // 800 DPI over 10 cm = 800 * 10 / 2.54 ≈ 3149.6 counts.
-        let m = DpiMeter {
-            active: false,
-            x: -3149.6,
-            y: 0.0,
-        };
-        assert!((m.measured_dpi() - 800.0).abs() < 0.1);
     }
 
     /// Every preference changed away from its default.

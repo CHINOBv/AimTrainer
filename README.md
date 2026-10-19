@@ -6,7 +6,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - Uses VALORANT's 0.07°/count for yaw and pitch, read from raw, unaccelerated mouse counts.
   - Shows cm/360 and eDPI.
   - Includes a converter with monitor-distance matching for CS2, Apex, Overwatch 2, Fortnite, Call of Duty, Destiny 2, Rainbow Six Siege and Deadlock.
-  - Includes a DPI check and a guided **sensitivity finder**.
+  - Includes a **DPI deviation test** (move a measured distance along a ruler) and a guided **sensitivity finder**.
 - **VALORANT FOV and movement**
   - 70.53° vertical (Hor+, 103° horizontal at 16:9), with ultrawide pillarboxed like the game. ADS zoom follows the weapon.
   - Rifle and knife speeds and the stopping curves Riot measured.
@@ -161,7 +161,7 @@ To change them later, open **Settings → Sensitivity** and enter:
 - your **DPI**;
 - your **ADS multiplier**, if you changed it.
 
-Then use **DPI check**: move the mouse exactly 10 cm along a ruler. The measured DPI should be within a few percent of the DPI you configured. If it isn't, you have OS mouse acceleration on or the wrong DPI.
+Then use **Measure DPI**: lay a ruler next to the mouse, press **Start**, hold **Shift** and move the mouse the distance you set (10 cm by default, at least 5 cm) to the right, then release Shift. The page shows the real DPI from the raw counts and its deviation from the DPI you configured; mice often differ by a few percent. A large mismatch means OS mouse acceleration is on or the DPI value is wrong. **Apply corrected sensitivity…** stores the real DPI and scales the sensitivity so your cm/360 stays the same; it asks for confirmation first, and you then need to set the same sensitivity in VALORANT so the trainer still matches the game.
 
 ## Feel settings
 

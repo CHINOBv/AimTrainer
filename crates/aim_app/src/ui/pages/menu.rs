@@ -22,6 +22,7 @@ use crate::ui::atoms::{ERROR, GOOD};
 use crate::ui::molecules::{SettingsRows, tab_bar};
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::coach_panel::{self, CardOutcome, CoachAction, CoachState};
+use crate::ui::organisms::dpi_check::DpiMeter;
 use crate::ui::organisms::journal_panel;
 use crate::ui::organisms::profile_code::{self, ProfileImport};
 use crate::ui::organisms::progress_panel::{self, ProgressModel};
@@ -29,7 +30,7 @@ use crate::ui::organisms::replay_viewer::{self, ReplayViewerState};
 use crate::ui::organisms::sens_converter::{ConverterState, sens_converter};
 use crate::ui::organisms::sens_finder;
 use crate::ui::organisms::sens_suggestion::{self, RECENT_RUNS, SensSuggestionState};
-use crate::ui::organisms::settings_panels::{self, DpiMeter, SettingsTab};
+use crate::ui::organisms::settings_panels::{self, SettingsTab};
 use crate::ui::organisms::system_check::{self, SystemModel};
 use crate::ui::organisms::today_panel::{
     self, ChallengeModel, DayModel, MissionModel, MissionsModel, QuickModel, RoutineModel,
@@ -59,7 +60,11 @@ impl Plugin for MenuPage {
             .init_resource::<CoachPlay>()
             .add_systems(
                 Update,
-                (count_dpi_meter, save_settings, start_coach_scenario),
+                (
+                    count_dpi_meter.run_if(in_state(AppState::Menu)),
+                    save_settings,
+                    start_coach_scenario,
+                ),
             )
             .add_systems(Update, journal::poll_journal)
             .add_systems(
@@ -303,11 +308,17 @@ fn settings_section(
     }
 }
 
-fn count_dpi_meter(motion: Res<AccumulatedMouseMotion>, mut state: ResMut<MenuState>) {
-    if state.meter.active {
-        state.meter.x += motion.delta.x as f64;
-        state.meter.y += motion.delta.y as f64;
+/// Feed the DPI helper the raw x counts of this frame while Shift is held.
+fn count_dpi_meter(
+    motion: Res<AccumulatedMouseMotion>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut state: ResMut<MenuState>,
+) {
+    if !state.meter.armed {
+        return;
     }
+    let held = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+    state.meter.update(held, motion.delta.x as f64);
 }
 
 /// Leave hotkey recording (it unregisters every global hotkey) once the hotkey rows are
