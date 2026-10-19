@@ -185,7 +185,7 @@ Game-feel effects live in the `[feel]` table of `settings.toml`. Missing keys ta
 
 Minimal keeps only the damage indicator (at 60%), health bar and death screen. Juicy adds screen punch and crosshair bloom to Standard.
 
-Every feel key above takes effect. The arena HUD keys (`damage_indicator`, `damage_vignette`, `kill_feed`, `streak_banner`, `health_bar`, `low_hp_pulse`, `death_screen`, `round_transitions` and `screen_punch`) scale opacity and size with their intensities; `distinct_markers`, `kill_flash_arena`, `crosshair_bloom` and `arena_arrows` change the markers and crosshair. The animated countdown also plays before scenario runs.
+Every feel key above takes effect. The arena HUD keys (`damage_indicator`, `damage_vignette`, `kill_feed`, `streak_banner`, `health_bar`, `low_hp_pulse`, `death_screen`, `round_transitions` and `screen_punch`) each turn an effect on or off, and the three toggles with an intensity (`damage_indicator`, `damage_vignette`, `screen_punch`) scale its opacity and size; `distinct_markers`, `kill_flash_arena`, `crosshair_bloom` and `arena_arrows` change the markers and crosshair. The animated countdown also plays before scenario runs.
 
 The `[sound]` table adds per-category volumes, each a percent of `volume_percent` (a sound plays at master × category): `shots_percent`, `world_percent`, `ui_percent` and `cues_percent` (all 100).
 

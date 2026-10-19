@@ -105,6 +105,13 @@ fn number_keys_enabled(text_focus: bool, recording_hotkey: bool, on_keys_tab: bo
     !(text_focus || recording_hotkey || on_keys_tab)
 }
 
+/// Whether the restart-key row (which records bare keys, digits included) can be on
+/// screen: on the Keys sub-tab, or in any Settings search, which shows rows from every
+/// sub-tab.
+fn bare_key_rows_shown(tab: Tab, settings_tab: SettingsTab, query: &str) -> bool {
+    tab == Tab::Settings && (settings_tab == SettingsTab::Keys || !query.trim().is_empty())
+}
+
 /// The routine "Continue" resumes: today's unfinished method day, else the newest
 /// unfinished routine from today. `runs_of` gives a routine's current run count; a
 /// position whose count differs belongs to an edited routine and is skipped.
@@ -310,7 +317,7 @@ fn menu(
     let lib = nav.library();
     let mut action: Option<UiAction> = None;
 
-    let on_keys_tab = state.tab == Tab::Settings && state.settings_tab == SettingsTab::Keys;
+    let on_keys_tab = bare_key_rows_shown(state.tab, state.settings_tab, &state.settings_query);
     if number_keys_enabled(
         ctx.egui_wants_keyboard_input(),
         cfg.hotkey_capture.recording.is_some(),
@@ -995,6 +1002,25 @@ mod tests {
         assert_eq!(tab_for_key(Key::Num9), None);
         assert_eq!(tab_for_key(Key::Num0), None);
         assert_eq!(tab_for_key(Key::A), None);
+    }
+
+    #[test]
+    fn the_restart_key_row_shows_on_the_keys_tab_and_in_any_search() {
+        assert!(bare_key_rows_shown(Tab::Settings, SettingsTab::Keys, ""));
+        assert!(
+            bare_key_rows_shown(Tab::Settings, SettingsTab::Audio, "restart"),
+            "a search shows rows from every sub-tab"
+        );
+        assert!(!bare_key_rows_shown(
+            Tab::Settings,
+            SettingsTab::Audio,
+            "  "
+        ));
+        assert!(!bare_key_rows_shown(
+            Tab::Today,
+            SettingsTab::Keys,
+            "restart"
+        ));
     }
 
     #[test]
