@@ -208,6 +208,15 @@ pub struct PlayerDef {
     /// on them and a negative one looks up.
     #[serde(default)]
     pub elevation: f32,
+    /// Where the player's feet start, `[x, z]` in meters (default: the origin). Written by
+    /// the trainer at the end of the start countdown so the run and its replays begin where
+    /// the player moved to; must lie inside the bounds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<[f32; 2]>,
+    /// The player's velocity when the run starts, `[right, forward]` in m/s in the player's
+    /// own frame (default: standing still). Written with `start`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_velocity: Option<[f32; 2]>,
 }
 
 /// Allowed `player.elevation`, meters.
@@ -227,6 +236,8 @@ impl Default for PlayerDef {
             bounds_x: default_bounds(),
             bounds_z: default_bounds(),
             elevation: 0.0,
+            start: None,
+            start_velocity: None,
         }
     }
 }
@@ -1209,6 +1220,20 @@ impl ScenarioDef {
             "player.elevation",
             "must be within [-3, 6] m",
         );
+        check(
+            p.start.is_none_or(|[x, z]| {
+                (p.bounds_x.min..=p.bounds_x.max).contains(&x)
+                    && (p.bounds_z.min..=p.bounds_z.max).contains(&z)
+            }),
+            "player.start",
+            "must be inside the player bounds",
+        );
+        check(
+            p.start_velocity
+                .is_none_or(|v| v.iter().all(|c| c.is_finite())),
+            "player.start_velocity",
+            "must be finite",
+        );
 
         let t = &self.targets;
         check(
@@ -1965,6 +1990,34 @@ mod tests {
             let mut b = d.clone();
             b.player.elevation = ok;
             assert!(b.validate().is_empty(), "{ok}");
+        }
+    }
+
+    #[test]
+    fn player_start_fields_are_optional_parse_and_must_stay_inside_the_bounds() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!((d.player.start, d.player.start_velocity), (None, None));
+        let plain = toml::to_string(&d).unwrap();
+        assert!(!plain.contains("start"), "absent fields are not written");
+        let src = format!(
+            "{MINIMAL}\n[player]\nmovement = true\nbounds_x = [-5, 5]\nbounds_z = [-1, 1]\n\
+             start = [2.5, -0.5]\nstart_velocity = [3.0, 0.25]\n"
+        );
+        let moved = ScenarioDef::from_toml(&src).unwrap();
+        assert_eq!(moved.player.start, Some([2.5, -0.5]));
+        assert_eq!(moved.player.start_velocity, Some([3.0, 0.25]));
+        assert!(moved.validate().is_empty(), "{:?}", moved.validate());
+        for bad in [[5.5, 0.0], [0.0, -1.5], [f32::NAN, 0.0]] {
+            let mut b = moved.clone();
+            b.player.start = Some(bad);
+            let fields: Vec<_> = b.validate().into_iter().map(|e| e.field).collect();
+            assert_eq!(fields, ["player.start"], "{bad:?}");
+        }
+        for bad in [[f32::INFINITY, 0.0], [0.0, f32::NAN]] {
+            let mut b = moved.clone();
+            b.player.start_velocity = Some(bad);
+            let fields: Vec<_> = b.validate().into_iter().map(|e| e.field).collect();
+            assert_eq!(fields, ["player.start_velocity"], "{bad:?}");
         }
     }
 
