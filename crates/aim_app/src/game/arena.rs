@@ -379,6 +379,12 @@ impl ArenaFinisher<'_, '_> {
                 )
             });
         }
+        if let Some(a) = run.session.adaptive() {
+            notes.push(format!(
+                "Adaptive bots: ended at {}, peaked at {} ({} steps up, {} down)",
+                a.skill, a.peak, a.steps_up, a.steps_down
+            ));
+        }
         if let Some((cause, n)) = stats.top_death_cause() {
             notes.push(format!(
                 "Most deaths: {} ({n} of {})",

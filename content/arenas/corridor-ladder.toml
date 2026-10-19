@@ -1,0 +1,22 @@
+# Duel ladder in the original Duel Corridor: the bots' aim adapts to how you play.
+id = "corridor-ladder"
+name = "Duel Ladder"
+description = "Two bots duel you down the corridor. Three kills in a row make them sharper, two deaths in a row ease them off, from recruit up to elite. Climb as high as you can and stay there."
+map = "duel-corridor"
+duration_secs = 120.0
+weapon = "vandal"
+
+[mode]
+kind = "deathmatch"
+bots = 2
+bot_skill = "contender"
+respawn_secs = 2.0
+bots_shoot_back = true
+bot_strafe = true
+
+# Streak lengths are design choices, not VALORANT values (docs/maps.md).
+[mode.adaptive]
+min_skill = "recruit"
+max_skill = "elite"
+kills_to_step_up = 3
+deaths_to_step_down = 2

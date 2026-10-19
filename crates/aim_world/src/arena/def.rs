@@ -1,5 +1,6 @@
 //! Arena definition: the TOML format, loading and semantic validation.
 
+use super::ladder::{AdaptiveLadder, validate_adaptive};
 use super::squad::{SquadEntry, validate_squad};
 use crate::map::{MapDef, SpawnKind};
 use aim_core::games::valorant::Weapon;
@@ -65,6 +66,10 @@ pub enum ArenaMode {
         /// own skill. The counts must add up to `bots`. Not with a site objective.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         squad: Vec<SquadEntry>,
+        /// Adaptive ladder: the bots' skill steps up after kill streaks and down after
+        /// deaths, between two presets. Bots with a squad `skill` keep theirs.
+        #[serde(default)]
+        adaptive: Option<AdaptiveLadder>,
     },
     /// One bot per angle marker, in order. Each bot waits hidden, peeks when the player can
     /// see the marker, holds for `hold_secs` and hides again until it is killed.
@@ -438,8 +443,12 @@ impl ArenaDef {
                 reactive,
                 rules,
                 squad,
+                adaptive,
                 ..
             } => {
+                if let Some(a) = adaptive {
+                    validate_adaptive(a, bot_skill, &mut push);
+                }
                 validate_squad(squad, *bots, &mut push);
                 if !squad.is_empty() && objective.is_some() {
                     push(

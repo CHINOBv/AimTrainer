@@ -218,6 +218,12 @@ speed_multiplier = 1.0        # optional, (0, 2]: scales run speed and accelerat
 role = "pusher"               # roamer | pusher | angle_holder | jiggle_peeker
 skill = "veteran"             # optional: this group's aimer preset, default bot_skill
 count = 1                     # optional, default 1; the counts must add up to `bots`
+
+[mode.adaptive]               # optional: the bots' skill follows the player's streaks
+min_skill = "recruit"         # weakest preset it steps down to
+max_skill = "elite"           # strongest preset it steps up to (bot_skill must lie in between)
+kills_to_step_up = 3          # optional, default 3: kills in a row without dying
+deaths_to_step_down = 2       # optional, default 2: deaths in a row without a kill
 ```
 
 Rule conditions (all optional; at most `MAX_RULES` = 16 rules; not allowed with `[mode.objective]`):
@@ -247,7 +253,9 @@ Squad roles (not allowed with `[mode.objective]`) give each bot slot a personali
 | `angle_holder` | Holds the angle from its spawn without moving (`hold`); under half health it falls back to cover and stays hidden until it sees the player (`retreat`). |
 | `jiggle_peeker` | Roams, strafes (ADAD) in every fight as with `bot_strafe`, falls back to cover when shot and re-peeks. |
 
-A squad entry's `skill` replaces `bot_skill` for its bots. An arena without `[[mode.squad]]` behaves exactly as before. The death recap names the killer's role.
+A squad entry's `skill` replaces `bot_skill` for its bots. An arena without `[[mode.squad]]` behaves exactly as before.
+
+The adaptive ladder starts the bots at `bot_skill`. Every `kills_to_step_up` kills in a row without a death step the bots up one preset (recruit, contender, veteran, elite), never above `max_skill`; every `deaths_to_step_down` deaths in a row without a kill step them down one, never below `min_skill`. A kill resets the death count and a death resets the kill count; a step also starts its count again. The new preset applies to the next flick every bot plans, except bots with their own squad `skill`. It only counts kills and deaths, so it draws no random numbers and the run stays deterministic. `ArenaSession::adaptive()` reports the current and peak preset and the steps taken; the HUD shows "Bots: veteran (peak elite)" and the results notes summarize the climb. The streak lengths are design choices, not VALORANT values. The death recap names the killer's role.
 
 A rule without `behavior` only changes the speed. When no rule holds, the bot behaves as described in the bot model below. Rules only read what the bot could know (its health, its own sight, the last place it saw the player), never the player's position through walls; distance and player speed are a simplification, read directly. Evaluating rules draws no random numbers.
 
@@ -349,3 +357,4 @@ Corners come from the box geometry only, so a corner counts even if no bot would
 | `lanes-deathmatch` | `freight-lanes` | Deathmatch, 3 contender bots that strafe and shoot back, 120 s. |
 | `corridor-reactive` | `duel-corridor` | Reactive duels: 2 contender bots that shoot back. They copy (35%) or oppose (35%) the player's strafe, juke when the crosshair is within 4° (50%) or the player fires; they hold long angles beyond 20 m, strafe for 1.5 s after a hit and retreat under half health. Shoot-back deadline 1.5 s (40 damage, −25 points). 90 s. |
 | `yard-squad` | `training-yard` | Mixed-squad free-for-all, 5 bots that shoot back: 2 contender roamers, a veteran pusher, a contender angle holder and a contender jiggle peeker. 120 s. |
+| `corridor-ladder` | `duel-corridor` | Adaptive duel ladder: 2 bots that strafe and shoot back, starting at contender; 3 kills in a row step them up and 2 deaths in a row step them down, between recruit and elite. 120 s. |

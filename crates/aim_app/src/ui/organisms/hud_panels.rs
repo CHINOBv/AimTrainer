@@ -395,6 +395,9 @@ pub fn arena_status(
                 if s.is_practice() {
                     ui.colored_label(GOOD, "PRACTICE · bots don't shoot");
                 }
+                if let Some(a) = s.adaptive() {
+                    ui.label(format!("Bots: {} (peak {})", a.skill, a.peak));
+                }
                 if let Some(o) = s.objective() {
                     let site = if o.capture_progress > 0.0 {
                         RichText::new(format!("SITE CONTESTED {:.0}%", o.capture_progress * 100.0))

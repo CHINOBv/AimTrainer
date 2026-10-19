@@ -300,3 +300,154 @@ fn the_squad_arena_mixes_every_role() {
         assert!(roles.contains(&role), "{role:?}");
     }
 }
+
+// --- Adaptive ladder ---------------------------------------------------------------------
+
+fn adaptive(min: &str, max: &str, up: u32, down: u32) -> String {
+    format!(
+        "[mode.adaptive]\nmin_skill = \"{min}\"\nmax_skill = \"{max}\"\nkills_to_step_up = {up}\ndeaths_to_step_down = {down}\n"
+    )
+}
+
+#[test]
+fn kill_streaks_step_the_bots_up_to_the_max() {
+    // bot_skill is veteran; the ladder runs from contender to elite.
+    let mut s = duel(false, &adaptive("contender", "elite", 2, 1));
+    assert_eq!(s.adaptive().map(|a| a.skill), Some("veteran"));
+    let mut kills_seen = Vec::new();
+    run(&mut s, 10.0, |s| {
+        kills_seen.push((s.stats().kills, s.adaptive().unwrap().skill));
+        super::tests::perfect(s)
+    });
+    assert!(s.stats().kills >= 4, "{:?}", s.stats());
+    // Two kills step veteran up to elite; later streaks stay at the max.
+    let at = |k: u32| kills_seen.iter().find(|(n, _)| *n == k).unwrap().1;
+    assert_eq!((at(1), at(2)), ("veteran", "elite"));
+    let a = s.adaptive().unwrap();
+    assert_eq!(
+        (a.skill, a.peak, a.steps_up, a.steps_down),
+        ("elite", "elite", 1, 0)
+    );
+}
+
+#[test]
+fn deaths_step_the_bots_down_to_the_min_and_the_killer_uses_the_new_skill() {
+    let mut s = duel(true, &adaptive("contender", "elite", 2, 1));
+    run(&mut s, 10.0, |_| FrameInput {
+        dt: DT,
+        view: ViewAngles::new(90.0, 0.0),
+        ..Default::default()
+    });
+    let recaps = &s.stats().death_recaps;
+    assert!(recaps.len() >= 3, "{recaps:?}");
+    let skills: Vec<&str> = recaps.iter().map(|r| r.killer_skill).collect();
+    assert_eq!(skills[0], "veteran");
+    assert!(skills[1..].iter().all(|k| *k == "contender"), "{skills:?}");
+    let a = s.adaptive().unwrap();
+    assert_eq!(
+        (a.skill, a.peak, a.steps_up, a.steps_down),
+        ("contender", "veteran", 0, 1)
+    );
+}
+
+#[test]
+fn a_kill_resets_the_death_streak() {
+    // Two deaths in a row are needed to step down; a kill in between resets the count.
+    let mut s = duel(true, &adaptive("recruit", "elite", 5, 2));
+    let mut frame = 0;
+    run(&mut s, 10.0, |s| {
+        frame += 1;
+        let deaths = s.stats().deaths;
+        // Kill after every death, so deaths never come two in a row.
+        if deaths > s.stats().kills {
+            super::tests::perfect(s)
+        } else {
+            FrameInput {
+                dt: DT,
+                view: ViewAngles::new(90.0, 0.0),
+                ..Default::default()
+            }
+        }
+    });
+    assert!(s.stats().deaths >= 2, "{:?}", s.stats());
+    assert_eq!(s.adaptive().unwrap().steps_down, 0);
+}
+
+#[test]
+fn arenas_without_a_ladder_report_none() {
+    assert_eq!(duel(true, "").adaptive(), None);
+}
+
+#[test]
+fn adaptive_ladders_are_validated() {
+    let errs = |extra: &str| {
+        let src = format!(
+            "id = \"d\"\nname = \"D\"\nmap = \"duel-room\"\nduration_secs = 10.0\nweapon = \"vandal\"\n\n[mode]\nkind = \"deathmatch\"\nbots = 1\nbot_skill = \"contender\"\nrespawn_secs = 1.0\nbots_shoot_back = true\n{extra}"
+        );
+        ArenaDef::from_toml(&src)
+            .unwrap()
+            .validate()
+            .iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+    };
+    let e = errs(&adaptive("godlike", "elite", 0, 0));
+    for want in [
+        "mode.adaptive.min_skill: 'godlike' is not one of",
+        "mode.adaptive.kills_to_step_up: must be >= 1",
+        "mode.adaptive.deaths_to_step_down: must be >= 1",
+    ] {
+        assert!(e.iter().any(|x| x.contains(want)), "{want}: {e:?}");
+    }
+    let e = errs(&adaptive("elite", "recruit", 1, 1));
+    assert!(
+        e.iter()
+            .any(|x| x.contains("min_skill must not be stronger than max_skill")),
+        "{e:?}"
+    );
+    let e = errs(&adaptive("veteran", "elite", 1, 1));
+    assert!(
+        e.iter()
+            .any(|x| x.contains("bot_skill 'contender' must be within")),
+        "{e:?}"
+    );
+    assert!(errs(&adaptive("recruit", "veteran", 3, 2)).is_empty());
+    let defaults = "[mode.adaptive]\nmin_skill = \"recruit\"\nmax_skill = \"elite\"\n";
+    assert!(errs(defaults).is_empty());
+}
+
+#[test]
+fn adaptive_runs_are_deterministic() {
+    let go = || {
+        let mut s = duel(true, &adaptive("recruit", "elite", 2, 1));
+        let mut frame = 0;
+        run(&mut s, 10.0, |s| {
+            frame += 1;
+            if (frame / 120) % 2 == 0 {
+                super::tests::perfect(s)
+            } else {
+                super::tests::idle(s)
+            }
+        });
+        (s.result(), s.stats().clone(), s.adaptive())
+    };
+    assert_eq!(go(), go());
+}
+
+#[test]
+fn the_duel_ladder_arena_climbs_from_recruit_to_elite() {
+    let (def, map) = super::tests::builtin("corridor-ladder");
+    let ArenaMode::Deathmatch {
+        adaptive: Some(a), ..
+    } = &def.mode
+    else {
+        panic!("corridor-ladder has an adaptive ladder");
+    };
+    assert_eq!(
+        (a.min_skill.as_str(), a.max_skill.as_str()),
+        ("recruit", "elite")
+    );
+    assert_eq!((a.kills_to_step_up, a.deaths_to_step_down), (3, 2));
+    let s = ArenaSession::new(def, map, 1).unwrap();
+    assert_eq!(s.adaptive().map(|a| a.skill), Some("contender"));
+}

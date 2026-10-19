@@ -4,6 +4,7 @@ use super::behavior::{Phase, Push, Retreat};
 use super::bot::{Bot, Brain, Ctx, PEEK_DELAY_SECS, head_of, yaw_of};
 use super::coaching::Coaching;
 use super::def::{ArenaDef, ArenaError, ArenaMode, PRACTICE_SUFFIX, SiteObjective, bot_profile};
+use super::ladder::{AdaptiveStatus, Ladder};
 use super::recap::{DeathRecap, Killer, top_cause};
 use super::squad::{self, BotRole};
 use crate::corner::PeekCorner;
@@ -256,6 +257,8 @@ pub struct ArenaSession {
     shot_fired: bool,
     /// Deathmatch squad: the role and fixed skill of each bot slot (empty without a squad).
     squad_slots: Vec<(BotRole, Option<AimerProfile>)>,
+    /// Deathmatch with an adaptive ladder: moves `aimer` with the player's streaks.
+    ladder: Option<Ladder>,
 }
 
 /// The aimer preset angle bots use for flick speed and endpoint error; their reaction time
@@ -315,6 +318,14 @@ impl ArenaSession {
             squad_slots: match &def.mode {
                 ArenaMode::Deathmatch { squad, .. } => squad::slots(squad),
                 ArenaMode::AngleClear { .. } => Vec::new(),
+            },
+            ladder: match &def.mode {
+                ArenaMode::Deathmatch {
+                    adaptive: Some(a),
+                    bot_skill,
+                    ..
+                } => Some(Ladder::new(a, bot_skill)),
+                _ => None,
             },
             def,
             map,
@@ -446,6 +457,11 @@ impl ArenaSession {
             speed: self.player_speed(),
             accurate: self.is_accurate(),
         }
+    }
+
+    /// Where the adaptive ladder stands, if the arena has one.
+    pub fn adaptive(&self) -> Option<AdaptiveStatus> {
+        self.ladder.as_ref().map(Ladder::status)
     }
 
     /// The site objective, if the arena has one.
@@ -695,6 +711,11 @@ impl ArenaSession {
             let ttk = now - bot.first_seen_at.unwrap_or(now);
             self.stats.kills += 1;
             self.stats.kill_times.push(ttk);
+            if let Some(ladder) = &mut self.ladder
+                && ladder.on_kill()
+            {
+                self.aimer = ladder.profile();
+            }
             if self
                 .def
                 .mode
@@ -877,6 +898,11 @@ impl ArenaSession {
 
     fn player_died(&mut self) {
         self.stats.deaths += 1;
+        if let Some(ladder) = &mut self.ladder
+            && ladder.on_death()
+        {
+            self.aimer = ladder.profile();
+        }
         for e in self.engagements.drain(..) {
             self.stats.exposure_times_secs.push(self.time - e.seen_at);
         }
