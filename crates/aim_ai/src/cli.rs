@@ -109,6 +109,15 @@ impl CliDelegateProvider {
         }
     }
 
+    /// The command with the trainer's tools wired in, when the caller offers tools and
+    /// [`with_trainer_tools`] applies to the configured command.
+    fn wired_command(&self, tools: &[ToolSpec]) -> Option<Vec<String>> {
+        if tools.is_empty() {
+            return None;
+        }
+        find_trainer_server().and_then(|server| with_trainer_tools(&self.command, &server))
+    }
+
     fn run(&self, command: &[String], prompt: &str) -> Result<String, ModelError> {
         let (program, args) = command
             .split_first()
@@ -183,9 +192,8 @@ impl CliDelegateProvider {
 }
 
 impl ChatModel for CliDelegateProvider {
-    fn complete(&mut self, messages: &[Message], _tools: &[ToolSpec]) -> Result<Reply, ModelError> {
-        let wired =
-            find_trainer_server().and_then(|server| with_trainer_tools(&self.command, &server));
+    fn complete(&mut self, messages: &[Message], tools: &[ToolSpec]) -> Result<Reply, ModelError> {
+        let wired = self.wired_command(tools);
         let stdout = match &wired {
             Some(command) => self.run(command, &flatten(messages, true))?,
             None => self.run(&self.command, &flatten(messages, false))?,
@@ -532,6 +540,13 @@ mod tests {
         );
         assert_eq!(with_trainer_tools(&to_strings(&["codex"]), server), None);
         assert_eq!(with_trainer_tools(&[], server), None);
+    }
+
+    #[test]
+    fn codex_stays_text_only_when_the_caller_offers_no_tools() {
+        let p =
+            CliDelegateProvider::new(codex_command(), PromptInput::Stdin, Duration::from_secs(5));
+        assert_eq!(p.wired_command(&[]), None);
     }
 
     #[test]
