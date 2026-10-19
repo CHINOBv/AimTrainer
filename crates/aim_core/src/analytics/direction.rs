@@ -7,6 +7,7 @@
 
 use super::flick::{Flick, FlickKind, OVERSHOOT_RADII};
 use super::stats::median;
+use crate::i18n::{Lang, tr_in};
 use crate::scenario::{ScenarioDef, SpawnArea};
 
 /// A flick is far when its distance is above `(min + max) / FAR_DIVISOR` of the scenario's
@@ -73,6 +74,11 @@ impl Quadrant {
             Quadrant::DownRight => "down-right",
         }
     }
+
+    /// [`Quadrant::label`] in `lang`.
+    pub fn label_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.label())
+    }
 }
 
 /// Near or far, relative to the scenario's possible target distances.
@@ -94,6 +100,11 @@ impl DistanceClass {
             DistanceClass::Near => "near",
             DistanceClass::Far => "far",
         }
+    }
+
+    /// [`DistanceClass::label`] in `lang`.
+    pub fn label_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.label())
     }
 }
 
@@ -226,6 +237,11 @@ impl Axis {
             Axis::Horizontal => "horizontal",
             Axis::Vertical => "vertical",
         }
+    }
+
+    /// [`Axis::label`] in `lang`.
+    pub fn label_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.label())
     }
 }
 
@@ -642,5 +658,14 @@ mod tests {
         let tracking = analyze(&record("track-precise", AimerProfile::PRESETS[2], 5));
         assert_eq!(tracking.distance_split, None);
         assert_eq!(tracking.direction_summary(), None);
+    }
+
+    #[test]
+    fn direction_labels_are_shown_in_spanish() {
+        assert_eq!(Quadrant::UpLeft.label_in(Lang::En), "up-left");
+        assert_eq!(Quadrant::UpLeft.label_in(Lang::Es), "arriba-izquierda");
+        assert_eq!(DistanceClass::Far.label_in(Lang::Es), "lejos");
+        assert_eq!(Axis::Vertical.label_in(Lang::Es), "vertical");
+        assert_eq!(Axis::Horizontal.label_in(Lang::En), "horizontal");
     }
 }

@@ -6,6 +6,7 @@
 
 use super::benchmark::{BenchmarkDef, BenchmarkResult};
 use super::routine::RoutineDef;
+use crate::i18n::{Lang, tr_in};
 use serde::{Deserialize, Serialize};
 
 /// A weekly training method: tiers plus one plan per weekday.
@@ -128,6 +129,11 @@ impl Weekday {
             Weekday::Saturday => "Saturday",
             Weekday::Sunday => "Sunday",
         }
+    }
+
+    /// [`Weekday::label`] in `lang`.
+    pub fn label_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.label())
     }
 }
 
@@ -435,5 +441,12 @@ mod tests {
         }
         let energy = b.evaluate(&bests).overall;
         assert_eq!(m.suggested_tier(energy).id, "intermediate");
+    }
+
+    #[test]
+    fn weekdays_are_shown_in_spanish() {
+        assert_eq!(Weekday::Monday.label_in(Lang::En), "Monday");
+        assert_eq!(Weekday::Monday.label_in(Lang::Es), "Lunes");
+        assert_eq!(Weekday::Saturday.label_in(Lang::Es), "Sábado");
     }
 }

@@ -8,6 +8,7 @@
 //! `docs/training-science.md`).
 
 use super::rules::Verdict;
+use crate::i18n::{Lang, tr_in, tr_named_in};
 use crate::training::benchmark::BenchmarkDef;
 use crate::training::progress::{self, RunRecord};
 
@@ -66,7 +67,7 @@ impl BenchmarkProfile {
             .zip(trends)
             .map(|((def, result), trend)| {
                 let (verdict, explanation) =
-                    judge(&def.name, result.energy, comparable, played.len());
+                    judge(Lang::En, &def.name, result.energy, comparable, played.len());
                 SubcategoryStanding {
                     name: def.name.clone(),
                     skill: def.skill.clone(),
@@ -95,6 +96,25 @@ impl BenchmarkProfile {
         v
     }
 
+    /// [`SubcategoryStanding::explanation`] of `standing` (one of this profile's
+    /// subcategories) in `lang`, with the subcategory name translated.
+    pub fn explanation_in(&self, lang: Lang, standing: &SubcategoryStanding) -> String {
+        let played = self
+            .subcategories
+            .iter()
+            .filter(|s| s.energy.is_some())
+            .count();
+        let comparable = self.average.filter(|_| played >= MIN_PLAYED);
+        judge(
+            lang,
+            tr_in(lang, &standing.name),
+            standing.energy,
+            comparable,
+            played,
+        )
+        .1
+    }
+
     /// Strong subcategories, in benchmark order.
     pub fn strengths(&self) -> impl Iterator<Item = &SubcategoryStanding> {
         self.subcategories
@@ -104,19 +124,30 @@ impl BenchmarkProfile {
 }
 
 fn judge(
+    lang: Lang,
     name: &str,
     energy: Option<f32>,
     average: Option<f32>,
     played: usize,
 ) -> (Option<Verdict>, String) {
     let Some(energy) = energy else {
-        return (None, format!("{name}: not played yet."));
+        return (
+            None,
+            tr_named_in(lang, "{name}: not played yet.", &[("name", &name)]),
+        );
     };
+    let energy_text = format!("{energy:.0}");
     let Some(average) = average.filter(|a| *a > 0.0) else {
         return (
             None,
-            format!(
-                "{name}: {energy:.0} energy. Play at least {MIN_PLAYED} subcategories to compare them."
+            tr_named_in(
+                lang,
+                "{name}: {energy} energy. Play at least {min} subcategories to compare them.",
+                &[
+                    ("name", &name),
+                    ("energy", &energy_text),
+                    ("min", &MIN_PLAYED),
+                ],
             ),
         );
     };
@@ -128,17 +159,29 @@ fn judge(
     } else {
         None
     };
-    let relation = if ratio < 1.0 {
-        format!("{:.0}% below", (1.0 - ratio) * 100.0)
+    let (template, share) = if ratio < 1.0 {
+        (
+            "{name}: {energy} energy is {share}% below your average of {average} across {played} played subcategories.",
+            1.0 - ratio,
+        )
     } else {
-        format!("{:.0}% above", (ratio - 1.0) * 100.0)
+        (
+            "{name}: {energy} energy is {share}% above your average of {average} across {played} played subcategories.",
+            ratio - 1.0,
+        )
     };
-    (
-        verdict,
-        format!(
-            "{name}: {energy:.0} energy is {relation} your average of {average:.0} across {played} played subcategories."
-        ),
-    )
+    let text = tr_named_in(
+        lang,
+        template,
+        &[
+            ("name", &name),
+            ("energy", &energy_text),
+            ("share", &format!("{:.0}", share * 100.0)),
+            ("average", &format!("{average:.0}")),
+            ("played", &played),
+        ],
+    );
+    (verdict, text)
 }
 
 #[cfg(test)]
@@ -236,5 +279,30 @@ mod tests {
             vec![None, Some(100.0), Some(300.0)]
         );
         assert_eq!(p.subcategories[0].energy, Some(300.0));
+    }
+
+    #[test]
+    fn explanations_are_shown_in_spanish_and_english_is_unchanged() {
+        let b = benchmark::builtin::all().remove(0);
+        let mut ranks = vec![Some(1); b.subcategories.len()];
+        ranks[0] = Some(0);
+        ranks[2] = None;
+        let p = BenchmarkProfile::build(&b, &runs(&b, &ranks, NOW - 60), NOW, 4);
+        for s in &p.subcategories {
+            assert_eq!(p.explanation_in(Lang::En, s), s.explanation);
+        }
+        let es = p.explanation_in(Lang::Es, &p.subcategories[0]);
+        assert!(
+            es.starts_with("Clic estático: 100 de energía está "),
+            "{es}"
+        );
+        assert!(es.ends_with(" subcategorías jugadas."), "{es}");
+        assert_eq!(
+            p.explanation_in(Lang::Es, &p.subcategories[2]),
+            format!(
+                "{}: aún sin jugar.",
+                tr_in(Lang::Es, &b.subcategories[2].name)
+            )
+        );
     }
 }
