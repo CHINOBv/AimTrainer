@@ -86,6 +86,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/dodge-peek.toml"),
     ),
     (
+        "dot-sweep.toml",
+        include_str!("../../../../content/scenarios/dot-sweep.toml"),
+    ),
+    (
         "drifting-heads.toml",
         include_str!("../../../../content/scenarios/drifting-heads.toml"),
     ),
@@ -102,6 +106,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/flick-wide.toml"),
     ),
     (
+        "fly-switch.toml",
+        include_str!("../../../../content/scenarios/fly-switch.toml"),
+    ),
+    (
         "go-no-go.toml",
         include_str!("../../../../content/scenarios/go-no-go.toml"),
     ),
@@ -110,12 +118,24 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/hop-field.toml"),
     ),
     (
+        "hop-switch.toml",
+        include_str!("../../../../content/scenarios/hop-switch.toml"),
+    ),
+    (
+        "jitter-switch.toml",
+        include_str!("../../../../content/scenarios/jitter-switch.toml"),
+    ),
+    (
         "long-range-heads.toml",
         include_str!("../../../../content/scenarios/long-range-heads.toml"),
     ),
     (
         "micro-adjust.toml",
         include_str!("../../../../content/scenarios/micro-adjust.toml"),
+    ),
+    (
+        "mini-regen-switch.toml",
+        include_str!("../../../../content/scenarios/mini-regen-switch.toml"),
     ),
     (
         "peek-reaction.toml",
@@ -144,6 +164,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "pressure-balloons.toml",
         include_str!("../../../../content/scenarios/pressure-balloons.toml"),
+    ),
+    (
+        "prism-bounce.toml",
+        include_str!("../../../../content/scenarios/prism-bounce.toml"),
     ),
     (
         "radar-recall.toml",
@@ -220,6 +244,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "tap-discipline.toml",
         include_str!("../../../../content/scenarios/tap-discipline.toml"),
+    ),
+    (
+        "tempo-movers.toml",
+        include_str!("../../../../content/scenarios/tempo-movers.toml"),
     ),
     (
         "track-close-strafe.toml",
