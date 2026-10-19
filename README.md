@@ -38,6 +38,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - A **replay viewer** of your crosshair path: the trail is coloured by speed, and it has a hit/miss heatmap and a side-by-side comparison with an earlier run.
   - Benchmark trends and personal bests, and a **plateau detector** on the Progress page: a benchmark subcategory you keep playing with no new personal best in 3 weeks gets suggestions for a change of stimulus (a variant, a sensitivity variation, a switch of emphasis or a lighter week).
   - Offline **post-match analysis** of official match files.
+  - **Verifiable score proofs**: copy a run's proof code from the results screen; a friend pastes it on the Progress page and their trainer replays the run to confirm the score, with no server.
 - **Your setup**
   - VALORANT **crosshair codes** (import and export).
   - **Target visibility:** VALORANT's enemy highlight colours (red, purple for tritanopia, yellow for deuteranopia/protanopia) or any custom colour, an optional target outline with colour and thickness, and an environment tint for the floor grid.
@@ -229,6 +230,12 @@ Every finished scenario run is saved as one CSV row in the data directory (`~/.l
 Rows written before snapshots existed keep their columns and load with empty snapshot fields; the next run written upgrades the file's header line. Arena runs are stored without a snapshot.
 
 **Export:** on the Progress page, **Export history (CSV)** writes a copy with the same columns, one row per run, with older rows padded with empty fields so every row has all 21 columns. Type a path in the field next to the button, or leave it empty to write `history-export-<unix time>.csv` next to `history.csv`. It never replaces an existing file (the history included); pick a new name instead. The export runs on a background thread, and the page shows where the file went or why it failed.
+
+## Score proofs
+
+Runs are deterministic: the same scenario, seed and inputs always give the same score. **Copy proof code** on the results screen of a scenario run copies a share code (base64url) that bundles the run key, a hash of the scenario as played, the seed, every input and the claimed score and accuracy.
+
+To check a friend's score, paste the code into **Verify a proof** on the Progress page. Your trainer rebuilds the scenario from your own library, checks the hash and replays the inputs on a background thread, then shows either `Verified: <scenario> score X, accuracy Y%` or why it failed: not a proof code, an unsupported version, an unknown scenario, a scenario that differs from the one played (for example an edited custom file), or a replay that gives another score. A proof shows that the inputs produce the score; it cannot show that a human produced them. Arena runs have no proof code.
 
 ## Ranked journal
 

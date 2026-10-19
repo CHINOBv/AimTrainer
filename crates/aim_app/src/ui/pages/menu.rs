@@ -26,6 +26,7 @@ use crate::ui::organisms::dpi_check::DpiMeter;
 use crate::ui::organisms::journal_panel;
 use crate::ui::organisms::profile_code::{self, ProfileImport};
 use crate::ui::organisms::progress_panel::{self, ProgressModel};
+use crate::ui::organisms::proof_panel;
 use crate::ui::organisms::replay_viewer::{self, ReplayViewerState};
 use crate::ui::organisms::sens_converter::{ConverterState, sens_converter};
 use crate::ui::organisms::sens_finder;
@@ -180,6 +181,8 @@ struct MenuState {
     journal: journal_panel::JournalState,
     /// Benchmark plateaus, recomputed when the history changes (Progress tab).
     plateaus: HistoryCache<Vec<aim_core::training::progress::Plateau>>,
+    /// "Verify a proof" field and its background check (Progress tab).
+    proof: proof_panel::ProofVerifier,
 }
 
 /// A value derived from the history, recomputed only after the history changed.
@@ -509,6 +512,14 @@ fn menu(
                             )
                         });
                         progress_panel::plateau_section(ui, plateaus);
+                    }
+                    state.proof.poll();
+                    if proof_panel::verify_section(ui, &mut state.proof) {
+                        state.proof.start(lib.scenarios.clone());
+                    }
+                    if state.proof.is_running() {
+                        ui.ctx()
+                            .request_repaint_after(std::time::Duration::from_millis(100));
                     }
                     state.export.poll();
                     let default_path = cfg
