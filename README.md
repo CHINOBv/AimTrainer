@@ -36,6 +36,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - **Run insights:** flicks by screen direction and distance, click timing, pace and stamina, target priority, tracking speed match and edge time, and firing while moving. In arenas: peek timing. A **miss compass** shows whether you miss above or below the head, and a **potential score** names the one fix worth the most points.
   - A **sensitivity suggestion** from your recent flicks' over/undershoot, with the evidence shown. It is applied only when you choose to.
   - A **replay viewer** of your crosshair path: the trail is coloured by speed, and it has a hit/miss heatmap and a side-by-side comparison with an earlier run.
+  - **Mistake replays**, one mistake at a time: your whole flick, then the exact moment it went wrong in slow motion (for example, where an overflick passed the target), a tip for that flick, and a realistic corrected example drawn over your path. Open them from a saved replay on the Progress page.
   - Benchmark trends and personal bests, and a **plateau detector** on the Progress page: a benchmark subcategory you keep playing with no new personal best in 3 weeks gets suggestions for a change of stimulus (a variant, a sensitivity variation, a switch of emphasis or a lighter week).
   - Offline **post-match analysis** of official match files.
   - **Verifiable score proofs**: copy a run's proof code from the results screen; a friend pastes it on the Progress page and their trainer replays the run to confirm the score, with no server.
