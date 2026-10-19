@@ -1,0 +1,26 @@
+# Idea credit: the angle-holding VALORANT micro drills of the Voltaic VALORANT playlists.
+# Original scenario: no file, name or value was copied.
+# Approximation: there is no cover to peek from. A head-sized sphere appears after a random
+# wait on the left or right side of the angle (spawn_rules.exclude_center), strafes and leaves
+# after 1.6 s; its value fades over 1 s, so a fast reaction scores more.
+id = "angle-hold-peek"
+name = "Angle Hold Peek"
+category = "reaction"
+description = """
+Hold an angle. After a random wait a small head-sized target peeks from the left or the right
+side, strafes and leaves after 1.6 s. Keep the crosshair on the head line and react fast."""
+duration_secs = 60
+
+[targets]
+shape = { kind = "sphere", radius = 0.15 }
+spawn = { kind = "angular", yaw_deg = [-14.0, 14.0], pitch_deg = [0.0, 0.0], distance = [15.0, 20.0] }
+motion = { kind = "strafe", weapon = "vandal", change_secs = [0.3, 0.6], max_offset = 1.5 }
+max_alive = 1
+lifetime_secs = 1.6
+appear_delay_secs = [0.5, 2.0]
+spawn_rules = { exclude_center = 0.5 }
+
+[scoring]
+miss_penalty = 25
+expire_penalty = 25
+decay = { window_secs = 1.0, floor = 0.3 }

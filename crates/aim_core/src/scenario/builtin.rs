@@ -10,6 +10,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/ammo-discipline.toml"),
     ),
     (
+        "angle-hold-peek.toml",
+        include_str!("../../../../content/scenarios/angle-hold-peek.toml"),
+    ),
+    (
         "arc-follow.toml",
         include_str!("../../../../content/scenarios/arc-follow.toml"),
     ),
@@ -108,6 +112,14 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "micro-adjust.toml",
         include_str!("../../../../content/scenarios/micro-adjust.toml"),
+    ),
+    (
+        "micro-cluster.toml",
+        include_str!("../../../../content/scenarios/micro-cluster.toml"),
+    ),
+    (
+        "micro-pace.toml",
+        include_str!("../../../../content/scenarios/micro-pace.toml"),
     ),
     (
         "mini-phase.toml",
