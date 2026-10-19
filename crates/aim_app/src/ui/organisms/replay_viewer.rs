@@ -10,6 +10,7 @@
 //! side by side with an earlier run of the same scenario ([`super::replay_compare`]).
 
 use super::replay_compare::{self, ReplayCompareState};
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::persistence::replays::{self, ReplayEntry};
 use crate::ui::atoms::speed_ramp::ramp_color;
 use crate::ui::atoms::{BAD, GOOD, WARN};
@@ -157,32 +158,32 @@ pub(crate) fn timestamp_label(millis: u64) -> String {
             t.hour(),
             t.minute()
         ),
-        None => "unknown date".to_owned(),
+        None => tr("unknown date").to_owned(),
     }
 }
 
 fn summary(e: &Engagement) -> String {
-    let outcome = if e.killed { "killed" } else { "not killed" };
+    let outcome = if e.killed {
+        "{} shot(s), {} missed, killed"
+    } else {
+        "{} shot(s), {} missed, not killed"
+    };
     let mut parts = vec![
-        format!(
-            "{} shot(s), {} missed, {outcome}",
-            e.shots.len(),
-            e.misses()
-        ),
+        tr_fmt(outcome, &[&e.shots.len(), &e.misses()]),
         format!("{:.2} s", (e.end_secs - e.start_secs).max(0.0)),
-        format!("target radius {:.2}°", e.radius_deg),
+        tr_fmt("target radius {}°", &[&format!("{:.2}", e.radius_deg)]),
     ];
     if let Some(r) = e.reaction_secs {
-        parts.push(format!("reaction {:.0} ms", r * 1000.0));
+        parts.push(tr_fmt("reaction {} ms", &[&format!("{:.0}", r * 1000.0)]));
     }
     if !e.shots.is_empty() {
-        parts.push(format!("{} correction(s)", e.corrections));
+        parts.push(tr_fmt("{} correction(s)", &[&e.corrections]));
     }
     if e.overshot {
-        parts.push("overshot".to_owned());
+        parts.push(tr("overshot").to_owned());
     }
     if e.undershot {
-        parts.push("undershot".to_owned());
+        parts.push(tr("undershot").to_owned());
     }
     parts.join(" · ")
 }
@@ -302,26 +303,26 @@ fn plot(ui: &mut egui::Ui, e: &Engagement, zoom: bool) {
         paint_shot(&painter, to_screen(s.offset_deg, center, px_per_deg), s.hit);
     }
 
-    response.on_hover_text(
+    response.on_hover_text(tr(
         "Crosshair offset from the target center, in degrees. Yellow circle: the target. \
          Trail colour: crosshair speed (see the legend). Hollow dot: start. \
          Green dot: hit. Red cross: miss.",
-    );
+    ));
 }
 
 /// Legend of the speed-coloured trail: one swatch per speed band.
 fn speed_legend(ui: &mut egui::Ui) {
     ui.horizontal_wrapped(|ui| {
-        ui.small("Trail speed:");
+        ui.small(tr("Trail speed:"));
         let bands = [
             (
                 1.0 / 6.0,
-                format!("slow (< {SLOW_SPEED_DEG_PER_SEC:.0}°/s)"),
+                tr_fmt("slow (< {}°/s)", &[&format!("{SLOW_SPEED_DEG_PER_SEC:.0}")]),
             ),
-            (0.5, "medium".to_owned()),
+            (0.5, tr("medium").to_owned()),
             (
                 5.0 / 6.0,
-                format!("fast (≥ {FAST_SPEED_DEG_PER_SEC:.0}°/s)"),
+                tr_fmt("fast (≥ {}°/s)", &[&format!("{FAST_SPEED_DEG_PER_SEC:.0}")]),
             ),
         ];
         for (t, label) in bands {
@@ -357,23 +358,27 @@ fn heatmap_plot(ui: &mut egui::Ui, h: &ShotHeatmap, filter: ShotFilter, max: u32
     }
     let px_per_radius = paint_grid(&painter, area, h.extent_radii, "r");
     painter.circle_stroke(area.center(), px_per_radius, Stroke::new(1.5, WARN));
-    response.on_hover_text(
+    response.on_hover_text(tr(
         "Where your shots landed, in target radii (1r is the target's edge), so targets of \
          every size share one grid. Yellow circle: the target. Brighter cells: more shots.",
-    );
+    ));
 }
 
 /// Shot totals under a heatmap.
 fn heatmap_counts(ui: &mut egui::Ui, h: &ShotHeatmap, filter: ShotFilter) {
     let (hits, misses) = h.total();
     if hits + misses == 0 {
-        ui.small("No shots in this run (hold scenarios record none).");
+        ui.small(tr("No shots in this run (hold scenarios record none)."));
         return;
     }
-    ui.small(format!(
-        "{hits} hit(s), {misses} miss(es); {} outside ±{:.0} radii, not drawn",
-        filter.outside(h),
-        h.extent_radii
+    ui.small(tr_named(
+        "{hits} hit(s), {misses} miss(es); {outside} outside ±{extent} radii, not drawn",
+        &[
+            ("hits", &hits),
+            ("misses", &misses),
+            ("outside", &filter.outside(h)),
+            ("extent", &format!("{:.0}", h.extent_radii)),
+        ],
     ));
 }
 
@@ -383,7 +388,7 @@ fn heatmap_legend(ui: &mut egui::Ui, max: u32) {
         return;
     }
     ui.horizontal_wrapped(|ui| {
-        ui.small("Shots per cell:");
+        ui.small(tr("Shots per cell:"));
         ui.colored_label(ramp_color(1.0 / max as f32), "■");
         ui.small("1");
         ui.colored_label(ramp_color(1.0), "■");
@@ -401,7 +406,7 @@ fn path_view(
 ) {
     let count = path.engagements.len();
     if count == 0 {
-        ui.small("No engagements in this run.");
+        ui.small(tr("No engagements in this run."));
         return;
     }
     *engagement = (*engagement).min(count - 1);
@@ -409,9 +414,9 @@ fn path_view(
     ui.horizontal(|ui| {
         ui.add_enabled(
             count > 1,
-            egui::Slider::new(&mut shown, 1..=count).text(format!("of {count} engagements")),
+            egui::Slider::new(&mut shown, 1..=count).text(tr_fmt("of {} engagements", &[&count])),
         );
-        ui.checkbox(zoom, "Zoom on target");
+        ui.checkbox(zoom, tr("Zoom on target"));
     });
     *engagement = shown - 1;
     let e = &path.engagements[*engagement];
@@ -422,19 +427,19 @@ fn path_view(
         return;
     };
     ui.columns(2, |cols| {
-        cols[0].strong("This run");
+        cols[0].strong(tr("This run"));
         plot(&mut cols[0], e, *zoom);
         cols[0].label(summary(e));
-        cols[1].strong(format!("Earlier run, engagement {shown}"));
+        cols[1].strong(tr_fmt("Earlier run, engagement {}", &[&shown]));
         match other.engagements.get(*engagement) {
             Some(o) => {
                 plot(&mut cols[1], o, *zoom);
                 cols[1].label(summary(o));
             }
             None => {
-                cols[1].small(format!(
+                cols[1].small(tr_fmt(
                     "The earlier run has only {} engagement(s).",
-                    other.engagements.len()
+                    &[&other.engagements.len()],
                 ));
             }
         }
@@ -451,10 +456,10 @@ fn heatmap_view(
     filter: &mut ShotFilter,
 ) {
     ui.horizontal(|ui| {
-        ui.label("Shots:");
-        ui.radio_value(filter, ShotFilter::All, "All");
-        ui.radio_value(filter, ShotFilter::Hits, "Hits");
-        ui.radio_value(filter, ShotFilter::Misses, "Misses");
+        ui.label(tr("Shots:"));
+        ui.radio_value(filter, ShotFilter::All, tr("All"));
+        ui.radio_value(filter, ShotFilter::Hits, tr("Hits"));
+        ui.radio_value(filter, ShotFilter::Misses, tr("Misses"));
     });
     let f = *filter;
     let heatmap = |p: &ReplayPath| shot_heatmap(&p.engagements, HEATMAP_BINS, HEATMAP_EXTENT_RADII);
@@ -469,10 +474,10 @@ fn heatmap_view(
     let ho = heatmap(other);
     let max = f.max_count(&h).max(f.max_count(&ho));
     ui.columns(2, |cols| {
-        cols[0].strong("This run");
+        cols[0].strong(tr("This run"));
         heatmap_plot(&mut cols[0], &h, f, max);
         heatmap_counts(&mut cols[0], &h, f);
-        cols[1].strong("Earlier run");
+        cols[1].strong(tr("Earlier run"));
         heatmap_plot(&mut cols[1], &ho, f, max);
         heatmap_counts(&mut cols[1], &ho, f);
     });
@@ -488,7 +493,7 @@ pub fn replay_viewer(
     load: impl Fn(&ReplayEntry) -> Option<ReplayPath>,
 ) {
     if entries.is_empty() {
-        ui.small("No replays yet. Every finished run is saved here.");
+        ui.small(tr("No replays yet. Every finished run is saved here."));
         return;
     }
     let current = state
@@ -521,7 +526,9 @@ pub fn replay_viewer(
         return;
     };
     let Some(current) = entries.iter().find(|e| &e.path == selected) else {
-        ui.label("The selected replay is no longer on disk. Pick another one from the list.");
+        ui.label(tr(
+            "The selected replay is no longer on disk. Pick another one from the list.",
+        ));
         return;
     };
     let ReplayViewerState {
@@ -534,13 +541,13 @@ pub fn replay_viewer(
         ..
     } = state;
     let Some(path) = path.as_ref() else {
-        ui.colored_label(BAD, "This replay could not be read.");
+        ui.colored_label(BAD, tr("This replay could not be read."));
         return;
     };
     ui.horizontal(|ui| {
-        ui.label("View:");
-        ui.selectable_value(mode, ViewMode::Path, "Crosshair path");
-        ui.selectable_value(mode, ViewMode::Heatmap, "Shot heatmap");
+        ui.label(tr("View:"));
+        ui.selectable_value(mode, ViewMode::Path, tr("Crosshair path"));
+        ui.selectable_value(mode, ViewMode::Heatmap, tr("Shot heatmap"));
     });
     let candidates = replays::earlier_runs_of_same_scenario(entries, current);
     replay_compare::compare_picker(ui, compare, &candidates, &load);
@@ -706,5 +713,20 @@ mod tests {
         assert_eq!(ShotFilter::All.outside(&h), 9);
         assert_eq!(ShotFilter::Hits.outside(&h), 4);
         assert_eq!(ShotFilter::Misses.outside(&h), 5);
+    }
+
+    #[test]
+    fn the_viewer_reads_in_spanish() {
+        use aim_core::i18n::{Lang, tr_fmt_in, tr_in};
+        assert_eq!(tr_in(Lang::Es, "Shot heatmap"), "Mapa de calor de disparos");
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "of {} engagements", &[&5]),
+            "de 5 enfrentamientos"
+        );
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "{} shot(s), {} missed, killed", &[&2, &1]),
+            "2 disparo(s), 1 fallado(s), eliminado"
+        );
+        assert_eq!(tr_in(Lang::En, "Shot heatmap"), "Shot heatmap");
     }
 }

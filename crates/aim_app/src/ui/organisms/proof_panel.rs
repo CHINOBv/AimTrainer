@@ -2,6 +2,7 @@
 //! and a "Verify a proof" field that re-simulates a pasted code on a background thread
 //! against the player's own library.
 
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::ui::atoms::{BAD, GOOD, big};
 use aim_core::analytics::proof::{ScoreProof, verify};
 use aim_core::scenario::{Recording, RunKey, RunResult, ScenarioDef};
@@ -12,28 +13,36 @@ use std::thread::JoinHandle;
 pub fn proof_code(recording: &Recording, result: &RunResult) -> Result<String, String> {
     ScoreProof::new(recording.clone(), result)
         .and_then(|p| p.encode())
-        .map_err(|e| format!("Could not build a proof code: {e}"))
+        .map_err(|e| tr_fmt("Could not build a proof code: {}", &[&e]))
 }
 
 /// Re-simulate a pasted code against `library`: the verified line, or why it failed.
 pub fn verify_code(code: &str, library: &[ScenarioDef]) -> Result<String, String> {
-    let proof = ScoreProof::decode(code).map_err(|e| format!("Not verified: {e}"))?;
-    let v = verify(&proof, library).map_err(|e| format!("Not verified: {e}"))?;
+    let proof = ScoreProof::decode(code).map_err(|e| not_verified(&e))?;
+    let v = verify(&proof, library).map_err(|e| not_verified(&e))?;
     let base = RunKey::parse(&v.scenario_id).base.to_owned();
     let name = library
         .iter()
         .find(|d| d.id == base)
-        .map_or(base.clone(), |d| d.name.clone());
+        .map_or(base.clone(), |d| tr(&d.name).to_owned());
     let scenario = if v.scenario_id == base {
         name
     } else {
         format!("{name} ({})", v.scenario_id)
     };
-    Ok(format!(
-        "Verified: {scenario} score {:.0}, accuracy {:.1}%",
-        v.result.score,
-        v.result.accuracy * 100.0
+    Ok(tr_named(
+        "Verified: {scenario} score {score}, accuracy {accuracy}%",
+        &[
+            ("scenario", &scenario),
+            ("score", &format!("{:.0}", v.result.score)),
+            ("accuracy", &format!("{:.1}", v.result.accuracy * 100.0)),
+        ],
     ))
+}
+
+/// The failed-verification line for `reason`.
+fn not_verified(reason: &dyn std::fmt::Display) -> String {
+    tr_fmt("Not verified: {}", &[reason])
 }
 
 /// The pasted code and the verification running or finished.
@@ -59,7 +68,7 @@ impl ProofVerifier {
                 self.job = Some(h);
                 self.outcome = None;
             }
-            Err(e) => self.outcome = Some(Err(format!("Not verified: {e}"))),
+            Err(e) => self.outcome = Some(Err(not_verified(&e))),
         }
     }
 
@@ -74,7 +83,7 @@ impl ProofVerifier {
         {
             self.outcome = Some(
                 h.join()
-                    .unwrap_or_else(|_| Err("Not verified: the verifier stopped".to_owned())),
+                    .unwrap_or_else(|_| Err(tr("Not verified: the verifier stopped").to_owned())),
             );
         }
     }
@@ -98,17 +107,19 @@ impl ProofVerifier {
 /// "Verify a proof": returns true when the player asks to verify the pasted code.
 pub fn verify_section(ui: &mut egui::Ui, v: &mut ProofVerifier) -> bool {
     ui.add_space(10.0);
-    ui.label(big("Verify a proof", 20.0));
-    ui.small("Paste a friend's proof code: the run is replayed against your own scenarios, so an edited scenario or a changed score is caught. It shows the inputs give that score, not who played them.");
+    ui.label(big(tr("Verify a proof"), 20.0));
+    ui.small(tr("Paste a friend's proof code: the run is replayed against your own scenarios, so an edited scenario or a changed score is caught. It shows the inputs give that score, not who played them."));
     let mut clicked = false;
     ui.horizontal(|ui| {
         ui.add(
             egui::TextEdit::singleline(&mut v.code)
-                .hint_text("proof code")
+                .hint_text(tr("proof code"))
                 .desired_width(360.0),
         );
         let ready = !v.is_running() && !v.code.trim().is_empty();
-        clicked = ui.add_enabled(ready, egui::Button::new("Verify")).clicked();
+        clicked = ui
+            .add_enabled(ready, egui::Button::new(tr("Verify")))
+            .clicked();
         if v.is_running() {
             ui.spinner();
         }
@@ -214,5 +225,15 @@ mod tests {
         v.wait();
         assert!(!v.is_running());
         assert!(matches!(v.outcome(), Some(Ok(line)) if line.starts_with("Verified: ")));
+    }
+
+    #[test]
+    fn proof_lines_read_in_spanish() {
+        use aim_core::i18n::{Lang, tr_fmt_in, tr_in};
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "Not verified: {}", &[&"x"]),
+            "No verificado: x"
+        );
+        assert_eq!(tr_in(Lang::Es, "Verify a proof"), "Verificar una prueba");
     }
 }
