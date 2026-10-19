@@ -1,0 +1,48 @@
+# Original drill from the movement research (docs/library.md, "Library: movement").
+# Idea: Counter-strafe under time pressure, from counter-strafe guides and Riot measured stopping curves.
+id = "stutter-ladder"
+name = "Stutter Ladder"
+category = "movement"
+description = """
+Counter-strafe on a shrinking clock. Strafe with A/D, tap the opposite key to stop, and hit the head before the agent leaves.
+Every 8 kills the head stays for less time: 2.6 s, 2.0 s, 1.5 s, then 1.1 s. A hit within 0.3 s of your stop earns a bonus; moving shots lose points."""
+
+[weapon]
+kind = "vandal"
+simulate_spread = true
+
+[player]
+movement = true
+bounds_x = [-16.0, 16.0]
+bounds_z = [-3.0, 8.0]
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-9.0, 9.0], z = [-22.0, -12.0] }
+max_alive = 1
+lifetime_secs = 2.6
+
+[scoring]
+miss_penalty = 10
+moving_shot_penalty = 50
+expire_penalty = 40
+stop_window = { secs = 0.3, bonus = 40 }
+
+[[phases]]
+name = "2.6 s heads"
+targets = { lifetime_secs = 2.6 }
+advance = { kind = "kills", kills = 8 }
+
+[[phases]]
+name = "2.0 s heads"
+targets = { lifetime_secs = 2.0 }
+advance = { kind = "kills", kills = 8 }
+
+[[phases]]
+name = "1.5 s heads"
+targets = { lifetime_secs = 1.5 }
+advance = { kind = "kills", kills = 8 }
+
+[[phases]]
+name = "1.1 s heads"
+targets = { lifetime_secs = 1.1 }

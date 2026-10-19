@@ -1,0 +1,29 @@
+# Original drill from the movement research (docs/library.md, "Library: movement").
+# Idea: Spider shot with movement: strafe and stop between every shot.
+id = "spider-strafe"
+name = "Spider Strafe"
+category = "movement"
+description = """
+Spider shot on the move. Shoot the centre sphere, strafe, stop, shoot the sphere that appears 4–10° around it, strafe again, and come back to the centre.
+The centre stays in one place while you move. A hit within 0.4 s of an accurate stop scores 60 more than a standing shot, so moving between shots is most of the score; moving shots lose points."""
+
+[weapon]
+kind = "vandal"
+simulate_spread = true
+
+[player]
+movement = true
+bounds_x = [-16.0, 16.0]
+bounds_z = [-3.0, 6.0]
+
+[targets]
+shape = { kind = "sphere", radius = 0.2 }
+spawn = { kind = "floor", x = [0.0, 0.0], z = [-14.0, -14.0], height = [1.9, 1.9] }
+max_alive = 1
+spider = { ring_deg = [4.0, 10.0] }
+
+[scoring]
+sphere = 40
+miss_penalty = 10
+moving_shot_penalty = 40
+stop_window = { secs = 0.4, bonus = 60 }

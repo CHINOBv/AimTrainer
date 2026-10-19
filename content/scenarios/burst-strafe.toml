@@ -1,0 +1,32 @@
+# Original drill from the movement research (docs/library.md, "Library: movement").
+# Idea: Burst with movement: strafe, counter-strafe, short burst, strafe again.
+id = "burst-strafe"
+name = "Burst Strafe"
+category = "movement"
+description = """
+Burst with movement. Strafe, counter-strafe, fire a 2–4 bullet burst into the agent, then strafe again. It takes 3 hits.
+Bullets that hit within 0.35 s of your stop earn the stop bonus, and hits among the Vandal's first 6 bullets earn the burst bonus. A long spray climbs and runs past the window; moving shots lose points."""
+
+[weapon]
+kind = "vandal"
+simulate_spread = true
+recoil = true
+
+[player]
+movement = true
+bounds_x = [-16.0, 16.0]
+bounds_z = [-3.0, 8.0]
+
+[targets]
+shape = { kind = "humanoid" }
+spawn = { kind = "floor", x = [-8.0, 8.0], z = [-18.0, -11.0] }
+max_alive = 1
+health = 3
+lifetime_secs = 4.0
+
+[scoring]
+miss_penalty = 5
+moving_shot_penalty = 30
+expire_penalty = 40
+burst_bonus = 10
+stop_window = { secs = 0.35, bonus = 20 }

@@ -112,9 +112,27 @@ The engine cannot model these ideas exactly; each file explains its approximatio
 | `fade-track` | Health that drains on its own | No negative regeneration exists: a 3 s `lifetime_secs` plus score `decay` to 10% |
 | `angle-hold-peek`, `peek-track` | Peeking from behind cover | No cover in scenarios: the target appears after a wait, strafes and vanishes on `lifetime_secs` |
 
+## Library: movement
+
+Original drills built from the movement research of 2026-10-19 (VALORANT patch notes 3.0 and 9.10, Riot's measured stopping curves, counter-strafe guides; see `training-science.md`, "Movement drills and the stop-timing reward"). They credit their idea in a TOML comment, like the rest of the library. Every one uses `simulate_spread`, a moving-shot penalty and, except `spread-gate`, the `stop_window` reward. The simulated aimer does not move, so the calibrated scores measure only the aiming part.
+
+| Scenario | Idea | Mechanic | Trains |
+|---|---|---|---|
+| `stutter-ladder` | Counter-strafe under time pressure | Head-only agents whose lifetime drops every 8 kills (2.6 s → 2.0 s → 1.5 s → 1.1 s, four `phases`) | A fast, clean stop before the shot |
+| `mirror-duel` | ADAD mirror duel | One strafing agent with `reactions` that copy (50%) or oppose (30%) the player's new strafes | Shooting when the head settles instead of timing a bot |
+| `head-rail-run` | Crosshair placement while moving | Agents pop up 8–28 m away after a short wait, stay 1.8 s, and lose value over time (`decay`) | Keeping the crosshair at head height while strafing |
+| `depth-brake` | W/S braking | A narrow, long play area (x ±2 m, z −8 to 10 m), so the player moves forward and back | Stopping forward/back movement before the shot |
+| `crouch-duel` | Crouch-spam duel | One `dodge` agent with a 40% crouch chance at each decision | Holding the head line through crouches |
+| `flinch-stop` | Reaction stop | An agent appears after 0.6–1.8 s and stays 1.5 s | Stopping on a surprise target |
+| `spread-gate` | Spread discipline | Small spheres 22–30 m away; moving spread misses them; `accuracy_mult = "sqrt"` | Never shooting before a full stop |
+| `burst-strafe` | Burst with movement | `recoil` on, 3-hit agents, `burst_bonus` plus a 0.35 s `stop_window` | A 2–4 bullet burst right after the stop, then moving again |
+| `squad-strafe` | Moving enemies | Three agents at once, each on a strafe or dodge `motion_profile` | Picking one moving target, stopping and moving again |
+| `spider-web` | Spider shot (standing) | `targets.spider`: a fixed centre sphere and a rim sphere 6–16° around it, alternating | Flicking out and back to the centre |
+| `spider-strafe` | Spider shot with movement | A world-fixed centre, rim spheres 4–10° around it, and a 0.4 s `stop_window` worth more than the hit | Moving between every shot of a spider pattern |
+
 ## Routines
 
-Eight built-in routines in `content/routines/` use the library. Durations come from `RoutineDef::minutes` (scenario `duration_secs` × runs) and leave out the time between runs. A test keeps each one within ±20% of its target length. Run counts and block order are our design choices, not measured training effects (estimate).
+Nine built-in routines in `content/routines/` use the library. Durations come from `RoutineDef::minutes` (scenario `duration_secs` × runs) and leave out the time between runs. A test keeps each one within ±20% of its target length. Run counts and block order are our design choices, not measured training effects (estimate).
 
 | Routine | Purpose | Structure | Minutes |
 |---|---|---|---|
@@ -125,6 +143,7 @@ Eight built-in routines in `content/routines/` use the library. Durations come f
 | `switching-builder` | Target switching | Blocked, in order: warm-up, then `dot-sweep`, `tempo-movers`, `jitter-switch`, `fly-switch`, `hop-switch`, `prism-bounce`, `mini-regen-switch` | ≈27 |
 | `dynamic-clicking` | Clicking moving targets | Warm-up (`track-precise`, `flick-wide`), then 1 blocked run each of `diag-drifters`, `wave-runners`, `bobbing-heads`, `ricochet-ring`, `drifting-heads`, `zigzag-sparks`, `hop-field`, `skeet-arcs`, `popcorn-burst`, `stop-go-weavers`, `shrinking-movers`, `pill-crossfire` and `close-strafe-heads`, then a shorter interleaved pass of ten of them | ≈25 |
 | `reaction-and-decision` | Reaction and decisions under time pressure | Warm-up, then `reflex-flick`, `reactive-flick`, `pressure-balloons`, `go-no-go`, `peripheral-detect`, `radar-recall` and `sound-turn` interleaved | ≈19 |
+| `movement-builder` | Movement and stopping | Warm-up in order (`spider-web`, `counter-strafe`, `strafe-shot`), then 2 runs each of the ten movement drills above, interleaved | ≈23 |
 | `ranked-prep-15` | Warm-up before ranked | In order, easiest first: `track-precise` and `flick-wide` at −0.25 difficulty, then `dot-sweep`, `micro-pace`, `head-strafe-track`, `snap-reflex`, `counter-strafe` | ≈13 |
 
 ### Evidence notes

@@ -1,0 +1,30 @@
+# Original drill from the movement research (docs/library.md, "Library: movement").
+# Idea: Reaction stop: counter-strafe the moment a target appears.
+id = "flinch-stop"
+name = "Flinch Stop"
+category = "movement"
+description = """
+React and stop. Keep strafing: an agent appears after a random wait and stays for only 1.5 s.
+Counter-strafe the moment you see it and tap the head. A hit within 0.25 s of your stop earns a bonus; letting it leave or shooting on the move costs points."""
+
+[weapon]
+kind = "vandal"
+simulate_spread = true
+
+[player]
+movement = true
+bounds_x = [-16.0, 16.0]
+bounds_z = [-3.0, 6.0]
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-10.0, 10.0], z = [-20.0, -12.0] }
+max_alive = 1
+lifetime_secs = 1.5
+appear_delay_secs = [0.6, 1.8]
+
+[scoring]
+miss_penalty = 10
+moving_shot_penalty = 50
+expire_penalty = 30
+stop_window = { secs = 0.25, bonus = 40 }

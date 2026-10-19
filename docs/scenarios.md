@@ -48,6 +48,7 @@ regen = { interval_secs = 0.5, amount = 1, reset_on_hit = false }   # optional h
 spawn_rules = { avoid_last_deg = 10, min_flick_deg = 15 }          # optional spawn-pattern controls
 perception = { kind = "sound_cue", sound = "footsteps", reveal_after_secs = 0.8 }   # optional perception drill
 shrink_per_kill = { factor = 0.97, floor = 0.5 }                  # optional: every kill shrinks spheres
+spider = { ring_deg = [6, 16] }                                    # optional spider shot: centre and ring spawns alternate
 
 [scoring]                    # all optional
 head = 100                   # per hit (click) or per second (hold)
@@ -62,6 +63,7 @@ rings = { radius = [0.25, 0.5, 1.0], multiplier = [3.0, 2.0, 1.0] }   # optional
 decoy_penalty = 0            # per shot on a go/no-go decoy
 decay = { window_secs = 2.0, floor = 0.3 }   # optional: a target's value fades after it appears
 accuracy_mult = "none"       # "linear" or "sqrt": the final score × accuracy (or its square root)
+stop_window = { secs = 0.3, bonus = 40 }     # optional: bonus per hit fired soon after an accurate stop; needs player.movement
 
 [view]                       # optional
 fov_lock = [60, 80]          # vertical FOV in degrees: a fixed value (60) or a [min, max] clamp
@@ -214,6 +216,35 @@ With `recoil = true`, holding the fire button fires full-auto at the weapon's fi
 Recoil moves the bullets, not the camera. `simulate_spread` still adds running inaccuracy on top. The run then also records bursts, average burst length, the share of first bullets, and hits by bullet index (1, 2–3, 4–6, 7+). The per-bullet angles are estimates; see `valorant-mechanics.md`.
 
 `recoil` requires `fire = "click"` and `kind = "vandal"` or `"phantom"`, and `burst_bonus` above 0 requires `recoil`.
+
+### Stop-timing reward
+
+`scoring.stop_window` rewards shooting right after a stop, the moment a counter-strafe is meant to create:
+
+```toml
+[scoring]
+moving_shot_penalty = 50
+stop_window = { secs = 0.3, bonus = 40 }
+```
+
+A hit fired while accurate (at or below 27.5% of run speed for rifles), at most `secs` after the last frame the player moved faster than that, scores `bonus` extra points. Shots fired while moving never earn it, and a player who has not moved yet has no stop to time. Every bullet of a burst that lands inside the window earns it, so with `weapon.recoil` a 2–4 bullet burst right after the stop does and a long spray runs past the window. The run counts these hits as `stop_hits`.
+
+`secs` must be in (0, 2] and `bonus` ≥ 0. It needs `player.movement = true` and `fire = "click"`. The window length is a design choice, not a VALORANT value: a counter-strafe takes ≈0.16 s (`valorant-mechanics.md`), so 0.25–0.4 s leaves time to settle the crosshair without waiting. The built-in movement drills use it, and `burst-strafe` combines it with `burst_bonus`.
+
+### Spider shot
+
+`targets.spider` alternates two kinds of spawn, one target at a time:
+
+```toml
+[targets]
+spawn = { kind = "floor", x = [0, 0], z = [-14, -14], height = [1.9, 1.9] }
+max_alive = 1
+spider = { ring_deg = [4, 10] }
+```
+
+The 1st, 3rd, 5th… target is the centre, drawn from `spawn` as usual; a spawn area of one point gives a fixed centre. Every other target is a rim target `ring_deg` away from the last centre target, seen from the player's eye when it spawns, in a random direction (humanoids step left or right) and at the same distance. So the player flicks out, then back to the centre, every time. With `player.movement` the angle is measured from where the player stands, so a world-fixed centre (a `floor` point) stays put while the player moves.
+
+`ring_deg` is a [min, max] within (0, 60]. `spider` needs `max_alive = 1`, no decoys and no perception drill; `min_separation_deg` and `spawn_rules` apply only to the centre draws. The built-ins are `spider-web` (standing) and `spider-strafe` (moving, scored with `stop_window`).
 
 ### Spawn areas
 

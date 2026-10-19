@@ -1,0 +1,29 @@
+# Original drill from the movement research (docs/library.md, "Library: movement").
+# Idea: W/S braking: stop forward and backward movement before the shot.
+id = "depth-brake"
+name = "Depth Brake"
+category = "movement"
+description = """
+Stop going forward and back. The lane is narrow and long: walk up with W or back off with S, brake with the opposite key, and tap the head.
+The trainer uses the same stopping curves for W/S as for A/D, so a W/S counter-strafe also takes about 0.16 s. A hit within 0.3 s of the stop earns a bonus; moving shots lose points."""
+
+[weapon]
+kind = "vandal"
+simulate_spread = true
+
+[player]
+movement = true
+bounds_x = [-2.0, 2.0]
+bounds_z = [-8.0, 10.0]
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-8.0, 8.0], z = [-26.0, -14.0] }
+max_alive = 1
+lifetime_secs = 3.0
+
+[scoring]
+miss_penalty = 10
+moving_shot_penalty = 50
+expire_penalty = 40
+stop_window = { secs = 0.3, bonus = 40 }

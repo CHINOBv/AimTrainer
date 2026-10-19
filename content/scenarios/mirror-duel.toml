@@ -1,0 +1,31 @@
+# Original drill from the movement research (docs/library.md, "Library: movement").
+# Idea: ADAD mirror duel: an opponent whose strafe answers yours, so its turns cannot be timed.
+id = "mirror-duel"
+name = "Mirror Duel"
+category = "movement"
+description = """
+An A/D duel against an agent that answers your strafe. Half the time it copies a new strafe of yours, a third of the time it turns against it.
+Its rhythm follows yours, not a timer, so you cannot time its turns. Strafe, stop when the head settles, and tap it. Moving shots lose points."""
+
+[weapon]
+kind = "vandal"
+simulate_spread = true
+
+[player]
+movement = true
+bounds_x = [-16.0, 16.0]
+bounds_z = [-2.0, 6.0]
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-5.0, 5.0], z = [-16.0, -10.0] }
+motion = { kind = "strafe", weapon = "vandal", change_secs = [0.35, 0.8], stop_chance = 0.2, max_offset = 3.0 }
+max_alive = 1
+lifetime_secs = 4.0
+reactions = { mirror_strafe_chance = 0.5, oppose_strafe_chance = 0.3, react_secs = [0.2, 0.45] }
+
+[scoring]
+miss_penalty = 10
+moving_shot_penalty = 50
+expire_penalty = 40
+stop_window = { secs = 0.3, bonus = 30 }
