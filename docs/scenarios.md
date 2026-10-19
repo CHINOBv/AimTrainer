@@ -9,7 +9,7 @@ Scenarios, routines and benchmarks are plain TOML files. To add one, drop the fi
 
 **Overrides:** a user file with the same `id` as a built-in replaces it, which is the way to tweak a built-in.
 
-**Examples:** the built-in files are in `content/scenarios/` and `content/routines/`; copy one and edit it.
+**Examples:** the built-in files are in `content/scenarios/` and `content/routines/`; copy one and edit it. `library.md` lists the drill library and the idea behind each scenario.
 
 **Typos fail loudly:** unknown keys are rejected. The menu lists files that failed to load, with the field that is wrong.
 

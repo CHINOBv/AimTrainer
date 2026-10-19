@@ -1,0 +1,22 @@
+# Idea: KovaaK's reactive-flick drills (a static target that starts moving when hit).
+# Own name and parameters.
+id = "reactive-flick"
+name = "Reactive Flick"
+category = "flicking"
+description = """
+Two-hit flicks. A sphere waits still until you hit it; then it strafes away and needs a
+second hit. Trains a clean first flick followed by an immediate correction onto a target
+that just started moving."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.2 }
+spawn = { kind = "around_crosshair", offset_deg = [10.0, 35.0], distance = [12.0, 12.0], on_screen = true }
+health = 2
+
+# Still until hit, then strafing.
+[[targets.behaviors]]
+when = { health_below = 1.0 }
+motion = { kind = "strafe", change_secs = [0.25, 0.5], max_offset = 2.5 }
+
+[scoring]
+miss_penalty = 15

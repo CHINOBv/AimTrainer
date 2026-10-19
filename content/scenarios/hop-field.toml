@@ -1,0 +1,20 @@
+# Idea: Voltaic benchmark "dynamic clicking" slot (small spheres leaping in arcs).
+# Own name and parameters.
+id = "hop-field"
+name = "Hop Field"
+category = "flicking"
+description = """
+Dynamic clicking. Small spheres leap off the floor in arcs and keep bouncing until they run
+out of hops. Click each one before it lands for good. Trains leading a target whose vertical
+speed changes all the time."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.18 }
+spawn = { kind = "floor", x = [-5.0, 5.0], z = [-14.0, -10.0], height = [0.2, 0.2] }
+motion = { kind = "ballistic", speed = [4.0, 6.0], angle_deg = [55.0, 80.0], bounces = 4, restitution = 0.8 }
+max_alive = 3
+min_separation_deg = 6
+appear_delay_secs = [0.1, 0.3]
+
+[scoring]
+expire_penalty = 25

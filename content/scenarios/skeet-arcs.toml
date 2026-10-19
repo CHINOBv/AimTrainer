@@ -1,0 +1,18 @@
+# Idea: KovaaK's skeet drills (targets launched in parabolic arcs). Own name and parameters.
+id = "skeet-arcs"
+name = "Skeet Arcs"
+category = "flicking"
+description = """
+Clay-shooting arcs. Spheres are launched from the floor ahead and fly one parabola before
+landing. Click each one in the air; a landed target costs points. Trains leading a target
+whose path curves under gravity."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.22 }
+spawn = { kind = "floor", x = [-6.0, 6.0], z = [-16.0, -12.0], height = [0.3, 0.3] }
+motion = { kind = "ballistic", speed = [8.0, 11.0], angle_deg = [55.0, 75.0] }
+max_alive = 2
+appear_delay_secs = [0.2, 0.6]
+
+[scoring]
+expire_penalty = 30

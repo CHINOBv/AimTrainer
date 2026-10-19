@@ -1,0 +1,24 @@
+# Idea: Voltaic benchmark "switching" slots (low-gravity spheres ricocheting in a pentagon).
+# Own name and parameters. Approximation: "low gravity" is a slow linear_bounce; the paths
+# are straight lines with no curve.
+id = "prism-bounce"
+name = "Prism Bounce"
+category = "switching"
+description = """
+Switching inside a pentagon. Three spheres float slowly in straight lines and ricochet off the
+walls of a pentagon; each needs 0.4 s of tracking while firing. Trains re-acquiring a target
+right after a ricochet and switching to the next."""
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.25 }
+spawn = { kind = "angular", yaw_deg = [-10.0, 10.0], pitch_deg = [5.0, 14.0], distance = [12.0, 12.0] }
+motion = { kind = "linear_bounce", speed_deg = [5.0, 7.0], arena = { yaw_deg = [-22.0, 22.0], pitch_deg = [-2.0, 20.0], sides = 5 } }
+max_alive = 3
+health = 0.4
+min_separation_deg = 8
+
+[scoring]
+sphere = 400   # points per second on target; a kill is worth ≈160

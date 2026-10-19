@@ -1,0 +1,23 @@
+# Idea: Voltaic benchmark "switching evasive" slot (XYZ movement with a higher time to kill).
+# Own name and parameters.
+id = "fly-switch"
+name = "Fly Switch"
+category = "switching"
+description = """
+Evasive switching in three dimensions. Three spheres wander up, down and sideways and also
+move towards and away from you; each needs 0.6 s of tracking while firing. Trains holding a
+target whose size and path both change before switching."""
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.24 }
+spawn = { kind = "angular", yaw_deg = [-30.0, 30.0], pitch_deg = [0.0, 14.0], distance = [11.0, 15.0] }
+motion = { kind = "drift", speed = [1.2, 2.2], change_secs = [0.4, 0.9], max_offset = 2.0, depth = { change_secs = [0.6, 1.4], distance = [9.0, 16.0] } }
+max_alive = 3
+health = 0.6
+min_separation_deg = 12
+
+[scoring]
+sphere = 400   # points per second on target; a kill is worth ≈240
