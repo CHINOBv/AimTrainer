@@ -543,13 +543,15 @@ impl Settings {
         })
     }
 
-    pub fn save(&self, paths: &Paths) {
+    /// Writes the settings file; returns whether it was written (errors are logged).
+    pub fn save(&self, paths: &Paths) -> bool {
         let result = toml::to_string_pretty(self)
             .map_err(|e| e.to_string())
             .and_then(|s| fs::write(&paths.settings_file, s).map_err(|e| e.to_string()));
-        if let Err(e) = result {
+        if let Err(e) = &result {
             bevy::log::error!("could not save settings: {e}");
         }
+        result.is_ok()
     }
 }
 
@@ -572,6 +574,25 @@ mod tests {
         let settings: Settings = toml::from_str("fullscreen = false").unwrap();
         assert_eq!(settings.crosshair, Crosshair::default());
         assert!(!settings.fullscreen);
+    }
+
+    #[test]
+    fn save_reports_whether_the_file_was_written() {
+        let dir = std::env::temp_dir().join(format!("aimtrainer-save-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let paths = |file: std::path::PathBuf| Paths {
+            settings_file: file,
+            scenarios_dir: dir.clone(),
+            routines_dir: dir.clone(),
+            benchmarks_dir: dir.clone(),
+            history_file: dir.join("history.csv"),
+        };
+        assert!(Settings::default().save(&paths(dir.join("settings.toml"))));
+        assert!(
+            !Settings::default().save(&paths(dir.join("missing").join("settings.toml"))),
+            "a folder that does not exist cannot be written"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

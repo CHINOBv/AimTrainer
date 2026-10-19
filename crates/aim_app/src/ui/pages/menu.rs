@@ -317,11 +317,11 @@ fn menu(
     let lib = nav.library();
     let mut action: Option<UiAction> = None;
 
-    let on_keys_tab = bare_key_rows_shown(state.tab, state.settings_tab, &state.settings_query);
+    let bare_keys_shown = bare_key_rows_shown(state.tab, state.settings_tab, &state.settings_query);
     if number_keys_enabled(
         ctx.egui_wants_keyboard_input(),
         cfg.hotkey_capture.recording.is_some(),
-        on_keys_tab,
+        bare_keys_shown,
     ) && let Some(tab) = ctx.input(|i| {
         TAB_KEYS
             .iter()
@@ -619,15 +619,21 @@ impl SaveDebounce {
 #[derive(Resource, Default)]
 struct SettingsSaver {
     debounce: SaveDebounce,
-    writing: Option<std::thread::JoinHandle<()>>,
+    writing: Option<std::thread::JoinHandle<bool>>,
 }
 
 impl SettingsSaver {
     /// Collect a finished write and start the next one when it is due.
     fn update(&mut self, settings: &Settings, paths: &Paths, now: f64) {
         if self.writing.as_ref().is_some_and(|h| h.is_finished()) {
-            self.writing = None;
-            self.debounce.finished(now);
+            // "Saved" only after a successful write; a failed one is logged by `save`.
+            let written = self
+                .writing
+                .take()
+                .is_some_and(|h| h.join().unwrap_or(false));
+            if written {
+                self.debounce.finished(now);
+            }
         }
         // An invalid sensitivity is never written; the change stays pending until fixed.
         if !settings.sensitivity.is_valid() {
