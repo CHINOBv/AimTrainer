@@ -274,6 +274,163 @@ pub fn cue_recipe(sound: CueSound) -> Recipe {
     }
 }
 
+/// Game-feel sounds of arenas, rounds and menus. Like every clip here they are made up
+/// from tones and filtered noise, never recordings of a game's sounds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Effect {
+    /// A bot's shot: a dry crack over a short boom, harder than the player's hit sounds.
+    BotGunshot,
+    /// One step: a low heel thump plus a scuff.
+    Footstep,
+    /// A dull body thud when the player takes damage.
+    DamageThud,
+    /// A falling tone when the player dies.
+    Death,
+    /// A bright bell played on a kill streak, pitched up per streak level.
+    Streak,
+    /// Two quick rising notes for kills landed close together.
+    MultiKill,
+    /// A short beep for each second of the start countdown.
+    CountdownBeep,
+    /// A rising chord when the round goes live.
+    RoundStart,
+    /// A falling pair of notes when the round ends.
+    RoundEnd,
+    /// A dry tick for each of the last seconds of a timed run.
+    LowTimeTick,
+    /// A soft click for menu buttons.
+    UiClick,
+}
+
+impl Effect {
+    #[cfg(test)]
+    pub const ALL: [Self; 11] = [
+        Self::BotGunshot,
+        Self::Footstep,
+        Self::DamageThud,
+        Self::Death,
+        Self::Streak,
+        Self::MultiKill,
+        Self::CountdownBeep,
+        Self::RoundStart,
+        Self::RoundEnd,
+        Self::LowTimeTick,
+        Self::UiClick,
+    ];
+
+    pub fn recipe(self) -> Recipe {
+        match self {
+            Self::BotGunshot => Recipe {
+                voices: const {
+                    &[
+                        Voice::new(Noise, 6500.0, 1.0, 0.0005, 0.015),
+                        Voice::new(Noise, 900.0, 0.9, 0.001, 0.05),
+                        Voice::new(Square, 220.0, 0.35, 0.001, 0.03).glide_to(60.0),
+                        Voice::new(Sine, 90.0, 0.6, 0.002, 0.07).glide_to(40.0),
+                    ]
+                },
+                peak: 0.8,
+            },
+            Self::Footstep => Recipe {
+                voices: const {
+                    &[
+                        Voice::new(Sine, 120.0, 1.0, 0.003, 0.03).glide_to(55.0),
+                        Voice::new(Noise, 1800.0, 0.45, 0.002, 0.015),
+                    ]
+                },
+                peak: 0.6,
+            },
+            Self::DamageThud => Recipe {
+                voices: const {
+                    &[
+                        Voice::new(Sine, 95.0, 1.0, 0.002, 0.06).glide_to(45.0),
+                        Voice::new(Noise, 500.0, 0.5, 0.001, 0.02),
+                        Voice::new(Triangle, 190.0, 0.3, 0.002, 0.03).glide_to(90.0),
+                    ]
+                },
+                peak: 0.85,
+            },
+            Self::Death => Recipe {
+                voices: const {
+                    &[
+                        Voice::new(Triangle, 440.0, 1.0, 0.005, 0.12).glide_to(110.0),
+                        Voice::new(Sine, 220.0, 0.6, 0.005, 0.14).glide_to(55.0),
+                        Voice::new(Noise, 300.0, 0.3, 0.003, 0.05),
+                    ]
+                },
+                peak: 0.7,
+            },
+            Self::Streak => Recipe {
+                voices: const {
+                    &[
+                        Voice::new(Sine, 880.0, 1.0, 0.001, 0.06),
+                        Voice::new(Sine, 1760.0, 0.35, 0.001, 0.04),
+                        Voice::new(Triangle, 2640.0, 0.1, 0.001, 0.03),
+                    ]
+                },
+                peak: 0.55,
+            },
+            Self::MultiKill => Recipe {
+                voices: const {
+                    &[
+                        Voice::new(Sine, 1047.0, 0.9, 0.001, 0.04),
+                        Voice::new(Sine, 1568.0, 1.0, 0.001, 0.07).delayed(0.07),
+                        Voice::new(Triangle, 3136.0, 0.15, 0.001, 0.04).delayed(0.07),
+                    ]
+                },
+                peak: 0.65,
+            },
+            Self::CountdownBeep => Recipe {
+                voices: const {
+                    &[
+                        Voice::new(Sine, 880.0, 1.0, 0.002, 0.04),
+                        Voice::new(Square, 880.0, 0.08, 0.002, 0.02),
+                    ]
+                },
+                peak: 0.5,
+            },
+            Self::RoundStart => Recipe {
+                voices: const {
+                    &[
+                        Voice::new(Sine, 1320.0, 1.0, 0.002, 0.08),
+                        Voice::new(Sine, 1760.0, 0.6, 0.002, 0.1).delayed(0.05),
+                        Voice::new(Triangle, 660.0, 0.3, 0.002, 0.1),
+                    ]
+                },
+                peak: 0.6,
+            },
+            Self::RoundEnd => Recipe {
+                voices: const {
+                    &[
+                        Voice::new(Sine, 1320.0, 0.9, 0.002, 0.07),
+                        Voice::new(Sine, 880.0, 1.0, 0.002, 0.12).delayed(0.12),
+                        Voice::new(Triangle, 440.0, 0.3, 0.002, 0.12).delayed(0.12),
+                    ]
+                },
+                peak: 0.6,
+            },
+            Self::LowTimeTick => Recipe {
+                voices: const {
+                    &[
+                        Voice::new(Square, 1500.0, 0.6, 0.0005, 0.006),
+                        Voice::new(Sine, 750.0, 0.4, 0.0005, 0.01),
+                    ]
+                },
+                peak: 0.4,
+            },
+            Self::UiClick => Recipe {
+                voices: const {
+                    &[
+                        Voice::new(Noise, 5000.0, 0.6, 0.0003, 0.002),
+                        Voice::new(Sine, 1200.0, 0.5, 0.0005, 0.006),
+                    ]
+                },
+                peak: 0.35,
+            },
+        }
+    }
+}
+
 /// Render `recipe` with every frequency scaled by `pitch`: mono samples at [`SAMPLE_RATE`],
 /// normalized to the recipe's peak, starting and ending at silence.
 pub fn render(recipe: &Recipe, pitch: f32) -> Vec<f32> {
@@ -408,6 +565,33 @@ mod tests {
         }
         // Three steps: the footsteps outlast a single gunshot.
         assert!(footsteps.len() > gunshot.len());
+    }
+
+    #[test]
+    fn effects_are_distinct_short_clips_that_start_and_end_silent() {
+        let presets: Vec<_> = every_recipe()
+            .into_iter()
+            .map(|(_, r)| render(&r, 1.0))
+            .chain([CueSound::Footsteps, CueSound::Gunshot].map(|s| render(&cue_recipe(s), 1.0)))
+            .collect();
+        let effects: Vec<_> = Effect::ALL
+            .iter()
+            .map(|e| (e, render(&e.recipe(), 1.0)))
+            .collect();
+        for (i, (effect, clip)) in effects.iter().enumerate() {
+            let secs = clip.len() as f32 / SAMPLE_RATE as f32;
+            assert!(secs > 0.005 && secs < 1.5, "{effect:?}: {secs} s");
+            assert!(
+                clip[0].abs() < 0.01 && clip[clip.len() - 1].abs() < 0.01,
+                "{effect:?} clicks"
+            );
+            for (other, other_clip) in &effects[i + 1..] {
+                assert_ne!(clip, other_clip, "{effect:?} and {other:?}");
+            }
+            // The bot's gunshot must never sound like the player's hit feedback or the
+            // perception drill's gunshot.
+            assert!(presets.iter().all(|p| p != clip), "{effect:?}");
+        }
     }
 
     #[test]

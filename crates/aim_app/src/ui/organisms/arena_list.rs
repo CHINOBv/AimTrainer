@@ -14,7 +14,7 @@ pub fn arena_list(
     coaching: &mut bool,
 ) -> Option<UiAction> {
     let mut action = None;
-    egui::ScrollArea::vertical().show(ui, |ui| {
+    egui::ScrollArea::vertical().id_salt("arenas").show(ui, |ui| {
         ui.label(
             "Bots move with VALORANT movement and shoot back. Maps are original training layouts.",
         );
@@ -43,7 +43,7 @@ pub fn arena_list(
                 a.weapon.stats().display_name
             ));
             ui.horizontal(|ui| {
-                if ui.button("▶  Play").clicked() {
+                if crate::audio::ui_click::clicked(ui.button("▶  Play")).clicked() {
                     action = Some(UiAction::StartArena(a.id.clone()));
                 }
                 if ui

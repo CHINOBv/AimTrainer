@@ -39,7 +39,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
 - **Your setup**
   - VALORANT **crosshair codes** (import and export).
   - **Target visibility:** VALORANT's enemy highlight colours (red, purple for tritanopia, yellow for deuteranopia/protanopia) or any custom colour, an optional target outline with colour and thickness, and an environment tint for the floor grid.
-  - **Sound effects** for hits, headshots, kills and (optionally) misses, synthesized in code: several presets, a volume slider and previews.
+  - **Sound effects**, all synthesized in code (no game audio): hits, headshots, kills and (optionally) misses, with several presets, previews and a volume slider. Arenas add positional bot gunfire and footsteps, a damage thud scaled by damage, a death sound, rising streak and multi-kill stings, countdown beeps and round start/end stings. Timed runs tick through their last 10 seconds, and menu clicks are optional. Each sound has its own toggle, and four category volumes (shots, world, UI, cues) scale the master volume.
   - Subtle **hit feedback**: a short, semi-transparent hit marker (crosshair flash, dot, cross, ring or brackets; color and duration) and a target effect (flash, pop, fade or ring burst). Each can be turned off.
   - A shareable **profile code**.
   - An opt-in **sensitivity randomiser drill**: a random multiplier within your range every few seconds, shown on the HUD. Your saved sensitivity never changes.
@@ -70,23 +70,23 @@ On Windows, install Rust with rustup and run `cargo build --release`. The binary
 | ADS zoom (weapons that have a scope) | Right mouse button |
 | Move (movement scenarios) | WASD, Shift to walk |
 | Pause / resume | Esc |
-| Restart the run as it is (scenarios and arenas, also paused or in the countdown; keeps an adaptive run's level and records nothing) | R (Settings → Gameplay keys) |
+| Restart the run as it is (scenarios and arenas, also paused or in the countdown; keeps an adaptive run's level and records nothing) | R (Settings → Keys) |
 | Change your floor height (scenario pause menu) | Floor height −/+ (0.5 m steps), then Apply and restart |
 | Tune target size, distance and speed (scenario pause menu; tuned runs are saved apart and never move the adaptive level or the benchmark) | Size / Distance / Target speed −/+ (10% steps, 50–200%), then Apply and restart; Reset to scenario defaults |
 | Retry or next routine run (on the results screen) | Space |
 
-The menu tabs:
+The menu tabs (keys 1–8 switch tabs while no text field has focus):
 
 | Tab | What it holds |
 |---|---|
-| Today | The day's method session, the daily challenge, daily missions |
+| Today | Quick play (your last scenario) and Continue (a routine you started today), the day's method session, the daily challenge, daily missions |
 | Progress | Goal, readiness, fatigue, trend, per-skill strengths and trends, bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
-| Scenarios | Play, or play adaptively |
+| Scenarios | Search and filter (category, click or hold, moving or standing, waves); ★ pins a scenario to Favourites (saved as `favorites` in `settings.toml`); Recent lists your last 5 scenarios. Play, or play adaptively |
 | Routines | The routines (resume a split one), your personalized playlist |
 | Arenas | Deathmatch, site hold, angle clearing, jiggle-peek and pre-aim drills; a Practice button plays any arena with bots that never shoot |
 | Benchmark | Your benchmark energy and ranks, at novice, intermediate or advanced tier |
 | Tools | Sensitivity converter (360°, monitor distance 0/75/100%), sensitivity finder, system check |
-| Settings | Sensitivity, DPI check, crosshair, sound, hit feedback, profile code, hotkeys |
+| Settings | Sub-tabs: Sensitivity (DPI check, profile code), Crosshair, Feedback (hit feedback, game feel), Audio, Overlay, Keys, Training. A search box filters every section; each sub-tab has a reset to defaults. Changes save automatically ("Saved ✔") |
 
 ## Command line
 
@@ -136,7 +136,7 @@ Other commands: `aimtrainer show` and `aimtrainer hide`.
 
 ### Windows and X11
 
-The trainer registers three global hotkeys (defaults below). To change one, open **Settings → Global hotkeys**, click **Record** and press the new combination; Esc cancels and **Clear** disables the hotkey. A key needs Ctrl, Alt or Shift unless it is an F-key, so a hotkey never fires while you type. The change applies immediately, no restart needed. Recording stops after 10 s or when the window loses focus. A combination already used by another hotkey is flagged and only the first one is registered.
+The trainer registers three global hotkeys (defaults below). To change one, open **Settings → Keys → Global hotkeys**, click **Record** and press the new combination; Esc cancels and **Clear** disables the hotkey. A key needs Ctrl, Alt or Shift unless it is an F-key, so a hotkey never fires while you type. The change applies immediately, no restart needed. Recording stops after 10 s or when the window loses focus. A combination already used by another hotkey is flagged and only the first one is registered.
 
 | Hotkey | Action |
 |---|---|
@@ -150,13 +150,53 @@ The trainer is a separate window. It does not read game memory or inject input. 
 
 ## Sensitivity setup
 
-Open Settings and enter:
+On the very first start (no `settings.toml` yet) a short wizard asks for your game, sensitivity, DPI and feedback preset (Minimal / Standard / Juicy). Skip it at any step; it is not shown again, and players with an existing settings file never see it (`first_run_done` in `settings.toml`).
+
+To change them later, open **Settings → Sensitivity** and enter:
 
 - your **VALORANT sensitivity**;
 - your **DPI**;
 - your **ADS multiplier**, if you changed it.
 
 Then use **DPI check**: move the mouse exactly 10 cm along a ruler. The measured DPI should be within a few percent of the DPI you configured. If it isn't, you have OS mouse acceleration on or the wrong DPI.
+
+## Feel settings
+
+Every key below has a control in **Settings → Feedback** (game feel) or **Settings → Audio** (sound): a checkbox, plus an intensity slider for toggles. The Feedback tab's preset picker (Minimal / Standard / Juicy) sets every feel key at once.
+
+Game-feel effects live in the `[feel]` table of `settings.toml`. Missing keys take the Standard preset, which keeps the look of effects that already existed (the red damage flash stays on at its usual strength). A toggle is a table with `enabled` and `intensity_percent` (100 = designed strength); a toggle table that leaves out `enabled` turns the effect on.
+
+| Key | Default | What it does |
+|---|---|---|
+| `preset` | `"standard"` | Last preset applied: `"minimal"`, `"standard"` or `"juicy"`. Changing one key does not change it |
+| `damage_indicator` | on, 100 | Arena: arrow around the crosshair towards the damage source, sized by damage |
+| `damage_vignette` | on, 100 | Arena: red screen-edge flash on damage |
+| `kill_feed` | `true` | Arena: list of recent kills |
+| `streak_banner` | `true` | Arena: multi-kill and streak banner |
+| `health_bar` | `true` | Arena: health bar with a ghost of the damage just taken |
+| `low_hp_pulse` | `true` | Arena: health bar pulse at low health |
+| `death_screen` | `true` | Arena: killing-shot direction and respawn timer after a death |
+| `round_transitions` | `true` | Animated countdown, "GO" pop and an end-of-round banner that holds the results for 0.8 s |
+| `screen_punch` | off, 100 | Arena: screen-space jolt on damage; never moves the camera |
+| `crosshair_bloom` | `false` | Crosshair opens with recoil and movement inaccuracy |
+| `arena_arrows` | `true` | Arena: edge arrows towards enemies in sight but outside the view |
+| `kill_flash_arena` | `true` | Arena: brief flash on a kill |
+| `distinct_markers` | `true` | Different hit markers for head, body and kill |
+
+Minimal keeps only the damage indicator (at 60%), health bar and death screen. Juicy adds screen punch and crosshair bloom to Standard.
+
+Every feel key above takes effect. The arena HUD keys (`damage_indicator`, `damage_vignette`, `kill_feed`, `streak_banner`, `health_bar`, `low_hp_pulse`, `death_screen`, `round_transitions` and `screen_punch`) each turn an effect on or off, and the three toggles with an intensity (`damage_indicator`, `damage_vignette`, `screen_punch`) scale its opacity and size; `distinct_markers`, `kill_flash_arena`, `crosshair_bloom` and `arena_arrows` change the markers and crosshair. The animated countdown also plays before scenario runs.
+
+The `[sound]` table adds per-category volumes, each a percent of `volume_percent` (a sound plays at master × category): `shots_percent`, `world_percent`, `ui_percent` and `cues_percent` (all 100).
+
+| Category | Sounds |
+|---|---|
+| Shots | Your hit, kill and miss sounds |
+| World | Arena bot gunfire and footsteps, panned to where they come from |
+| UI | Menu clicks (main tabs and the scenario list) |
+| Cues | Damage taken, death, streaks and multi-kills, countdown and round stings, low-time ticks, and the sound cues of perception drills |
+
+Sound toggles: `bot_gunfire`, `footsteps`, `damage_taken`, `death`, `streak`, `round_cues` and `low_time_warning` are on; `ui_clicks` is off. `enabled = false` silences every effect except perception-drill cues, which are part of the drill. Footsteps are heard from running bots within about 20 m; a multi-kill is a kill within 1.5 s of the previous one (both estimates, tuned by ear).
 
 ## Your own exercises
 
