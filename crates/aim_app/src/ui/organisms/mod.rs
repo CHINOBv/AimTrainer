@@ -6,6 +6,7 @@ pub mod audio_cue_panel;
 pub mod benchmark_panel;
 pub mod break_banner;
 pub mod coach_panel;
+pub mod coach_take;
 pub mod coaching_overlay;
 pub mod damage_indicator;
 pub mod death_recap;
