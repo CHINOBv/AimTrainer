@@ -36,7 +36,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - **Run insights:** flicks by screen direction and distance, click timing, pace and stamina, target priority, tracking speed match and edge time, and firing while moving. In arenas: peek timing. A **miss compass** shows whether you miss above or below the head, and a **potential score** names the one fix worth the most points.
   - A **sensitivity suggestion** from your recent flicks' over/undershoot, with the evidence shown. It is applied only when you choose to.
   - A **replay viewer** of your crosshair path: the trail is coloured by speed, and it has a hit/miss heatmap and a side-by-side comparison with an earlier run.
-  - Benchmark trends and personal bests.
+  - Benchmark trends and personal bests, and a **plateau detector** on the Progress page: a benchmark subcategory you keep playing with no new personal best in 3 weeks gets suggestions for a change of stimulus (a variant, a sensitivity variation, a switch of emphasis or a lighter week).
   - Offline **post-match analysis** of official match files.
 - **Your setup**
   - VALORANT **crosshair codes** (import and export).

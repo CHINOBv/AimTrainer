@@ -8,7 +8,9 @@ use crate::ui::organisms::history_chart::history_chart;
 use aim_core::analytics::BenchmarkProfile;
 use aim_core::analytics::profile::Verdict;
 use aim_core::analytics::skills::SubcategoryStanding;
-use aim_core::training::progress::{DailyGoal, FatigueSignal, Readiness, Warmth};
+use aim_core::training::progress::{
+    DailyGoal, FatigueSignal, PLATEAU_WEEKS, Plateau, Readiness, Warmth,
+};
 use bevy_egui::egui;
 
 pub struct ProgressModel {
@@ -172,6 +174,36 @@ pub fn export_section(ui: &mut egui::Ui, path: &mut String, view: &ExportView) -
     clicked
 }
 
+/// The headline of one plateau.
+pub fn plateau_text(p: &Plateau) -> String {
+    format!(
+        "{}: no new personal best in {} week{}, although you kept playing it.",
+        p.subcategory,
+        p.weeks,
+        if p.weeks == 1 { "" } else { "s" }
+    )
+}
+
+/// Benchmark subcategories without a new personal best for [`PLATEAU_WEEKS`] weeks, each
+/// with the changes of stimulus to try.
+pub fn plateau_section(ui: &mut egui::Ui, plateaus: &[Plateau]) {
+    ui.add_space(10.0);
+    ui.label(big("Plateaus", 20.0));
+    ui.small(format!(
+        "A subcategory you still play with no new personal best in {PLATEAU_WEEKS} weeks (an estimate, not a sourced threshold)."
+    ));
+    if plateaus.is_empty() {
+        ui.label("No plateau right now.");
+        return;
+    }
+    for p in plateaus {
+        ui.colored_label(WARN, plateau_text(p));
+        for s in &p.suggestions {
+            ui.label(format!("  • {}", s.text()));
+        }
+    }
+}
+
 /// Played weekly energies of a subcategory, oldest first (weeks before its first run are
 /// skipped).
 pub fn trend_points(s: &SubcategoryStanding) -> Vec<f32> {
@@ -240,6 +272,24 @@ pub fn skills_section(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plateau_lines_name_the_subcategory_and_the_weeks() {
+        use aim_core::training::progress::PlateauSuggestion;
+        let p = Plateau {
+            subcategory: "Static clicking".into(),
+            skill: "clicking".into(),
+            weeks: 4,
+            last_best_at: 0,
+            suggestions: PlateauSuggestion::ALL.to_vec(),
+        };
+        assert_eq!(
+            plateau_text(&p),
+            "Static clicking: no new personal best in 4 weeks, although you kept playing it."
+        );
+        let one = Plateau { weeks: 1, ..p };
+        assert!(plateau_text(&one).contains("in 1 week,"));
+    }
 
     fn standing(weekly: Vec<Option<f32>>) -> SubcategoryStanding {
         SubcategoryStanding {

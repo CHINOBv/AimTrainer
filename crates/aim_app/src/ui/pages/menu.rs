@@ -173,6 +173,34 @@ struct MenuState {
     export_path: String,
     /// The ranked journal's entry form and breathing timer (Progress tab).
     journal: journal_panel::JournalState,
+    /// Benchmark plateaus, recomputed when the history changes (Progress tab).
+    plateaus: HistoryCache<Vec<aim_core::training::progress::Plateau>>,
+}
+
+/// A value derived from the history, recomputed only after the history changed.
+#[derive(Debug)]
+struct HistoryCache<T> {
+    value: Option<T>,
+}
+
+impl<T> Default for HistoryCache<T> {
+    fn default() -> Self {
+        Self { value: None }
+    }
+}
+
+impl<T> HistoryCache<T> {
+    /// Forget the value when the history changed this frame.
+    fn note_change(&mut self, changed: bool) {
+        if changed {
+            self.value = None;
+        }
+    }
+
+    /// The cached value, computed by `compute` when missing.
+    fn get(&mut self, compute: impl FnOnce() -> T) -> &T {
+        self.value.get_or_insert_with(compute)
+    }
 }
 
 /// The Settings tab: search, sub-tabs, a reset per section, and the rows.
@@ -345,6 +373,9 @@ fn menu(
     let now = cfg.time.elapsed_secs_f64();
     let saved = cfg.saver.debounce.show_saved(now);
     let state = &mut *state;
+    // Read every frame: a change seen while another tab is open must still refresh caches.
+    let history_changed = history.is_changed();
+    state.plateaus.note_change(history_changed);
     let lib = nav.library();
     let mut action: Option<UiAction> = None;
 
@@ -458,6 +489,15 @@ fn menu(
                         action = action
                             .take()
                             .or(progress_panel::skills_section(ui, &skills, name));
+                        let plateaus = state.plateaus.get(|| {
+                            aim_core::training::progress::plateaus(
+                                bench,
+                                history.runs(),
+                                now_secs(),
+                                aim_core::training::progress::PLATEAU_WEEKS,
+                            )
+                        });
+                        progress_panel::plateau_section(ui, plateaus);
                     }
                     state.export.poll();
                     let default_path = cfg
@@ -1279,6 +1319,27 @@ mod tests {
         assert_is_system(super::start_coach_scenario);
         assert_is_system(crate::persistence::journal::poll_journal);
         assert_is_system(crate::persistence::journal::flush_journal_on_exit);
+    }
+
+    #[test]
+    fn history_caches_recompute_only_after_the_history_changed() {
+        let mut cache = super::HistoryCache::<u32>::default();
+        let mut computed = 0;
+        let mut get = |cache: &mut super::HistoryCache<u32>, changed: bool| {
+            cache.note_change(changed);
+            *cache.get(|| {
+                computed += 1;
+                computed
+            })
+        };
+        assert_eq!(get(&mut cache, false), 1, "computed when first needed");
+        assert_eq!(
+            get(&mut cache, false),
+            1,
+            "kept while the history is unchanged"
+        );
+        assert_eq!(get(&mut cache, true), 2, "recomputed after a change");
+        assert_eq!(get(&mut cache, false), 2);
     }
 
     #[test]
