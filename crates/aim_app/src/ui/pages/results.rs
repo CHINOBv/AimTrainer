@@ -2,6 +2,7 @@
 //! its replay and analyzes it once; both are cached until the next result.
 
 use crate::game::{AppState, FinderState, LastResult};
+use crate::i18n::tr;
 use crate::overlay::Overlay;
 use crate::persistence::library::Library;
 use crate::persistence::replays;
@@ -352,7 +353,7 @@ impl WatchWindow {
             WATCH_TITLE
         };
         let mut closed = false;
-        egui::Window::new(title)
+        egui::Window::new(tr(title))
             .open(open)
             .default_size([460.0, 600.0])
             .show(ctx, |ui| match player {
@@ -364,7 +365,7 @@ impl WatchWindow {
                     }) == Some(PlayerAction::Close);
                 }
                 None => {
-                    ui.label(NO_MISTAKES);
+                    ui.label(tr(NO_MISTAKES));
                     replay_viewer(ui, viewer, entries, |e| {
                         replays::load(&e.path).ok().map(|r| replay_path(&r))
                     });

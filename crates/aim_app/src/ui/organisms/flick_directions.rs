@@ -4,6 +4,7 @@
 //! [`DirectionGrid`] is plain text built from the core's
 //! [`DirectionSummary`](aim_core::analytics::DirectionSummary); the view only lays it out.
 
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::ui::atoms::WARN;
 use aim_core::analytics::RunAnalysis;
 use aim_core::analytics::direction::{
@@ -46,7 +47,10 @@ fn cell(b: &DirectionBucket) -> String {
             let reaction = b
                 .median_reaction_secs
                 .map_or(String::new(), |s| format!(" · {:.0} ms", s * 1000.0));
-            format!("{} hit of {}{reaction}", pct(rate), b.flicks)
+            format!(
+                "{}{reaction}",
+                tr_fmt("{} hit of {}", &[&pct(rate), &b.flicks])
+            )
         }
     }
 }
@@ -65,40 +69,50 @@ impl DirectionGrid {
             })
             .collect();
         let source = match split.source {
-            RangeSource::SpawnArea => "the scenario's spawn range",
-            RangeSource::Observed => "this run's flick distances",
+            RangeSource::SpawnArea => {
+                "Far = above {far}° ((min + max) / 1.9 of the scenario's spawn range, {min}°–{max}°)."
+            }
+            RangeSource::Observed => {
+                "Far = above {far}° ((min + max) / 1.9 of this run's flick distances, {min}°–{max}°)."
+            }
         };
-        let split_note = format!(
-            "Far = above {:.1}° ((min + max) / 1.9 of {source}, {:.1}°–{:.1}°).",
-            split.far_above_deg(),
-            split.min_deg,
-            split.max_deg,
+        let split_note = tr_named(
+            source,
+            &[
+                ("far", &format!("{:.1}", split.far_above_deg())),
+                ("min", &format!("{:.1}", split.min_deg)),
+                ("max", &format!("{:.1}", split.max_deg)),
+            ],
         );
         let weakest_note = summary.weakest.map(|w| {
-            format!(
+            tr_fmt(
                 "Weakest direction: {} hits {} vs {} elsewhere ({} points lower).",
-                w.quadrant.label(),
-                pct(w.hit_rate),
-                pct(w.others_hit_rate),
-                (w.gap() * 100.0).round(),
+                &[
+                    &w.quadrant.label(),
+                    &pct(w.hit_rate),
+                    &pct(w.others_hit_rate),
+                    &(w.gap() * 100.0).round(),
+                ],
             )
         });
         let axis_note = summary.horizontal.zip(summary.vertical).map(|(h, v)| {
             let verdict = match summary.weak_axis {
-                Some(axis) => format!(
+                Some(axis) => tr_fmt(
                     "{} is your weak axis (more than {} points worse).",
-                    axis.label(),
-                    (WEAK_AXIS_MARGIN * 100.0).round()
+                    &[&axis.label(), &(WEAK_AXIS_MARGIN * 100.0).round()],
                 ),
-                None => "No clear weak axis.".to_owned(),
+                None => tr("No clear weak axis.").to_owned(),
             };
-            format!(
-                "First movement over/undershoots by more than one radius: horizontal {} of {}, vertical {} of {}. {verdict}",
-                pct(h.miss_rate()),
-                h.samples,
-                pct(v.miss_rate()),
-                v.samples,
-            )
+            let measured = tr_fmt(
+                "First movement over/undershoots by more than one radius: horizontal {} of {}, vertical {} of {}.",
+                &[
+                    &pct(h.miss_rate()),
+                    &h.samples,
+                    &pct(v.miss_rate()),
+                    &v.samples,
+                ],
+            );
+            format!("{measured} {verdict}")
         });
         let rates = |d| std::array::from_fn(|i| summary.bucket(Quadrant::ALL[i], d).hit_rate());
         Some(Self {
@@ -115,14 +129,14 @@ impl DirectionGrid {
 /// Draw the grid: one row per quadrant, near and far columns.
 pub fn flick_directions(ui: &mut egui::Ui, grid: &DirectionGrid) {
     ui.add_space(4.0);
-    ui.strong("Flicks by direction");
+    ui.strong(tr("Flicks by direction"));
     egui::Grid::new("flick_directions")
         .num_columns(3)
         .striped(true)
         .show(ui, |ui| {
             ui.label("");
-            ui.label("Near");
-            ui.label("Far");
+            ui.label(tr("Near"));
+            ui.label(tr("Far"));
             ui.end_row();
             for row in &grid.rows {
                 ui.label(row.quadrant);
@@ -137,8 +151,9 @@ pub fn flick_directions(ui: &mut egui::Ui, grid: &DirectionGrid) {
             ui.colored_label(WARN, note);
         }
         None => {
-            ui.small(format!(
-                "A weakest direction needs {MIN_QUADRANT_FLICKS} flicks in a quadrant."
+            ui.small(tr_fmt(
+                "A weakest direction needs {} flicks in a quadrant.",
+                &[&MIN_QUADRANT_FLICKS],
             ));
         }
     }

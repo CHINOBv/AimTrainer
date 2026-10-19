@@ -5,6 +5,7 @@
 //! The builders here are pure and tested; the view only lays the models out (painting is
 //! not covered by automated tests).
 
+use crate::i18n::{tr, tr_fmt};
 use crate::ui::UiAction;
 use crate::ui::atoms::{NEUTRAL, Tone, big};
 use crate::ui::molecules::gauge::{GaugeModel, gauge};
@@ -13,12 +14,11 @@ use crate::ui::molecules::radial_wedges::radial_wedges;
 use crate::ui::molecules::sparkline::sparkline;
 use crate::ui::organisms::analysis_panel::RunReport;
 use aim_core::analytics::RunAnalysis;
-use aim_core::analytics::rules::{Metric, Rule, Verdict};
+use aim_core::analytics::rules::{Direction, Metric, Rule, Verdict};
 use bevy_egui::egui::{self, Color32};
 
 // Every string this section shows.
 const FIRST_RUN: &str = "First run recorded";
-const NEW_BEST: &str = "new personal best";
 const ACCURACY: &str = "Accuracy";
 const ACCURACY_HINT: &str =
     "Hits ÷ shots. No threshold colours it: accuracy only means something next to speed.";
@@ -28,15 +28,12 @@ const CLICK_DELAY: &str = "Click delay";
 const ON_TARGET: &str = "On target";
 const SPEED_MATCH: &str = "Speed match";
 const BEHIND: &str = "Behind";
-const PROVISIONAL: &str = "(provisional thresholds).";
 const FIX_ICON: &str = "⚠";
 const CLEAN_ICON: &str = "✔";
-const WORK_ON: &str = "Work on:";
 const CLEAN: &str = "No weakness crossed a threshold";
 const CLEAN_HINT: &str = "Every measured metric is inside its thresholds for this run.";
 const WATCH: &str = "▶ Watch it";
 const WATCH_HINT: &str = "Replay this run and see where the crosshair went.";
-const PRACTICE: &str = "Practice:";
 const MISSES: &str = "Misses";
 const MISSES_HINT: &str = "Where your misses went around the head (humanoids) or the center (spheres). Bigger wedge = more misses.";
 const DIRECTIONS: &str = "Flick hit rate";
@@ -102,21 +99,20 @@ pub fn metric_tone(rules: &[Rule], metric: Metric, value: f32) -> Tone {
 pub fn threshold_hint(rules: &[Rule], metric: Metric) -> String {
     let parts: Vec<String> = rules_of(rules, metric)
         .map(|r| {
-            let verdict = match r.verdict {
-                Verdict::Weakness => "weakness",
-                Verdict::Strength => "strength",
+            // One whole template per verdict and direction, so each language can order it.
+            let template = match (r.verdict, r.direction) {
+                (Verdict::Weakness, Direction::Above) => "weakness above {}",
+                (Verdict::Weakness, Direction::Below) => "weakness below {}",
+                (Verdict::Strength, Direction::Above) => "strength above {}",
+                (Verdict::Strength, Direction::Below) => "strength below {}",
             };
-            format!(
-                "{verdict} {} {}",
-                r.direction.word(),
-                metric.format(r.threshold)
-            )
+            tr_fmt(template, &[&metric.format(r.threshold)])
         })
         .collect();
     if parts.is_empty() {
         return String::new();
     }
-    let text = format!("{} {PROVISIONAL}", parts.join(" · "));
+    let text = tr_fmt("{} (provisional thresholds).", &[&parts.join(" · ")]);
     let mut chars = text.chars();
     chars
         .next()
@@ -131,26 +127,41 @@ pub fn score_hero(
     kills_per_min: f32,
 ) -> ScoreHero {
     let (delta, tone) = match previous_best {
-        None => (FIRST_RUN.to_owned(), Tone::Neutral),
-        Some(pb) if score > pb => (format!("▲ {:+.0} · {NEW_BEST}", score - pb), Tone::Good),
-        Some(pb) if score < pb => (format!("▼ {:+.0} vs best {pb:.0}", score - pb), Tone::Bad),
-        Some(pb) => (format!("= your best {pb:.0}"), Tone::Warn),
+        None => (tr(FIRST_RUN).to_owned(), Tone::Neutral),
+        Some(pb) if score > pb => (
+            tr_fmt(
+                "▲ {} · new personal best",
+                &[&format!("{:+.0}", score - pb)],
+            ),
+            Tone::Good,
+        ),
+        Some(pb) if score < pb => (
+            tr_fmt(
+                "▼ {} vs best {}",
+                &[&format!("{:+.0}", score - pb), &format!("{pb:.0}")],
+            ),
+            Tone::Bad,
+        ),
+        Some(pb) => (tr_fmt("= your best {}", &[&format!("{pb:.0}")]), Tone::Warn),
     };
     ScoreHero {
         score: format!("{score:.0}"),
         delta,
         tone,
-        sub: format!("{kills} kills · {kills_per_min:.1}/min"),
+        sub: tr_fmt(
+            "{} kills · {}/min",
+            &[&kills, &format!("{kills_per_min:.1}")],
+        ),
     }
 }
 
 pub fn accuracy_gauge(accuracy: f32) -> GaugeModel {
     GaugeModel {
-        label: ACCURACY,
+        label: tr(ACCURACY),
         value: format!("{:.0}%", accuracy * 100.0),
         fill: accuracy.clamp(0.0, 1.0),
         tone: Tone::Neutral,
-        hint: ACCURACY_HINT.to_owned(),
+        hint: tr(ACCURACY_HINT).to_owned(),
     }
 }
 
@@ -163,7 +174,7 @@ fn metric_gauge(
     full: f32,
 ) -> GaugeModel {
     GaugeModel {
-        label,
+        label: tr(label),
         value: metric.format(value),
         fill: (value / full).clamp(0.0, 1.0),
         tone: metric_tone(rules, metric, value),
@@ -241,7 +252,7 @@ pub fn main_fix(report: &RunReport) -> MainFix {
     } else if let Some(a) = top {
         MainFix {
             icon: FIX_ICON,
-            headline: format!("{WORK_ON} {}", a.headline),
+            headline: tr_fmt("Work on: {}", &[&a.headline]),
             hint: format!("{}\n{}", a.explanation, a.tip),
             tone: Tone::Bad,
             practice,
@@ -249,8 +260,8 @@ pub fn main_fix(report: &RunReport) -> MainFix {
     } else {
         MainFix {
             icon: CLEAN_ICON,
-            headline: CLEAN.to_owned(),
-            hint: CLEAN_HINT.to_owned(),
+            headline: tr(CLEAN).to_owned(),
+            hint: tr(CLEAN_HINT).to_owned(),
             tone: Tone::Good,
             practice: None,
         }
@@ -288,12 +299,12 @@ fn main_fix_card(ui: &mut egui::Ui, fix: &MainFix, can_watch: bool) -> Option<Ui
                 ui.strong(&fix.headline).on_hover_text(&fix.hint);
                 if can_watch
                     && fix.tone != Tone::Good
-                    && ui.button(WATCH).on_hover_text(WATCH_HINT).clicked()
+                    && ui.button(tr(WATCH)).on_hover_text(tr(WATCH_HINT)).clicked()
                 {
                     action = Some(UiAction::WatchMistakes);
                 }
                 if let Some((id, name)) = &fix.practice
-                    && ui.small_button(format!("{PRACTICE} {name}")).clicked()
+                    && ui.small_button(tr_fmt("Practice: {}", &[name])).clicked()
                 {
                     action = Some(UiAction::StartScenario(id.clone()));
                 }
@@ -327,14 +338,14 @@ fn charts(ui: &mut egui::Ui, report: &RunReport) {
     ui.horizontal_top(|ui| {
         if let Some(c) = &report.miss_compass {
             ui.vertical(|ui| {
-                ui.small(MISSES);
-                let hint = format!("{MISSES_HINT}\n{}", c.split_note);
+                ui.small(tr(MISSES));
+                let hint = format!("{}\n{}", tr(MISSES_HINT), c.split_note);
                 radial_wedges(ui, &c.counts, &c.busiest_wedges, &hint);
             });
         }
         if let Some(d) = &report.directions {
             ui.vertical(|ui| {
-                ui.small(DIRECTIONS);
+                ui.small(tr(DIRECTIONS));
                 let series = [
                     RadarSeries {
                         values: d.near_rates.to_vec(),
@@ -346,21 +357,24 @@ fn charts(ui: &mut egui::Ui, report: &RunReport) {
                     },
                 ];
                 let hint = match &d.weakest_note {
-                    Some(w) => format!("{DIRECTIONS_HINT}\n{w}"),
-                    None => DIRECTIONS_HINT.to_owned(),
+                    Some(w) => format!("{}\n{w}", tr(DIRECTIONS_HINT)),
+                    None => tr(DIRECTIONS_HINT).to_owned(),
                 };
                 radar(ui, &QUADRANT_AXES, &series, &hint);
             });
         }
         if let Some(p) = &report.pace {
             ui.vertical(|ui| {
-                ui.small(PACE);
+                ui.small(tr(PACE));
                 let warn = p.flags.iter().any(|f| !f.good);
                 let color = if warn { Tone::Warn.color() } else { NEUTRAL };
                 if let Some(r) = sparkline(ui, &p.rates, SPARKLINE_WIDTH_PX, color) {
-                    let rows: Vec<String> =
-                        p.rows.iter().map(|(l, v)| format!("{l}: {v}")).collect();
-                    r.on_hover_text(format!("{PACE_HINT}\n{}", rows.join("\n")));
+                    let rows: Vec<String> = p
+                        .rows
+                        .iter()
+                        .map(|(l, v)| format!("{}: {v}", tr(l)))
+                        .collect();
+                    r.on_hover_text(format!("{}\n{}", tr(PACE_HINT), rows.join("\n")));
                 }
                 for f in &p.flags {
                     let tone = if f.good { Tone::Good } else { Tone::Warn };
@@ -524,6 +538,49 @@ mod tests {
         assert_eq!(fix.headline, "Fix overshoot → about 104 points (+4%)");
         assert!(fix.hint.starts_with("Estimate: "), "{fix:?}");
         assert!(fix.hint.contains("Slow the end"), "{fix:?}");
+    }
+
+    #[test]
+    fn the_results_screen_reads_in_spanish_and_english_is_unchanged() {
+        use aim_core::i18n::{Lang, tr_fmt_in, tr_in, tr_named_in};
+        assert_eq!(tr_in(Lang::Es, FIRST_RUN), "Primera partida registrada");
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "▲ {} · new personal best", &[&"+12"]),
+            "▲ +12 · nuevo récord personal"
+        );
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "{} kills · {}/min", &[&24, &"48.0"]),
+            "24 bajas · 48.0/min"
+        );
+        assert_eq!(tr_in(Lang::Es, "Details"), "Detalles");
+        assert_eq!(tr_in(Lang::Es, "Coach's take"), "Opinión del entrenador");
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "Above {} · below {} of {} misses", &[&1, &2, &4]),
+            "Arriba 1 · abajo 2 de 4 fallos"
+        );
+        assert_eq!(
+            tr_named_in(
+                Lang::Es,
+                "{routine} · run {n}/{total}",
+                &[("routine", &"R"), ("n", &2), ("total", &5)]
+            ),
+            "R · partida 2/5"
+        );
+        // Keys written with a line continuation in the source.
+        assert_ne!(
+            tr_in(
+                Lang::Es,
+                "Error {} s after each sound (or at your first shot); turn time until the \
+                 crosshair moves towards it at {}°/s. Estimates."
+            ),
+            tr_in(
+                Lang::En,
+                "Error {} s after each sound (or at your first shot); turn time until the \
+                 crosshair moves towards it at {}°/s. Estimates."
+            )
+        );
+        assert_eq!(tr_in(Lang::En, FIRST_RUN), FIRST_RUN);
+        assert_eq!(score_hero(300.0, None, 0, 0.0).delta, "First run recorded");
     }
 
     #[test]

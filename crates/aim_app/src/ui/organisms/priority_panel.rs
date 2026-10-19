@@ -1,6 +1,7 @@
 //! Target prioritization section of the run analysis: nearest-target-first share and
 //! missed opportunities, with the rule verdicts (value and threshold) that apply to them.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::ui::atoms::{GOOD, WARN};
 use crate::ui::molecules::stat_row;
 use aim_core::analytics::Finding;
@@ -24,21 +25,25 @@ impl PriorityReport {
     /// `findings` are the run's rule findings; only the prioritization ones are kept.
     pub fn new<'a>(p: &PriorityAnalysis, findings: impl IntoIterator<Item = &'a Finding>) -> Self {
         let nearest = match p.nearest_share() {
-            Some(share) => format!(
-                "{} of {} contested kills ({:.0}%)",
-                p.nearest_kills,
-                p.contested_kills,
-                share * 100.0
+            Some(share) => tr_fmt(
+                "{} of {} contested kills ({}%)",
+                &[
+                    &p.nearest_kills,
+                    &p.contested_kills,
+                    &format!("{:.0}", share * 100.0),
+                ],
             ),
-            None => format!(
-                "{} of {} contested kills (needs {MIN_CONTESTED_KILLS} to judge)",
-                p.nearest_kills, p.contested_kills
+            None => tr_fmt(
+                "{} of {} contested kills (needs {} to judge)",
+                &[&p.nearest_kills, &p.contested_kills, &MIN_CONTESTED_KILLS],
             ),
         };
-        let missed = format!(
-            "{} (on a target ≥ {:.0} ms without firing, then left it)",
-            p.missed_opportunities,
-            MISSED_DWELL_SECS * 1000.0
+        let missed = tr_fmt(
+            "{} (on a target ≥ {} ms without firing, then left it)",
+            &[
+                &p.missed_opportunities,
+                &format!("{:.0}", MISSED_DWELL_SECS * 1000.0),
+            ],
         );
         let verdicts = findings
             .into_iter()
@@ -59,14 +64,14 @@ impl PriorityReport {
 
 /// Draw the prioritization section.
 pub fn priority_panel(ui: &mut egui::Ui, report: &PriorityReport) {
-    egui::CollapsingHeader::new(TITLE)
+    egui::CollapsingHeader::new(tr(TITLE))
         .default_open(true)
         .show(ui, |ui| {
             egui::Grid::new("priority_metrics")
                 .num_columns(2)
                 .show(ui, |ui| {
                     for (label, value) in &report.rows {
-                        stat_row(ui, label, value.as_str());
+                        stat_row(ui, tr(label), value.as_str());
                     }
                 });
             for (strength, text) in &report.verdicts {

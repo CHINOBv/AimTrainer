@@ -4,6 +4,7 @@
 //! run, oldest on the left, with the personal best marked. The point layout is the
 //! sparkline's ([`spark_points`]).
 
+use crate::i18n::tr_fmt;
 use crate::ui::atoms::GOOD;
 use crate::ui::molecules::sparkline::spark_points;
 use bevy_egui::egui::{self, Align2, Color32, FontId, Sense, Stroke, StrokeKind, vec2};
@@ -64,8 +65,8 @@ pub fn history_chart(ui: &mut egui::Ui, scores: &[f32]) {
         font,
         weak,
     );
-    response.on_hover_text(format!(
+    response.on_hover_text(tr_fmt(
         "Last {} runs, oldest on the left. Green: best.",
-        scores.len()
+        &[&scores.len()],
     ));
 }

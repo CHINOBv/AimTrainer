@@ -4,6 +4,7 @@
 //! answer for the result they belong to, so reopening sends nothing again. A rejected or
 //! failed reply shows its reason; the rule-based fix and tip stay on screen either way.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::persistence::coach::{self, DebriefRequest, Job};
 use aim_ai::CoachConfig;
 use aim_core::coach::debrief::{Debrief, MistakeDigest, MistakeWhy, RunDigest};
@@ -22,7 +23,6 @@ const CANCEL: &str = "Cancel";
 const CANCELLED: &str = "Cancelled.";
 const FALLBACK: &str = "The rule-based advice above still applies.";
 const PREVIEW: &str = "Preview what is sent";
-const PLAY: &str = "▶ Play";
 const CUE: &str = "Cue:";
 
 /// The Coach's take for one result: its digest, the request and the answer.
@@ -93,7 +93,7 @@ pub fn coach_take(
 ) -> Option<TakeAction> {
     let mut action = None;
     egui::Frame::group(ui.style()).show(ui, |ui| {
-        ui.strong(TAKE_TITLE);
+        ui.strong(tr(TAKE_TITLE));
         match &take.outcome {
             Some(Ok(debrief)) => {
                 for bullet in &debrief.bullets {
@@ -102,7 +102,7 @@ pub fn coach_take(
                 if let Some(drill) = &debrief.drill {
                     let name = name_of(&drill.scenario_id).unwrap_or(drill.scenario_id.clone());
                     ui.horizontal(|ui| {
-                        if ui.button(format!("{PLAY}: {name}")).clicked() {
+                        if ui.button(tr_fmt("▶ Play: {}", &[&tr(&name)])).clicked() {
                             action = Some(TakeAction::Play(drill.scenario_id.clone()));
                         }
                     });
@@ -112,18 +112,18 @@ pub fn coach_take(
             outcome => {
                 if let Some(Err(reason)) = outcome {
                     ui.small(reason);
-                    ui.small(FALLBACK);
+                    ui.small(tr(FALLBACK));
                 }
                 action = ask_row(
                     ui,
                     take.job.is_pending(),
                     take.job.request().phase() == &coach::Phase::Cancelled,
-                    if outcome.is_some() {
+                    tr(if outcome.is_some() {
                         ASK_AGAIN
                     } else {
                         ASK_TAKE
-                    },
-                    ASK_TAKE_HINT,
+                    }),
+                    tr(ASK_TAKE_HINT),
                 )
                 .map(|ask| match ask {
                     Ask::Ask => TakeAction::Ask,
@@ -187,7 +187,7 @@ pub fn coach_why(ui: &mut egui::Ui, why: &CoachWhy, digest: &MistakeDigest) -> O
             egui::Frame::group(ui.style()).show(ui, |ui| {
                 ui.label(&answer.why);
                 ui.horizontal_wrapped(|ui| {
-                    ui.strong(CUE);
+                    ui.strong(tr(CUE));
                     ui.label(&answer.cue);
                 });
             });
@@ -200,12 +200,12 @@ pub fn coach_why(ui: &mut egui::Ui, why: &CoachWhy, digest: &MistakeDigest) -> O
                 ui,
                 why.job.is_pending(),
                 why.job.request().phase() == &coach::Phase::Cancelled,
-                if outcome.is_some() {
+                tr(if outcome.is_some() {
                     ASK_AGAIN
                 } else {
                     ASK_WHY
-                },
-                ASK_WHY_HINT,
+                }),
+                tr(ASK_WHY_HINT),
             )
             .map(|ask| match ask {
                 Ask::Ask => WhyAction::Ask,
@@ -234,8 +234,8 @@ fn ask_row(
     ui.horizontal(|ui| {
         if pending {
             ui.spinner();
-            ui.label(ASKING);
-            if ui.button(CANCEL).clicked() {
+            ui.label(tr(ASKING));
+            if ui.button(tr(CANCEL)).clicked() {
                 action = Some(Ask::Cancel);
             }
         } else {
@@ -243,7 +243,7 @@ fn ask_row(
                 action = Some(Ask::Ask);
             }
             if cancelled {
-                ui.small(CANCELLED);
+                ui.small(tr(CANCELLED));
             }
         }
     });
@@ -252,11 +252,11 @@ fn ask_row(
 
 /// The exact JSON that is sent, behind a collapsed header.
 fn preview(ui: &mut egui::Ui, id: &str, json: &str) {
-    egui::CollapsingHeader::new(PREVIEW)
+    egui::CollapsingHeader::new(tr(PREVIEW))
         .id_salt(id)
         .default_open(false)
         .show(ui, |ui| {
-            ui.small(format!("{} bytes", json.len()));
+            ui.small(tr_fmt("{} bytes", &[&json.len()]));
             ui.add(egui::Label::new(egui::RichText::new(json).monospace().small()).wrap());
         });
 }
