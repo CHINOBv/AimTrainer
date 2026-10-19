@@ -1,0 +1,23 @@
+# Idea: KovaaK's tiny-jumper drills (small one-shot targets hopping on the floor).
+# Own name and parameters.
+id = "cockroach-hop"
+name = "Cockroach Hop"
+category = "precision"
+description = """
+Tiny jumpers. Very small spheres hop along the floor in short, quick bounces. Kill 15 as fast
+as you can; the final score is multiplied by the square root of your accuracy. Trains
+precise clicks on small, erratic targets."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.08 }
+spawn = { kind = "floor", x = [-3.0, 3.0], z = [-9.0, -7.0], height = [0.08, 0.08] }
+motion = { kind = "ballistic", speed = [3.0, 4.5], angle_deg = [45.0, 70.0], bounces = 8, restitution = 0.9 }
+max_alive = 2
+min_separation_deg = 4
+
+[scoring]
+accuracy_mult = "sqrt"
+
+[end]
+kind = "kills"
+kills = 15

@@ -1,0 +1,22 @@
+# Idea: KovaaK's reflex-flick drills (one short-lived target; easy/fair/hard variants).
+# Own name and parameters. The easy/fair/hard variants are the difficulty knob.
+id = "reflex-flick"
+name = "Reflex Flick"
+category = "reaction"
+description = """
+Reaction flicks. One sphere appears up to 30° from your crosshair and leaves after 1.2 s.
+Flick and click before it goes; an expired target costs points. Play it at an easier or
+harder difficulty level for a longer or shorter lifetime."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.25 }
+spawn = { kind = "around_crosshair", offset_deg = [6.0, 30.0], distance = [12.0, 12.0], on_screen = true }
+lifetime_secs = 1.2
+appear_delay_secs = [0.2, 0.5]
+
+[scoring]
+miss_penalty = 15
+expire_penalty = 15
+
+[difficulty]
+lifetime = 0.4

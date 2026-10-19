@@ -18,6 +18,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/burst-control.toml"),
     ),
     (
+        "cockroach-hop.toml",
+        include_str!("../../../../content/scenarios/cockroach-hop.toml"),
+    ),
+    (
         "counter-strafe.toml",
         include_str!("../../../../content/scenarios/counter-strafe.toml"),
     ),
@@ -130,8 +134,16 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/peripheral-detect.toml"),
     ),
     (
+        "popcorn-burst.toml",
+        include_str!("../../../../content/scenarios/popcorn-burst.toml"),
+    ),
+    (
         "precision-rings.toml",
         include_str!("../../../../content/scenarios/precision-rings.toml"),
+    ),
+    (
+        "pressure-balloons.toml",
+        include_str!("../../../../content/scenarios/pressure-balloons.toml"),
     ),
     (
         "radar-recall.toml",
@@ -140,6 +152,14 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "react-duel.toml",
         include_str!("../../../../content/scenarios/react-duel.toml"),
+    ),
+    (
+        "reactive-flick.toml",
+        include_str!("../../../../content/scenarios/reactive-flick.toml"),
+    ),
+    (
+        "reflex-flick.toml",
+        include_str!("../../../../content/scenarios/reflex-flick.toml"),
     ),
     (
         "regen-track.toml",
@@ -152,6 +172,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "six-pin.toml",
         include_str!("../../../../content/scenarios/six-pin.toml"),
+    ),
+    (
+        "skeet-arcs.toml",
+        include_str!("../../../../content/scenarios/skeet-arcs.toml"),
     ),
     (
         "sound-turn.toml",

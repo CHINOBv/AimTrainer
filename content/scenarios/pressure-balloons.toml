@@ -1,0 +1,26 @@
+# Idea: KovaaK's pressure drills (large targets that drift in and must be shot before
+# their time runs out). Own name and parameters. "Drift in" uses a drift motion whose depth
+# band is nearer than the spawn, so every balloon first floats towards you.
+id = "pressure-balloons"
+name = "Pressure Balloons"
+category = "reaction"
+description = """
+Pressure clicking. Large spheres float in from far away and leave after 3.5 s. Pop each one
+before it goes: the fifth balloon that escapes fails the run. Trains staying fast and
+accurate while targets pile up."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.4 }
+spawn = { kind = "angular", yaw_deg = [-35.0, 35.0], pitch_deg = [0.0, 14.0], distance = [16.0, 20.0] }
+motion = { kind = "drift", speed = [1.0, 2.0], change_secs = [0.6, 1.2], max_offset = 2.0, depth = { change_secs = [1.5, 2.5], distance = [10.0, 14.0] } }
+max_alive = 2
+min_separation_deg = 10
+lifetime_secs = 3.5
+appear_delay_secs = [0.1, 0.4]
+
+[scoring]
+miss_penalty = 10
+expire_penalty = 50
+
+[fail]
+max_expired = 5
