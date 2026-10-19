@@ -47,3 +47,17 @@ Rules:
   - Added after review: a "Use my personal dose" switch (default on), because the dose silently replaced the explicit warm-up length; RED observed.
   - New persisted data: the `[breaks]` settings table, the `personal_warmup` setting, and `journal.toml`.
   - Needs a playtest: panel layouts, the break banner, live DPI counting, clipboard copy, the breathing timer.
+- L6 (2026-10-18) RDD reviews on 3 slices (core, app, toggle) were approved and acknowledged. Independent verifier at 0b8301f: S1, S2, S4, S5 and S6 pass; S3 partial with one blocker (B1).
+  - **B1 fixed:** `aimtrainer warmup 3` now plays 3 min even when a personal dose exists. `Command::Warmup` carries `Option<u32>`; without minutes (bare CLI or hotkey) it uses the dose when on, else the Settings length. A bare `aimtrainer warmup` now follows the Settings length instead of a fixed 5 (same with default settings), documented in the CLI help and README.
+  - Also fixed, test first:
+    - a non-table `breaks =`/`coach =` value resets only itself instead of every setting;
+    - a failed move-aside of a corrupt journal keeps the backup for the next save;
+    - DPI Stop keeps the reading;
+    - a drop at the end of a session no longer stretches the warm-up dose;
+    - the old-file `personal_warmup` default is pinned;
+    - the training-science wording for the DPI test is corrected.
+  - Advisories kept:
+    - the Settings slider allows 30 min while the queue warm-up stops at 15;
+    - proof hashes include the display name;
+    - the dose uses every run of a session;
+    - playtest pending.
