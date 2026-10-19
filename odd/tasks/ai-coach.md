@@ -37,8 +37,8 @@ Rules:
 | T2 | S1 | delegated (worktree `coach-core`) | done | a10d935, 7afa6ed, e5b7b50, merge 3d7b16d |
 | T3 | S2, S4 | delegated, after T2 | done | 366401f..501cf5e, merge 1a71f7e |
 | T4 | S6 | delegated, after T2 (parallel with T3) | done | 3a49673, f3c6286, merge 8e8016c |
-| T5 | S5 | delegated, after T3 | pending | |
-| T6 | S3 | later, gated on OpenAI eligibility | pending | |
+| T5 | S5 | delegated, after T3 | done (manual provider test pending) | c2b0887, 239bbc2, merge 477b158, 99d7409 |
+| T6 | S3 | later, gated on OpenAI eligibility | deferred: needs OpenAI to confirm eligibility for the Sign-in-with-ChatGPT preview | |
 | T7 | seam: merge, verifier, review, merge to `main` | inline | pending | |
 
 ## Log
@@ -60,3 +60,13 @@ Rules:
     - the app page needs settings, key entry and the data preview;
     - Windows cross-compile from Linux may need a C toolchain (aws-lc-sys, bundled SQLite);
     - the opencode/codex CLI flags need a real-CLI check.
+- L4 (2026-10-18) T5 merged.
+  - Coach tab (key 9):
+    - opt-in; `[coach]` settings have no key field, and a bad `[coach]` table resets only the coach;
+    - keys go to the OS keyring per provider/base URL;
+    - test connection, exact `to_prompt_json()` preview, chat off the frame with cancel;
+    - generated scenario cards with Validate/Play/Save (labelled uncalibrated, never overwritten);
+    - memory wipe with confirmation.
+  - The MCP keeps notes in the same `coach.db` (opened lazily).
+  - The writer's busy-timeout concern was checked: rusqlite already sets a 5 s busy timeout, now pinned by a test.
+  - T6 (ChatGPT plan login) is deferred: it depends on OpenAI confirming that an open-source local app is eligible for the official preview; no workaround via Codex credentials.
