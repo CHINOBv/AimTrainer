@@ -135,6 +135,19 @@ Spreading the skills across the week does give VDIM spacing between sessions. Ou
 - **Our default:** train at your exact VALORANT sensitivity. The trainer converts it to the same cm/360.
 - **Sensitivity randomiser drill (opt-in, off by default).** `aim_core::sensitivity::randomizer` changes the look sensitivity to a random multiplier of your own every interval. The defaults are ×0.8–×1.2 every 10 s, with optional easing between values. The bounds are limited to ×0.5–×2.0 and the interval to at least 2 s. It is deterministic per seed. The HUD shows the current multiplier. The saved sensitivity never changes, and sensitivity-finder tests never use the drill. Because no controlled evidence supports or rejects randomisation (above), the drill is offered as an occasional robustness exercise in the spirit of Voltaic's plateau advice. The default range and the limits are **estimates**.
 
+### DPI deviation test
+
+A mouse's real counts per inch can differ from its nominal DPI, so the same in-game sensitivity gives a different cm/360 than the player thinks (inference: the size of the deviation varies by sensor and firmware and is not quantified here). `aim_core::sensitivity::dpi_check` measures it:
+
+1. Turn off pointer acceleration and use the mouse software's DPI setting you play with.
+2. Tape a ruler to the desk and put the mouse's edge on a mark.
+3. Start the test, move the mouse straight along the ruler by a known distance (10 cm or more is best; at least 5 cm is required) and stop it. The trainer counts the raw counts of the movement.
+4. Enter the distance you moved, in cm or inches.
+
+- `measure` returns the real DPI (`counts / inches`) and the deviation from the nominal DPI in percent. It rejects zero counts, a distance that is not a number, a distance below 5 cm and a nominal DPI of 0.
+- `corrected_sensitivity` stores the rounded real DPI and scales the sensitivity value so the cm/360 stays the one the player expects. Apply the corrected value in VALORANT too, or set the mouse software so its real DPI matches the nominal one.
+- The 5 cm minimum is an **estimate**: a ruler read to ±1 mm then stays within about ±2%.
+
 ## Analytics metrics
 
 Post-run analysis (`aim_core::analytics`) re-simulates the recorded run and measures it. Every number below is shown with the metric that produced it. **All thresholds are provisional:** they are estimates chosen against the simulated aimer, not calibrated on player data, and will be revised once real runs exist.
