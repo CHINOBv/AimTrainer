@@ -22,7 +22,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - **Adaptive difficulty** that holds you near 80% success.
   - A Voltaic-style **benchmark** with novice, intermediate and advanced tiers.
 - **Ranked days**
-  - A **queue warm-up** sized to your queue, or to your **personal warm-up dose** once your own sessions show where your scores level off (2–15 min; shown next to the setting in Settings → Training).
+  - A **queue warm-up** sized to your queue, or to your **personal warm-up dose** once your own sessions show where your scores level off (2–15 min; shown next to the setting in Settings → Training, where **Use my personal dose** can turn it off).
   - **20-second buy-phase drills** that hide themselves when done.
   - A **"ready for ranked?" check.**
   - **Fatigue warnings.**

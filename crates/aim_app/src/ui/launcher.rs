@@ -8,6 +8,7 @@ use super::UiAction;
 use super::navigation::Navigator;
 use crate::overlay::QuickLaunch;
 use crate::persistence::history::History;
+use crate::persistence::settings::Settings;
 use crate::platform::ipc::Command;
 use aim_core::training::progress::{RunRecord, SESSION_GAP_SECS, bests_until};
 use aim_core::training::store::RunStore;
@@ -57,6 +58,7 @@ pub fn personal_dose(records: &[RunRecord]) -> Option<WarmupDose> {
 pub fn launch_requested(
     mut quick: ResMut<QuickLaunch>,
     dose: Res<PersonalWarmup>,
+    settings: Res<Settings>,
     mut nav: Navigator,
 ) {
     let Some(cmd) = quick.pending.take() else {
@@ -64,7 +66,8 @@ pub fn launch_requested(
     };
     let action = match cmd {
         Command::Warmup(minutes) => {
-            let minutes = warmup::queue_warmup_minutes(dose.0.as_ref(), minutes as f32);
+            let dose = dose.0.as_ref().filter(|_| settings.personal_warmup);
+            let minutes = warmup::queue_warmup_minutes(dose, minutes as f32);
             UiAction::StartRoutineDef(Box::new(warmup::queue_warmup(minutes)))
         }
         Command::Micro => {
@@ -110,6 +113,7 @@ mod tests {
         w.insert_resource(AdaptiveLevels::default());
         w.insert_resource(QuickLaunch::default());
         w.insert_resource(PersonalWarmup::default());
+        w.insert_resource(Settings::default());
         w.insert_resource(Library {
             scenarios: aim_core::scenario::builtin::all(),
             routines: Vec::new(),
@@ -162,6 +166,20 @@ mod tests {
         w.run_system_once(launch_requested).unwrap();
         let routine = w.resource::<ActiveRoutine>().0.clone().unwrap();
         assert_eq!(routine.plan.len(), 24, "12 min of 30 s runs");
+    }
+
+    #[test]
+    fn turning_the_personal_dose_off_keeps_the_set_length() {
+        let mut w = world();
+        w.insert_resource(PersonalWarmup(Some(WarmupDose {
+            minutes: 12.0,
+            sessions: 4,
+        })));
+        w.resource_mut::<Settings>().personal_warmup = false;
+        w.resource_mut::<QuickLaunch>().request(Command::Warmup(5));
+        w.run_system_once(launch_requested).unwrap();
+        let routine = w.resource::<ActiveRoutine>().0.clone().unwrap();
+        assert_eq!(routine.plan.len(), 10, "the player's 5 min, not the dose");
     }
 
     fn rec(timestamp: u64, scenario: &str, score: f32) -> RunRecord {

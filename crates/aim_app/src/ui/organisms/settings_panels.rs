@@ -77,6 +77,7 @@ pub fn reset_section(settings: &mut Settings, tab: SettingsTab) {
         }
         SettingsTab::Training => {
             settings.warmup_minutes = d.warmup_minutes;
+            settings.personal_warmup = d.personal_warmup;
             settings.daily_goal_minutes = d.daily_goal_minutes;
             settings.mission_commitment = d.mission_commitment;
             settings.arena_coaching = d.arena_coaching;
@@ -246,7 +247,11 @@ pub fn training_panel(
                 .range(1..=30)
                 .suffix(" min"),
         );
-        ui.label(personal_warmup_text(dose));
+        ui.checkbox(&mut settings.personal_warmup, "Use my personal dose")
+            .on_hover_text("When on, the queue warm-up lasts as long as your scores need to level off, once there is enough history. Off keeps the length set here.");
+        if settings.personal_warmup {
+            ui.label(personal_warmup_text(dose));
+        }
     });
     rows.row(ui, "Daily goal", |ui| {
         ui.add(
@@ -631,6 +636,7 @@ mod tests {
             micro_hotkey: "F3".into(),
             restart_key: "F5".into(),
             warmup_minutes: 9,
+            personal_warmup: false,
             daily_goal_minutes: 50.0,
             target_color: [0.0, 1.0, 0.0],
             offscreen_arrows: false,

@@ -83,6 +83,8 @@ pub struct Settings {
     pub restart_key: String,
     /// Length of the queue warm-up, minutes.
     pub warmup_minutes: u32,
+    /// Size the queue warm-up by the player's personal dose when there is enough history.
+    pub personal_warmup: bool,
     /// Daily training goal, minutes (30–50 min captures most daily gains, Listman 2021).
     pub daily_goal_minutes: f32,
     pub target_color: [f32; 3],
@@ -480,6 +482,7 @@ impl Default for Settings {
             micro_hotkey: "ctrl+shift+F8".to_owned(),
             restart_key: crate::platform::game_key::DEFAULT_RESTART.to_owned(),
             warmup_minutes: 5,
+            personal_warmup: true,
             daily_goal_minutes: 30.0,
             target_color: [1.0, 0.27, 0.33],
             offscreen_arrows: true,
