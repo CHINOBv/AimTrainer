@@ -250,6 +250,10 @@ pub mod builtin {
             include_str!("../../../../content/routines/fundamentals-hour.toml"),
         ),
         (
+            "movement-builder.toml",
+            include_str!("../../../../content/routines/movement-builder.toml"),
+        ),
+        (
             "quick-warmup.toml",
             include_str!("../../../../content/routines/quick-warmup.toml"),
         ),
@@ -355,6 +359,7 @@ mod tests {
             ("dynamic-clicking", 25.0),
             ("reaction-and-decision", 20.0),
             ("ranked-prep-15", 12.5),
+            ("movement-builder", 23.0),
         ];
         for (id, target) in targets {
             let r = routines

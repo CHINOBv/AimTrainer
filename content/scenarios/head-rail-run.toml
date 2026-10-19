@@ -1,0 +1,32 @@
+# Original drill from the movement research (docs/library.md, "Library: movement").
+# Idea: Crosshair placement while moving: hold head height during the strafe.
+id = "head-rail-run"
+name = "Head Rail Run"
+category = "movement"
+description = """
+Crosshair placement on the move. Agents pop up at different distances along the lane while you strafe.
+Keep the crosshair at head height as you move, so each one needs only a small adjustment, then stop and tap. Heads stay 1.8 s and are worth less the longer you take; moving shots lose points."""
+
+[weapon]
+kind = "phantom"
+simulate_spread = true
+
+[player]
+movement = true
+bounds_x = [-16.0, 16.0]
+bounds_z = [-3.0, 6.0]
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-12.0, 12.0], z = [-28.0, -8.0] }
+max_alive = 1
+lifetime_secs = 1.8
+appear_delay_secs = [0.3, 0.9]
+spawn_rules = { min_flick_deg = 8 }
+
+[scoring]
+miss_penalty = 10
+moving_shot_penalty = 40
+expire_penalty = 20
+decay = { window_secs = 1.5, floor = 0.5 }
+stop_window = { secs = 0.3, bonus = 30 }

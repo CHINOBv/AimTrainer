@@ -1,0 +1,28 @@
+# Original drill from the movement research (docs/library.md, "Library: movement").
+# Idea: Spread discipline: VALORANT patch 3.0 accuracy threshold and patch 9.10 run inaccuracy.
+id = "spread-gate"
+name = "Spread Gate"
+category = "movement"
+description = """
+Only a full stop lands. Small spheres sit far away and the Phantom fires with its spread: a shot above 27.5% of run speed sprays up to 6° off and misses at this range.
+Strafe between spheres, stop fully, then shoot. Misses are expensive and the score scales with accuracy."""
+
+[weapon]
+kind = "phantom"
+simulate_spread = true
+
+[player]
+movement = true
+bounds_x = [-16.0, 16.0]
+bounds_z = [-3.0, 6.0]
+
+[targets]
+shape = { kind = "sphere", radius = 0.12 }
+spawn = { kind = "floor", x = [-10.0, 10.0], z = [-30.0, -22.0], height = [1.5, 2.1] }
+max_alive = 3
+min_separation_deg = 6
+
+[scoring]
+miss_penalty = 30
+moving_shot_penalty = 30
+accuracy_mult = "sqrt"

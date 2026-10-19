@@ -242,6 +242,24 @@ The 0.5 s window is an estimate: it covers the measured stop (0.16 s counter-str
 
 **Rule (provisional).** Shots fired while moving > 20% is a weakness and recommends `counter-strafe`, then `strafe-shot`. A movement category needs ≥ 10 shots before it is judged. The 20% threshold is an estimate, not calibrated.
 
+### Movement drills and the stop-timing reward
+
+Research date: 2026-10-19. The movement drills in `docs/library.md` ("Library: movement") turn one mechanic into separate practice conditions, so the stop is trained against different pressures:
+
+| Condition | Why it matters | Drill | Confidence |
+|---|---|---|---|
+| Shoot only at or below 27.5% of run speed | VALORANT makes shots fully accurate only there (patch 3.0); rifles fire with up to +6° run inaccuracy above it (patch 9.10 run inaccuracy 6) | every drill; `spread-gate` makes moving shots miss outright | verified (`valorant-mechanics.md`) |
+| A counter-strafe stops in ≈0.16 s, a release in ≈0.17 s | The measured stopping curves; the stop is short, so the skill is timing the shot to it | `stutter-ladder` (shrinking time per target), `flinch-stop` (stop on a surprise target) | verified for 2020 (`valorant-mechanics.md`) |
+| Forward/back stops use the same curves | The trainer applies the strafing curves to W/S as well (an assumption: Riot measured strafing) | `depth-brake` | estimate |
+| An opponent's movement answers yours | Less predictable practice retains and transfers better (Shea & Morgan 1979); an opponent that reacts to your strafe cannot be timed | `mirror-duel`, `squad-strafe` | analogy, not tested |
+| Crosshair placement while moving | Keeping the crosshair at head height makes the shot after the stop a small adjustment | `head-rail-run` | inference |
+| Short bursts after the stop | Rifles keep their first bullets steady (protected bullets, patch 11.08); a burst inside the stop window lands, a long spray climbs | `burst-strafe` | verified values, inferred drill |
+| Return to the centre after each shot | Spider-shot drills alternate a fixed centre with rim targets, so every second flick goes home | `spider-web`, `spider-strafe` | inference |
+
+**Stop-timing reward (`scoring.stop_window`).** A hit fired while accurate within `secs` of the last moving frame scores a bonus. It pays for the same thing the counter-strafe check above measures (a shot right after the stop), inside the run, so the score teaches the rhythm. The windows used (0.25–0.4 s) are a design choice, not measured: about the 0.16 s stop plus time to settle the crosshair. In `spider-strafe` the bonus (60) is larger than the hit itself (40), so moving between shots is most of the score.
+
+**Calibration limit.** The simulated aimer never moves, so the `calibrate` example measures only the aiming part of these drills: it never earns the stop bonus and never takes a moving-shot penalty. The challenge-point check (contender accuracy 45–85%, Guadagnoli & Lee 2004) therefore covers the aim, not the movement; the movement part needs real player data.
+
 ### Peek efficiency (arenas)
 
 `aim_world::arena::ArenaStats` times each *engagement*: the first exposure of a bot life, from the first frame any part of its head is in the player's line of sight (the same first sight that feeds crosshair placement and time to kill).

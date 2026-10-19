@@ -1,0 +1,20 @@
+# Original drill from the movement research (docs/library.md, "Library: movement").
+# Idea: Spider shot: alternate a fixed centre target with targets around it (standing variant).
+id = "spider-web"
+name = "Spider Web"
+category = "flicking"
+description = """
+Centre, out, centre. A sphere sits in the middle; shoot it and another appears 6–16° away in any direction. Shoot that and the centre comes back.
+Flick out and flick home every time: the flick home trains returning to your crosshair placement."""
+
+[weapon]
+kind = "vandal"
+
+[targets]
+shape = { kind = "sphere", radius = 0.18 }
+spawn = { kind = "angular", yaw_deg = [0.0, 0.0], pitch_deg = [2.0, 2.0], distance = [12.0, 12.0] }
+max_alive = 1
+spider = { ring_deg = [6.0, 16.0] }
+
+[scoring]
+miss_penalty = 10

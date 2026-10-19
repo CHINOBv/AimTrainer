@@ -1,0 +1,76 @@
+# Movement drills built from the movement research (docs/library.md, "Movement").
+# Structure: an ordered warm-up, then every drill interleaved run by run, because varied
+# practice retains and transfers better (docs/training-science.md, "Routine design").
+# Run counts are our estimate.
+id = "movement-builder"
+name = "Movement Builder (≈23 min)"
+description = """
+Shoot only when you are stopped: counter-strafes on a clock, mirror duels, crosshair placement on the move, W/S braking, crouch-spam duels, reaction stops, spread discipline, bursts after a stop, a moving squad and the spider shot.
+A warm-up in order, then every drill interleaved, so each run asks for a different stop.
+≈23 min; pair it with a flick or tracking routine on longer days."""
+interleave_from = 3
+
+[[blocks]]
+scenario = "spider-web"
+runs = 1
+note = "Warm-up: flick out and back home to the centre, no movement yet."
+
+[[blocks]]
+scenario = "counter-strafe"
+runs = 1
+note = "Warm-up: strafe, tap the opposite key, then shoot."
+
+[[blocks]]
+scenario = "strafe-shot"
+runs = 1
+note = "Warm-up: move, stop, shoot, and move again."
+
+[[blocks]]
+scenario = "stutter-ladder"
+runs = 2
+note = "Stop sooner as the heads leave sooner; never shoot on the move to save time."
+
+[[blocks]]
+scenario = "mirror-duel"
+runs = 2
+note = "Watch the head, not your own keys: shoot when it settles."
+
+[[blocks]]
+scenario = "head-rail-run"
+runs = 2
+note = "Keep the crosshair at head height while you strafe."
+
+[[blocks]]
+scenario = "depth-brake"
+runs = 2
+note = "Brake W with S and S with W before you shoot."
+
+[[blocks]]
+scenario = "crouch-duel"
+runs = 2
+note = "Hold the head line and let the crouches come back to it."
+
+[[blocks]]
+scenario = "flinch-stop"
+runs = 2
+note = "Stop the moment it appears, then shoot."
+
+[[blocks]]
+scenario = "spread-gate"
+runs = 2
+note = "A full stop first: a moving shot cannot land here."
+
+[[blocks]]
+scenario = "burst-strafe"
+runs = 2
+note = "Stop, two to four bullets, then strafe again."
+
+[[blocks]]
+scenario = "squad-strafe"
+runs = 2
+note = "Pick one target, stop, shoot, and move before the next."
+
+[[blocks]]
+scenario = "spider-strafe"
+runs = 2
+note = "Strafe between every shot and stop before you fire."

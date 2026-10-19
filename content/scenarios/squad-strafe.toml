@@ -1,0 +1,36 @@
+# Original drill from the movement research (docs/library.md, "Library: movement").
+# Idea: Moving enemies: several agents strafe and juke while the player moves.
+id = "squad-strafe"
+name = "Squad Strafe"
+category = "movement"
+description = """
+Everyone moves. Three agents strafe and juke at once while you strafe too.
+Pick one, counter-strafe, tap the head, and move again before you take the next. A hit within 0.3 s of your stop earns a bonus; moving shots lose points."""
+
+[weapon]
+kind = "vandal"
+simulate_spread = true
+
+[player]
+movement = true
+bounds_x = [-16.0, 16.0]
+bounds_z = [-3.0, 6.0]
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-12.0, 12.0], z = [-22.0, -12.0] }
+max_alive = 3
+min_separation_deg = 8
+
+[[targets.motion_profiles]]
+weight = 1
+motion = { kind = "strafe", weapon = "vandal", change_secs = [0.4, 1.0], stop_chance = 0.2, max_offset = 3.0 }
+
+[[targets.motion_profiles]]
+weight = 1
+motion = { kind = "dodge", weapon = "vandal", change_secs = [0.3, 0.8], juke_chance = 0.3, stop_chance = 0.2, crouch_chance = 0.1, max_offset = 3.0 }
+
+[scoring]
+miss_penalty = 10
+moving_shot_penalty = 40
+stop_window = { secs = 0.3, bonus = 30 }
