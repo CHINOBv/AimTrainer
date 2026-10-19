@@ -25,8 +25,8 @@ Rules:
 
 | ID | Specs | Route | Status | Commit |
 |---|---|---|---|---|
-| T1 | plan | inline | done | this commit |
-| T2 | S1–S6 core (pure) | delegated (worktree `creative-core`) | in progress | |
+| T1 | plan | inline | done | 1b76f80 |
+| T2 | S1–S6 core (pure) | delegated (worktree `creative-core`) | done | b1838d7..7381cf1, merged |
 | T3 | S1–S6 app UI + persistence | delegated, after T2 and after the coach/history app pieces merge | pending | |
 | T4 | seam: verifier, review, merge to `main` | inline | pending | |
 
@@ -39,3 +39,6 @@ Rules:
   - An offline sidecar for the player's own finished recordings needs an explicit policy decision by the owner, and must never include enemy/head detection.
   - Live analysis is forbidden.
 - L3 (2026-10-18) The research ranked 22 proposals. This first batch follows its recommendation (journal, DPI test, warm-up dose, RSI breaks, verifiable proofs) plus the plateau detector.
+- L4 (2026-10-18) T2 merged.
+  - Modules: `training::journal` (tilt reset), `sensitivity::dpi_check`, `training::warmup::warmup_dose`, `training::ergonomics`, `progress::plateaus`, `analytics::proof` (FNV-1a content hash, base64url share code, replay re-simulation).
+  - Decision for T3: `queue_warmup` silently caps at 12 runs × 30 s = 6 min, although the Settings slider allows 30 and the dose goes up to 15. Raise the cap to 15 min (30 runs) so explicit settings are honoured, with a test.
