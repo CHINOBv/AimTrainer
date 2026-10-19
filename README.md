@@ -235,7 +235,7 @@ Rows written before snapshots existed keep their columns and load with empty sna
 
 Runs are deterministic: the same scenario, seed and inputs always give the same score. **Copy proof code** on the results screen of a scenario run copies a share code (base64url) that bundles the run key, a hash of the scenario as played, the seed, every input and the claimed score and accuracy.
 
-To check a friend's score, paste the code into **Verify a proof** on the Progress page. Your trainer rebuilds the scenario from your own library, checks the hash and replays the inputs on a background thread, then shows either `Verified: <scenario> score X, accuracy Y%` or why it failed: not a proof code, an unsupported version, an unknown scenario, a scenario that differs from the one played (for example an edited custom file), or a replay that gives another score. A proof shows that the inputs produce the score; it cannot show that a human produced them. Arena runs have no proof code.
+To check a friend's score, paste the code into **Verify a proof** on the Progress page. Your trainer rebuilds the scenario from your own library, checks the hash and replays the inputs on a background thread, then shows either `Verified: <scenario> score X, accuracy Y%` or why it failed: not a proof code, an unsupported version, an unknown scenario, a scenario that differs from the one played (for example an edited custom file), or a replay that gives another score. A proof shows that the inputs produce the score; it cannot show that a human produced them. Arena runs have no proof code. Verify on the same operating system the run was played on: Windows and Linux round some math differently, so a cross-platform proof can report a slightly different score.
 
 ## Ranked journal
 
