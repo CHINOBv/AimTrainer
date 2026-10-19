@@ -190,6 +190,7 @@ dependencies = [
 name = "aim_mcp"
 version = "0.1.0"
 dependencies = [
+ "aim_ai",
  "aim_core",
  "aim_world",
  "directories",

@@ -3,11 +3,15 @@
 //! Mirrors `Paths::resolve` in `crates/aim_app/src/persistence/settings.rs`: `aim_app` is a
 //! binary, so the resolution cannot be shared. Keep the qualifier, organization and file
 //! names in sync with it. Unlike the app, this never creates folders: the server only reads,
-//! except for an opt-in `create_scenario` with `dry_run = false`.
+//! except for an opt-in `create_scenario` with `dry_run = false` and the coach memory
+//! (`remember` and `recall` open `coach.db` in the data folder, creating it if needed).
 
 use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
+
+/// File name of the coach memory in the data folder (the app's `COACH_MEMORY_FILE`).
+pub const MEMORY_FILE: &str = "coach.db";
 
 /// The player's content and history locations.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,6 +24,8 @@ pub struct Paths {
     pub benchmarks_dir: PathBuf,
     /// The run history (`history.csv`).
     pub history_file: PathBuf,
+    /// The coach memory (SQLite), shared with the trainer's Coach page.
+    pub memory_file: PathBuf,
 }
 
 impl Paths {
@@ -38,6 +44,7 @@ impl Paths {
             routines_dir: config.join("routines"),
             benchmarks_dir: config.join("benchmarks"),
             history_file: data.join("history.csv"),
+            memory_file: data.join(MEMORY_FILE),
         }
     }
 }

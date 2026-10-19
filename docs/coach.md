@@ -37,7 +37,7 @@ These are the same tools as the in-app coach. Every call is forwarded to `aim_co
 
 - **`create_scenario` is a dry run by default.** It only returns the TOML. Pass `"dry_run": false` to also save it as `<id>.toml` in your custom scenarios folder. An existing file is never replaced. Generated scenarios are uncalibrated.
 - **Reads:** the server reads your custom content and `history.csv` from the same folders as the trainer (see `docs/scenarios.md`). Only history-based analyses are available; the skill profile, flick directions, miss compass and pace need replays, which the server does not read.
-- **Memory:** notes are kept in memory and last only as long as the server process. The planned SQLite store will make them persistent.
+- **Memory:** `remember` and `recall` use the trainer's `coach.db` (in the data folder next to `history.csv`), so the agent and the Coach tab share notes. The file is created on the first `remember` or `recall`; the other tools never touch it.
 
 ### Resources
 
@@ -222,7 +222,7 @@ The coach's `remember` and `recall` tools use `SqliteMemory`, a `CoachMemory` in
 
 | Topic | Behavior |
 |---|---|
-| File | The app passes the path (S5 decides where it lives); this crate hard-codes none. `open_in_memory()` keeps nothing on disk. |
+| File | `coach.db` in the trainer's data folder, next to `history.csv` (`~/.local/share/aimtrainer/` on Linux). The trainer and `aimtrainer-mcp` pass that path; this crate hard-codes none. `open_in_memory()` keeps nothing on disk. |
 | Search | An FTS5 table over the note text and tags. Each query word also matches as a prefix ("track" finds "tracking"). |
 | Order | FTS5 relevance (bm25, which favors short, focused notes) first, then newest first on ties. A query without words returns the newest notes. |
 | Wipe | `wipe()` deletes every note, for the settings page's wipe button. `secure_delete` is on, so wiped text is overwritten in the file. |

@@ -11,6 +11,7 @@ use std::io::Write;
 use std::sync::{Mutex, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use aim_ai::SqliteMemory;
 use aim_core::coach::tools::{self, ToolOutcome};
 use aim_core::coach::{InMemoryCoachMemory, ToolEnv};
 use aim_core::scenario::{ScenarioDef, builtin};
@@ -41,9 +42,9 @@ const SCHEMA_DOC: &str = include_str!("../../../docs/scenarios.md");
 #[derive(Debug)]
 pub struct CoachServer {
     paths: Paths,
-    // The SQLite store from `aim_ai` replaces this at the `CoachMemory` seam; until then,
-    // notes last as long as the server process.
-    memory: Mutex<InMemoryCoachMemory>,
+    /// The trainer's coach memory (`Paths::memory_file`), opened on the first `remember`
+    /// or `recall`, so the other tools never create the file.
+    memory: Mutex<Option<SqliteMemory>>,
 }
 
 impl CoachServer {
@@ -51,8 +52,28 @@ impl CoachServer {
     pub fn new(paths: Paths) -> Self {
         Self {
             paths,
-            memory: Mutex::new(InMemoryCoachMemory::default()),
+            memory: Mutex::new(None),
         }
+    }
+
+    /// Run `name` against the coach memory file, opening it (and its folder) first.
+    fn call_with_memory(
+        &self,
+        name: &str,
+        args: &Value,
+        env: &ToolEnv,
+    ) -> Result<ToolOutcome, String> {
+        let mut slot = self.memory.lock().unwrap_or_else(PoisonError::into_inner);
+        if slot.is_none() {
+            let file = &self.paths.memory_file;
+            if let Some(dir) = file.parent() {
+                fs::create_dir_all(dir)
+                    .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+            }
+            *slot = Some(SqliteMemory::open(file).map_err(|e| e.to_string())?);
+        }
+        let memory = slot.as_mut().expect("opened above");
+        Ok(tools::call(name, args, env, memory))
     }
 
     /// Every tool of [`tools::specs`], in order, with `dry_run` added to `create_scenario`.
@@ -119,9 +140,16 @@ impl CoachServer {
             benchmark: lib.benchmarks.first(),
             now,
         };
-        let outcome = {
-            let mut memory = self.memory.lock().unwrap_or_else(PoisonError::into_inner);
-            tools::call(name, &Value::Object(args), &env, &mut *memory)
+        let args = Value::Object(args);
+        let outcome = if name == tools::REMEMBER || name == tools::RECALL {
+            match self.call_with_memory(name, &args, &env) {
+                Ok(outcome) => outcome,
+                Err(e) => return errors(vec![format!("coach memory: {e}")]),
+            }
+        } else {
+            // These tools never read or write notes; a throwaway store keeps the file
+            // untouched.
+            tools::call(name, &args, &env, &mut InMemoryCoachMemory::default())
         };
 
         if name != tools::CREATE_SCENARIO || outcome.is_error {
