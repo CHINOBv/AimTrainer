@@ -62,6 +62,15 @@ rings = { radius = [0.25, 0.5, 1.0], multiplier = [3.0, 2.0, 1.0] }   # optional
 decoy_penalty = 0            # per shot on a go/no-go decoy
 decay = { window_secs = 2.0, floor = 0.3 }   # optional: a target's value fades after it appears
 accuracy_mult = "none"       # "linear" or "sqrt": the final score × accuracy (or its square root)
+
+[view]                       # optional
+fov_lock = [60, 80]          # vertical FOV in degrees: a fixed value (60) or a [min, max] clamp
+
+[feedback]                   # optional; see "Per-scenario feedback"
+hit_markers = true           # false hides hit markers in this scenario
+hit_sounds = true            # false mutes hit and kill sounds in this scenario
+damage_numbers = false       # true: floating damage numbers at each hit (click only)
+health_bars = false          # true: a small bar over targets whose health is above 1
 ```
 
 ### Go/no-go decoys
@@ -172,6 +181,26 @@ Behaviour rules still override the profile in force. `reactions` need every prof
 With `movement = true`, the player's feet stay inside `bounds_x` and `bounds_z`; pushing into an edge stops only that direction, so you slide along it. The edges are drawn as low, see-through strips on the floor, a few centimeters high, so they never block the view. The built-in movement drills use `counter-strafe` x [−8, 8], z [−2, 5] and `strafe-shot` x [−7, 7], z [−3, 5].
 
 `elevation` raises (or lowers, when negative) the player's floor; targets keep theirs at 0. The trainer draws a translucent slab at that height under the play area. You can also change it during a run: press Esc, set **Floor height** in 0.5 m steps, and choose **Apply and restart**. The run restarts at the same difficulty and duration, and a routine stays at the same run.
+
+### FOV lock
+
+By default every scenario uses VALORANT's camera: a vertical FOV of ≈70.53° (103° horizontal at 16:9, see `valorant-mechanics.md`). `[view] fov_lock` changes it for this scenario only:
+
+- `fov_lock = 60` always renders at 60° vertical.
+- `fov_lock = [min, max]` clamps VALORANT's FOV into the range, so `[60, 80]` keeps 70.53° while `[40, 55]` renders at 55°.
+
+Zoom narrows the locked FOV the way VALORANT zooms: the horizontal FOV is divided by the weapon's zoom. Every bound must lie within 30–120° and `min <= max`. The lock changes only what you see: hit tests and spawns still use world angles, so an `on_screen` spawn tuned for VALORANT's FOV can land off screen under a much narrower lock.
+
+### Per-scenario feedback
+
+`[feedback]` adjusts hit feedback for one scenario. It never turns on what the player switched off in Settings:
+
+| Field | Default | Effect |
+|---|---|---|
+| `hit_markers` | `true` | `false` hides hit markers, whatever the player's marker style. |
+| `hit_sounds` | `true` | `false` mutes hit, headshot and kill sounds. |
+| `damage_numbers` | `false` | `true` floats the weapon's VALORANT damage for the zone hit (e.g. Vandal 160 head, 40 body; a sphere counts as body) above each hit. Needs `fire = "click"`. |
+| `health_bars` | `false` | `true` draws a small bar over every target whose starting health is above 1 (click: hits, hold: seconds); it shows the share of health left. |
 
 ### Recoil
 

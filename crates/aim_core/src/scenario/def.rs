@@ -48,6 +48,13 @@ pub struct ScenarioDef {
     /// Ordered phases (waves): each overrides part of `targets` and advances on a trigger.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phases: Option<Vec<PhaseDef>>,
+    /// Camera options: an FOV lock for this scenario only.
+    #[serde(default, skip_serializing_if = "ViewDef::is_default")]
+    pub view: ViewDef,
+    /// Hit feedback for this scenario: hide markers or sounds, opt into damage numbers and
+    /// health bars.
+    #[serde(default, skip_serializing_if = "FeedbackDef::is_default")]
+    pub feedback: FeedbackDef,
 }
 
 fn default_duration() -> f32 {
@@ -919,6 +926,123 @@ impl Default for ScoringDef {
     }
 }
 
+/// Vertical FOVs, degrees, an FOV lock may use. A design choice: wide enough for every
+/// common game FOV (VALORANT's is ≈70.5°), narrow enough to keep the view usable.
+pub const FOV_LOCK_RANGE: Range = Range::new(30.0, 120.0);
+
+/// Camera options of a scenario.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ViewDef {
+    /// Vertical FOV for this scenario, degrees: a fixed value (`fov_lock = 60`) or a
+    /// `[min, max]` the hipfire FOV is clamped into. `None` keeps VALORANT's FOV.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fov_lock: Option<FovLock>,
+}
+
+impl ViewDef {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Vertical FOV the camera uses, degrees: VALORANT's hipfire FOV with the lock applied,
+    /// or, for `zoom` > 1, that FOV narrowed the way VALORANT zooms (horizontal FOV / zoom).
+    pub fn vertical_fov_deg(&self, zoom: Option<f64>) -> f64 {
+        use crate::fov;
+        let zoom = zoom.filter(|z| *z > 1.0);
+        let Some(lock) = self.fov_lock else {
+            return zoom.map_or_else(
+                fov::valorant_vertical_fov_deg,
+                fov::valorant_zoomed_vertical_fov_deg,
+            );
+        };
+        let hip = lock.clamp(fov::valorant_vertical_fov_deg());
+        match zoom {
+            None => hip,
+            Some(z) => {
+                let aspect = fov::VALORANT_MAX_ASPECT;
+                fov::vertical_from_horizontal(
+                    fov::horizontal_from_vertical(hip, aspect) / z,
+                    aspect,
+                )
+            }
+        }
+    }
+}
+
+/// A scenario's FOV lock, vertical degrees.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum FovLock {
+    /// Always this FOV.
+    Fixed(f32),
+    /// The hipfire FOV clamped into `[min, max]`.
+    Range(Range),
+}
+
+impl FovLock {
+    /// The allowed FOVs as a range (a fixed lock is a one-value range).
+    pub fn bounds(self) -> Range {
+        match self {
+            FovLock::Fixed(v) => Range::fixed(v),
+            FovLock::Range(r) => r,
+        }
+    }
+
+    /// `vfov_deg` clamped into the lock.
+    pub fn clamp(self, vfov_deg: f64) -> f64 {
+        let b = self.bounds();
+        vfov_deg.clamp(b.min as f64, b.max as f64)
+    }
+
+    fn is_valid(self) -> bool {
+        let b = self.bounds();
+        b.is_valid() && b.min >= FOV_LOCK_RANGE.min && b.max <= FOV_LOCK_RANGE.max
+    }
+}
+
+/// Per-scenario hit feedback. Markers and sounds follow the player's settings unless the
+/// scenario hides them; damage numbers and health bars exist only per scenario (opt-in).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, default)]
+pub struct FeedbackDef {
+    /// `false` hides hit markers in this scenario.
+    pub hit_markers: bool,
+    /// `false` mutes hit and kill sounds in this scenario.
+    pub hit_sounds: bool,
+    /// Floating damage numbers at each hit (click scenarios).
+    pub damage_numbers: bool,
+    /// A small bar over each target whose starting health is above 1.
+    pub health_bars: bool,
+}
+
+impl Default for FeedbackDef {
+    fn default() -> Self {
+        Self {
+            hit_markers: true,
+            hit_sounds: true,
+            damage_numbers: false,
+            health_bars: false,
+        }
+    }
+}
+
+impl FeedbackDef {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Whether hit markers show, given whether the player's own markers are on.
+    pub fn hit_markers_shown(&self, player_on: bool) -> bool {
+        player_on && self.hit_markers
+    }
+
+    /// Whether hit and kill sounds play, given whether the player's own sounds are on.
+    pub fn hit_sounds_played(&self, player_on: bool) -> bool {
+        player_on && self.hit_sounds
+    }
+}
+
 /// A semantic problem found by validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationError {
@@ -938,6 +1062,18 @@ impl ScenarioDef {
     /// Parses a scenario from TOML source.
     pub fn from_toml(src: &str) -> Result<Self, toml::de::Error> {
         toml::from_str(src)
+    }
+
+    /// A stable 64-bit hash of the definition's content (FNV-1a over its canonical TOML), so
+    /// run history can tell an edited scenario from the original. Formatting and comments
+    /// in the source file do not change it; any changed value does. Blocks left at their
+    /// defaults are not serialized, so adding an optional block to the engine keeps the
+    /// hashes of scenarios that do not use it.
+    pub fn content_hash(&self) -> u64 {
+        // Every definition serializes (replays embed it the same way); the debug form is a
+        // stable fallback that still changes with every value.
+        let canonical = toml::to_string(self).unwrap_or_else(|_| format!("{self:?}"));
+        fnv1a_64(canonical.as_bytes())
     }
 
     /// Semantic checks that serde cannot express. Returns every problem found.
@@ -1377,6 +1513,16 @@ impl ScenarioDef {
                 check(false, field, msg);
             }
         }
+        check(
+            self.view.fov_lock.is_none_or(FovLock::is_valid),
+            "view.fov_lock",
+            "must be a vertical FOV, or a [min, max] with min <= max, within 30–120 degrees",
+        );
+        check(
+            !self.feedback.damage_numbers || self.weapon.fire == FireMode::Click,
+            "feedback.damage_numbers",
+            "needs weapon.fire = \"click\": hold mode fires no shots to number",
+        );
         errs.extend(self.run_rule_problems());
         errs
     }
@@ -1602,6 +1748,15 @@ fn motion_problems(m: &Motion) -> Vec<(&'static str, &'static str)> {
         );
     }
     out
+}
+
+/// 64-bit FNV-1a: tiny, dependency-free and identical on every platform and release.
+fn fnv1a_64(bytes: &[u8]) -> u64 {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    bytes
+        .iter()
+        .fold(OFFSET, |h, &b| (h ^ b as u64).wrapping_mul(PRIME))
 }
 
 /// Most floor bounces a `ballistic` motion may have.
@@ -2617,5 +2772,158 @@ mod tests {
             "{ kind = \"capsule\", radius = 0.3, hieght = 1.6 }",
         );
         assert!(ScenarioDef::from_toml(&typo).is_err());
+    }
+
+    #[test]
+    fn without_a_view_block_the_camera_keeps_valorants_fov() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!(d.view, ViewDef::default());
+        assert_eq!(
+            d.view.vertical_fov_deg(None),
+            crate::fov::valorant_vertical_fov_deg()
+        );
+        assert_eq!(
+            d.view.vertical_fov_deg(Some(1.25)),
+            crate::fov::valorant_zoomed_vertical_fov_deg(1.25)
+        );
+        assert!(
+            !toml::to_string(&d).unwrap().contains("[view]"),
+            "an unused block is not written, so content hashes stay put"
+        );
+    }
+
+    #[test]
+    fn a_fixed_fov_lock_replaces_the_fov_and_a_range_clamps_it() {
+        let fixed = ScenarioDef::from_toml(&format!("{MINIMAL}\n[view]\nfov_lock = 60\n")).unwrap();
+        assert_eq!(fixed.view.fov_lock, Some(FovLock::Fixed(60.0)));
+        assert!(fixed.validate().is_empty(), "{:?}", fixed.validate());
+        assert_eq!(fixed.view.vertical_fov_deg(None), 60.0);
+        // Zoom narrows the locked FOV the way it narrows VALORANT's: horizontal / zoom.
+        let zoomed = fixed.view.vertical_fov_deg(Some(2.0));
+        let h = crate::fov::horizontal_from_vertical(60.0, 16.0 / 9.0) / 2.0;
+        assert!((zoomed - crate::fov::vertical_from_horizontal(h, 16.0 / 9.0)).abs() < 1e-9);
+
+        let narrow =
+            ScenarioDef::from_toml(&format!("{MINIMAL}\n[view]\nfov_lock = [40, 55]\n")).unwrap();
+        assert_eq!(
+            narrow.view.vertical_fov_deg(None),
+            55.0,
+            "70.5° clamps down to max"
+        );
+        let wide =
+            ScenarioDef::from_toml(&format!("{MINIMAL}\n[view]\nfov_lock = [80, 100]\n")).unwrap();
+        assert_eq!(
+            wide.view.vertical_fov_deg(None),
+            80.0,
+            "70.5° clamps up to min"
+        );
+        let around =
+            ScenarioDef::from_toml(&format!("{MINIMAL}\n[view]\nfov_lock = [60, 90]\n")).unwrap();
+        assert_eq!(
+            around.view.vertical_fov_deg(None),
+            crate::fov::valorant_vertical_fov_deg(),
+            "inside the range VALORANT's FOV is kept"
+        );
+    }
+
+    #[test]
+    fn fov_lock_ranges_are_validated_and_typos_rejected() {
+        let fields = |lock: &str| -> Vec<&'static str> {
+            ScenarioDef::from_toml(&format!("{MINIMAL}\n[view]\nfov_lock = {lock}\n"))
+                .unwrap()
+                .validate()
+                .into_iter()
+                .map(|e| e.field)
+                .collect()
+        };
+        let none: [&str; 0] = [];
+        assert_eq!(fields("30"), none);
+        assert_eq!(fields("120"), none);
+        assert_eq!(fields("[30, 120]"), none);
+        for bad in ["29", "121", "0", "[90, 60]", "[20, 60]", "[60, 130]", "nan"] {
+            assert_eq!(fields(bad), ["view.fov_lock"], "{bad}");
+        }
+        let typo = format!("{MINIMAL}\n[view]\nfov_lok = 60\n");
+        assert!(ScenarioDef::from_toml(&typo).is_err());
+    }
+
+    #[test]
+    fn feedback_defaults_leave_the_players_settings_in_charge() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!(d.feedback, FeedbackDef::default());
+        for player in [true, false] {
+            assert_eq!(d.feedback.hit_markers_shown(player), player);
+            assert_eq!(d.feedback.hit_sounds_played(player), player);
+        }
+        assert!(!d.feedback.damage_numbers && !d.feedback.health_bars);
+        assert!(!toml::to_string(&d).unwrap().contains("[feedback]"));
+    }
+
+    #[test]
+    fn feedback_can_only_hide_markers_and_sounds_and_opt_into_numbers_and_bars() {
+        let src = format!(
+            "{MINIMAL}\n[feedback]\nhit_markers = false\nhit_sounds = false\ndamage_numbers = true\nhealth_bars = true\n"
+        );
+        let d = ScenarioDef::from_toml(&src).unwrap();
+        assert!(d.validate().is_empty(), "{:?}", d.validate());
+        for player in [true, false] {
+            assert!(!d.feedback.hit_markers_shown(player));
+            assert!(!d.feedback.hit_sounds_played(player));
+        }
+        // `true` cannot force on what the player turned off.
+        let on = ScenarioDef::from_toml(&format!(
+            "{MINIMAL}\n[feedback]\nhit_markers = true\nhit_sounds = true\n"
+        ))
+        .unwrap();
+        assert!(!on.feedback.hit_markers_shown(false));
+        assert!(!on.feedback.hit_sounds_played(false));
+        assert!(d.feedback.damage_numbers && d.feedback.health_bars);
+
+        let typo = format!("{MINIMAL}\n[feedback]\nhit_marker = false\n");
+        assert!(ScenarioDef::from_toml(&typo).is_err());
+    }
+
+    #[test]
+    fn damage_numbers_need_shots_to_show() {
+        let mut d =
+            ScenarioDef::from_toml(&format!("{MINIMAL}\n[feedback]\ndamage_numbers = true\n"))
+                .unwrap();
+        d.weapon.fire = FireMode::Hold;
+        d.targets.health = 2.0;
+        let fields: Vec<_> = d.validate().into_iter().map(|e| e.field).collect();
+        assert_eq!(fields, ["feedback.damage_numbers"]);
+    }
+
+    #[test]
+    fn the_content_hash_is_stable_and_changes_with_any_edit() {
+        let a = ScenarioDef::from_toml(MINIMAL).unwrap();
+        let b = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!(
+            a.content_hash(),
+            b.content_hash(),
+            "same definition, same hash"
+        );
+        assert_eq!(a.content_hash(), a.clone().content_hash());
+        // Formatting and comments are not content.
+        let reformatted = format!("# a comment\n{}", MINIMAL.replace("    ", "  "));
+        assert_eq!(
+            ScenarioDef::from_toml(&reformatted).unwrap().content_hash(),
+            a.content_hash()
+        );
+        let mut edited = a.clone();
+        edited.targets.max_alive = 2;
+        assert_ne!(edited.content_hash(), a.content_hash());
+        let mut faster = a.clone();
+        faster.duration_secs = 30.0;
+        assert_ne!(faster.content_hash(), a.content_hash());
+        let locked =
+            ScenarioDef::from_toml(&format!("{MINIMAL}\n[view]\nfov_lock = 60\n")).unwrap();
+        assert_ne!(locked.content_hash(), a.content_hash());
+        // Every built-in scenario hashes, and no two share a hash.
+        let hashes: std::collections::HashSet<u64> = crate::scenario::builtin::all()
+            .iter()
+            .map(ScenarioDef::content_hash)
+            .collect();
+        assert_eq!(hashes.len(), crate::scenario::builtin::all().len());
     }
 }

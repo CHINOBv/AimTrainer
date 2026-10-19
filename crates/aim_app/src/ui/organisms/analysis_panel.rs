@@ -13,6 +13,7 @@ use crate::ui::organisms::miss_compass::MissCompassGrid;
 use crate::ui::organisms::moving_panel::MovingReport;
 use crate::ui::organisms::perception_panel::{DetectionReport, RadarRecallReport};
 use crate::ui::organisms::potential_tip::PotentialLine;
+use aim_core::analytics::damage::{DamageEfficiency, TtkSpread};
 use aim_core::analytics::{RunAnalysis, SkillProfile};
 use bevy_egui::egui;
 
@@ -55,6 +56,10 @@ pub struct RunReport {
     pub detection: Option<DetectionReport>,
     /// Correct and incorrect picks, for radar-recall runs.
     pub radar_recall: Option<RadarRecallReport>,
+    /// Median time to kill and its interquartile range, with enough kills.
+    pub ttk_spread: Option<String>,
+    /// Damage dealt against damage available, for hold runs and multi-hit targets.
+    pub damage_efficiency: Option<String>,
 }
 
 pub(crate) fn ms(secs: f32) -> String {
@@ -183,8 +188,28 @@ impl RunReport {
             audio_cue: analysis.audio_cue.as_ref().map(AudioCueReport::new),
             detection: analysis.detection.as_ref().map(DetectionReport::new),
             radar_recall: analysis.radar_recall.as_ref().map(RadarRecallReport::new),
+            ttk_spread: analysis.ttk_spread.as_ref().map(ttk_spread_text),
+            damage_efficiency: analysis
+                .damage_efficiency
+                .as_ref()
+                .map(damage_efficiency_text),
         }
     }
+}
+
+/// "412 ms (IQR 150 ms, 12 kills)": the median time to kill and how much it varies.
+pub fn ttk_spread_text(s: &TtkSpread) -> String {
+    format!(
+        "{} (IQR {}, {} kills)",
+        ms(s.median_secs),
+        ms(s.iqr_secs()),
+        s.kills
+    )
+}
+
+/// "75% (30 of 40)": damage dealt against damage available.
+pub fn damage_efficiency_text(e: &DamageEfficiency) -> String {
+    format!("{} ({:.0} of {:.0})", pct(e.ratio()), e.done, e.possible)
 }
 
 /// Draw the report. Returns an action when a "practice" button is clicked.
@@ -443,5 +468,26 @@ mod tests {
                 .any(|(s, t)| *s && t.contains("threshold"))
         );
         assert!(report("flick-wide", 2).priority.is_none());
+    }
+
+    #[test]
+    fn ttk_spread_and_damage_efficiency_are_worded_for_the_results_card() {
+        use aim_core::analytics::damage::{DamageEfficiency, TtkSpread};
+        let spread = TtkSpread {
+            kills: 12,
+            median_secs: 0.412,
+            q1_secs: 0.35,
+            q3_secs: 0.5,
+        };
+        assert_eq!(ttk_spread_text(&spread), "412 ms (IQR 150 ms, 12 kills)");
+        let e = DamageEfficiency {
+            done: 30.0,
+            possible: 40.0,
+        };
+        assert_eq!(damage_efficiency_text(&e), "75% (30 of 40)");
+        let click = report("flick-wide", 2);
+        assert!(click.ttk_spread.is_some());
+        assert_eq!(click.damage_efficiency, None);
+        assert!(report("track-precise", 2).damage_efficiency.is_some());
     }
 }
