@@ -26,8 +26,16 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/arc-follow.toml"),
     ),
     (
+        "bobbing-heads.toml",
+        include_str!("../../../../content/scenarios/bobbing-heads.toml"),
+    ),
+    (
         "burst-control.toml",
         include_str!("../../../../content/scenarios/burst-control.toml"),
+    ),
+    (
+        "close-strafe-heads.toml",
+        include_str!("../../../../content/scenarios/close-strafe-heads.toml"),
     ),
     (
         "cockroach-hop.toml",
@@ -202,6 +210,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/peripheral-detect.toml"),
     ),
     (
+        "pill-crossfire.toml",
+        include_str!("../../../../content/scenarios/pill-crossfire.toml"),
+    ),
+    (
         "popcorn-burst.toml",
         include_str!("../../../../content/scenarios/popcorn-burst.toml"),
     ),
@@ -242,6 +254,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/ricochet-ring.toml"),
     ),
     (
+        "shrinking-movers.toml",
+        include_str!("../../../../content/scenarios/shrinking-movers.toml"),
+    ),
+    (
         "six-pin.toml",
         include_str!("../../../../content/scenarios/six-pin.toml"),
     ),
@@ -276,6 +292,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "static-headline.toml",
         include_str!("../../../../content/scenarios/static-headline.toml"),
+    ),
+    (
+        "stop-go-weavers.toml",
+        include_str!("../../../../content/scenarios/stop-go-weavers.toml"),
     ),
     (
         "strafe-shot.toml",
@@ -334,8 +354,16 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/track-reactive-strafe.toml"),
     ),
     (
+        "wave-runners.toml",
+        include_str!("../../../../content/scenarios/wave-runners.toml"),
+    ),
+    (
         "wide-wall-five.toml",
         include_str!("../../../../content/scenarios/wide-wall-five.toml"),
+    ),
+    (
+        "zigzag-sparks.toml",
+        include_str!("../../../../content/scenarios/zigzag-sparks.toml"),
     ),
 ];
 

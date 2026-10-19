@@ -1,0 +1,32 @@
+# Idea: evasive dynamic clicking with changing movement patterns (Voltaic and KovaaK's
+# dynamic clicking playlists). Original scenario: no file, name or value was copied.
+id = "stop-go-weavers"
+name = "Stop-and-Go Weavers"
+category = "flicking"
+description = """
+Dynamic clicking on targets that keep changing their pattern. Each sphere switches between a smooth wave,
+a sharp zigzag and short stops. Re-read the motion after every change instead of trusting the last one."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.16 }
+spawn = { kind = "angular", yaw_deg = [-28.0, 28.0], pitch_deg = [3.0, 11.0], distance = [13.0, 13.0] }
+max_alive = 2
+min_separation_deg = 8
+
+[[targets.motion_profiles]]
+weight = 2
+switch_secs = [0.8, 1.6]
+motion = { kind = "wave", speed = [2.0, 3.0], amplitude = [0.3, 0.6], frequency_hz = [0.6, 1.0], max_offset = 4.0 }
+
+[[targets.motion_profiles]]
+weight = 1
+switch_secs = [0.6, 1.2]
+motion = { kind = "wave", form = "zigzag", speed = [1.5, 2.5], amplitude = [0.3, 0.5], frequency_hz = [1.0, 1.5], max_offset = 4.0 }
+
+[[targets.motion_profiles]]
+weight = 1
+switch_secs = [0.3, 0.6]
+motion = { kind = "static" }
+
+[scoring]
+miss_penalty = 15

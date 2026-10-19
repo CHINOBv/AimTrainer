@@ -357,7 +357,7 @@ motion = { kind = "wave", speed = [2.0, 3.0], amplitude = [0.3, 0.5], frequency_
 | `form` | `"sine"` (default) slows into each turn, like a smooth bob; `"zigzag"` climbs and falls at a constant speed and turns sharply. |
 | `max_offset` | Max lateral distance from the spawn point, meters (> 0). |
 
-Each value is drawn once, when the target appears, together with a random side and a random point of the cycle, so several targets do not weave in step. Spheres never sink below the minimum sphere height. Humanoids walk on the floor, so `wave` needs a sphere or capsule shape (also in motion profiles and behaviour rules). Speed tuning and the difficulty speed knob scale `speed` and `frequency_hz` together, so the target travels the same path faster; the amplitude stays. Like the other newer motions, `wave` draws random numbers only when it is used, so other scenarios replay exactly as before.
+Each value is drawn once, when the target appears, together with a random side and a random point of the cycle, so several targets do not weave in step. Spheres never sink below the minimum sphere height. Humanoids walk on the floor, so `wave` needs a sphere or capsule shape (also in motion profiles and behaviour rules). Speed tuning and the difficulty speed knob scale `speed` and `frequency_hz` together, so the target travels the same path faster; the amplitude stays. The built-in `wave-runners`, `zigzag-sparks`, `bobbing-heads` and `stop-go-weavers` use it. Like the other newer motions, `wave` draws random numbers only when it is used, so other scenarios replay exactly as before.
 
 ### Reactive targets
 

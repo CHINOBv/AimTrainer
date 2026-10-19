@@ -1,0 +1,20 @@
+# Idea: multi-target clicking on evasive movers (Voltaic dynamic clicking slots). Original
+# scenario: no file, name or value was copied.
+id = "pill-crossfire"
+name = "Pill Crossfire"
+category = "flicking"
+description = """
+Dynamic multi-target clicking. Three capsules juke and stop across a wide arc; the small head is worth
+more than twice the body. Pick the next target while the last shot lands, and aim for the head."""
+
+[targets]
+shape = { kind = "capsule", radius = 0.25, height = 1.4, head = { radius = 0.14, offset = 0.85 } }
+spawn = { kind = "angular", yaw_deg = [-35.0, 35.0], pitch_deg = [0.0, 0.0], distance = [11.0, 15.0] }
+motion = { kind = "dodge", change_secs = [0.3, 0.8], juke_chance = 0.3, stop_chance = 0.2, max_offset = 2.5 }
+max_alive = 3
+min_separation_deg = 10
+
+[scoring]
+head = 100
+body = 40
+miss_penalty = 15
