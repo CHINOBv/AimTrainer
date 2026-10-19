@@ -14,8 +14,8 @@ use crate::persistence::settings::{Paths, Settings};
 use crate::platform::frame_stats::FrameStats;
 use crate::platform::hotkey::HotkeyCapture;
 use crate::ui::UiAction;
-use crate::ui::atoms::ERROR;
-use crate::ui::molecules::tab_bar;
+use crate::ui::atoms::{ERROR, GOOD};
+use crate::ui::molecules::{SettingsRows, tab_bar};
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::profile_code::{self, ProfileImport};
 use crate::ui::organisms::progress_panel::{self, ProgressModel};
@@ -23,19 +23,19 @@ use crate::ui::organisms::replay_viewer::{self, ReplayViewerState};
 use crate::ui::organisms::sens_converter::{ConverterState, sens_converter};
 use crate::ui::organisms::sens_finder;
 use crate::ui::organisms::sens_suggestion::{self, RECENT_RUNS, SensSuggestionState};
-use crate::ui::organisms::settings_panels::{self, DpiMeter};
+use crate::ui::organisms::settings_panels::{self, DpiMeter, SettingsTab};
 use crate::ui::organisms::system_check::{self, SystemModel};
 use crate::ui::organisms::today_panel::{
-    self, ChallengeModel, DayModel, MissionModel, MissionsModel, RoutineModel, TodayAction,
-    TodayModel,
+    self, ChallengeModel, DayModel, MissionModel, MissionsModel, QuickModel, RoutineModel,
+    TodayAction, TodayModel,
 };
 use crate::ui::organisms::{
-    arena_list, benchmark_panel, feedback_settings, routine_list, scenario_browser,
+    arena_list, benchmark_panel, feedback_settings, first_run, routine_list, scenario_browser,
 };
 use aim_core::fov;
 use aim_core::training::method::{MethodDef, Weekday};
 use aim_core::training::playlist;
-use aim_core::training::resume::PositionStore;
+use aim_core::training::resume::{PositionStore, RoutinePosition};
 use aim_core::training::store::RunStore;
 use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::AccumulatedMouseMotion;
@@ -48,7 +48,9 @@ pub struct MenuPage;
 impl Plugin for MenuPage {
     fn build(&self, app: &mut App) {
         app.init_resource::<MenuState>()
-            .add_systems(Update, count_dpi_meter)
+            .init_resource::<SettingsSaver>()
+            .add_systems(Update, (count_dpi_meter, save_settings))
+            .add_systems(Last, flush_settings_on_exit)
             .add_systems(OnExit(AppState::Menu), stop_recording_on_exit)
             .add_systems(
                 EguiPrimaryContextPass,
@@ -57,7 +59,7 @@ impl Plugin for MenuPage {
     }
 }
 
-#[derive(Default, PartialEq, Clone, Copy)]
+#[derive(Debug, Default, PartialEq, Clone, Copy)]
 enum Tab {
     #[default]
     Today,
@@ -81,6 +83,54 @@ const TABS: [(Tab, &str); 8] = [
     (Tab::Settings, "Settings"),
 ];
 
+/// Keys 1–8 select the tabs in [`TABS`] order.
+const TAB_KEYS: [egui::Key; 8] = [
+    egui::Key::Num1,
+    egui::Key::Num2,
+    egui::Key::Num3,
+    egui::Key::Num4,
+    egui::Key::Num5,
+    egui::Key::Num6,
+    egui::Key::Num7,
+    egui::Key::Num8,
+];
+
+fn tab_for_key(key: egui::Key) -> Option<Tab> {
+    TAB_KEYS.iter().position(|&k| k == key).map(|i| TABS[i].0)
+}
+
+/// Number keys switch tabs unless a text field has focus or a key is being recorded
+/// (`on_keys_tab`: the Keys sub-tab, whose restart-key row records bare keys).
+fn number_keys_enabled(text_focus: bool, recording_hotkey: bool, on_keys_tab: bool) -> bool {
+    !(text_focus || recording_hotkey || on_keys_tab)
+}
+
+/// Whether the restart-key row (which records bare keys, digits included) can be on
+/// screen: on the Keys sub-tab, or in any Settings search, which shows rows from every
+/// sub-tab.
+fn bare_key_rows_shown(tab: Tab, settings_tab: SettingsTab, query: &str) -> bool {
+    tab == Tab::Settings && (settings_tab == SettingsTab::Keys || !query.trim().is_empty())
+}
+
+/// The routine "Continue" resumes: today's unfinished method day, else the newest
+/// unfinished routine from today. `runs_of` gives a routine's current run count; a
+/// position whose count differs belongs to an edited routine and is skipped.
+fn continue_position(
+    progress: &MethodProgress,
+    date: &str,
+    runs_of: impl Fn(&str) -> Option<usize>,
+) -> Option<RoutinePosition> {
+    let open = |p: &&RoutinePosition| {
+        p.date == date && !p.is_done() && runs_of(&p.routine) == Some(p.total_runs)
+    };
+    progress
+        .today
+        .iter()
+        .find(open)
+        .or_else(|| progress.routines.iter().rev().find(open))
+        .cloned()
+}
+
 #[derive(Resource, Default)]
 struct MenuState {
     tab: Tab,
@@ -91,6 +141,110 @@ struct MenuState {
     replays: ReplayViewerState,
     converter: Option<ConverterState>,
     sens_suggestion: SensSuggestionState,
+    settings_tab: SettingsTab,
+    /// Text of the Settings search box.
+    settings_query: String,
+    /// The section whose "Reset" was clicked once and waits for confirmation.
+    confirm_reset: Option<SettingsTab>,
+    scenario_filter: scenario_browser::ScenarioFilter,
+    wizard_step: first_run::WizardStep,
+}
+
+/// The Settings tab: search, sub-tabs, a reset per section, and the rows.
+fn settings_page(root: &mut egui::Ui, state: &mut MenuState, cfg: &mut SettingsAccess) {
+    egui::Panel::top("settings_tabs").show(root, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Search");
+            ui.add(
+                egui::TextEdit::singleline(&mut state.settings_query)
+                    .hint_text("Search settings")
+                    .desired_width(180.0),
+            );
+            if !state.settings_query.is_empty() && ui.small_button("Clear").clicked() {
+                state.settings_query.clear();
+            }
+            ui.separator();
+            tab_bar(ui, &mut state.settings_tab, &SettingsTab::ALL);
+        });
+        let searching = !state.settings_query.trim().is_empty();
+        ui.horizontal(|ui| {
+            if searching {
+                ui.small("Showing matches from every section.");
+            } else if state.confirm_reset == Some(state.settings_tab) {
+                ui.label("Reset this section to its defaults?");
+                if ui.button("Reset").clicked() {
+                    settings_panels::reset_section(&mut cfg.settings, state.settings_tab);
+                    state.confirm_reset = None;
+                }
+                if ui.button("Cancel").clicked() {
+                    state.confirm_reset = None;
+                }
+            } else if ui.button("Reset section to defaults").clicked() {
+                state.confirm_reset = Some(state.settings_tab);
+            }
+        });
+    });
+    // Pinned below the rows, which scroll.
+    egui::Panel::bottom("settings_footer").show(root, |ui| {
+        ui.small(format!(
+            "Settings file: {}  ·  VALORANT FOV: {:.2}° vertical (103° horizontal at 16:9, Hor+)",
+            cfg.paths.settings_file.display(),
+            fov::valorant_vertical_fov_deg()
+        ));
+    });
+    egui::CentralPanel::default().show(root, |ui| {
+        egui::ScrollArea::vertical()
+            .id_salt("settings")
+            .show(ui, |ui| {
+                let query = state.settings_query.clone();
+                let mut rows = SettingsRows::new(&query);
+                let tabs: Vec<SettingsTab> = if rows.searching() {
+                    SettingsTab::ALL.iter().map(|t| t.0).collect()
+                } else {
+                    vec![state.settings_tab]
+                };
+                for tab in tabs {
+                    settings_section(ui, &mut rows, tab, state, cfg);
+                }
+            });
+    });
+}
+
+fn settings_section(
+    ui: &mut egui::Ui,
+    rows: &mut SettingsRows,
+    tab: SettingsTab,
+    state: &mut MenuState,
+    cfg: &mut SettingsAccess,
+) {
+    let settings = &mut *cfg.settings;
+    match tab {
+        SettingsTab::Sensitivity => {
+            settings_panels::sensitivity_panel(
+                ui,
+                rows,
+                settings,
+                &mut state.dpi_target,
+                &mut state.meter,
+            );
+            rows.block(ui, "Profile code share import export", |ui| {
+                ui.add_space(8.0);
+                profile_code::profile_code(ui, settings, &mut state.profile_import);
+            });
+        }
+        SettingsTab::Crosshair => settings_panels::crosshair_panel(ui, rows, settings),
+        SettingsTab::Feedback => feedback_settings::feedback_panel(ui, rows, settings),
+        SettingsTab::Audio => {
+            if let Some(clip) = feedback_settings::audio_panel(ui, rows, &mut settings.sound) {
+                cfg.sound_previews.write(SoundPreview(clip));
+            }
+        }
+        SettingsTab::Overlay => settings_panels::overlay_panel(ui, rows, settings),
+        SettingsTab::Keys => {
+            settings_panels::keys_panel(ui, rows, settings, &mut cfg.hotkey_capture.recording)
+        }
+        SettingsTab::Training => settings_panels::training_panel(ui, rows, settings),
+    }
 }
 
 fn count_dpi_meter(motion: Res<AccumulatedMouseMotion>, mut state: ResMut<MenuState>) {
@@ -130,6 +284,8 @@ struct SettingsAccess<'w> {
     clear: ResMut<'w, ClearColor>,
     hotkey_capture: ResMut<'w, HotkeyCapture>,
     sound_previews: MessageWriter<'w, SoundPreview>,
+    saver: ResMut<'w, SettingsSaver>,
+    time: Res<'w, Time<Real>>,
 }
 
 fn menu(
@@ -155,9 +311,25 @@ fn menu(
             .max_rect(ctx.viewport_rect()),
     );
     let before = cfg.settings.clone();
+    let now = cfg.time.elapsed_secs_f64();
+    let saved = cfg.saver.debounce.show_saved(now);
     let state = &mut *state;
     let lib = nav.library();
     let mut action: Option<UiAction> = None;
+
+    let bare_keys_shown = bare_key_rows_shown(state.tab, state.settings_tab, &state.settings_query);
+    if number_keys_enabled(
+        ctx.egui_wants_keyboard_input(),
+        cfg.hotkey_capture.recording.is_some(),
+        bare_keys_shown,
+    ) && let Some(tab) = ctx.input(|i| {
+        TAB_KEYS
+            .iter()
+            .find(|&&k| i.key_pressed(k))
+            .and_then(|&k| tab_for_key(k))
+    }) {
+        state.tab = tab;
+    }
 
     egui::Panel::top("tabs").show(&mut root, |ui| {
         ui.horizontal(|ui| {
@@ -167,6 +339,12 @@ fn menu(
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Quit").clicked() {
                     action = Some(UiAction::Quit);
+                }
+                if saved {
+                    ui.colored_label(GOOD, "Saved ✔");
+                    // Repaint so the message disappears without waiting for input.
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_millis(250));
                 }
                 let s = cfg.settings.sensitivity;
                 ui.label(format!(
@@ -200,9 +378,13 @@ fn menu(
                 &cfg.paths,
             );
             let missions = missions_model(lib, &training.missions, cfg.settings.mission_commitment);
+            let quick = quick_model(lib, &history, &training.progress, &today);
             egui::CentralPanel::default().show(&mut root, |ui| {
+                today_action = today_panel::quick_bar(ui, &quick);
                 match today_model(lib, &history, &training.progress, &today, weekday, missions) {
-                    Some(model) => today_action = today_panel::today_panel(ui, &model),
+                    Some(model) => {
+                        today_action = today_panel::today_panel(ui, &model).or(today_action.take())
+                    }
                     None => {
                         ui.label("No weekly training method is available.");
                     }
@@ -260,7 +442,14 @@ fn menu(
                             cfg.paths.scenarios_dir.display()
                         ));
                     });
-                    scenario_browser::scenario_list(ui, lib, &history, &mut state.selected);
+                    scenario_browser::scenario_list(
+                        ui,
+                        lib,
+                        &history,
+                        &mut state.selected,
+                        &mut state.scenario_filter,
+                        &mut cfg.settings.favorites,
+                    );
                 });
             egui::CentralPanel::default().show(&mut root, |ui| {
                 match state.selected.as_deref().and_then(|id| lib.scenario(id)) {
@@ -277,15 +466,20 @@ fn menu(
             });
         }
         Tab::Routines => {
+            // Pinned below the list, which scrolls and would otherwise push it off-screen.
+            egui::Panel::bottom("custom_routines").show(&mut root, |ui| {
+                ui.small(format!(
+                    "Custom routines: {}",
+                    cfg.paths.routines_dir.display()
+                ));
+            });
             egui::CentralPanel::default().show(&mut root, |ui| {
                 let personalized = lib.benchmarks.first().map(|b| {
                     playlist::personalized(b, &b.evaluate(&history.bests()), &lib.scenarios, 30.0)
                 });
-                action = action.take().or(routine_list::routine_list(
-                    ui,
-                    lib,
-                    personalized.as_ref(),
-                    |id| {
+                // The list's scroll area has no salt of its own; this scope gives it one.
+                let list = ui.push_id("routines", |ui| {
+                    routine_list::routine_list(ui, lib, personalized.as_ref(), |id| {
                         // A routine edited since it was split may have another run count.
                         let runs = lib
                             .routines
@@ -297,12 +491,9 @@ fn menu(
                             .resumable(&crate::persistence::method_progress::local_date(), id)
                             .filter(|p| p.total_runs == runs)
                             .cloned()
-                    },
-                ));
-                ui.small(format!(
-                    "Custom routines: {}",
-                    cfg.paths.routines_dir.display()
-                ));
+                    })
+                });
+                action = action.take().or(list.inner);
             });
         }
         Tab::Arenas => {
@@ -329,78 +520,44 @@ fn menu(
         }
         Tab::Tools => {
             egui::CentralPanel::default().show(&mut root, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.heading("Sensitivity converter");
-                    let converter = state.converter.get_or_insert_with(|| {
-                        ConverterState::from_sensitivity(cfg.settings.sensitivity)
+                egui::ScrollArea::vertical()
+                    .id_salt("tools")
+                    .show(ui, |ui| {
+                        ui.heading("Sensitivity converter");
+                        let converter = state.converter.get_or_insert_with(|| {
+                            ConverterState::from_sensitivity(cfg.settings.sensitivity)
+                        });
+                        sens_converter(ui, &mut cfg.settings, converter);
+                        ui.separator();
+                        action = action.take().or(sens_finder::sens_finder(
+                            ui,
+                            &mut training.finder.0,
+                            &mut cfg.settings,
+                        ));
+                        ui.separator();
+                        let system = SystemModel {
+                            frames: training.frames.summary(),
+                            vsync_off: true,
+                            fullscreen: cfg.settings.fullscreen,
+                            wayland: crate::platform::is_wayland(),
+                            windows: cfg!(windows),
+                        };
+                        system_check::system_check(ui, &system);
                     });
-                    sens_converter(ui, &mut cfg.settings, converter);
-                    ui.separator();
-                    action = action.take().or(sens_finder::sens_finder(
-                        ui,
-                        &mut training.finder.0,
-                        &mut cfg.settings,
-                    ));
-                    ui.separator();
-                    let system = SystemModel {
-                        frames: training.frames.summary(),
-                        vsync_off: true,
-                        fullscreen: cfg.settings.fullscreen,
-                        wayland: crate::platform::is_wayland(),
-                        windows: cfg!(windows),
-                    };
-                    system_check::system_check(ui, &system);
-                });
             });
         }
-        Tab::Settings => {
-            egui::CentralPanel::default().show(&mut root, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    settings_panels::sensitivity_panel(
-                        ui,
-                        &mut cfg.settings,
-                        &mut state.dpi_target,
-                        &mut state.meter,
-                    );
-                    ui.separator();
-                    settings_panels::display_panel(
-                        ui,
-                        &mut cfg.settings,
-                        &mut cfg.hotkey_capture.recording,
-                    );
-                    ui.separator();
-                    if let Some(clip) = feedback_settings::sound_panel(ui, &mut cfg.settings.sound)
-                    {
-                        cfg.sound_previews.write(SoundPreview(clip));
-                    }
-                    ui.separator();
-                    let crosshair = cfg.settings.crosshair.color();
-                    feedback_settings::hit_feedback_panel(
-                        ui,
-                        &mut cfg.settings.hit_feedback,
-                        crosshair,
-                    );
-                    ui.separator();
-                    profile_code::profile_code(ui, &mut cfg.settings, &mut state.profile_import);
-                    ui.add_space(8.0);
-                    ui.small(format!(
-                        "Settings file: {}",
-                        cfg.paths.settings_file.display()
-                    ));
-                    ui.small(format!(
-                        "VALORANT FOV: {:.2}° vertical (103° horizontal at 16:9, Hor+)",
-                        fov::valorant_vertical_fov_deg()
-                    ));
-                });
-            });
-        }
+        Tab::Settings => settings_page(&mut root, state, &mut cfg),
     }
 
-    if state.tab != Tab::Settings {
+    first_run::first_run_wizard(ctx, &mut state.wizard_step, &mut cfg.settings);
+    let hotkeys_shown = state.tab == Tab::Settings
+        && (state.settings_tab == SettingsTab::Keys || !state.settings_query.trim().is_empty());
+    if !hotkeys_shown {
         stop_recording(&mut cfg.hotkey_capture);
     }
     if *cfg.settings != before && cfg.settings.sensitivity.is_valid() {
-        cfg.settings.save(&cfg.paths);
+        // The file is written later by `save_settings`; the background updates now.
+        cfg.saver.debounce.changed(now);
         *cfg.clear = background(&cfg.settings, overlay.visible);
     }
     if let Some(t) = today_action {
@@ -411,6 +568,119 @@ fn menu(
         nav.apply(action);
     }
     Ok(())
+}
+
+/// Seconds without a further change before the settings file is written.
+const SAVE_DELAY_SECS: f64 = 0.5;
+/// How long the "Saved" message stays after a write, seconds.
+const SAVED_SHOWN_SECS: f64 = 2.0;
+
+/// When to write the settings file: once changes have settled for [`SAVE_DELAY_SECS`], and
+/// never while an earlier write is still running (writes then land in order).
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+struct SaveDebounce {
+    /// Time of the newest change not yet written.
+    last_change: Option<f64>,
+    /// Time the newest write finished.
+    saved_at: Option<f64>,
+}
+
+impl SaveDebounce {
+    fn changed(&mut self, now: f64) {
+        self.last_change = Some(now);
+    }
+
+    fn pending(&self) -> bool {
+        self.last_change.is_some()
+    }
+
+    /// True when a write should start now; the change then counts as written.
+    fn should_write(&mut self, now: f64, writing: bool) -> bool {
+        match self.last_change {
+            Some(t) if !writing && now - t >= SAVE_DELAY_SECS => {
+                self.last_change = None;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn finished(&mut self, now: f64) {
+        self.saved_at = Some(now);
+    }
+
+    /// Whether to show the "Saved" message.
+    fn show_saved(&self, now: f64) -> bool {
+        !self.pending() && self.saved_at.is_some_and(|t| now - t < SAVED_SHOWN_SECS)
+    }
+}
+
+/// Writes the settings file off the frame: debounced, on a background thread.
+#[derive(Resource, Default)]
+struct SettingsSaver {
+    debounce: SaveDebounce,
+    writing: Option<std::thread::JoinHandle<bool>>,
+}
+
+impl SettingsSaver {
+    /// Collect a finished write and start the next one when it is due.
+    fn update(&mut self, settings: &Settings, paths: &Paths, now: f64) {
+        if self.writing.as_ref().is_some_and(|h| h.is_finished()) {
+            // "Saved" only after a successful write; a failed one is logged by `save`.
+            let written = self
+                .writing
+                .take()
+                .is_some_and(|h| h.join().unwrap_or(false));
+            if written {
+                self.debounce.finished(now);
+            }
+        }
+        // An invalid sensitivity is never written; the change stays pending until fixed.
+        if !settings.sensitivity.is_valid() {
+            return;
+        }
+        if self.debounce.should_write(now, self.writing.is_some()) {
+            let (settings, paths) = (settings.clone(), paths.clone());
+            let spawned = std::thread::Builder::new()
+                .name("settings-save".into())
+                .spawn(move || settings.save(&paths));
+            match spawned {
+                Ok(handle) => self.writing = Some(handle),
+                Err(e) => bevy::log::error!("could not start the settings writer: {e}"),
+            }
+        }
+    }
+
+    /// Finish every write before the app exits.
+    fn flush(&mut self, settings: &Settings, paths: &Paths) {
+        if let Some(handle) = self.writing.take() {
+            let _ = handle.join();
+        }
+        if self.debounce.pending() && settings.sensitivity.is_valid() {
+            settings.save(paths);
+            self.debounce = SaveDebounce::default();
+        }
+    }
+}
+
+fn save_settings(
+    mut saver: ResMut<SettingsSaver>,
+    settings: Res<Settings>,
+    paths: Res<Paths>,
+    time: Res<Time<Real>>,
+) {
+    saver.update(&settings, &paths, time.elapsed_secs_f64());
+}
+
+fn flush_settings_on_exit(
+    mut exits: MessageReader<AppExit>,
+    mut saver: ResMut<SettingsSaver>,
+    settings: Res<Settings>,
+    paths: Res<Paths>,
+) {
+    if exits.read().next().is_some() {
+        saver.flush(&settings, &paths);
+    }
 }
 
 /// Analyses of the newest [`RECENT_RUNS`] click-run replays (`entries` is newest first),
@@ -588,6 +858,32 @@ fn today_model(
     })
 }
 
+/// The Today shortcuts: the last scenario played and a routine to continue.
+fn quick_model(
+    lib: &Library,
+    history: &History,
+    progress: &MethodProgress,
+    date: &str,
+) -> QuickModel {
+    let last_scenario =
+        scenario_browser::recent_scenarios(history.runs(), |id| lib.scenario(id).is_some(), 1)
+            .into_iter()
+            .next()
+            .and_then(|id| lib.scenario(&id).map(|d| (id, d.name.clone())));
+    let routine_of = |id: &str| lib.routines.iter().find(|r| r.id == id);
+    let routine = continue_position(progress, date, |id| {
+        routine_of(id).map(|r| r.run_count(&lib.scenarios))
+    })
+    .and_then(|p| {
+        let name = routine_of(&p.routine)?.name.clone();
+        Some((p, name))
+    });
+    QuickModel {
+        last_scenario,
+        routine,
+    }
+}
+
 /// Local day number (days since 0001-01-01), the seed input for today's missions.
 fn local_day_number() -> i64 {
     i64::from(chrono::Local::now().date_naive().num_days_from_ce())
@@ -671,6 +967,13 @@ fn apply_today(
                 seed: d.seed,
             })
         }
+        TodayAction::QuickPlay(scenario) => Some(UiAction::StartScenario(scenario)),
+        TodayAction::Continue(p) => Some(UiAction::StartRoutineAt {
+            routine: p.routine,
+            level: p.level,
+            index: p.next_index,
+            seed: p.seed,
+        }),
         TodayAction::WarmUp => Some(UiAction::StartRoutine("quick-warmup".to_owned())),
         TodayAction::PlayMission(scenario) => Some(UiAction::StartScenario(scenario)),
         TodayAction::Challenge => todays_challenge(lib).map(|c| UiAction::StartChallenge {
@@ -683,6 +986,7 @@ fn apply_today(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use bevy::ecs::system::assert_is_system;
     use bevy::prelude::Result;
 
@@ -691,5 +995,130 @@ mod tests {
         assert_is_system::<(), Result, _>(super::menu);
         assert_is_system(super::count_dpi_meter);
         assert_is_system(super::stop_recording_on_exit);
+        assert_is_system(super::save_settings);
+        assert_is_system(super::flush_settings_on_exit);
+    }
+
+    #[test]
+    fn number_keys_one_to_eight_pick_the_tabs_in_order() {
+        use egui::Key;
+        assert_eq!(tab_for_key(Key::Num1), Some(Tab::Today));
+        assert_eq!(tab_for_key(Key::Num3), Some(Tab::Scenarios));
+        assert_eq!(tab_for_key(Key::Num8), Some(Tab::Settings));
+        assert_eq!(tab_for_key(Key::Num9), None);
+        assert_eq!(tab_for_key(Key::Num0), None);
+        assert_eq!(tab_for_key(Key::A), None);
+    }
+
+    #[test]
+    fn the_restart_key_row_shows_on_the_keys_tab_and_in_any_search() {
+        assert!(bare_key_rows_shown(Tab::Settings, SettingsTab::Keys, ""));
+        assert!(
+            bare_key_rows_shown(Tab::Settings, SettingsTab::Audio, "restart"),
+            "a search shows rows from every sub-tab"
+        );
+        assert!(!bare_key_rows_shown(
+            Tab::Settings,
+            SettingsTab::Audio,
+            "  "
+        ));
+        assert!(!bare_key_rows_shown(
+            Tab::Today,
+            SettingsTab::Keys,
+            "restart"
+        ));
+    }
+
+    #[test]
+    fn number_keys_are_off_while_typing_or_recording_a_key() {
+        assert!(number_keys_enabled(false, false, false));
+        assert!(
+            !number_keys_enabled(true, false, false),
+            "a text field has focus"
+        );
+        assert!(
+            !number_keys_enabled(false, true, false),
+            "recording a hotkey"
+        );
+        assert!(
+            !number_keys_enabled(false, false, true),
+            "the Keys sub-tab records bare keys"
+        );
+    }
+
+    fn position(routine: &str, date: &str, next: usize, total: usize) -> RoutinePosition {
+        RoutinePosition {
+            date: date.into(),
+            routine: routine.into(),
+            level: 0.0,
+            seed: 7,
+            next_index: next,
+            total_runs: total,
+        }
+    }
+
+    #[test]
+    fn continue_offers_todays_unfinished_routine_method_day_first() {
+        let runs = |_: &str| Some(10);
+        let day = "2026-10-18";
+        let mut p = MethodProgress {
+            tier: None,
+            today: Some(position("method", day, 3, 10)),
+            routines: vec![position("other", day, 2, 10)],
+        };
+        assert_eq!(
+            continue_position(&p, day, runs).map(|c| c.routine),
+            Some("method".into())
+        );
+        p.today = Some(position("method", day, 10, 10));
+        assert_eq!(
+            continue_position(&p, day, runs).map(|c| c.routine),
+            Some("other".into()),
+            "a finished method day falls back to another routine"
+        );
+        p.routines = vec![position("other", "2026-10-17", 2, 10)];
+        assert_eq!(continue_position(&p, day, runs), None, "yesterday's run");
+        p.routines = vec![position("edited", day, 2, 10)];
+        assert_eq!(
+            continue_position(&p, day, |_| Some(12)),
+            None,
+            "a routine edited since has another run count"
+        );
+    }
+
+    #[test]
+    fn settings_are_written_once_after_the_last_change_settles() {
+        let mut d = SaveDebounce::default();
+        assert!(!d.should_write(10.0, false), "nothing changed yet");
+        d.changed(1.0);
+        d.changed(1.3);
+        assert!(!d.should_write(1.6, false), "0.3 s after the last change");
+        assert!(d.pending());
+        assert!(d.should_write(1.3 + SAVE_DELAY_SECS, false));
+        assert!(!d.pending());
+        assert!(!d.should_write(5.0, false), "one write per settled change");
+    }
+
+    #[test]
+    fn a_write_in_flight_delays_the_next_one() {
+        let mut d = SaveDebounce::default();
+        d.changed(0.0);
+        assert!(
+            !d.should_write(2.0, true),
+            "the previous write is still running"
+        );
+        assert!(d.pending());
+        assert!(d.should_write(2.1, false));
+    }
+
+    #[test]
+    fn saved_shows_briefly_after_a_write_and_hides_on_a_new_change() {
+        let mut d = SaveDebounce::default();
+        assert!(!d.show_saved(0.0));
+        d.finished(3.0);
+        assert!(d.show_saved(3.5));
+        assert!(!d.show_saved(3.0 + SAVED_SHOWN_SECS));
+        d.changed(3.6);
+        assert!(!d.show_saved(3.7), "a newer change is not saved yet");
     }
 }

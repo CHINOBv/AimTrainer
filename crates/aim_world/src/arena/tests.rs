@@ -200,6 +200,44 @@ fn bots_that_shoot_back_damage_an_idle_player_in_the_open() {
 }
 
 #[test]
+fn every_bot_shot_is_reported_from_the_bots_eye_and_hits_name_the_shooter() {
+    let mut s = ArenaSession::new(duel_def(true), duel_room(false), 3).unwrap();
+    let (mut fired, mut hits) = (0, 0);
+    let mut t = 0.0;
+    while !s.is_finished() && t < 10.0 {
+        let events = s.update(idle(&s));
+        let shots: Vec<(u64, Vec3)> = events
+            .iter()
+            .filter_map(|e| match *e {
+                ArenaEvent::BotFired { bot_id, origin } => Some((bot_id, origin)),
+                _ => None,
+            })
+            .collect();
+        for &(id, origin) in &shots {
+            let bot = s.bots().find(|b| b.id == id).expect("a known bot");
+            assert_eq!(origin, MapDef::eye(bot.feet), "fired from the bot's eye");
+        }
+        for e in &events {
+            if let ArenaEvent::PlayerHit { from, zone, .. } = *e {
+                assert!(zone.is_some(), "a bot bullet hits a body zone");
+                assert!(
+                    shots.iter().any(|&(_, o)| o == from),
+                    "the hit comes from a shot fired this frame: {events:?}"
+                );
+                hits += 1;
+            }
+        }
+        fired += shots.len();
+        t += DT;
+    }
+    assert!(hits > 0);
+    assert!(
+        fired > hits,
+        "misses are reported too ({fired} shots, {hits} hits)"
+    );
+}
+
+#[test]
 fn perfect_aim_kills_bots_and_dies_less_than_a_player_who_never_shoots() {
     let (def, map) = builtin("yard-deathmatch");
     let mut sharp = ArenaSession::new(def.clone(), map.clone(), 11).unwrap();

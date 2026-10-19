@@ -90,6 +90,18 @@ pub struct Settings {
     pub sens_randomizer: RandomizerConfig,
     /// Live coaching overlay in arenas (crosshair placement and movement accuracy).
     pub arena_coaching: bool,
+    /// Game-feel effects (HUD indicators, transitions, crosshair extras).
+    pub feel: FeelSettings,
+    /// Scenario ids starred in the scenario list, in the order they were starred.
+    pub favorites: Vec<String>,
+    /// The first-run wizard was finished or skipped. False only for a new player (no
+    /// settings file yet); a file without this key comes from an existing player.
+    #[serde(default = "first_run_done_in_old_files")]
+    pub first_run_done: bool,
+}
+
+fn first_run_done_in_old_files() -> bool {
+    true
 }
 
 /// VALORANT's "Enemy Highlight Color" options (General → Accessibility), applied to
@@ -218,6 +230,31 @@ pub struct SoundSettings {
     pub kill: KillSound,
     /// A soft sound on missed shots.
     pub miss: bool,
+    /// Volume of the player's shot sounds (hit, kill, miss), percent of the master volume.
+    pub shots_percent: u8,
+    /// Volume of world sounds in arenas (bot gunfire, footsteps), percent of the master volume.
+    pub world_percent: u8,
+    /// Volume of menu sounds (UI clicks), percent of the master volume.
+    pub ui_percent: u8,
+    /// Volume of cues (damage taken, death, streaks, round and timer cues), percent of the
+    /// master volume.
+    pub cues_percent: u8,
+    /// Positional bot gunfire in arenas.
+    pub bot_gunfire: bool,
+    /// Positional bot footsteps in arenas.
+    pub footsteps: bool,
+    /// A sound when the player takes damage.
+    pub damage_taken: bool,
+    /// A sound when the player dies.
+    pub death: bool,
+    /// Multi-kill and kill-streak sounds.
+    pub streak: bool,
+    /// Countdown beeps and round start and end stings.
+    pub round_cues: bool,
+    /// Ticks in the last seconds of a timed run.
+    pub low_time_warning: bool,
+    /// Click sounds in the menus (off by default).
+    pub ui_clicks: bool,
 }
 
 impl Default for SoundSettings {
@@ -228,7 +265,157 @@ impl Default for SoundSettings {
             hit: HitSound::default(),
             kill: KillSound::default(),
             miss: false,
+            shots_percent: 100,
+            world_percent: 100,
+            ui_percent: 100,
+            cues_percent: 100,
+            bot_gunfire: true,
+            footsteps: true,
+            damage_taken: true,
+            death: true,
+            streak: true,
+            round_cues: true,
+            low_time_warning: true,
+            ui_clicks: false,
         }
+    }
+}
+
+/// An effect that can be switched off and scaled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Toggle {
+    pub enabled: bool,
+    /// Strength of the effect, percent (100 = the designed strength).
+    pub intensity_percent: u8,
+}
+
+impl Toggle {
+    /// On at `intensity_percent`.
+    pub const fn on(intensity_percent: u8) -> Self {
+        Self {
+            enabled: true,
+            intensity_percent,
+        }
+    }
+
+    /// Off; switching it on uses `intensity_percent`.
+    pub const fn off(intensity_percent: u8) -> Self {
+        Self {
+            enabled: false,
+            intensity_percent,
+        }
+    }
+}
+
+/// A missing key in a toggle table takes this value, so a table that only sets
+/// `intensity_percent` turns the effect on.
+impl Default for Toggle {
+    fn default() -> Self {
+        Self::on(100)
+    }
+}
+
+/// A named set of feel toggles, offered in the first-run wizard and the settings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FeelPreset {
+    /// Information only: damage direction, health bar and death screen.
+    Minimal,
+    /// The defaults.
+    #[default]
+    Standard,
+    /// Every effect, including screen punch and crosshair bloom.
+    Juicy,
+}
+
+/// Game-feel effects: HUD indicators, transitions and crosshair extras. Missing keys
+/// (older files) take the Standard preset, which keeps today's look for the effects that
+/// already existed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FeelSettings {
+    /// Arena: an arrow around the crosshair pointing to where damage came from, sized by
+    /// the damage.
+    pub damage_indicator: Toggle,
+    /// Arena: the red screen-edge flash when the player takes damage.
+    pub damage_vignette: Toggle,
+    /// Arena: a list of recent kills.
+    pub kill_feed: bool,
+    /// Arena: a banner for multi-kills and kill streaks.
+    pub streak_banner: bool,
+    /// Arena: the player's health bar, with a ghost of the damage just taken.
+    pub health_bar: bool,
+    /// Arena: the health bar pulses at low health.
+    pub low_hp_pulse: bool,
+    /// Arena: after a death, the direction of the killing shot and the respawn timer.
+    pub death_screen: bool,
+    /// Animated countdown, a "GO" pop and an end-of-round banner.
+    pub round_transitions: bool,
+    /// Arena: a short screen-space jolt on damage. It never moves the camera. Off by default.
+    pub screen_punch: Toggle,
+    /// The crosshair opens up with recoil and movement inaccuracy. Off by default.
+    pub crosshair_bloom: bool,
+    /// Arena: arrows at the screen edge towards enemies in sight but outside the view.
+    pub arena_arrows: bool,
+    /// Arena: a brief flash on a kill.
+    pub kill_flash_arena: bool,
+    /// Different hit markers for head, body and kill.
+    pub distinct_markers: bool,
+    /// The preset last applied. Changing a single key afterwards does not change it.
+    pub preset: FeelPreset,
+}
+
+impl FeelSettings {
+    /// The toggles of `preset`.
+    pub fn for_preset(preset: FeelPreset) -> Self {
+        let standard = Self {
+            damage_indicator: Toggle::on(100),
+            damage_vignette: Toggle::on(100),
+            kill_feed: true,
+            streak_banner: true,
+            health_bar: true,
+            low_hp_pulse: true,
+            death_screen: true,
+            round_transitions: true,
+            screen_punch: Toggle::off(100),
+            crosshair_bloom: false,
+            arena_arrows: true,
+            kill_flash_arena: true,
+            distinct_markers: true,
+            preset,
+        };
+        match preset {
+            FeelPreset::Standard => standard,
+            FeelPreset::Minimal => Self {
+                damage_indicator: Toggle::on(60),
+                damage_vignette: Toggle::off(100),
+                kill_feed: false,
+                streak_banner: false,
+                low_hp_pulse: false,
+                round_transitions: false,
+                arena_arrows: false,
+                kill_flash_arena: false,
+                distinct_markers: false,
+                ..standard
+            },
+            FeelPreset::Juicy => Self {
+                screen_punch: Toggle::on(100),
+                crosshair_bloom: true,
+                ..standard
+            },
+        }
+    }
+
+    /// Set every toggle to `preset`'s values.
+    pub fn apply_preset(&mut self, preset: FeelPreset) {
+        *self = Self::for_preset(preset);
+    }
+}
+
+impl Default for FeelSettings {
+    fn default() -> Self {
+        Self::for_preset(FeelPreset::Standard)
     }
 }
 
@@ -255,6 +442,9 @@ impl Default for Settings {
             target_visibility: TargetVisibility::default(),
             sens_randomizer: RandomizerConfig::default(),
             arena_coaching: false,
+            feel: FeelSettings::default(),
+            favorites: Vec::new(),
+            first_run_done: false,
         }
     }
 }
@@ -336,24 +526,32 @@ fn set_legacy_color(crosshair: &mut Crosshair, rgb: [f32; 3]) {
 impl Settings {
     pub fn load(paths: &Paths) -> Self {
         match fs::read_to_string(&paths.settings_file) {
-            Ok(src) => toml::from_str(&src).unwrap_or_else(|e| {
-                bevy::log::warn!(
-                    "invalid {}: {e}; using defaults",
-                    paths.settings_file.display()
-                );
-                Self::default()
-            }),
+            Ok(src) => Self::parse(&src),
             Err(_) => Self::default(),
         }
     }
 
-    pub fn save(&self, paths: &Paths) {
+    /// Settings from an existing file's text; invalid text falls back to the defaults.
+    fn parse(src: &str) -> Self {
+        toml::from_str(src).unwrap_or_else(|e| {
+            bevy::log::warn!("invalid settings file: {e}; using defaults");
+            // The file exists, so this is not a new player.
+            Self {
+                first_run_done: true,
+                ..Self::default()
+            }
+        })
+    }
+
+    /// Writes the settings file; returns whether it was written (errors are logged).
+    pub fn save(&self, paths: &Paths) -> bool {
         let result = toml::to_string_pretty(self)
             .map_err(|e| e.to_string())
             .and_then(|s| fs::write(&paths.settings_file, s).map_err(|e| e.to_string()));
-        if let Err(e) = result {
+        if let Err(e) = &result {
             bevy::log::error!("could not save settings: {e}");
         }
+        result.is_ok()
     }
 }
 
@@ -376,6 +574,25 @@ mod tests {
         let settings: Settings = toml::from_str("fullscreen = false").unwrap();
         assert_eq!(settings.crosshair, Crosshair::default());
         assert!(!settings.fullscreen);
+    }
+
+    #[test]
+    fn save_reports_whether_the_file_was_written() {
+        let dir = std::env::temp_dir().join(format!("aimtrainer-save-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let paths = |file: std::path::PathBuf| Paths {
+            settings_file: file,
+            scenarios_dir: dir.clone(),
+            routines_dir: dir.clone(),
+            benchmarks_dir: dir.clone(),
+            history_file: dir.join("history.csv"),
+        };
+        assert!(Settings::default().save(&paths(dir.join("settings.toml"))));
+        assert!(
+            !Settings::default().save(&paths(dir.join("missing").join("settings.toml"))),
+            "a folder that does not exist cannot be written"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -540,6 +757,135 @@ mod tests {
         assert_eq!(settings.target_visibility.outline_scale(), Some(1.3));
         let partial: Settings = toml::from_str("[target_visibility]\noutline = true\n").unwrap();
         assert_eq!(partial.target_visibility.outline_scale(), Some(1.08));
+    }
+
+    #[test]
+    fn feel_defaults_to_standard_and_keeps_todays_damage_vignette_for_old_files() {
+        let feel = toml::from_str::<Settings>("fullscreen = false")
+            .unwrap()
+            .feel;
+        assert_eq!(feel, FeelSettings::default());
+        assert_eq!(feel.preset, FeelPreset::Standard);
+        assert_eq!(
+            feel.damage_vignette,
+            Toggle {
+                enabled: true,
+                intensity_percent: 100
+            },
+            "today's 0.25 s vignette at its current strength"
+        );
+        assert!(!feel.screen_punch.enabled, "screen punch is opt-in");
+        assert!(!feel.crosshair_bloom, "crosshair bloom is opt-in");
+        assert!(feel.damage_indicator.enabled && feel.health_bar && feel.death_screen);
+    }
+
+    #[test]
+    fn partial_feel_tables_keep_the_other_defaults_and_round_trip() {
+        let src = "[feel]\nkill_feed = false\npreset = \"juicy\"\n[feel.screen_punch]\nintensity_percent = 40\n";
+        let settings: Settings = toml::from_str(src).unwrap();
+        let feel = &settings.feel;
+        assert!(!feel.kill_feed);
+        assert_eq!(feel.preset, FeelPreset::Juicy);
+        assert_eq!(
+            feel.screen_punch,
+            Toggle {
+                enabled: true,
+                intensity_percent: 40
+            },
+            "a toggle table without `enabled` turns the effect on"
+        );
+        assert!(feel.streak_banner && feel.arena_arrows);
+        let text = toml::to_string_pretty(&settings).unwrap();
+        assert_eq!(toml::from_str::<Settings>(&text).unwrap(), settings);
+    }
+
+    #[test]
+    fn feel_presets_set_every_toggle() {
+        let mut feel = FeelSettings::default();
+        feel.apply_preset(FeelPreset::Minimal);
+        assert_eq!(feel.preset, FeelPreset::Minimal);
+        assert!(!feel.damage_vignette.enabled && !feel.screen_punch.enabled);
+        assert!(!feel.kill_feed && !feel.streak_banner && !feel.low_hp_pulse);
+        assert!(!feel.round_transitions && !feel.crosshair_bloom && !feel.arena_arrows);
+        assert!(!feel.kill_flash_arena && !feel.distinct_markers);
+        assert!(
+            feel.damage_indicator.enabled && feel.health_bar && feel.death_screen,
+            "minimal keeps the information, drops the decoration"
+        );
+
+        feel.apply_preset(FeelPreset::Juicy);
+        assert_eq!(feel.preset, FeelPreset::Juicy);
+        assert!(feel.screen_punch.enabled && feel.crosshair_bloom);
+        assert!(feel.damage_vignette.enabled && feel.kill_feed && feel.distinct_markers);
+
+        feel.kill_feed = false;
+        feel.apply_preset(FeelPreset::Standard);
+        assert_eq!(feel, FeelSettings::default());
+    }
+
+    #[test]
+    fn sound_categories_default_to_full_volume_and_ui_clicks_off_for_old_files() {
+        let sound = toml::from_str::<Settings>("fullscreen = false")
+            .unwrap()
+            .sound;
+        assert_eq!(
+            [
+                sound.shots_percent,
+                sound.world_percent,
+                sound.ui_percent,
+                sound.cues_percent
+            ],
+            [100; 4]
+        );
+        assert!(sound.bot_gunfire && sound.footsteps && sound.damage_taken && sound.death);
+        assert!(sound.streak && sound.round_cues && sound.low_time_warning);
+        assert!(!sound.ui_clicks, "UI clicks are opt-in");
+    }
+
+    #[test]
+    fn sound_categories_round_trip_and_partial_tables_keep_defaults() {
+        let src = "[sound]\nworld_percent = 30\nfootsteps = false\nui_clicks = true\n";
+        let settings: Settings = toml::from_str(src).unwrap();
+        let sound = &settings.sound;
+        assert_eq!((sound.world_percent, sound.shots_percent), (30, 100));
+        assert!(!sound.footsteps && sound.ui_clicks && sound.bot_gunfire);
+        assert_eq!(sound.volume_percent, 50);
+        let text = toml::to_string_pretty(&settings).unwrap();
+        assert_eq!(toml::from_str::<Settings>(&text).unwrap(), settings);
+    }
+
+    #[test]
+    fn favorites_are_empty_for_old_settings_files_and_round_trip() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert!(old.favorites.is_empty());
+        let starred = Settings {
+            favorites: vec!["flick-headshot".into(), "track-precise".into()],
+            ..Settings::default()
+        };
+        let text = toml::to_string_pretty(&starred).unwrap();
+        assert_eq!(toml::from_str::<Settings>(&text).unwrap(), starred);
+    }
+
+    #[test]
+    fn the_first_run_wizard_shows_only_without_a_settings_file() {
+        assert!(
+            !Settings::default().first_run_done,
+            "no settings file yet: a new player"
+        );
+        assert!(
+            Settings::parse("fullscreen = false").first_run_done,
+            "a file written before the wizard existed"
+        );
+        assert!(
+            Settings::parse("not = [valid").first_run_done,
+            "an unreadable file still means an existing player"
+        );
+        let pending = Settings::default();
+        let text = toml::to_string_pretty(&pending).unwrap();
+        assert!(
+            !Settings::parse(&text).first_run_done,
+            "a file saved while the wizard is still open keeps it open"
+        );
     }
 
     #[test]

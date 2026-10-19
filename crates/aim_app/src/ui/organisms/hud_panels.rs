@@ -2,7 +2,8 @@
 //! window.
 
 use crate::ui::UiAction;
-use crate::ui::atoms::{BAD, GOOD, WARN, big};
+use crate::ui::atoms::{BAD, GOOD, WARN, big, pop};
+use crate::ui::organisms::health_bar::{self, HealthBar};
 use aim_core::scenario::{RunEnd, RunKey, Session, Tuning};
 use bevy_egui::egui::{self, Align2, FontId, RichText};
 
@@ -143,14 +144,71 @@ pub fn spray_meter(ctx: &egui::Context, s: &Session) {
         });
 }
 
-/// Countdown before a run, with a reminder of the restart key (`restart`, e.g. "R").
-pub fn countdown(ctx: &egui::Context, secs: f32, restart: &str) {
+/// Countdown before a run, with a reminder of the restart key (`restart`, e.g. "R"). With
+/// `animate`, each second's number pops in and fades out.
+pub fn countdown(ctx: &egui::Context, secs: f32, restart: &str, animate: bool) {
+    let (scale, alpha) = if animate {
+        countdown_pop(secs)
+    } else {
+        (1.0, 1.0)
+    };
     egui::Area::new(egui::Id::new("countdown"))
         .anchor(Align2::CENTER_CENTER, [0.0, -80.0])
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                ui.label(big(format!("{}", secs.ceil() as i32), 56.0));
+                ui.label(
+                    big(format!("{}", secs.ceil() as i32), 56.0 * scale)
+                        .color(egui::Color32::WHITE.gamma_multiply(alpha)),
+                );
                 ui.small(format!("{restart}: restart"));
+            });
+        });
+}
+
+/// The animated countdown number never fades below this opacity.
+const COUNTDOWN_MIN_ALPHA: f32 = 0.35;
+/// How long the "GO" pop and the end-of-round banner stay, seconds.
+pub const GO_SECS: f32 = 0.7;
+pub const ROUND_END_SECS: f32 = 1.0;
+
+/// Scale and opacity of the countdown number with `secs` left: each second pops in large
+/// and fades towards [`COUNTDOWN_MIN_ALPHA`] as it runs out.
+pub fn countdown_pop(secs: f32) -> (f32, f32) {
+    let into_second = (secs.ceil() - secs).clamp(0.0, 0.999);
+    let (scale, alpha) = pop(into_second, 1.0).unwrap_or((1.0, 1.0));
+    (scale, alpha.max(COUNTDOWN_MIN_ALPHA))
+}
+
+/// "GO", popping in at the crosshair, `age` seconds after the round started.
+pub fn go_pop(ctx: &egui::Context, age: f32) {
+    let Some((scale, alpha)) = pop(age, GO_SECS) else {
+        return;
+    };
+    egui::Area::new(egui::Id::new("go-pop"))
+        .anchor(Align2::CENTER_CENTER, [0.0, -80.0])
+        .interactable(false)
+        .show(ctx, |ui| {
+            ui.label(big("GO", 64.0 * scale).color(GOOD.gamma_multiply(alpha)));
+        });
+}
+
+/// The end-of-round banner, `age` seconds after the round ended, with the run's kills and
+/// deaths.
+pub fn round_end_banner(ctx: &egui::Context, age: f32, kills: u32, deaths: u32) {
+    let Some((scale, alpha)) = pop(age, ROUND_END_SECS) else {
+        return;
+    };
+    let alpha = alpha.max(COUNTDOWN_MIN_ALPHA);
+    egui::Area::new(egui::Id::new("round-end"))
+        .anchor(Align2::CENTER_CENTER, [0.0, -80.0])
+        .interactable(false)
+        .show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.label(big("ROUND OVER", 48.0 * scale).color(WARN.gamma_multiply(alpha)));
+                ui.label(
+                    big(format!("{kills} kills · {deaths} deaths"), 20.0)
+                        .color(egui::Color32::WHITE.gamma_multiply(alpha)),
+                );
             });
         });
 }
@@ -306,9 +364,22 @@ fn spawn_note(ctx: &egui::Context, s: &aim_world::arena::ArenaSession) {
         });
 }
 
-/// Arena status: time, health, kills/deaths, the site objective (when the arena has one),
-/// a respawn note during the spawn grace, and a red vignette for `damage_flash` seconds.
-pub fn arena_status(ctx: &egui::Context, s: &aim_world::arena::ArenaSession, damage_flash: f32) {
+/// What the arena status draws besides the session itself.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ArenaStatusExtras {
+    /// The health bar instead of the plain HP number, when it is on.
+    pub health_bar: Option<HealthBar>,
+    /// The death screen is up, so the plain "You died" note stays hidden.
+    pub death_screen: bool,
+}
+
+/// Arena status: time, health, kills/deaths, the site objective (when the arena has one)
+/// and a respawn note during the spawn grace (unless the death screen is up).
+pub fn arena_status(
+    ctx: &egui::Context,
+    s: &aim_world::arena::ArenaSession,
+    extras: &ArenaStatusExtras,
+) {
     let stats = s.stats();
     egui::Area::new(egui::Id::new("arena-hud"))
         .anchor(Align2::CENTER_TOP, [0.0, 16.0])
@@ -345,33 +416,22 @@ pub fn arena_status(ctx: &egui::Context, s: &aim_world::arena::ArenaSession, dam
     egui::Area::new(egui::Id::new("arena-health"))
         .anchor(Align2::LEFT_BOTTOM, [24.0, -24.0])
         .show(ctx, |ui| {
-            ui.label(
-                RichText::new(format!("{health:.0} HP"))
-                    .color(color)
-                    .strong()
-                    .font(FontId::proportional(26.0)),
-            );
+            if let Some(bar) = &extras.health_bar {
+                health_bar::draw(ui, bar);
+            } else {
+                ui.label(
+                    RichText::new(format!("{health:.0} HP"))
+                        .color(color)
+                        .strong()
+                        .font(FontId::proportional(26.0)),
+                );
+            }
             if !s.is_accurate() {
                 ui.colored_label(BAD, "MOVING");
             }
         });
-    spawn_note(ctx, s);
-    if damage_flash > 0.0 {
-        let alpha = (damage_flash / 0.25).clamp(0.0, 1.0) * 0.35;
-        let painter = ctx.layer_painter(egui::LayerId::new(
-            egui::Order::Background,
-            egui::Id::new("damage"),
-        ));
-        let rect = ctx.content_rect();
-        painter.rect_stroke(
-            rect.shrink(20.0),
-            0.0,
-            egui::Stroke::new(
-                40.0,
-                egui::Color32::from_rgba_unmultiplied(220, 30, 30, (alpha * 255.0) as u8),
-            ),
-            egui::StrokeKind::Inside,
-        );
+    if !extras.death_screen {
+        spawn_note(ctx, s);
     }
 }
 
@@ -390,18 +450,49 @@ pub struct ArrowCamera {
     pub aspect: f32,
 }
 
-/// A small semi-transparent chevron at the screen edge for every live, visible target
-/// outside the current view, pointing towards it.
-pub fn offscreen_arrows(ctx: &egui::Context, s: &Session, cam: &ArrowCamera, rgb: [f32; 3]) {
-    let half_v = cam.vfov_deg / 2.0;
-    let half_h = aim_core::fov::horizontal_from_vertical(cam.vfov_deg as f64, cam.aspect as f64)
-        as f32
-        / 2.0;
+/// Where the off-screen arrows of a scenario point: every live, visible target, at its head
+/// for humanoids and its center for spheres.
+pub fn scenario_arrow_points(s: &Session) -> Vec<aim_core::math::Vec3> {
     let head = s.dims().head_center_height();
     let humanoid = matches!(
         s.def().targets.shape,
         aim_core::scenario::Shape::Humanoid { .. }
     );
+    s.targets()
+        .filter(|t| t.health > 0.0)
+        .map(|t| {
+            let mut p = t.position;
+            if humanoid {
+                p.y += head;
+            }
+            p
+        })
+        .collect()
+}
+
+/// Where the off-screen arrows of an arena point: the head of every live bot in the
+/// player's line of sight.
+pub fn arena_arrow_points(
+    bots: impl IntoIterator<Item = aim_world::arena::BotView>,
+) -> Vec<aim_core::math::Vec3> {
+    bots.into_iter()
+        .filter(|b| b.alive && b.visible_to_player)
+        .map(|b| b.head())
+        .collect()
+}
+
+/// A small semi-transparent chevron at the screen edge for every one of `points` outside
+/// the current view, pointing towards it.
+pub fn offscreen_arrows(
+    ctx: &egui::Context,
+    points: &[aim_core::math::Vec3],
+    cam: &ArrowCamera,
+    rgb: [f32; 3],
+) {
+    let half_v = cam.vfov_deg / 2.0;
+    let half_h = aim_core::fov::horizontal_from_vertical(cam.vfov_deg as f64, cam.aspect as f64)
+        as f32
+        / 2.0;
     let screen = ctx.content_rect();
     let (w, h) = aim_core::fov::valorant_viewport(screen.width() as f64, screen.height() as f64);
     let viewport = egui::Rect::from_center_size(screen.center(), egui::vec2(w as f32, h as f32));
@@ -411,11 +502,7 @@ pub fn offscreen_arrows(ctx: &egui::Context, s: &Session, cam: &ArrowCamera, rgb
         egui::Order::Foreground,
         egui::Id::new("offscreen_arrows"),
     ));
-    for t in s.targets().filter(|t| t.health > 0.0) {
-        let mut p = t.position;
-        if humanoid {
-            p.y += head;
-        }
+    for &p in points {
         let Some(bearing) = aim_core::fov::offscreen_bearing(cam.view, cam.eye, p, half_h, half_v)
         else {
             continue;
@@ -483,10 +570,88 @@ mod progress_tests {
 }
 
 #[cfg(test)]
+mod countdown_tests {
+    use super::{COUNTDOWN_MIN_ALPHA, countdown_pop};
+
+    #[test]
+    fn each_countdown_second_pops_in_and_fades() {
+        let (start, start_alpha) = countdown_pop(3.0);
+        assert!(start > 1.3 && (start_alpha - 1.0).abs() < 1e-4, "{start}");
+        let (mid, mid_alpha) = countdown_pop(2.5);
+        assert!((mid - 1.0).abs() < 1e-4 && (mid_alpha - 1.0).abs() < 1e-4);
+        let (_, late) = countdown_pop(2.01);
+        assert!((COUNTDOWN_MIN_ALPHA..1.0).contains(&late), "{late}");
+        // The next second pops again.
+        assert!(countdown_pop(1.999).0 > 1.3);
+    }
+}
+
+#[cfg(test)]
 mod offscreen_tests {
-    use super::edge_point;
+    use super::{arena_arrow_points, edge_point, scenario_arrow_points};
+    use aim_core::math::{Vec3, ViewAngles};
+    use aim_core::scenario::{FrameInput, Session, Shape, builtin};
+    use aim_world::arena::BotView;
     use bevy_egui::egui::{Pos2, Rect};
     use std::f32::consts::{FRAC_PI_2, PI};
+
+    /// A scenario a moment after it starts, with its first targets out.
+    fn started(id: &str) -> Session {
+        let def = builtin::all().into_iter().find(|d| d.id == id).unwrap();
+        let mut s = Session::new(def, 7);
+        s.update(FrameInput {
+            dt: 0.05,
+            view: ViewAngles::new(180.0, 0.0),
+            ..Default::default()
+        });
+        s
+    }
+
+    #[test]
+    fn scenario_arrows_point_at_live_targets_as_before() {
+        let mut seen_humanoid = false;
+        for def in builtin::all() {
+            let s = started(&def.id);
+            let humanoid = matches!(s.def().targets.shape, Shape::Humanoid { .. });
+            seen_humanoid |= humanoid;
+            let head = s.dims().head_center_height();
+            let expected: Vec<Vec3> = s
+                .targets()
+                .filter(|t| t.health > 0.0)
+                .map(|t| {
+                    let mut p = t.position;
+                    if humanoid {
+                        p.y += head;
+                    }
+                    p
+                })
+                .collect();
+            assert_eq!(scenario_arrow_points(&s), expected, "{}", def.id);
+        }
+        assert!(seen_humanoid, "the check covers humanoid targets too");
+    }
+
+    #[test]
+    fn arena_arrows_point_at_the_heads_of_live_bots_in_sight() {
+        let bot = |id, alive, visible_to_player| BotView {
+            id,
+            feet: Vec3::new(id as f32, 0.0, -5.0),
+            facing_yaw_deg: 0.0,
+            alive,
+            visible_to_player,
+        };
+        let bots = [
+            bot(1, true, true),
+            bot(2, true, false),
+            bot(3, false, false),
+            bot(4, true, true),
+        ];
+        assert_eq!(
+            arena_arrow_points(bots),
+            vec![bots[0].head(), bots[3].head()]
+        );
+        assert!(arena_arrow_points([]).is_empty());
+    }
 
     #[test]
     fn arrows_sit_on_the_inset_screen_edge_towards_the_bearing() {

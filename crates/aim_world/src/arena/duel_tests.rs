@@ -3,6 +3,7 @@
 
 use super::tests::{DT, builtin, duel_room, idle, perfect, run};
 use super::*;
+use crate::map::MapDef;
 use aim_core::math::{Vec3, ViewAngles};
 use aim_core::movement::MoveInput;
 use aim_core::scenario::FrameInput;
@@ -35,7 +36,7 @@ fn player_hits(events: &[ArenaEvent]) -> Vec<f32> {
     events
         .iter()
         .filter_map(|e| match e {
-            ArenaEvent::PlayerHit { damage } => Some(*damage),
+            ArenaEvent::PlayerHit { damage, .. } => Some(*damage),
             _ => None,
         })
         .collect()
@@ -53,6 +54,42 @@ fn a_bot_not_killed_before_the_deadline_lands_one_shot_per_life() {
     assert_eq!(st.damage_taken, 30.0);
     assert_eq!(s.player_health(), PLAYER_HEALTH - 30.0);
     assert_eq!(s.result().score, -20.0, "the penalty is subtracted");
+}
+
+#[test]
+fn a_deadline_shot_comes_from_the_bots_eye_without_a_zone_or_a_bullet() {
+    let mut s = ArenaSession::new(duel(false, DEADLINE), duel_room(false), 3).unwrap();
+    let (mut events, mut expected) = (Vec::new(), Vec::new());
+    let mut t = 0.0;
+    while t < 3.0 {
+        let frame = s.update(idle(&s));
+        let bot_eye = MapDef::eye(s.bots().next().expect("one bot").feet);
+        if frame
+            .iter()
+            .any(|e| matches!(e, ArenaEvent::PlayerHit { .. }))
+        {
+            expected.push(ArenaEvent::PlayerHit {
+                damage: 30.0,
+                from: bot_eye,
+                zone: None,
+            });
+        }
+        events.extend(frame);
+        t += DT;
+    }
+    let hits: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e, ArenaEvent::PlayerHit { .. }))
+        .cloned()
+        .collect();
+    assert_eq!(expected.len(), 1, "{events:?}");
+    assert_eq!(hits, expected);
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, ArenaEvent::BotFired { .. })),
+        "a sure shot fires no bullet"
+    );
 }
 
 #[test]

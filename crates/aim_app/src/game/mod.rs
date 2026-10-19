@@ -30,7 +30,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
-use feedback::{ShotFeedback, ShotOutcome};
+use feedback::{HitFrame, MarkerKind, ShotFeedback, ShotOutcome};
 use hit_effect::{BaseMaterial, EffectAssets, Struck};
 use std::collections::HashMap;
 
@@ -66,6 +66,8 @@ pub struct Run {
     pub zoomed: bool,
     /// Seconds left on the hit-marker flash.
     pub hit_flash: f32,
+    /// The kind of hit the marker shows.
+    pub marker: MarkerKind,
     pub kill_flash: f32,
     /// Definition, seed and every input fed to the session, for analysis and replays.
     pub recording: Recording,
@@ -108,9 +110,31 @@ impl Run {
             paused: false,
             zoomed: false,
             hit_flash: 0.0,
+            marker: MarkerKind::Body,
             kill_flash: 0.0,
             entities: HashMap::new(),
             struck: Vec::new(),
+        }
+    }
+
+    /// Weapon inaccuracy from movement and the spray in progress, for the crosshair bloom.
+    fn inaccuracy(&self) -> f32 {
+        let s = &self.session;
+        let movement = feedback::movement_inaccuracy(s.player_speed(), s.movement_profile());
+        let recoil = s.recoil_profile().map_or(0.0, |p| {
+            feedback::recoil_inaccuracy(s.burst_index(), p.spread_ramp_bullets)
+        });
+        feedback::inaccuracy(movement, recoil)
+    }
+
+    /// What the HUD draws for hit feedback this frame.
+    pub fn hit_frame(&self) -> HitFrame {
+        HitFrame {
+            marker_secs_left: self.hit_flash,
+            marker: self.marker,
+            // Scenario runs keep their look: their kill flash times out but draws nothing.
+            kill_flash_secs: 0.0,
+            inaccuracy: self.inaccuracy(),
         }
     }
 }
@@ -725,9 +749,11 @@ fn tick(
     }
     let input = frame_input(dt, run.view, &keys, &buttons);
     run.recording.inputs.push(input);
+    let mut marker = None;
     for event in run.session.update(input) {
         if let Some(outcome) = ShotOutcome::from_session(&event) {
             feedback.write(ShotFeedback(outcome));
+            marker = marker.max(MarkerKind::of(outcome));
         }
         match event {
             SessionEvent::Shot {
@@ -738,7 +764,7 @@ fn tick(
                 hit_effect::record(&mut run.struck, id, Some(zone), false);
             }
             SessionEvent::Killed { id, .. } => {
-                run.kill_flash = 0.12;
+                run.kill_flash = feedback::KILL_FLASH_SECS;
                 hit_effect::record(&mut run.struck, id, None, true);
             }
             SessionEvent::Finished => finisher.finish(&run),
@@ -750,6 +776,9 @@ fn tick(
             }
             _ => {}
         }
+    }
+    if let Some(kind) = marker {
+        run.marker = kind;
     }
 }
 

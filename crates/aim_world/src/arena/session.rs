@@ -48,10 +48,22 @@ pub enum ArenaEvent {
         /// Seconds from the bot first becoming visible to the player in this life.
         time_to_kill_secs: f32,
     },
+    /// The player took damage. `from` is the eye of the bot that dealt it, in world space;
+    /// `zone` is the body zone a bot bullet hit, or `None` for a shoot-back deadline's sure
+    /// shot, which fires no bullet.
     PlayerHit {
         damage: f32,
+        from: Vec3,
+        zone: Option<HitZone>,
     },
     PlayerDied,
+    /// A bot fired a bullet at the player, hit or miss, from `origin` (its eye, world space).
+    /// It comes before the `PlayerHit` the bullet causes. Deadline sure shots fire no bullet
+    /// and are not reported here.
+    BotFired {
+        bot_id: u64,
+        origin: Vec3,
+    },
     BotSpawned {
         id: u64,
     },
@@ -754,20 +766,36 @@ impl ArenaSession {
                 origin: bot.eye(),
                 dir,
             };
+            events.push(ArenaEvent::BotFired {
+                bot_id: bot.id,
+                origin: ray.origin,
+            });
             bot.after_shot(&ctx, &mut self.rng);
             let hit = ray_humanoid(ray, self.player.feet, self.player.view.yaw_deg, &self.dims)
                 .filter(|&(t, _)| self.map.raycast(ray, t).is_none());
             if let Some((_, zone)) = hit {
                 let dmg = Self::damage(&self.bot_weapon, zone);
-                self.damage_player(dmg, events);
+                self.damage_player(dmg, ray.origin, Some(zone), events);
             }
         }
     }
 
-    fn damage_player(&mut self, dmg: f32, events: &mut Vec<ArenaEvent>) {
+    /// Damage the player by `dmg` from a bot whose eye is at `from`; `zone` is the body
+    /// zone a bullet hit, if a bullet dealt it.
+    fn damage_player(
+        &mut self,
+        dmg: f32,
+        from: Vec3,
+        zone: Option<HitZone>,
+        events: &mut Vec<ArenaEvent>,
+    ) {
         self.player.health -= dmg;
         self.stats.damage_taken += dmg;
-        events.push(ArenaEvent::PlayerHit { damage: dmg });
+        events.push(ArenaEvent::PlayerHit {
+            damage: dmg,
+            from,
+            zone,
+        });
         if self.player.health <= 0.0 {
             events.push(ArenaEvent::PlayerDied);
             self.player_died();
@@ -797,7 +825,8 @@ impl ArenaSession {
             self.bots[i].deadline_hit = true;
             self.stats.deadline_hits += 1;
             if deadline.damage > 0.0 {
-                self.damage_player(deadline.damage, events);
+                let from = self.bots[i].eye();
+                self.damage_player(deadline.damage, from, None, events);
             }
         }
     }
@@ -1015,7 +1044,9 @@ impl Activity for ArenaSession {
                 } => Some(ActivityEvent::Kill { time_to_kill_secs }),
                 ArenaEvent::PlayerHit { .. } => Some(ActivityEvent::Damaged),
                 ArenaEvent::Finished => Some(ActivityEvent::Finished),
-                ArenaEvent::PlayerDied | ArenaEvent::BotSpawned { .. } => None,
+                ArenaEvent::PlayerDied
+                | ArenaEvent::BotSpawned { .. }
+                | ArenaEvent::BotFired { .. } => None,
             })
             .collect()
     }

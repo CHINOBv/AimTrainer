@@ -14,45 +14,47 @@ pub fn benchmark_panel(
     bests: &HashMap<String, f32>,
 ) -> Option<UiAction> {
     let mut action = None;
-    egui::ScrollArea::vertical().show(ui, |ui| {
-        for b in benchmarks {
-            ui.heading(&b.name);
-            ui.label(&b.description);
-            if !b.calibrated {
-                ui.colored_label(WARN, "Provisional thresholds (simulated players).");
-            }
-            let view = tier_selector(ui, b);
-            let b = view.as_ref().unwrap_or(b);
-            let rank = |e: f32| b.rank_for(e).map(str::to_owned);
-            let res = b.evaluate(bests);
-            let overall = match res.overall {
-                Some(e) => energy_text(Some(e), "energy", rank),
-                None => "— (score every subcategory)".to_owned(),
-            };
-            ui.strong(format!("Overall: {overall}"));
-            egui::Grid::new(&b.id)
-                .striped(true)
-                .num_columns(4)
-                .show(ui, |ui| {
-                    for (sub, r) in b.subcategories.iter().zip(&res.subcategories) {
-                        ui.label(format!("{} / {}", sub.skill, sub.name));
-                        ui.label(energy_text(r.energy, "", rank));
-                        for s in &sub.scenarios {
-                            let best = bests
-                                .get(&s.id)
-                                .map_or("—".to_owned(), |v| format!("{v:.0}"));
-                            let name = parse_run_key(&s.id).0;
-                            // A tier's ids are run keys, so this starts it at the tier's level.
-                            if ui.button(format!("▶ {name} ({best})")).clicked() {
-                                action = Some(UiAction::StartScenario(s.id.clone()));
+    egui::ScrollArea::vertical()
+        .id_salt("benchmark")
+        .show(ui, |ui| {
+            for b in benchmarks {
+                ui.heading(&b.name);
+                ui.label(&b.description);
+                if !b.calibrated {
+                    ui.colored_label(WARN, "Provisional thresholds (simulated players).");
+                }
+                let view = tier_selector(ui, b);
+                let b = view.as_ref().unwrap_or(b);
+                let rank = |e: f32| b.rank_for(e).map(str::to_owned);
+                let res = b.evaluate(bests);
+                let overall = match res.overall {
+                    Some(e) => energy_text(Some(e), "energy", rank),
+                    None => "— (score every subcategory)".to_owned(),
+                };
+                ui.strong(format!("Overall: {overall}"));
+                egui::Grid::new(&b.id)
+                    .striped(true)
+                    .num_columns(4)
+                    .show(ui, |ui| {
+                        for (sub, r) in b.subcategories.iter().zip(&res.subcategories) {
+                            ui.label(format!("{} / {}", sub.skill, sub.name));
+                            ui.label(energy_text(r.energy, "", rank));
+                            for s in &sub.scenarios {
+                                let best = bests
+                                    .get(&s.id)
+                                    .map_or("—".to_owned(), |v| format!("{v:.0}"));
+                                let name = parse_run_key(&s.id).0;
+                                // A tier's ids are run keys, so this starts it at the tier's level.
+                                if ui.button(format!("▶ {name} ({best})")).clicked() {
+                                    action = Some(UiAction::StartScenario(s.id.clone()));
+                                }
                             }
+                            ui.end_row();
                         }
-                        ui.end_row();
-                    }
-                });
-            ui.separator();
-        }
-    });
+                    });
+                ui.separator();
+            }
+        });
     action
 }
 
