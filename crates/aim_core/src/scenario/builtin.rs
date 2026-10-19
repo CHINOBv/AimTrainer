@@ -10,6 +10,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/ammo-discipline.toml"),
     ),
     (
+        "arc-follow.toml",
+        include_str!("../../../../content/scenarios/arc-follow.toml"),
+    ),
+    (
         "burst-control.toml",
         include_str!("../../../../content/scenarios/burst-control.toml"),
     ),
@@ -74,6 +78,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/dynamic-strafe-heads.toml"),
     ),
     (
+        "fade-track.toml",
+        include_str!("../../../../content/scenarios/fade-track.toml"),
+    ),
+    (
         "flick-headshot.toml",
         include_str!("../../../../content/scenarios/flick-headshot.toml"),
     ),
@@ -86,12 +94,20 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/go-no-go.toml"),
     ),
     (
+        "ground-reactive.toml",
+        include_str!("../../../../content/scenarios/ground-reactive.toml"),
+    ),
+    (
         "long-range-heads.toml",
         include_str!("../../../../content/scenarios/long-range-heads.toml"),
     ),
     (
         "micro-adjust.toml",
         include_str!("../../../../content/scenarios/micro-adjust.toml"),
+    ),
+    (
+        "orbit-track.toml",
+        include_str!("../../../../content/scenarios/orbit-track.toml"),
     ),
     (
         "peek-reaction.toml",
@@ -124,6 +140,14 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "regen-track.toml",
         include_str!("../../../../content/scenarios/regen-track.toml"),
+    ),
+    (
+        "sky-reactive.toml",
+        include_str!("../../../../content/scenarios/sky-reactive.toml"),
+    ),
+    (
+        "smooth-xyz.toml",
+        include_str!("../../../../content/scenarios/smooth-xyz.toml"),
     ),
     (
         "sound-turn.toml",
@@ -168,6 +192,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "tap-discipline.toml",
         include_str!("../../../../content/scenarios/tap-discipline.toml"),
+    ),
+    (
+        "thin-glide.toml",
+        include_str!("../../../../content/scenarios/thin-glide.toml"),
     ),
     (
         "track-close-strafe.toml",
