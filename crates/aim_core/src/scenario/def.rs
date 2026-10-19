@@ -658,6 +658,45 @@ pub enum Motion {
         #[serde(default = "default_reverse_chance")]
         reverse_chance: f32,
     },
+    /// Glides sideways along its lateral axis at a constant speed while weaving up and
+    /// down on a periodic path, a smooth sine or a sharp zigzag, and turns back at
+    /// `max_offset`. It starts at a random side and a random point of its cycle. Spheres
+    /// and capsules only.
+    Wave {
+        /// Lateral speed, m/s.
+        speed: Range,
+        /// Height of the weave above and below its center line, meters (> 0).
+        amplitude: Range,
+        /// Full up-and-down cycles per second (> 0).
+        frequency_hz: Range,
+        /// Shape of the weave.
+        #[serde(default)]
+        form: WaveForm,
+        /// Max lateral distance from the spawn point, meters.
+        #[serde(default = "default_strafe_width")]
+        max_offset: f32,
+    },
+}
+
+/// Shape of a `wave` motion's weave (`motion.form`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WaveForm {
+    /// A sine: it slows into each turn.
+    #[default]
+    Sine,
+    /// A triangle: constant vertical speed with sharp turns.
+    Zigzag,
+}
+
+impl WaveForm {
+    /// Height of the weave, in [-1, 1], at `phase` cycles (0 is the center line, rising).
+    pub fn at(self, phase: f32) -> f32 {
+        match self {
+            Self::Sine => (phase * std::f32::consts::TAU).sin(),
+            Self::Zigzag => 4.0 * ((phase - 0.25).rem_euclid(1.0) - 0.5).abs() - 1.0,
+        }
+    }
 }
 
 /// Forward/back movement of a `strafe`, `dodge` or `drift` target (`motion.depth`). The
@@ -1510,6 +1549,19 @@ impl ScenarioDef {
             "targets.motion.arena.sides",
             "humanoids bounce horizontally only: use the box (sides = 0)",
         );
+        let waves = |m: &Motion| matches!(m, Motion::Wave { .. });
+        check(
+            !humanoid || !waves(&t.motion),
+            "targets.motion",
+            "wave weaves up and down: use a sphere or capsule shape",
+        );
+        check(
+            !humanoid
+                || !t.motion_profiles.iter().any(|p| waves(&p.motion))
+                    && !t.behaviors.iter().flat_map(|b| &b.motion).any(waves),
+            "targets.motion_profiles.motion",
+            "wave weaves up and down: use a sphere or capsule shape",
+        );
         if let Some(p) = &t.perception {
             for (field, msg) in p.problems(self) {
                 check(false, field, msg);
@@ -1743,6 +1795,34 @@ fn motion_problems(m: &Motion) -> Vec<(&'static str, &'static str)> {
                 (0.0..=1.0).contains(reverse_chance),
                 "targets.motion.reverse_chance",
                 "must be in [0, 1]",
+            );
+        }
+        Motion::Wave {
+            speed,
+            amplitude,
+            frequency_hz,
+            max_offset,
+            ..
+        } => {
+            check(
+                speed.is_valid() && speed.min >= 0.0 && speed.max.is_finite(),
+                "targets.motion.speed",
+                "must be a non-negative [min, max]",
+            );
+            check(
+                amplitude.is_valid() && amplitude.min > 0.0 && amplitude.max.is_finite(),
+                "targets.motion.amplitude",
+                "must be a positive [min, max] in meters",
+            );
+            check(
+                frequency_hz.is_valid() && frequency_hz.min > 0.0 && frequency_hz.max <= 10.0,
+                "targets.motion.frequency_hz",
+                "must be a positive [min, max] of at most 10 Hz",
+            );
+            check(
+                max_offset.is_finite() && *max_offset > 0.0,
+                "targets.motion.max_offset",
+                "must be > 0",
             );
         }
     }

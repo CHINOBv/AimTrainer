@@ -442,6 +442,15 @@ fn scale_motion(motion: &mut Motion, s: f32) {
                 sooner(c);
             }
         }
+        Motion::Wave {
+            speed,
+            frequency_hz,
+            ..
+        } => {
+            // The same path, travelled faster.
+            *speed = scale(*speed, 1.0 + s);
+            *frequency_hz = scale(*frequency_hz, 1.0 + s);
+        }
     }
 }
 
@@ -1087,5 +1096,34 @@ mod tests {
         };
         let (d0, d1) = hard("demo-depth");
         assert!((depth(&d1).max / depth(&d0).max - 0.7).abs() < 1e-5);
+    }
+
+    #[test]
+    fn the_speed_knob_plays_a_wave_faster_with_the_same_amplitude() {
+        let def = ScenarioDef::from_toml(
+            r#"
+            id = "w"
+            name = "w"
+            category = "custom"
+            [targets]
+            shape = { kind = "sphere", radius = 0.2 }
+            spawn = { kind = "angular", yaw_deg = [0, 0], pitch_deg = [5, 5], distance = [10, 10] }
+            motion = { kind = "wave", speed = [2, 3], amplitude = [0.4, 0.6], frequency_hz = [1, 2] }
+            "#,
+        )
+        .unwrap();
+        let wave = |d: &ScenarioDef| match d.targets.motion {
+            Motion::Wave {
+                speed,
+                amplitude,
+                frequency_hz,
+                ..
+            } => (speed, amplitude, frequency_hz),
+            _ => panic!("wave"),
+        };
+        let ((s0, a0, f0), (s1, a1, f1)) = (wave(&def), wave(&def.at_difficulty(1.0)));
+        assert!((s1.max / s0.max - 1.3).abs() < 1e-5);
+        assert!((f1.min / f0.min - 1.3).abs() < 1e-5);
+        assert_eq!(a1, a0);
     }
 }

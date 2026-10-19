@@ -252,6 +252,7 @@ Angles are measured from the eye between aim points (a humanoid's head, a sphere
 | `ballistic` | `speed`, `angle_deg`, `gravity` (default 9.81), `bounces` (default 0), `restitution` (default 0.5), `on_floor` (default `"expire"`) | Thrown once under gravity, then lands. See "Ballistic targets". |
 | `linear_bounce` | `speed_deg`, `arena = { yaw_deg, pitch_deg, sides }` | Straight lines at a constant angular speed, reflecting off the walls of a box or polygon. See "Bouncing and orbiting targets". |
 | `orbit` | `speed_deg`, `radius` (optional), `change_secs` (optional), `reverse_chance` (default 0.5) | Circles around the player. See "Bouncing and orbiting targets". |
+| `wave` | `speed`, `amplitude`, `frequency_hz`, `form` (default `"sine"`), `max_offset` (default 3) | Glides sideways while weaving up and down on a sine or zigzag path. See "Wave targets". |
 
 `strafe`, `dodge` and `drift` also take an optional `depth` block, which adds forward/back movement (see "Depth movement").
 
@@ -339,6 +340,24 @@ motion = { kind = "orbit", speed_deg = [12.0, 26.0], change_secs = [1.0, 2.5], r
 | `reverse_chance` | Chance that a decision reverses the direction, in [0, 1]. |
 
 The built-in `demo-bounce` and `demo-orbit` use them. Speed tuning and the difficulty speed knob scale `speed_deg`. Every new motion draws random numbers only when it is used, so other scenarios replay exactly as before.
+
+#### Wave targets
+
+A `wave` target glides sideways (across your view, like a strafe) at a constant `speed` in m/s and weaves up and down around its spawn height, turning back when it is `max_offset` meters from its spawn point:
+
+```toml
+motion = { kind = "wave", speed = [2.0, 3.0], amplitude = [0.3, 0.5], frequency_hz = [0.8, 1.2], form = "zigzag", max_offset = 4.0 }
+```
+
+| Field | Meaning |
+|---|---|
+| `speed` | Lateral speed, m/s, a non-negative range. A speed near 0 gives a target that mostly bobs in place. |
+| `amplitude` | How far the weave rises above and falls below its center line, meters (a positive range). |
+| `frequency_hz` | Full up-and-down cycles per second, a positive range of at most 10 Hz. |
+| `form` | `"sine"` (default) slows into each turn, like a smooth bob; `"zigzag"` climbs and falls at a constant speed and turns sharply. |
+| `max_offset` | Max lateral distance from the spawn point, meters (> 0). |
+
+Each value is drawn once, when the target appears, together with a random side and a random point of the cycle, so several targets do not weave in step. Spheres never sink below the minimum sphere height. Humanoids walk on the floor, so `wave` needs a sphere or capsule shape (also in motion profiles and behaviour rules). Speed tuning and the difficulty speed knob scale `speed` and `frequency_hz` together, so the target travels the same path faster; the amplitude stays. Like the other newer motions, `wave` draws random numbers only when it is used, so other scenarios replay exactly as before.
 
 ### Reactive targets
 
@@ -550,7 +569,7 @@ During a library scenario run, press Esc to tune its targets, from 50% to 200% i
 |---|---|
 | Target size | Sphere radius, and every length of a capsule. Agents (humanoids) keep their VALORANT size; use Distance to make their heads smaller or larger on screen. |
 | Distance | Spawn distance: `angular` and `around_crosshair` `distance`, and `floor` `z`. |
-| Target speed | Motion speed: drift `speed`; strafe run speed and acceleration together, so the strafe keeps its timing; `linear_bounce` and `orbit` `speed_deg`; and a `ballistic` launch speed (× k) with its gravity (× k²), so it flies the same arc faster. |
+| Target speed | Motion speed: drift `speed`; strafe run speed and acceleration together, so the strafe keeps its timing; `linear_bounce` and `orbit` `speed_deg`; `wave` `speed` and `frequency_hz` together (the same path, faster); and a `ballistic` launch speed (× k) with its gravity (× k²), so it flies the same arc faster. |
 
 A tuned run is stored under its own key (`%s80d120v150`: size, distance and speed percentages); the default 100/100/100 adds no suffix. Tuned runs never move the adaptive level, even when started adaptively, and never count for the benchmark, which reads only exact untuned keys. The results screen lists the tuning, and the HUD shows a "tuned" tag.
 

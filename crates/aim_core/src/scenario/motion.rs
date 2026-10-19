@@ -3,7 +3,7 @@
 //! flight, straight-line bouncing, or an orbit around the player).
 
 use super::MIN_SPHERE_HEIGHT;
-use super::def::{BounceArena, DepthDef, Motion, Shape, TargetsDef};
+use super::def::{BounceArena, DepthDef, Motion, Shape, TargetsDef, WaveForm};
 use crate::games::valorant::{
     CROUCH_HEIGHT_DROP_M, CROUCH_TRANSITION_SECS, JUMP_AIR_SECS, JUMP_APEX_M, Weapon,
 };
@@ -81,6 +81,20 @@ pub(super) struct MotionState {
     bounces_left: u32,
     /// A ballistic target came down for the last time; the session removes it.
     pub(super) landed: bool,
+    /// The weave of a `wave` target; `None` until the motion first decides.
+    weave: Option<Weave>,
+}
+
+/// What a [`Motion::Wave`] target decided when it appeared.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Weave {
+    /// Signed lateral speed, m/s (the sign is the side it glides to).
+    speed: f32,
+    amplitude: f32,
+    frequency_hz: f32,
+    form: WaveForm,
+    /// Position in the cycle, in cycles.
+    phase: f32,
 }
 
 /// The chances and timings a [`Motion::Dodge`] target decides with.
@@ -120,6 +134,7 @@ impl MotionState {
             glide: None,
             bounces_left: 0,
             landed: false,
+            weave: None,
         }
     }
 
@@ -157,11 +172,13 @@ impl MotionState {
         self.crouch = 0.0;
         self.glide = None;
         self.flight = Vec3::ZERO;
+        self.weave = None;
         match motion {
             Motion::Static
             | Motion::Ballistic { .. }
             | Motion::LinearBounce { .. }
-            | Motion::Orbit { .. } => {
+            | Motion::Orbit { .. }
+            | Motion::Wave { .. } => {
                 self.intent = 0.0;
                 self.fb_intent = 0.0;
                 self.strafe = LocalVelocity::default();
@@ -326,6 +343,29 @@ impl MotionState {
                 }
                 let before = *position;
                 self.orbit(position, *radius, dt);
+                self.measure(before, *position, dt);
+            }
+            Motion::Wave {
+                speed,
+                amplitude,
+                frequency_hz,
+                form,
+                max_offset,
+            } => {
+                // Speed tuning plays the same path faster: lateral speed and frequency × k.
+                if now >= self.next_change_at {
+                    let side = rng.sign();
+                    self.weave = Some(Weave {
+                        speed: rng.in_range(*speed) * speed_k * side,
+                        amplitude: rng.in_range(*amplitude),
+                        frequency_hz: rng.in_range(*frequency_hz) * speed_k,
+                        form: *form,
+                        phase: rng.next_f32(),
+                    });
+                    self.next_change_at = f32::INFINITY;
+                }
+                let before = *position;
+                self.weave(position, *max_offset, humanoid, dt);
                 self.measure(before, *position, dt);
             }
         }
@@ -581,6 +621,24 @@ impl MotionState {
         let yaw = ViewAngles::from_direction(flat).yaw_deg + rate * dt;
         let p = self.viewer + ViewAngles::new(yaw, 0.0).direction() * r;
         *position = Vec3::new(p.x, position.y, p.z);
+    }
+
+    /// Glides along `lateral`, turning back at `max_offset`, while weaving vertically.
+    fn weave(&mut self, position: &mut Vec3, max_offset: f32, humanoid: bool, dt: f32) {
+        let Some(w) = &mut self.weave else {
+            return;
+        };
+        let side = (*position - self.anchor).dot(self.lateral);
+        if side.abs() >= max_offset && side * w.speed > 0.0 {
+            w.speed = -w.speed;
+        }
+        let next = w.phase + w.frequency_hz * dt;
+        let rise = w.amplitude * (w.form.at(next) - w.form.at(w.phase));
+        w.phase = next.rem_euclid(1.0);
+        *position += self.lateral * (w.speed * dt) + Vec3::UP * rise;
+        if !humanoid {
+            position.y = position.y.max(MIN_SPHERE_HEIGHT);
+        }
     }
 
     /// Records the velocity of a motion that moved from `before` to `after`.
@@ -1029,5 +1087,121 @@ mod tests {
                 "{seed}: {windows:?}"
             );
         }
+    }
+
+    /// A `wave` motion with these extra fields, at 2 m/s, 0.5 m amplitude and 1 Hz.
+    fn wave(extra: &str) -> String {
+        format!(
+            r#"{{ kind = "wave", speed = [2, 2], amplitude = [0.5, 0.5], frequency_hz = [1, 1]{extra} }}"#
+        )
+    }
+
+    #[test]
+    fn wave_glides_sideways_while_weaving_up_and_down() {
+        let mut s = Session::new(def(SPHERE, AHEAD, &wave(", max_offset = 50")), 4);
+        let (path, _) = run(&mut s, 101, 0.01);
+        let start = path[0].unwrap();
+        let end = path[100].unwrap();
+        // One second at 2 m/s along the lateral axis (world x here), in either direction.
+        assert!(((end.x - start.x).abs() - 2.0).abs() < 0.05, "{end:?}");
+        assert!((end.z - start.z).abs() < 1e-4, "keeps its distance");
+        // A whole period later it is back at its height, having swept 2 × amplitude.
+        assert!((end.y - start.y).abs() < 0.02, "{} vs {}", end.y, start.y);
+        let ys: Vec<f32> = path.iter().map(|p| p.unwrap().y).collect();
+        let span = ys.iter().cloned().fold(f32::MIN, f32::max)
+            - ys.iter().cloned().fold(f32::MAX, f32::min);
+        assert!((span - 1.0).abs() < 0.02, "sweeps 2 × amplitude: {span}");
+        let speed = s.targets().next().unwrap().velocity().length();
+        assert!(speed > 1.9, "reports its velocity: {speed}");
+    }
+
+    #[test]
+    fn a_zigzag_wave_climbs_and_falls_at_a_constant_speed() {
+        let vertical_steps = |motion: &str| {
+            let mut s = Session::new(def(SPHERE, AHEAD, motion), 4);
+            let (path, _) = run(&mut s, 200, 0.01);
+            path.windows(2)
+                .map(|w| (w[1].unwrap().y - w[0].unwrap().y).abs())
+                .collect::<Vec<f32>>()
+        };
+        // 4 × amplitude × frequency = 2 m/s, so 0.02 m per frame except at the turns.
+        let steady = |steps: &[f32]| steps.iter().filter(|d| (**d - 0.02).abs() < 1e-3).count();
+        let zigzag = vertical_steps(&wave(r#", form = "zigzag""#));
+        assert!(steady(&zigzag) >= 190, "{zigzag:?}");
+        let sine = vertical_steps(&wave(""));
+        assert!(steady(&sine) < 100, "a sine eases into its turns");
+    }
+
+    #[test]
+    fn wave_turns_back_at_its_max_offset() {
+        let mut s = Session::new(def(SPHERE, AHEAD, &wave(", max_offset = 1")), 2);
+        let (path, _) = run(&mut s, 400, 0.01);
+        let xs: Vec<f32> = path.iter().map(|p| p.unwrap().x).collect();
+        assert!(xs.iter().all(|x| x.abs() <= 1.03), "{xs:?}");
+        let turns = xs
+            .windows(3)
+            .filter(|w| (w[1] - w[0]) * (w[2] - w[1]) < 0.0)
+            .count();
+        assert!(turns >= 3, "goes back and forth: {turns}");
+    }
+
+    #[test]
+    fn wave_is_deterministic_per_seed_and_speed_tuning_plays_it_faster() {
+        let motion = wave("");
+        let path = |seed, k: f32| {
+            let mut d = def(SPHERE, AHEAD, &motion);
+            d.targets.speed_scale = k;
+            let mut s = Session::new(d, seed);
+            run(&mut s, 50, 0.01).0
+        };
+        assert_eq!(path(7, 1.0), path(7, 1.0));
+        let (slow, fast) = (path(7, 1.0), path(7, 2.0));
+        let moved = |p: &[Option<Vec3>]| (p[49].unwrap().x - p[0].unwrap().x).abs();
+        assert!((moved(&fast) / moved(&slow) - 2.0).abs() < 0.05);
+    }
+
+    #[test]
+    fn wave_parameters_are_validated() {
+        let problems = |shape: &str, motion: &str| {
+            let d = ScenarioDef::from_toml(&format!(
+                r#"
+                id = "m"
+                name = "m"
+                category = "custom"
+                [targets]
+                shape = {shape}
+                spawn = {AHEAD}
+                motion = {motion}
+                "#
+            ))
+            .unwrap();
+            d.validate()
+                .into_iter()
+                .map(|e| e.field)
+                .collect::<Vec<_>>()
+        };
+        let bad = r#"{ kind = "wave", speed = [-1, 2], amplitude = [0, 0.5], frequency_hz = [0, 1], max_offset = 0 }"#;
+        assert_eq!(
+            problems(SPHERE, bad),
+            [
+                "targets.motion.speed",
+                "targets.motion.amplitude",
+                "targets.motion.frequency_hz",
+                "targets.motion.max_offset",
+            ]
+        );
+        assert_eq!(
+            problems(r#"{ kind = "humanoid" }"#, &wave("")),
+            ["targets.motion"]
+        );
+        assert!(problems(SPHERE, &wave("")).is_empty());
+        assert!(
+            ScenarioDef::from_toml(&format!(
+                "id = \"m\"\nname = \"m\"\ncategory = \"custom\"\n[targets]\nshape = {SPHERE}\nspawn = {AHEAD}\nmotion = {}\n",
+                wave(", wobble = 1")
+            ))
+            .is_err(),
+            "unknown fields are rejected"
+        );
     }
 }
