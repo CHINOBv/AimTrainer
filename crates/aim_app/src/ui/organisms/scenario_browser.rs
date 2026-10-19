@@ -1,6 +1,7 @@
 //! Scenario list (search, filters, favourites, recent runs, then every category) and the
 //! details/play panel.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::persistence::history::History;
 use crate::persistence::library::Library;
 use crate::ui::UiAction;
@@ -30,7 +31,15 @@ pub struct ScenarioFilter {
 
 impl ScenarioFilter {
     pub fn matches(&self, def: &ScenarioDef) -> bool {
-        let text = format!("{} {} {}", def.name, def.description, def.category.label());
+        // The shown (translated) name and description match too; in English they repeat.
+        let text = format!(
+            "{} {} {} {} {}",
+            def.name,
+            def.description,
+            def.category.label(),
+            tr(&def.name),
+            tr(&def.description)
+        );
         matches_query(&self.query, &text)
             && self.category.is_none_or(|c| def.category == c)
             && self.fire.is_none_or(|f| def.weapon.fire == f)
@@ -97,11 +106,11 @@ pub fn scenario_list(
                     } else {
                         ui.visuals().weak_text_color()
                     });
-                    let hint = if fav {
+                    let hint = tr(if fav {
                         "Remove from favourites"
                     } else {
                         "Add to favourites"
-                    };
+                    });
                     if ui
                         .add(egui::Button::new(star).frame(false))
                         .on_hover_text(hint)
@@ -110,7 +119,7 @@ pub fn scenario_list(
                         toggled = Some(d.id.clone());
                     }
                     let is_selected = selected.as_deref() == Some(d.id.as_str());
-                    if scenario_item(ui, &d.name, history.best(&d.id), is_selected) {
+                    if scenario_item(ui, tr(&d.name), history.best(&d.id), is_selected) {
                         *selected = Some(d.id.clone());
                     }
                 });
@@ -124,7 +133,7 @@ pub fn scenario_list(
             let favs = group(favorites);
             if !favs.is_empty() {
                 ui.push_id("favourites", |ui| {
-                    ui.heading("★ Favourites");
+                    ui.heading(tr("★ Favourites"));
                     for d in favs {
                         row(ui, d);
                     }
@@ -138,7 +147,7 @@ pub fn scenario_list(
             ));
             if !recent.is_empty() {
                 ui.push_id("recent", |ui| {
-                    ui.heading("Recent");
+                    ui.heading(tr("Recent"));
                     for d in recent {
                         row(ui, d);
                     }
@@ -165,7 +174,7 @@ pub fn scenario_list(
                 ui.add_space(6.0);
             }
             if !any {
-                ui.label("No scenario matches the filters.");
+                ui.label(tr("No scenario matches the filters."));
             }
         });
     if let Some(id) = toggled {
@@ -177,10 +186,10 @@ fn filter_controls(ui: &mut egui::Ui, filter: &mut ScenarioFilter) {
     ui.horizontal(|ui| {
         ui.add(
             egui::TextEdit::singleline(&mut filter.query)
-                .hint_text("Search scenarios")
+                .hint_text(tr("Search scenarios"))
                 .desired_width(160.0),
         );
-        if filter.is_active() && ui.small_button("Clear").clicked() {
+        if filter.is_active() && ui.small_button(tr("Clear")).clicked() {
             *filter = ScenarioFilter::default();
         }
     });
@@ -189,7 +198,7 @@ fn filter_controls(ui: &mut egui::Ui, filter: &mut ScenarioFilter) {
             ui,
             "filter_category",
             &mut filter.category,
-            "Any category",
+            tr("Any category"),
             &Category::ALL,
             |c| c.label(),
         );
@@ -197,23 +206,25 @@ fn filter_controls(ui: &mut egui::Ui, filter: &mut ScenarioFilter) {
             ui,
             "filter_fire",
             &mut filter.fire,
-            "Click or hold",
+            tr("Click or hold"),
             &[FireMode::Click, FireMode::Hold],
-            |f| match f {
-                FireMode::Click => "Click",
-                FireMode::Hold => "Hold to fire",
+            |f| {
+                tr(match f {
+                    FireMode::Click => "Click",
+                    FireMode::Hold => "Hold to fire",
+                })
             },
         );
         option_combo(
             ui,
             "filter_movement",
             &mut filter.movement,
-            "Any movement",
+            tr("Any movement"),
             &[true, false],
-            |m| if m { "Moving" } else { "Standing" },
+            |m| tr(if m { "Moving" } else { "Standing" }),
         );
-        ui.checkbox(&mut filter.waves_only, "Waves")
-            .on_hover_text("Only scenarios with phases (waves).");
+        ui.checkbox(&mut filter.waves_only, tr("Waves"))
+            .on_hover_text(tr("Only scenarios with phases (waves)."));
     });
 }
 
@@ -246,12 +257,12 @@ pub fn scenario_details(
     history: &History,
     adaptive_level: f32,
 ) -> Option<UiAction> {
-    ui.heading(&def.name);
-    let fire = if def.weapon.fire == FireMode::Hold {
+    ui.heading(tr(&def.name));
+    let fire = tr(if def.weapon.fire == FireMode::Hold {
         "hold to fire"
     } else {
         "click"
-    };
+    });
     ui.label(format!(
         "{} · {:.0}s · {} · {fire}",
         def.category.label(),
@@ -259,9 +270,11 @@ pub fn scenario_details(
         def.weapon.kind.stats().display_name,
     ));
     ui.add_space(6.0);
-    ui.label(&def.description);
+    ui.label(tr(&def.description));
     if def.player.movement {
-        ui.label("Movement: WASD (Shift = walk). Counter-strafe before shooting.");
+        ui.label(tr(
+            "Movement: WASD (Shift = walk). Counter-strafe before shooting.",
+        ));
     }
     let charted = history.recent(&def.id, CHART_RUNS);
     let recent = &charted[charted.len().saturating_sub(LISTED_RUNS)..];
@@ -269,23 +282,26 @@ pub fn scenario_details(
         ui.add_space(6.0);
         history_chart(ui, &charted);
         let list: Vec<String> = recent.iter().map(|s| format!("{s:.0}")).collect();
-        ui.label(format!("Last runs: {}", list.join(", ")));
+        ui.label(tr_fmt("Last runs: {}", &[&list.join(", ")]));
     }
     ui.add_space(10.0);
     let mut action = None;
     ui.horizontal(|ui| {
         if ui
-            .add_sized([160.0, 36.0], egui::Button::new("▶  Play"))
+            .add_sized([160.0, 36.0], egui::Button::new(tr("▶  Play")))
             .clicked()
         {
             action = Some(UiAction::StartScenario(def.id.clone()));
         }
-        let adaptive = egui::Button::new(format!("▶  Adaptive ({adaptive_level:+.2})"));
+        let adaptive = egui::Button::new(tr_fmt(
+            "▶  Adaptive ({})",
+            &[&format!("{adaptive_level:+.2}")],
+        ));
         if ui
             .add_sized([200.0, 36.0], adaptive)
-            .on_hover_text(
+            .on_hover_text(tr(
                 "Difficulty follows you to keep success near 80%, where learning is fastest.",
-            )
+            ))
             .clicked()
         {
             action = Some(UiAction::StartAdaptive(def.id.clone()));
@@ -295,9 +311,11 @@ pub fn scenario_details(
 }
 
 pub fn empty_selection(ui: &mut egui::Ui) {
-    ui.heading("Pick a scenario");
-    ui.label("Esc pauses a run. Right mouse = ADS zoom for weapons with a scope.");
-    ui.label("Click ★ next to a scenario to pin it to Favourites.");
+    ui.heading(tr("Pick a scenario"));
+    ui.label(tr(
+        "Esc pauses a run. Right mouse = ADS zoom for weapons with a scope.",
+    ));
+    ui.label(tr("Click ★ next to a scenario to pin it to Favourites."));
 }
 
 #[cfg(test)]

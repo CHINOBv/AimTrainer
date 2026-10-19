@@ -2,6 +2,7 @@
 //! player's area, weapon) and start it. Edits the settings in place; the container saves
 //! them like any other setting.
 
+use crate::i18n::tr;
 use crate::ui::UiAction;
 use aim_core::scenario::lab::{
     APPEAR_DELAY_SECS, AREA_DEPTH_M, AREA_HALF_WIDTH_M, CHANGE_SECS, DISTANCE_M, DURATION_SECS,
@@ -51,8 +52,8 @@ pub fn movement_lab(ui: &mut egui::Ui, s: &mut LabSettings, best: Option<f32>) -
     egui::ScrollArea::vertical()
         .id_salt("movement-lab")
         .show(ui, |ui| {
-            ui.heading(TITLE);
-            ui.label(INTRO);
+            ui.heading(tr(TITLE));
+            ui.label(tr(INTRO));
             ui.add_space(6.0);
             enemies(ui, s);
             spawns(ui, s);
@@ -61,13 +62,13 @@ pub fn movement_lab(ui: &mut egui::Ui, s: &mut LabSettings, best: Option<f32>) -
             ui.separator();
             ui.label(egui::RichText::new(s.summary()).strong());
             if let Some(b) = best {
-                ui.label(format!("{PB}: {b:.0}"));
+                ui.label(format!("{}: {b:.0}", tr(PB)));
             }
             ui.horizontal(|ui| {
-                if crate::audio::ui_click::clicked(ui.button(START)).clicked() {
+                if crate::audio::ui_click::clicked(ui.button(tr(START))).clicked() {
                     action = Some(UiAction::StartLab(s.clamped()));
                 }
-                if ui.button(RESET).clicked() {
+                if ui.button(tr(RESET)).clicked() {
                     *s = LabSettings::default();
                 }
             });
@@ -76,7 +77,7 @@ pub fn movement_lab(ui: &mut egui::Ui, s: &mut LabSettings, best: Option<f32>) -
 }
 
 fn grid(ui: &mut egui::Ui, heading: &str, add: impl FnOnce(&mut egui::Ui)) {
-    ui.strong(heading);
+    ui.strong(tr(heading));
     egui::Grid::new(heading)
         .num_columns(2)
         .spacing([12.0, 4.0])
@@ -90,7 +91,7 @@ fn f_slider<'a>(v: &'a mut f32, (lo, hi): (f32, f32), unit: &str) -> egui::Slide
 
 fn enemies(ui: &mut egui::Ui, s: &mut LabSettings) {
     grid(ui, ENEMIES, |ui| {
-        ui.label(MOTION);
+        ui.label(tr(MOTION));
         ui.horizontal(|ui| {
             for m in LabMotion::ALL {
                 ui.selectable_value(&mut s.motion, m, m.label());
@@ -98,16 +99,16 @@ fn enemies(ui: &mut egui::Ui, s: &mut LabSettings) {
         });
         ui.end_row();
         let moving = s.motion != LabMotion::Static;
-        ui.label(SPEED).on_hover_text(SPEED_HINT);
+        ui.label(tr(SPEED)).on_hover_text(tr(SPEED_HINT));
         ui.add_enabled(
             moving,
             egui::Slider::new(&mut s.speed_pct, SPEED_PCT.0..=SPEED_PCT.1).suffix("%"),
         );
         ui.end_row();
-        ui.label(CHANGE).on_hover_text(CHANGE_HINT);
+        ui.label(tr(CHANGE)).on_hover_text(tr(CHANGE_HINT));
         ui.add_enabled(moving, f_slider(&mut s.change_secs, CHANGE_SECS, " s"));
         ui.end_row();
-        ui.label(DODGE).on_hover_text(DODGE_HINT);
+        ui.label(tr(DODGE)).on_hover_text(tr(DODGE_HINT));
         ui.add_enabled_ui(s.motion == LabMotion::Dodge, |ui| {
             ui.horizontal(|ui| {
                 for d in DodgePreset::ALL {
@@ -116,16 +117,16 @@ fn enemies(ui: &mut egui::Ui, s: &mut LabSettings) {
             });
         });
         ui.end_row();
-        ui.label(COUNT);
+        ui.label(tr(COUNT));
         ui.add(egui::Slider::new(
             &mut s.max_alive,
             MAX_ALIVE.0..=MAX_ALIVE.1,
         ));
         ui.end_row();
-        ui.label(SHAPE);
+        ui.label(tr(SHAPE));
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut s.head_only, true, HEAD_ONLY);
-            ui.selectable_value(&mut s.head_only, false, FULL_BODY);
+            ui.selectable_value(&mut s.head_only, true, tr(HEAD_ONLY));
+            ui.selectable_value(&mut s.head_only, false, tr(FULL_BODY));
         });
         ui.end_row();
     });
@@ -133,29 +134,29 @@ fn enemies(ui: &mut egui::Ui, s: &mut LabSettings) {
 
 fn spawns(ui: &mut egui::Ui, s: &mut LabSettings) {
     grid(ui, SPAWNS, |ui| {
-        ui.label(DISTANCE_MIN);
+        ui.label(tr(DISTANCE_MIN));
         ui.add(f_slider(&mut s.distance_m.min, DISTANCE_M, " m"));
         ui.end_row();
-        ui.label(DISTANCE_MAX);
+        ui.label(tr(DISTANCE_MAX));
         ui.add(f_slider(&mut s.distance_m.max, DISTANCE_M, " m"));
         ui.end_row();
         // Keep the range ordered while dragging either end.
         if s.distance_m.min > s.distance_m.max {
             s.distance_m.max = s.distance_m.min;
         }
-        ui.label(SPREAD);
+        ui.label(tr(SPREAD));
         ui.add(f_slider(&mut s.spread_m, SPREAD_M, " m"));
         ui.end_row();
-        ui.label(DELAY).on_hover_text(DELAY_HINT);
+        ui.label(tr(DELAY)).on_hover_text(tr(DELAY_HINT));
         ui.add(f_slider(&mut s.appear_delay_secs, APPEAR_DELAY_SECS, " s"));
         ui.end_row();
-        ui.label(LIFETIME);
+        ui.label(tr(LIFETIME));
         ui.horizontal(|ui| {
             ui.add_enabled(
                 !s.until_killed,
                 f_slider(&mut s.lifetime_secs, LIFETIME_SECS, " s"),
             );
-            ui.checkbox(&mut s.until_killed, UNTIL_KILLED);
+            ui.checkbox(&mut s.until_killed, tr(UNTIL_KILLED));
         });
         ui.end_row();
     });
@@ -164,15 +165,15 @@ fn spawns(ui: &mut egui::Ui, s: &mut LabSettings) {
 fn player(ui: &mut egui::Ui, s: &mut LabSettings) {
     grid(ui, PLAYER, |ui| {
         ui.label("");
-        ui.checkbox(&mut s.player_movement, MOVEMENT);
+        ui.checkbox(&mut s.player_movement, tr(MOVEMENT));
         ui.end_row();
-        ui.label(AREA_WIDTH);
+        ui.label(tr(AREA_WIDTH));
         ui.add_enabled(
             s.player_movement,
             f_slider(&mut s.area_half_width_m, AREA_HALF_WIDTH_M, " m"),
         );
         ui.end_row();
-        ui.label(AREA_DEPTH);
+        ui.label(tr(AREA_DEPTH));
         ui.add_enabled(
             s.player_movement,
             f_slider(&mut s.area_depth_m, AREA_DEPTH_M, " m"),
@@ -183,7 +184,7 @@ fn player(ui: &mut egui::Ui, s: &mut LabSettings) {
 
 fn weapon(ui: &mut egui::Ui, s: &mut LabSettings) {
     grid(ui, WEAPON, |ui| {
-        ui.label(WEAPON);
+        ui.label(tr(WEAPON));
         egui::ComboBox::from_id_salt("lab-weapon")
             .selected_text(s.weapon.stats().display_name)
             .show_ui(ui, |ui| {
@@ -193,10 +194,10 @@ fn weapon(ui: &mut egui::Ui, s: &mut LabSettings) {
             });
         ui.end_row();
         ui.label("");
-        ui.checkbox(&mut s.simulate_spread, SIMULATE_SPREAD)
-            .on_hover_text(SPREAD_HINT);
+        ui.checkbox(&mut s.simulate_spread, tr(SIMULATE_SPREAD))
+            .on_hover_text(tr(SPREAD_HINT));
         ui.end_row();
-        ui.label(LENGTH);
+        ui.label(tr(LENGTH));
         ui.add(f_slider(&mut s.duration_secs, DURATION_SECS, " s"));
         ui.end_row();
     });

@@ -1,5 +1,6 @@
 //! Profile code: sensitivity, DPI, ADS multiplier and crosshair in one shareable line.
 
+use crate::i18n::tr;
 use crate::persistence::settings::Settings;
 use crate::ui::atoms::{ERROR, GOOD};
 use aim_core::profile::Profile;
@@ -13,8 +14,10 @@ pub struct ProfileImport {
 }
 
 pub fn profile_code(ui: &mut egui::Ui, settings: &mut Settings, import: &mut ProfileImport) {
-    ui.heading("Profile code");
-    ui.label("Move your setup to another PC or share it: sensitivity, DPI, ADS multiplier and crosshair.");
+    ui.heading(tr("Profile code"));
+    ui.label(tr(
+        "Move your setup to another PC or share it: sensitivity, DPI, ADS multiplier and crosshair.",
+    ));
     let mut code = Profile {
         sensitivity: settings.sensitivity,
         ads_multiplier: settings.ads_multiplier,
@@ -23,17 +26,17 @@ pub fn profile_code(ui: &mut egui::Ui, settings: &mut Settings, import: &mut Pro
     .encode();
     ui.horizontal(|ui| {
         ui.add(egui::TextEdit::singleline(&mut code).desired_width(420.0));
-        if ui.button("Copy").clicked() {
+        if ui.button(tr("Copy")).clicked() {
             ui.ctx().copy_text(code.clone());
         }
     });
     ui.horizontal(|ui| {
         ui.add(
             egui::TextEdit::singleline(&mut import.text)
-                .hint_text("Paste a CAT1|… code")
+                .hint_text(tr("Paste a CAT1|… code"))
                 .desired_width(420.0),
         );
-        if ui.button("Import").clicked() {
+        if ui.button(tr("Import")).clicked() {
             import.outcome = Some(match Profile::decode(&import.text) {
                 Ok(p) => {
                     settings.sensitivity = p.sensitivity;
@@ -47,7 +50,7 @@ pub fn profile_code(ui: &mut egui::Ui, settings: &mut Settings, import: &mut Pro
     });
     match &import.outcome {
         Some(Ok(())) => {
-            ui.colored_label(GOOD, "Profile applied.");
+            ui.colored_label(GOOD, tr("Profile applied."));
         }
         Some(Err(e)) => {
             ui.colored_label(ERROR, e);

@@ -4,6 +4,7 @@ use crate::audio::SoundPreview;
 use crate::game::AppState;
 use crate::game::FinderState;
 use crate::game::{ActiveRoutine, start_run};
+use crate::i18n::{tr, tr_fmt};
 use crate::overlay::{Overlay, background};
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::coach::context::{ContextData, load_context};
@@ -225,13 +226,13 @@ impl<T> HistoryCache<T> {
 fn settings_page(root: &mut egui::Ui, state: &mut MenuState, cfg: &mut SettingsAccess) {
     egui::Panel::top("settings_tabs").show(root, |ui| {
         ui.horizontal(|ui| {
-            ui.label("Search");
+            ui.label(tr("Search"));
             ui.add(
                 egui::TextEdit::singleline(&mut state.settings_query)
-                    .hint_text("Search settings")
+                    .hint_text(tr("Search settings"))
                     .desired_width(180.0),
             );
-            if !state.settings_query.is_empty() && ui.small_button("Clear").clicked() {
+            if !state.settings_query.is_empty() && ui.small_button(tr("Clear")).clicked() {
                 state.settings_query.clear();
             }
             ui.separator();
@@ -240,27 +241,29 @@ fn settings_page(root: &mut egui::Ui, state: &mut MenuState, cfg: &mut SettingsA
         let searching = !state.settings_query.trim().is_empty();
         ui.horizontal(|ui| {
             if searching {
-                ui.small("Showing matches from every section.");
+                ui.small(tr("Showing matches from every section."));
             } else if state.confirm_reset == Some(state.settings_tab) {
-                ui.label("Reset this section to its defaults?");
-                if ui.button("Reset").clicked() {
+                ui.label(tr("Reset this section to its defaults?"));
+                if ui.button(tr("Reset")).clicked() {
                     settings_panels::reset_section(&mut cfg.settings, state.settings_tab);
                     state.confirm_reset = None;
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(tr("Cancel")).clicked() {
                     state.confirm_reset = None;
                 }
-            } else if ui.button("Reset section to defaults").clicked() {
+            } else if ui.button(tr("Reset section to defaults")).clicked() {
                 state.confirm_reset = Some(state.settings_tab);
             }
         });
     });
     // Pinned below the rows, which scroll.
     egui::Panel::bottom("settings_footer").show(root, |ui| {
-        ui.small(format!(
-            "Settings file: {}  ·  VALORANT FOV: {:.2}° vertical (103° horizontal at 16:9, Hor+)",
-            cfg.paths.settings_file.display(),
-            fov::valorant_vertical_fov_deg()
+        ui.small(tr_fmt(
+            "Settings file: {}  ·  VALORANT FOV: {}° vertical (103° horizontal at 16:9, Hor+)",
+            &[
+                &cfg.paths.settings_file.display(),
+                &format!("{:.2}", fov::valorant_vertical_fov_deg()),
+            ],
         ));
     });
     egui::CentralPanel::default().show(root, |ui| {
@@ -426,11 +429,11 @@ fn menu(
             ui.separator();
             tab_bar(ui, &mut state.tab, &crate::i18n::labels(&TABS));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Quit").clicked() {
+                if ui.button(tr("Quit")).clicked() {
                     action = Some(UiAction::Quit);
                 }
                 if saved {
-                    ui.colored_label(GOOD, "Saved ✔");
+                    ui.colored_label(GOOD, tr("Saved ✔"));
                     // Repaint so the message disappears without waiting for input.
                     ui.ctx()
                         .request_repaint_after(std::time::Duration::from_millis(250));
@@ -449,7 +452,7 @@ fn menu(
 
     if !lib.errors.is_empty() {
         egui::Panel::bottom("errors").show(&mut root, |ui| {
-            ui.colored_label(ERROR, "Some files failed to load:");
+            ui.colored_label(ERROR, tr("Some files failed to load:"));
             for e in &lib.errors {
                 ui.monospace(e);
             }
@@ -475,7 +478,7 @@ fn menu(
                         today_action = today_panel::today_panel(ui, &model).or(today_action.take())
                     }
                     None => {
-                        ui.label("No weekly training method is available.");
+                        ui.label(tr("No weekly training method is available."));
                     }
                 }
             });
@@ -566,8 +569,8 @@ fn menu(
                         &mut cfg.settings,
                     );
                     ui.separator();
-                    ui.heading("Replays");
-                    ui.small("Your crosshair path around each target: overshoot, corrections and misses at a glance.");
+                    ui.heading(tr("Replays"));
+                    ui.small(tr("Your crosshair path around each target: overshoot, corrections and misses at a glance."));
                     replay_viewer::replay_viewer(ui, &mut state.replays, &entries, |e| {
                         replays::load(&e.path).ok().map(|r| aim_core::analytics::path::replay_path(&r))
                     });
@@ -590,16 +593,16 @@ fn menu(
                     // Pinned below the list, which scrolls and would otherwise push it off-screen.
                     egui::Panel::bottom("custom_scenarios").show(ui, |ui| {
                         if ui
-                            .selectable_label(state.lab_open, LAB_BUTTON)
-                            .on_hover_text(LAB_HINT)
+                            .selectable_label(state.lab_open, tr(LAB_BUTTON))
+                            .on_hover_text(tr(LAB_HINT))
                             .clicked()
                         {
                             state.lab_open = true;
                             state.selected = None;
                         }
-                        ui.small(format!(
+                        ui.small(tr_fmt(
                             "Custom scenarios: {}",
-                            cfg.paths.scenarios_dir.display()
+                            &[&cfg.paths.scenarios_dir.display()],
                         ));
                     });
                     let picked = state.selected.clone();
@@ -639,9 +642,9 @@ fn menu(
         Tab::Routines => {
             // Pinned below the list, which scrolls and would otherwise push it off-screen.
             egui::Panel::bottom("custom_routines").show(&mut root, |ui| {
-                ui.small(format!(
+                ui.small(tr_fmt(
                     "Custom routines: {}",
-                    cfg.paths.routines_dir.display()
+                    &[&cfg.paths.routines_dir.display()],
                 ));
             });
             egui::CentralPanel::default().show(&mut root, |ui| {
@@ -694,7 +697,7 @@ fn menu(
                 egui::ScrollArea::vertical()
                     .id_salt("tools")
                     .show(ui, |ui| {
-                        ui.heading("Sensitivity converter");
+                        ui.heading(tr("Sensitivity converter"));
                         let converter = state.converter.get_or_insert_with(|| {
                             ConverterState::from_sensitivity(cfg.settings.sensitivity)
                         });
@@ -1461,6 +1464,33 @@ mod tests {
         );
         assert_eq!(aim_core::i18n::tr_in(Lang::Es, "Language"), "Idioma");
         assert_eq!(aim_core::i18n::tr_in(Lang::En, "Language"), "Language");
+    }
+
+    #[test]
+    fn menu_text_is_spanish_in_spanish_and_unchanged_in_english() {
+        use crate::i18n::Lang;
+        use aim_core::i18n::{tr_fmt_in, tr_in, tr_named_in};
+        assert_eq!(tr_in(Lang::Es, LAB_BUTTON), "Laboratorio de movimiento");
+        assert_eq!(tr_in(Lang::Es, "Daily challenge"), "Desafío diario");
+        assert_eq!(tr_in(Lang::Es, "▶  Play"), "▶  Jugar");
+        assert_eq!(tr_in(Lang::Es, "Back"), "Atrás");
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "{} runs · ≈{} min", &[&12, &"9"]),
+            "12 partidas · ≈9 min"
+        );
+        assert_eq!(
+            tr_named_in(
+                Lang::Es,
+                "⏵ Continue {name} (run {next}/{total})",
+                &[("name", &"Warm-up"), ("next", &3), ("total", &10)],
+            ),
+            "⏵ Continuar Warm-up (partida 3/10)"
+        );
+        assert_eq!(
+            tr_fmt_in(Lang::En, "{} runs · ≈{} min", &[&12, &"9"]),
+            "12 runs · ≈9 min"
+        );
+        assert_eq!(tr_in(Lang::En, "Daily challenge"), "Daily challenge");
     }
 
     #[test]
