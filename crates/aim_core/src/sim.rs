@@ -78,6 +78,18 @@ impl AimerProfile {
     pub fn recognition_secs(&self) -> f32 {
         0.5 * self.reaction_secs
     }
+
+    /// Fitts' law movement time, seconds, for a flick of `distance_deg` to a target of
+    /// angular radius `radius_deg`: `a + b·log2(D/W + 1)` with `W` the target's width.
+    pub fn fitts_secs(&self, distance_deg: f32, radius_deg: f32) -> f32 {
+        self.fitts_a + self.fitts_b * (distance_deg / (2.0 * radius_deg) + 1.0).log2()
+    }
+}
+
+/// Minimum-jerk position profile (Flash & Hogan 1985): the share of a movement done at
+/// normalized time `tau` in [0, 1], `s = τ³(10 − 15τ + 6τ²)`.
+pub fn minimum_jerk(tau: f32) -> f32 {
+    tau * tau * tau * (10.0 - 15.0 * tau + 6.0 * tau * tau)
 }
 
 struct Plan {
@@ -269,8 +281,7 @@ impl SimAimer {
             // Plan a (corrective) sub-movement. A correction reacts faster than a fresh target.
             let corrective = self.plan.is_some();
             let distance = angle_between_deg(self.view.direction(), goal.direction());
-            let fitts = self.profile.fitts_a
-                + self.profile.fitts_b * (distance / (2.0 * radius) + 1.0).log2();
+            let fitts = self.profile.fitts_secs(distance, radius);
             let sd = self.profile.endpoint_noise * radius;
             let error = (self.gaussian() * sd, self.gaussian() * sd);
             let reaction = if corrective {
@@ -293,7 +304,7 @@ impl SimAimer {
 
         let plan = self.plan.as_mut().expect("plan set above");
         let tau = ((now - plan.start_at) / plan.duration).clamp(0.0, 1.0);
-        let s = tau * tau * tau * (10.0 - 15.0 * tau + 6.0 * tau * tau);
+        let s = minimum_jerk(tau);
         let dy = wrap_degrees(goal.yaw_deg + plan.error.0 - plan.from.yaw_deg);
         let dp = goal.pitch_deg + plan.error.1 - plan.from.pitch_deg;
         self.view = plan.from.rotated(dy * s, dp * s);

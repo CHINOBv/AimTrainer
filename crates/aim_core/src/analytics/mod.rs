@@ -15,6 +15,7 @@ pub mod decision;
 pub mod direction;
 pub mod flick;
 pub mod miss_compass;
+pub mod mistakes;
 pub mod moving;
 pub mod pace;
 pub mod path;

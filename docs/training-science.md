@@ -392,6 +392,35 @@ Why these values (estimates, not calibrated): fixing half the misses, rather tha
 
 The definitions are our own design (inference); no aim-training source defines them this way. Regenerating targets can heal and be damaged again, which is why the ratio is capped at 100%.
 
+### Mistake replays
+
+`aim_core::analytics::mistakes` turns a click run into a list of mistakes, one per flick at most, in the order they happened. Each one is replayed in four steps: the whole flick, the wrong part in slow motion with a marker on the exact frame, a tip, and a corrected example over the player's path.
+
+**What counts as a mistake.** No new thresholds: every kind reuses an existing rule, applied to a single flick instead of the run's median or rate. A flick gets the first kind that applies, in this order, because an overflick's correction also slows its click and only the cause should be named.
+
+| Kind | Fires when (per flick) | Wrong frame (`error_at`) |
+|---|---|---|
+| Overflick | Primary endpoint error > +1 radius (the overshoot metric) | First frame of the primary movement whose error along the movement exceeds +1 radius: where the crosshair passes the far edge |
+| Underflick | Primary endpoint error < −1 radius | Last frame of the primary movement |
+| Extra corrections | Corrections above the "Corrections per flick" weakness threshold (1.0) | Last frame of the primary movement |
+| Slow reaction | Fresh flick with a reaction above the "Median reaction time" weakness threshold (300 ms) | Movement onset |
+| Late click | Click delay above the "Median click delay" weakness threshold (200 ms) | First frame on the target |
+
+The thresholds are read from `content/rules/recommendations.toml`, so they move with the rules. The slow-motion part starts 0.15 s before the wrong frame and runs to the shot; for a slow reaction it runs from the flick's start to 0.15 s after the onset. The 0.15 s is a presentation choice, not a measured value.
+
+**The corrected example** is generated, not recorded. It starts from the same view, goes to the same target, and is sampled at the run's frame rate. When the target moves, the example follows the target's recorded path, extrapolated for up to 0.5 s past the shot. It has these parts:
+
+- **Reaction:** the player's own reaction, unless the mistake was a slow reaction. In that case it uses the simulated veteran's 0.23 s.
+- **Primary movement:** minimum-jerk (Flash & Hogan 1985, *J. Neurosci.* 5(7), 1688–1703), with the simulated veteran's Fitts' law duration. This is the same model and code as the simulated aimer.
+- **Landing point:** inside the target, short of the center by 0.3–0.8 radii along the movement and up to 0.35 radii to the side. Real primary movements tend to fall slightly short (Meyer et al. 1988, above).
+- **Correction:** when the landing point is more than 0.5 radii from the center, one small correction (60–80 ms) removes 55–80% of the error.
+- **Click:** 20–40 ms later.
+- **No new late click:** the correction is skipped when it would push the example's click delay above 90% of the 200 ms late-click threshold.
+
+So the example never overshoots, never needs more than one correction, and is never perfectly centered. All its ranges are **estimates**, chosen so that the example would not itself be flagged as a mistake (a test checks this). No source measures the "ideal" correction for a given player. The random draws come from the run's seed and the flick's index, so the same run always gives the same examples.
+
+**Limits.** Only click runs are covered. A tracking run has no single wrong frame to replay, and detection drills have no aimed flicks. The example shows a good human flick, not the best one for this player's sensitivity or hand.
+
 ## Compound missions
 
 `aim_core::training::missions` builds the Today page's daily missions. A mission names one scenario and two conditions that must all hold in the **same run**, for example "accuracy ≥ 75% AND kills ≥ 62".

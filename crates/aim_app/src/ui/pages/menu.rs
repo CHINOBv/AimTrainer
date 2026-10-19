@@ -24,6 +24,7 @@ use crate::ui::navigation::Navigator;
 use crate::ui::organisms::coach_panel::{self, CardOutcome, CoachAction, CoachState};
 use crate::ui::organisms::dpi_check::DpiMeter;
 use crate::ui::organisms::journal_panel;
+use crate::ui::organisms::mistake_player::{self, SavedMistakes};
 use crate::ui::organisms::profile_code::{self, ProfileImport};
 use crate::ui::organisms::progress_panel::{self, ProgressModel};
 use crate::ui::organisms::proof_panel;
@@ -163,6 +164,8 @@ struct MenuState {
     meter: DpiMeter,
     profile_import: ProfileImport,
     replays: ReplayViewerState,
+    /// Step-by-step mistake replay of the selected saved replay.
+    mistakes: SavedMistakes,
     converter: Option<ConverterState>,
     sens_suggestion: SensSuggestionState,
     settings_tab: SettingsTab,
@@ -558,6 +561,14 @@ fn menu(
                     replay_viewer::replay_viewer(ui, &mut state.replays, &entries, |e| {
                         replays::load(&e.path).ok().map(|r| aim_core::analytics::path::replay_path(&r))
                     });
+                    ui.separator();
+                    let selected = state.replays.selected().map(std::path::Path::to_path_buf);
+                    mistake_player::saved_replay_mistakes(
+                        ui,
+                        &mut state.mistakes,
+                        selected.as_deref(),
+                        |p| replays::load(p).ok(),
+                    );
                 });
             });
         }

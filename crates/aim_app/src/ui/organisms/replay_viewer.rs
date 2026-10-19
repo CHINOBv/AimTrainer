@@ -107,6 +107,11 @@ impl ReplayViewerState {
         self.engagement = 0;
         self.compare.clear();
     }
+
+    /// File of the selected replay, if any.
+    pub fn selected(&self) -> Option<&std::path::Path> {
+        self.selected.as_deref()
+    }
 }
 
 /// Half-width of the square plot, degrees: every path point and shot fits with a margin,
@@ -134,7 +139,7 @@ pub fn grid_step_deg(extent_deg: f32) -> f32 {
 }
 
 /// Screen position of an offset (degrees, +y up) in a plot centered at `center`.
-fn to_screen(offset: (f32, f32), center: Pos2, px_per_deg: f32) -> Pos2 {
+pub(crate) fn to_screen(offset: (f32, f32), center: Pos2, px_per_deg: f32) -> Pos2 {
     Pos2::new(
         center.x + offset.0 * px_per_deg,
         center.y - offset.1 * px_per_deg,
@@ -184,7 +189,7 @@ fn summary(e: &Engagement) -> String {
 
 /// A framed square plot sized to the available width. Returns the hover response, a
 /// painter clipped to the frame, and the inner drawing area.
-fn plot_frame(ui: &mut egui::Ui) -> (egui::Response, egui::Painter, Rect) {
+pub(crate) fn plot_frame(ui: &mut egui::Ui) -> (egui::Response, egui::Painter, Rect) {
     let side = ui.available_width().clamp(PLOT_MIN_PX, PLOT_MAX_PX);
     let (response, painter) = ui.allocate_painter(vec2(side, side), Sense::hover());
     let frame = response.rect;
@@ -200,7 +205,7 @@ fn plot_frame(ui: &mut egui::Ui) -> (egui::Response, egui::Painter, Rect) {
 
 /// Grid lines and axis labels over `area`, spanning `±extent` around its center, each
 /// label suffixed with `unit`. Returns pixels per unit.
-fn paint_grid(painter: &egui::Painter, area: Rect, extent: f32, unit: &str) -> f32 {
+pub(crate) fn paint_grid(painter: &egui::Painter, area: Rect, extent: f32, unit: &str) -> f32 {
     let center = area.center();
     let px_per_unit = area.width() / 2.0 / extent;
     let weak = Color32::from_gray(150);
