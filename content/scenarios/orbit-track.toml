@@ -1,7 +1,7 @@
 # Idea credit: the circle-around-the-player control-tracking drills of the KovaaK's and Voltaic
 # tracking playlists. Original scenario: no file, name or value was copied.
 id = "orbit-track"
-name = "Orbit Follow"
+name = "Orbit Track"
 category = "tracking"
 description = """
 Control tracking. A sphere circles around you, sometimes turning back; every five seconds a new
