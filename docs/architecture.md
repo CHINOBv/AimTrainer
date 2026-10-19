@@ -69,6 +69,8 @@ New code follows this layout; existing code migrates as described in [Conformanc
 │   │   │   └── sim/            simulated aimer (tests, calibration, bot aim later)
 │   │   ├── examples/           developer tools (calibrate)
 │   │   └── tests/              cross-module tests through the public API
+│   ├── aim_ai/                 AI coach adapters (see docs/coach.md): config, API keys (OS keyring,
+│   │                           env fallback), chat providers, SQLite coach memory
 │   ├── aim_app/                Bevy front-end (binary `aimtrainer`)
 │   │   └── src/
 │   │       ├── main.rs         CLI parsing + App assembly only
