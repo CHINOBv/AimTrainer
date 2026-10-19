@@ -181,7 +181,9 @@ pub fn flatten(messages: &[Message]) -> String {
             Message::System { content } => ("Instructions", content.as_str()),
             Message::User { content } => ("Player", content.as_str()),
             Message::Assistant { content, .. } => ("Coach", content.as_str()),
-            Message::Tool { content, .. } => ("Tool result", content.as_str()),
+            // A CLI never sees the stats a tool returned, even if an earlier API
+            // provider called one in this conversation (docs/coach.md, privacy).
+            Message::Tool { .. } => continue,
         };
         if text.is_empty() {
             continue;
@@ -271,6 +273,23 @@ mod tests {
         );
         assert!(prompt.ends_with("No tools are available."));
         assert!(!prompt.contains("Coach:"), "empty turns are skipped");
+    }
+
+    #[test]
+    fn tool_results_from_an_earlier_provider_never_reach_a_cli() {
+        let prompt = flatten(&[
+            Message::User {
+                content: "Analyse my stats".into(),
+            },
+            Message::Tool {
+                call_id: "1".into(),
+                name: "list_stats".into(),
+                content: "{\"recent_runs\":[\"secret-stats\"]}".into(),
+                is_error: false,
+            },
+        ]);
+        assert!(!prompt.contains("secret-stats"), "{prompt}");
+        assert!(!prompt.contains("Tool result"), "{prompt}");
     }
 
     #[test]

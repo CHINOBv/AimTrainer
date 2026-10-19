@@ -561,7 +561,10 @@ impl Settings {
     /// Settings from an existing file's text; invalid text falls back to the defaults.
     fn parse(src: &str) -> Self {
         toml::from_str(src).unwrap_or_else(|e| {
-            bevy::log::warn!("invalid settings file: {e}; using defaults");
+            bevy::log::warn!(
+                "invalid settings file ({}); using defaults",
+                parse_error_message(src, &e)
+            );
             // The file exists, so this is not a new player.
             Self {
                 first_run_done: true,
@@ -579,6 +582,18 @@ impl Settings {
             bevy::log::error!("could not save settings: {e}");
         }
         result.is_ok()
+    }
+}
+
+/// Where a settings parse error is, without its text: toml quotes the offending line,
+/// which could hold a hand-typed API key (docs/coach.md: keys are never logged).
+fn parse_error_message(src: &str, e: &toml::de::Error) -> String {
+    match e.span() {
+        Some(span) => {
+            let line = src[..span.start.min(src.len())].matches('\n').count() + 1;
+            format!("error at line {line}")
+        }
+        None => "error at an unknown position".to_owned(),
     }
 }
 
@@ -735,6 +750,14 @@ mod tests {
         let text = toml::to_string_pretty(&on).unwrap();
         assert_eq!(toml::from_str::<Settings>(&text).unwrap(), on);
         assert_eq!(on.sensitivity, Settings::default().sensitivity);
+    }
+
+    #[test]
+    fn a_parse_error_message_never_quotes_the_settings_text() {
+        let src = "[coach]\napi_key = sk-secret-123\n";
+        let message = parse_error_message(src, &toml::from_str::<Settings>(src).unwrap_err());
+        assert!(!message.contains("sk-secret"), "{message}");
+        assert!(message.contains("line 2"), "{message}");
     }
 
     #[test]
