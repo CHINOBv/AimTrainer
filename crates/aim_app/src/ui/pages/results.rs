@@ -175,14 +175,14 @@ fn results(
             .collect(),
     };
     match results_card(ctx, &last, &rc) {
-        Some(UiAction::WatchMistakes) => watch.open(last.recording.as_ref()),
+        Some(UiAction::WatchMistakes) => watch.open(last.recording.as_ref(), &retry_ctx.paths),
         Some(action) => {
             watch.open = false;
             nav.apply(action);
         }
         None => {}
     }
-    watch.show(ctx, &retry_ctx.paths);
+    watch.show(ctx);
     Ok(())
 }
 
@@ -198,21 +198,28 @@ struct WatchWindow {
     open: bool,
     player: Option<MistakePlayerState>,
     viewer: ReplayViewerState,
+    /// Saved replays for the fallback viewer, listed once when the window opens.
+    entries: Vec<replays::ReplayEntry>,
 }
 
 impl WatchWindow {
-    fn open(&mut self, recording: Option<&Recording>) {
+    fn open(&mut self, recording: Option<&Recording>, paths: &Paths) {
         let player = recording
             .map(MistakePlayerState::from_recording)
             .filter(|p| !p.is_empty());
         *self = Self {
             open: true,
+            entries: if player.is_some() {
+                Vec::new()
+            } else {
+                replays::list(paths)
+            },
             player,
             viewer: ReplayViewerState::default(),
         };
     }
 
-    fn show(&mut self, ctx: &egui::Context, paths: &Paths) {
+    fn show(&mut self, ctx: &egui::Context) {
         if !self.open {
             return;
         }
@@ -220,6 +227,7 @@ impl WatchWindow {
             open,
             player,
             viewer,
+            entries,
         } = self;
         let title = if player.is_some() {
             MISTAKES_TITLE
@@ -236,8 +244,7 @@ impl WatchWindow {
                 }
                 None => {
                     ui.label(NO_MISTAKES);
-                    let entries = replays::list(paths);
-                    replay_viewer(ui, viewer, &entries, |e| {
+                    replay_viewer(ui, viewer, entries, |e| {
                         replays::load(&e.path).ok().map(|r| replay_path(&r))
                     });
                 }
