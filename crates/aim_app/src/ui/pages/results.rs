@@ -17,6 +17,7 @@ use aim_core::activity::ActivityKind;
 use aim_core::analytics::analyze;
 use aim_core::analytics::path::replay_path;
 use aim_core::scenario::Recording;
+use aim_core::scenario::lab::{LabSettings, is_lab_id};
 use aim_core::sensitivity::Sensitivity;
 use aim_core::training::routine::PlannedRun;
 use bevy::ecs::system::SystemParam;
@@ -96,6 +97,12 @@ fn arena_retry_for(id: &str) -> Option<crate::ui::UiAction> {
     })
 }
 
+/// The action that replays the Movement Lab drill behind run key `id`: the saved lab
+/// settings when they still describe that drill, otherwise `None`.
+fn lab_retry_for(id: &str, lab: &LabSettings) -> Option<UiAction> {
+    (is_lab_id(id) && lab.to_def().id == id).then(|| UiAction::StartLab(lab.clone()))
+}
+
 /// Inputs, paths and what deciding the Retry action needs beyond the navigator.
 #[derive(SystemParam)]
 struct RetryContext<'w> {
@@ -160,6 +167,8 @@ fn results(
         crate::ui::UiAction::StartFinderTest { slot, sens }
     } else if let Some(arena) = arena_retry(&last, id) {
         arena
+    } else if let Some(lab) = lab_retry_for(id, &retry_ctx.settings.movement_lab) {
+        lab
     } else {
         crate::ui::UiAction::Retry(id.clone())
     };
@@ -257,7 +266,7 @@ impl WatchWindow {
 
 #[cfg(test)]
 mod tests {
-    use super::{arena_retry_for, planned_name};
+    use super::{arena_retry_for, lab_retry_for, planned_name};
     use crate::ui::UiAction;
 
     #[test]
@@ -271,6 +280,27 @@ mod tests {
             Some(UiAction::StartArena("yard-deathmatch".into()))
         );
         assert_eq!(arena_retry_for("micro-adjust"), None);
+    }
+
+    #[test]
+    fn lab_results_retry_the_same_lab_drill() {
+        use aim_core::scenario::lab::LabSettings;
+        let lab = LabSettings {
+            max_alive: 4,
+            ..LabSettings::default()
+        };
+        let id = lab.to_def().id;
+        assert_eq!(
+            lab_retry_for(&id, &lab),
+            Some(UiAction::StartLab(lab.clone()))
+        );
+        let other = LabSettings::default();
+        assert_eq!(
+            lab_retry_for(&id, &other),
+            None,
+            "settings changed since the run: no other drill is started"
+        );
+        assert_eq!(lab_retry_for("micro-adjust", &lab), None);
     }
 
     #[test]

@@ -39,7 +39,8 @@ use crate::ui::organisms::today_panel::{
     TodayAction, TodayModel,
 };
 use crate::ui::organisms::{
-    arena_list, benchmark_panel, feedback_settings, first_run, routine_list, scenario_browser,
+    arena_list, benchmark_panel, feedback_settings, first_run, movement_lab, routine_list,
+    scenario_browser,
 };
 use aim_core::fov;
 use aim_core::scenario::ScenarioDef;
@@ -156,10 +157,16 @@ fn continue_position(
         .cloned()
 }
 
+/// Scenarios tab entry to the Movement Lab.
+const LAB_BUTTON: &str = "Movement Lab";
+const LAB_HINT: &str = "Build your own movement drill: enemy motion, count, spawn distance and frequency, your movement area and weapon.";
+
 #[derive(Resource, Default)]
 struct MenuState {
     tab: Tab,
     selected: Option<String>,
+    /// The Movement Lab is shown instead of the selected scenario (Scenarios tab).
+    lab_open: bool,
     dpi_target: u32,
     meter: DpiMeter,
     profile_import: ProfileImport,
@@ -579,11 +586,20 @@ fn menu(
                 .show(&mut root, |ui| {
                     // Pinned below the list, which scrolls and would otherwise push it off-screen.
                     egui::Panel::bottom("custom_scenarios").show(ui, |ui| {
+                        if ui
+                            .selectable_label(state.lab_open, LAB_BUTTON)
+                            .on_hover_text(LAB_HINT)
+                            .clicked()
+                        {
+                            state.lab_open = true;
+                            state.selected = None;
+                        }
                         ui.small(format!(
                             "Custom scenarios: {}",
                             cfg.paths.scenarios_dir.display()
                         ));
                     });
+                    let picked = state.selected.clone();
                     scenario_browser::scenario_list(
                         ui,
                         lib,
@@ -592,8 +608,18 @@ fn menu(
                         &mut state.scenario_filter,
                         &mut cfg.settings.favorites,
                     );
+                    // Picking a scenario in the list leaves the lab.
+                    if state.selected.is_some() && state.selected != picked {
+                        state.lab_open = false;
+                    }
                 });
             egui::CentralPanel::default().show(&mut root, |ui| {
+                if state.lab_open {
+                    let lab = &mut cfg.settings.movement_lab;
+                    let best = history.best(&lab.to_def().id);
+                    action = action.take().or(movement_lab::movement_lab(ui, lab, best));
+                    return;
+                }
                 match state.selected.as_deref().and_then(|id| lib.scenario(id)) {
                     Some(def) => {
                         action = action.take().or(scenario_browser::scenario_details(

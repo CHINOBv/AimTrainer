@@ -23,6 +23,7 @@ pub mod journal_panel;
 pub mod kill_feed;
 pub mod miss_compass;
 pub mod mistake_player;
+pub mod movement_lab;
 pub mod moving_panel;
 pub mod pace_panel;
 pub mod perception_panel;

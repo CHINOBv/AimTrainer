@@ -575,6 +575,29 @@ A tuned run is stored under its own key (`%s80d120v150`: size, distance and spee
 
 Target speed is stored in the definition as `targets.speed_scale` (default 1, allowed 0.25–4), which every motion reads. Scenario files normally leave it out.
 
+### Movement Lab
+
+The **Movement Lab** (Scenarios tab, below the list) builds a movement drill from a few settings instead of a file. `aim_core::scenario::lab::LabSettings::to_def` turns them into an ordinary `ScenarioDef` made of the blocks on this page, so it validates and plays like any scenario.
+
+| Setting | Allowed | Becomes |
+|---|---|---|
+| Enemy motion | static, strafe, dodge | `targets.motion` (`strafe` or `dodge` with the lab weapon's run speed, `max_offset = 3`) |
+| Speed | 50–150% | `targets.speed_scale` (strafe and dodge only) |
+| Direction changes | every 0.2–2 s | `change_secs`, a random 60–140% of the value |
+| Dodge style | light, medium, heavy | `juke_chance` / `stop_chance` / `crouch_chance`: 0.2/0.15/0.05, 0.5/0.25/0.1, 0.7/0.25/0.25 |
+| Enemies at once | 1–6 | `targets.max_alive` (6° apart when more than one) |
+| Shape | head only, full body | `humanoid` with `head_only` |
+| Spawn distance | 5–50 m | `floor` spawn `z = [-max, -min]` |
+| Lateral spread | ±1–20 m | `floor` spawn `x` |
+| Appear delay | 0–3 s | `appear_delay_secs = [value / 2, value]` |
+| Lifetime | 0.5–10 s, or until killed | `lifetime_secs` (and a 50-point `expire_penalty`), or none |
+| Player movement and area | on/off, ±2–20 m wide, 0–12 m deep | `player.movement`, `bounds_x`, `bounds_z` centered on the start (default ±16 m × 8 m) |
+| Weapon, spread, length | Classic, Vandal, Phantom, Guardian, Operator; 15–180 s | `weapon.kind`, `weapon.simulate_spread`, `duration_secs` |
+
+Out-of-range values (for example from a hand-edited `settings.toml`) are clamped. Every miss costs 10 points and, when you can move, every shot fired while moving costs 50.
+
+The generated id is `lab-` plus the content hash of the definition, so the same settings always share one history key and personal best, and lab results never mix with the built-in scenarios. The last settings are saved as `[movement_lab]` in `settings.toml`, and Retry on the results screen replays the same drill.
+
 ### Sizing targets realistically
 
 A VALORANT head is about 0.25 m (see `valorant-mechanics.md`). Its angular size depends on distance:

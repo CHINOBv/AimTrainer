@@ -86,7 +86,7 @@ The menu tabs (keys 1–9 switch tabs while no text field has focus):
 |---|---|
 | Today | Quick play (your last scenario) and Continue (a routine you started today), the day's method session, the daily challenge, daily missions |
 | Progress | Goal, readiness chips, fatigue, trend, per-skill bars with weekly sparklines (explanations on hover), bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
-| Scenarios | Search and filter (category, click or hold, moving or standing, waves); ★ pins a scenario to Favourites (saved as `favorites` in `settings.toml`); Recent lists your last 5 scenarios. Play, or play adaptively |
+| Scenarios | Search and filter (category, click or hold, moving or standing, waves); ★ pins a scenario to Favourites (saved as `favorites` in `settings.toml`); Recent lists your last 5 scenarios. Play, or play adaptively. **Movement Lab** (below the list) builds your own movement drill: enemy motion (static, strafe, dodge) and speed, enemies at once, head or body, spawn distance and spread, appear delay and lifetime, your movement area, weapon and length; it remembers your last settings and keeps each drill's results apart (see `docs/scenarios.md`) |
 | Routines | The routines (resume a split one), your personalized playlist |
 | Arenas | Deathmatch (also with mixed bot squads or an adaptive duel ladder), site hold, angle clearing, jiggle-peek and pre-aim drills; a Practice button plays any arena with bots that never shoot |
 | Benchmark | Your benchmark energy and ranks, at novice, intermediate or advanced tier |
