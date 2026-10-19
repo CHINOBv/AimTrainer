@@ -171,6 +171,19 @@ fn storage(e: rusqlite::Error) -> MemoryError {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_busy_database_is_waited_for_instead_of_failing_at_once() {
+        let m = SqliteMemory::open_in_memory().unwrap();
+        let ms: i64 = m
+            .conn
+            .pragma_query_value(None, "busy_timeout", |row| row.get(0))
+            .unwrap();
+        assert!(
+            ms >= 1000,
+            "the app and aimtrainer-mcp share coach.db: {ms} ms"
+        );
+    }
+
     fn note(text: &str, tags: &[&str], timestamp: u64) -> MemoryNote {
         MemoryNote {
             text: text.into(),
