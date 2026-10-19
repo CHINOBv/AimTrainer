@@ -63,18 +63,24 @@ New code follows this layout; existing code migrates as described in [Conformanc
 │   │   │   ├── scenario/       def (data), session (runtime), spawn, motion, weapon, scoring, hit
 │   │   │   ├── training/       routine, benchmark, method* (weekly plans), progress*, difficulty*, recommend*
 │   │   │   ├── analytics/*     telemetry, flick segmentation, skill profile
+│   │   │   ├── coach/          AI coach: player context, knowledge base, drills, tools, tool loop;
+│   │   │   │                   ports ChatModel and CoachMemory (providers and stores are adapters)
 │   │   │   ├── crosshair/*     crosshair model, import/export codes
 │   │   │   └── sim/            simulated aimer (tests, calibration, bot aim later)
 │   │   ├── examples/           developer tools (calibrate)
 │   │   └── tests/              cross-module tests through the public API
-│   └── aim_app/                Bevy front-end (binary `aimtrainer`)
-│       └── src/
-│           ├── main.rs         CLI parsing + App assembly only
-│           ├── game/           states, run lifecycle, camera, target visuals, input
-│           ├── ui/             egui: pages/ organisms/ molecules/ atoms/ (see coding standards)
-│           ├── overlay/        visibility, click-through, hotkey wiring
-│           ├── platform/       OS specifics: ipc (Unix socket), hotkeys
-│           └── persistence/    settings, history: port implementations
+│   ├── aim_ai/                 AI coach adapters (see docs/coach.md): config, API keys (OS keyring,
+│   │                           env fallback), chat providers, SQLite coach memory
+│   ├── aim_app/                Bevy front-end (binary `aimtrainer`)
+│   │   └── src/
+│   │       ├── main.rs         CLI parsing + App assembly only
+│   │       ├── game/           states, run lifecycle, camera, target visuals, input
+│   │       ├── ui/             egui: pages/ organisms/ molecules/ atoms/ (see coding standards)
+│   │       ├── overlay/        visibility, click-through, hotkey wiring
+│   │       ├── platform/       OS specifics: ipc (Unix socket), hotkeys
+│   │       └── persistence/    settings, history: port implementations
+│   └── aim_mcp/                MCP server (binary `aimtrainer-mcp`, stdio, rmcp): serves the core
+│                               coach tools and the built-in scenarios to coding agents (docs/coach.md)
 ├── docs/                       architecture, standards, research with sources, decisions
 └── odd/tasks/                  feature work logs
 ```
@@ -87,6 +93,7 @@ Keep a module inside `aim_core` until **one** of these is true:
 |---|---|
 | It needs a dependency the rest of the core must not have | Maps need a glTF loader and collision: `aim_world` |
 | It is a separate product surface with its own release cadence | Riot API client: `aim_integrations` |
+| It is a separate process with its own protocol dependencies | MCP server for coding agents (rmcp, tokio): `aim_mcp` |
 | Compile times of the core become painful (measure first) | Analytics with heavy math crates |
 
 Splitting early is YAGNI. A crate boundary costs API design, versioning and compile coordination.

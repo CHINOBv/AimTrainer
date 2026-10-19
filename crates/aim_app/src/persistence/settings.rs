@@ -19,7 +19,13 @@ pub struct Paths {
     pub routines_dir: PathBuf,
     pub benchmarks_dir: PathBuf,
     pub history_file: PathBuf,
+    /// The AI coach's memory (SQLite), next to the history. `aimtrainer-mcp` uses the
+    /// same file.
+    pub coach_memory_file: PathBuf,
 }
+
+/// File name of the coach memory in the data folder.
+pub const COACH_MEMORY_FILE: &str = "coach.db";
 
 impl Paths {
     pub fn resolve() -> Self {
@@ -36,6 +42,7 @@ impl Paths {
             routines_dir: config.join("routines"),
             benchmarks_dir: config.join("benchmarks"),
             history_file: data.join("history.csv"),
+            coach_memory_file: data.join(COACH_MEMORY_FILE),
         };
         for dir in [
             &paths.scenarios_dir,
@@ -94,6 +101,10 @@ pub struct Settings {
     pub feel: FeelSettings,
     /// Scenario ids starred in the scenario list, in the order they were starred.
     pub favorites: Vec<String>,
+    /// The AI coach's provider settings. Off by default; API keys are never kept here
+    /// (they live in the OS keyring or an environment variable).
+    #[serde(deserialize_with = "deserialize_coach")]
+    pub coach: aim_ai::CoachConfig,
     /// The first-run wizard was finished or skipped. False only for a new player (no
     /// settings file yet); a file without this key comes from an existing player.
     #[serde(default = "first_run_done_in_old_files")]
@@ -102,6 +113,21 @@ pub struct Settings {
 
 fn first_run_done_in_old_files() -> bool {
     true
+}
+
+/// An invalid `[coach]` table (for example one holding an `api_key`, which
+/// `CoachConfig` refuses) resets only the coach, switched off, instead of every setting.
+/// The next save then drops the offending line from the file.
+fn deserialize_coach<'de, D>(deserializer: D) -> Result<aim_ai::CoachConfig, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let table = toml::Table::deserialize(deserializer)?;
+    Ok(table.try_into().unwrap_or_else(|_| {
+        // The error is not logged: a type error quotes the value, which may be a key.
+        bevy::log::warn!("invalid [coach] settings; the coach is reset and off");
+        aim_ai::CoachConfig::default()
+    }))
 }
 
 /// VALORANT's "Enemy Highlight Color" options (General → Accessibility), applied to
@@ -444,6 +470,7 @@ impl Default for Settings {
             arena_coaching: false,
             feel: FeelSettings::default(),
             favorites: Vec::new(),
+            coach: aim_ai::CoachConfig::default(),
             first_run_done: false,
         }
     }
@@ -534,7 +561,10 @@ impl Settings {
     /// Settings from an existing file's text; invalid text falls back to the defaults.
     fn parse(src: &str) -> Self {
         toml::from_str(src).unwrap_or_else(|e| {
-            bevy::log::warn!("invalid settings file: {e}; using defaults");
+            bevy::log::warn!(
+                "invalid settings file ({}); using defaults",
+                parse_error_message(src, &e)
+            );
             // The file exists, so this is not a new player.
             Self {
                 first_run_done: true,
@@ -552,6 +582,18 @@ impl Settings {
             bevy::log::error!("could not save settings: {e}");
         }
         result.is_ok()
+    }
+}
+
+/// Where a settings parse error is, without its text: toml quotes the offending line,
+/// which could hold a hand-typed API key (docs/coach.md: keys are never logged).
+fn parse_error_message(src: &str, e: &toml::de::Error) -> String {
+    match e.span() {
+        Some(span) => {
+            let line = src[..span.start.min(src.len())].matches('\n').count() + 1;
+            format!("error at line {line}")
+        }
+        None => "error at an unknown position".to_owned(),
     }
 }
 
@@ -586,6 +628,7 @@ mod tests {
             routines_dir: dir.clone(),
             benchmarks_dir: dir.clone(),
             history_file: dir.join("history.csv"),
+            coach_memory_file: dir.join("coach.db"),
         };
         assert!(Settings::default().save(&paths(dir.join("settings.toml"))));
         assert!(
@@ -707,6 +750,14 @@ mod tests {
         let text = toml::to_string_pretty(&on).unwrap();
         assert_eq!(toml::from_str::<Settings>(&text).unwrap(), on);
         assert_eq!(on.sensitivity, Settings::default().sensitivity);
+    }
+
+    #[test]
+    fn a_parse_error_message_never_quotes_the_settings_text() {
+        let src = "[coach]\napi_key = sk-secret-123\n";
+        let message = parse_error_message(src, &toml::from_str::<Settings>(src).unwrap_err());
+        assert!(!message.contains("sk-secret"), "{message}");
+        assert!(message.contains("line 2"), "{message}");
     }
 
     #[test]
@@ -895,5 +946,68 @@ mod tests {
         assert_eq!(ch.color_index, CUSTOM_COLOR_INDEX);
         assert_eq!(ch.custom_color, Rgba::opaque(255, 128, 0));
         assert!(!ch.outlines);
+    }
+
+    #[test]
+    fn the_coach_is_off_for_old_settings_files_and_round_trips() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(old.coach, aim_ai::CoachConfig::default());
+        assert!(!old.coach.enabled, "the coach is opt-in");
+
+        let on = Settings {
+            coach: aim_ai::CoachConfig {
+                enabled: true,
+                base_url: Some(aim_ai::config::OLLAMA_BASE_URL.into()),
+                model: "llama3.1".into(),
+                api_key_env: Some("OPENAI_API_KEY".into()),
+                ..aim_ai::CoachConfig::default()
+            },
+            ..Settings::default()
+        };
+        let back: Settings = toml::from_str(&toml::to_string_pretty(&on).unwrap()).unwrap();
+        assert_eq!(back.coach, on.coach);
+    }
+
+    #[test]
+    fn a_coach_table_holding_a_key_is_dropped_and_the_other_settings_survive() {
+        let src = "fullscreen = false\n[coach]\nenabled = true\napi_key = \"sk-secret\"\n";
+        let settings = Settings::parse(src);
+        assert!(!settings.fullscreen, "the rest of the file still loads");
+        assert_eq!(settings.coach, aim_ai::CoachConfig::default());
+        let text = toml::to_string_pretty(&settings).unwrap();
+        assert!(!text.contains("sk-secret"), "the next save forgets the key");
+    }
+
+    #[test]
+    fn settings_never_serialize_an_api_key() {
+        let settings = Settings {
+            coach: aim_ai::CoachConfig {
+                enabled: true,
+                provider: aim_ai::ProviderKind::Anthropic,
+                model: "claude-sonnet-5-5".into(),
+                api_key_env: Some("ANTHROPIC_API_KEY".into()),
+                ..aim_ai::CoachConfig::default()
+            },
+            ..Settings::default()
+        };
+        let text = toml::to_string_pretty(&settings).unwrap();
+        let coach = text
+            .split("[coach]")
+            .nth(1)
+            .expect("a coach table")
+            .split("\n[")
+            .next()
+            .unwrap();
+        let keys: Vec<&str> = coach
+            .lines()
+            .filter_map(|l| l.split_once(" = ").map(|(k, _)| k.trim()))
+            .collect();
+        assert!(!keys.is_empty(), "{coach}");
+        for key in keys {
+            assert!(
+                !key.contains("key") || key == "api_key_env",
+                "a key-like field {key:?} is written: {coach}"
+            );
+        }
     }
 }
