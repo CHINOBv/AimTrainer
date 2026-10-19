@@ -3,6 +3,8 @@
 pub mod adaptive;
 pub mod benchmark;
 pub mod challenge;
+pub mod ergonomics;
+pub mod journal;
 pub mod method;
 pub mod missions;
 pub mod playlist;

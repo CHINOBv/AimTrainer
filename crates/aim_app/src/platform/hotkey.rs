@@ -62,10 +62,7 @@ fn install_capture(app: &mut App) {
 pub fn specs(settings: &Settings) -> [(&str, Command); 3] {
     [
         (settings.overlay_hotkey.as_str(), Command::Toggle),
-        (
-            settings.warmup_hotkey.as_str(),
-            Command::Warmup(settings.warmup_minutes),
-        ),
+        (settings.warmup_hotkey.as_str(), Command::Warmup(None)),
         (settings.micro_hotkey.as_str(), Command::Micro),
     ]
 }

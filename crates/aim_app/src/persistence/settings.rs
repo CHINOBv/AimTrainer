@@ -5,6 +5,7 @@ use crate::game::feedback::{HitMarkerStyle, MarkerColor, TargetEffect};
 use aim_core::crosshair::{CUSTOM_COLOR_INDEX, Crosshair, PRESET_COLORS, Rgba};
 use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::randomizer::RandomizerConfig;
+use aim_core::training::ergonomics::BreakPolicy;
 use aim_core::training::missions::Commitment;
 use bevy::prelude::Resource;
 use directories::ProjectDirs;
@@ -82,6 +83,8 @@ pub struct Settings {
     pub restart_key: String,
     /// Length of the queue warm-up, minutes.
     pub warmup_minutes: u32,
+    /// Size the queue warm-up by the player's personal dose when there is enough history.
+    pub personal_warmup: bool,
     /// Daily training goal, minutes (30–50 min captures most daily gains, Listman 2021).
     pub daily_goal_minutes: f32,
     pub target_color: [f32; 3],
@@ -105,6 +108,9 @@ pub struct Settings {
     /// (they live in the OS keyring or an environment variable).
     #[serde(deserialize_with = "deserialize_coach")]
     pub coach: aim_ai::CoachConfig,
+    /// Break prompts and the weekly volume cap (`[breaks]`; `enabled = false` turns them off).
+    #[serde(deserialize_with = "deserialize_breaks")]
+    pub breaks: BreakPolicy,
     /// The first-run wizard was finished or skipped. False only for a new player (no
     /// settings file yet); a file without this key comes from an existing player.
     #[serde(default = "first_run_done_in_old_files")]
@@ -122,11 +128,30 @@ fn deserialize_coach<'de, D>(deserializer: D) -> Result<aim_ai::CoachConfig, D::
 where
     D: serde::Deserializer<'de>,
 {
-    let table = toml::Table::deserialize(deserializer)?;
-    Ok(table.try_into().unwrap_or_else(|_| {
+    // Any value, so that a non-table (`coach = 1`) also resets only the coach.
+    let value = toml::Value::deserialize(deserializer)?;
+    Ok(value.try_into().unwrap_or_else(|_| {
         // The error is not logged: a type error quotes the value, which may be a key.
         bevy::log::warn!("invalid [coach] settings; the coach is reset and off");
         aim_ai::CoachConfig::default()
+    }))
+}
+
+/// An invalid `[breaks]` table (an unknown key, a wrong type or a zero length) resets only
+/// the break policy to its defaults instead of every setting.
+fn deserialize_breaks<'de, D>(deserializer: D) -> Result<BreakPolicy, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Any value, so that a non-table (`breaks = 45`) also resets only the breaks.
+    let value = toml::Value::deserialize(deserializer)?;
+    let policy = value
+        .try_into::<BreakPolicy>()
+        .ok()
+        .filter(|p| p.validate().is_empty());
+    Ok(policy.unwrap_or_else(|| {
+        bevy::log::warn!("invalid [breaks] settings; using the default break policy");
+        BreakPolicy::default()
     }))
 }
 
@@ -459,6 +484,7 @@ impl Default for Settings {
             micro_hotkey: "ctrl+shift+F8".to_owned(),
             restart_key: crate::platform::game_key::DEFAULT_RESTART.to_owned(),
             warmup_minutes: 5,
+            personal_warmup: true,
             daily_goal_minutes: 30.0,
             target_color: [1.0, 0.27, 0.33],
             offscreen_arrows: true,
@@ -471,6 +497,7 @@ impl Default for Settings {
             feel: FeelSettings::default(),
             favorites: Vec::new(),
             coach: aim_ai::CoachConfig::default(),
+            breaks: BreakPolicy::default(),
             first_run_done: false,
         }
     }
@@ -949,6 +976,47 @@ mod tests {
     }
 
     #[test]
+    fn breaks_use_the_default_policy_for_old_files_and_round_trip() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(old.breaks, BreakPolicy::default());
+        let custom = Settings {
+            breaks: BreakPolicy {
+                continuous_minutes: 30,
+                break_minutes: 10,
+                weekly_cap_minutes: 300,
+                enabled: false,
+            },
+            ..Settings::default()
+        };
+        let text = toml::to_string_pretty(&custom).unwrap();
+        assert!(text.contains("[breaks]"), "{text}");
+        let back: Settings = toml::from_str(&text).unwrap();
+        assert_eq!(back.breaks, custom.breaks);
+        let partial = Settings::parse("[breaks]\nenabled = false\n");
+        assert!(!partial.breaks.enabled);
+        assert_eq!(
+            partial.breaks.continuous_minutes, 45,
+            "missing keys default"
+        );
+    }
+
+    #[test]
+    fn an_invalid_breaks_table_resets_only_the_breaks() {
+        for table in [
+            "[breaks]\nenabled = \"yes\"\n",
+            "[breaks]\nsnooze = 3\n",
+            "[breaks]\ncontinuous_minutes = 0\n",
+        ] {
+            let settings = Settings::parse(&format!("fullscreen = false\n{table}"));
+            assert!(
+                !settings.fullscreen,
+                "the rest of the file still loads: {table}"
+            );
+            assert_eq!(settings.breaks, BreakPolicy::default(), "{table}");
+        }
+    }
+
+    #[test]
     fn the_coach_is_off_for_old_settings_files_and_round_trips() {
         let old: Settings = toml::from_str("fullscreen = false").unwrap();
         assert_eq!(old.coach, aim_ai::CoachConfig::default());
@@ -966,6 +1034,31 @@ mod tests {
         };
         let back: Settings = toml::from_str(&toml::to_string_pretty(&on).unwrap()).unwrap();
         assert_eq!(back.coach, on.coach);
+    }
+
+    #[test]
+    fn a_coach_or_breaks_value_that_is_not_a_table_resets_only_itself() {
+        let settings = Settings::parse(
+            "breaks = 45
+coach = \"sk-secret\"
+fullscreen = false
+",
+        );
+        assert!(!settings.fullscreen, "the rest of the file still loads");
+        assert_eq!(settings.coach, aim_ai::CoachConfig::default());
+        assert_eq!(settings.breaks, BreakPolicy::default());
+    }
+
+    #[test]
+    fn the_personal_warmup_dose_is_on_for_old_settings_files() {
+        let old: Settings = toml::from_str("warmup_minutes = 4").unwrap();
+        assert!(old.personal_warmup);
+        assert_eq!(old.warmup_minutes, 4);
+        let off = Settings::parse(
+            "personal_warmup = false
+",
+        );
+        assert!(!off.personal_warmup);
     }
 
     #[test]

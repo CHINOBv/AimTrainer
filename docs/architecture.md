@@ -133,8 +133,22 @@ FrameInput { dt, view angles, buttons, move keys }  ──►  Session::update  
 ```
 
 - **`Session` is deterministic:** the same `ScenarioDef`, seed and `FrameInput` sequence produce identical results. Never break this. The planned analytics and replays depend on it: a run can be stored as its input log and re-simulated.
+- **Score proofs depend on it too:** `analytics::proof` shares a run as a code (run key, content hash of the definition, seed, inputs, claimed score) and verifies it by re-simulating against the verifier's own library. Any change to `Session` that alters results invalidates proofs made with an earlier build, as it does saved replays.
 - **No hidden inputs:** the session reads nothing that is not in `FrameInput`, such as globals, wall-clock time or the OS.
 - **Simulation runs at the render frame rate,** with the real `dt`. Mouse look is applied in the same frame it arrives; it is never smoothed or delayed (see the latency rules in the coding standards).
+
+### Player-care and journal modules
+
+These modules are pure and keep their state as plain serde types or values passed in; the app stores them and supplies the clock as Unix seconds.
+
+| Module | Holds |
+|---|---|
+| `training::journal` | Ranked match entries with that day's readiness and fatigue, losing streak, tilt-reset routine |
+| `training::ergonomics` | `BreakPolicy` (continuous play, weekly cap), stretch list and disclaimers |
+| `training::warmup` (dose) | Personal warm-up length from past sessions |
+| `training::progress` (plateaus) | Benchmark subcategories without a new personal best |
+| `sensitivity::dpi_check` | Real DPI from a measured movement, corrected sensitivity |
+| `analytics::proof` | Score proof share codes and their verification |
 
 ### Activities
 

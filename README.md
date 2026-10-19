@@ -6,7 +6,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - Uses VALORANT's 0.07°/count for yaw and pitch, read from raw, unaccelerated mouse counts.
   - Shows cm/360 and eDPI.
   - Includes a converter with monitor-distance matching for CS2, Apex, Overwatch 2, Fortnite, Call of Duty, Destiny 2, Rainbow Six Siege and Deadlock.
-  - Includes a DPI check and a guided **sensitivity finder**.
+  - Includes a **DPI deviation test** (move a measured distance along a ruler) and a guided **sensitivity finder**.
 - **VALORANT FOV and movement**
   - 70.53° vertical (Hor+, 103° horizontal at 16:9), with ultrawide pillarboxed like the game. ADS zoom follows the weapon.
   - Rifle and knife speeds and the stopping curves Riot measured.
@@ -22,11 +22,13 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - **Adaptive difficulty** that holds you near 80% success.
   - A Voltaic-style **benchmark** with novice, intermediate and advanced tiers.
 - **Ranked days**
-  - A **queue warm-up** sized to your queue.
+  - A **queue warm-up** sized to your queue, or to your **personal warm-up dose** once your own sessions show where your scores level off (2–15 min; shown next to the setting in Settings → Training, where **Use my personal dose** can turn it off).
   - **20-second buy-phase drills** that hide themselves when done.
   - A **"ready for ranked?" check.**
   - **Fatigue warnings.**
   - **Daily goals and streaks.**
+  - A **ranked journal**: log each match in one tap (win/loss/draw, RR, a 1–5 rating and a tag), see results split by readiness and fatigue, and get a 3-minute **tilt reset** (paced breathing, then easy tracking) after two losses in a row.
+  - **Break reminders** after continuous play, a weekly volume cap and a short stretch list. All of it can be changed or turned off.
   - A **daily challenge** that everyone plays with the same seed.
   - **Compound daily missions** built from your own recent bests (for example "accuracy ≥ 75% AND kills ≥ 62"), with mastery missions and a low/medium/high commitment level.
 - **Feedback**
@@ -34,8 +36,9 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - **Run insights:** flicks by screen direction and distance, click timing, pace and stamina, target priority, tracking speed match and edge time, and firing while moving. In arenas: peek timing. A **miss compass** shows whether you miss above or below the head, and a **potential score** names the one fix worth the most points.
   - A **sensitivity suggestion** from your recent flicks' over/undershoot, with the evidence shown. It is applied only when you choose to.
   - A **replay viewer** of your crosshair path: the trail is coloured by speed, and it has a hit/miss heatmap and a side-by-side comparison with an earlier run.
-  - Benchmark trends and personal bests.
+  - Benchmark trends and personal bests, and a **plateau detector** on the Progress page: a benchmark subcategory you keep playing with no new personal best in 3 weeks gets suggestions for a change of stimulus (a variant, a sensitivity variation, a switch of emphasis or a lighter week).
   - Offline **post-match analysis** of official match files.
+  - **Verifiable score proofs**: copy a run's proof code from the results screen; a friend pastes it on the Progress page and their trainer replays the run to confirm the score, with no server.
 - **Your setup**
   - VALORANT **crosshair codes** (import and export).
   - **Target visibility:** VALORANT's enemy highlight colours (red, purple for tritanopia, yellow for deuteranopia/protanopia) or any custom colour, an optional target outline with colour and thickness, and an environment tint for the floor grid.
@@ -95,7 +98,7 @@ The menu tabs (keys 1–9 switch tabs while no text field has focus):
 aimtrainer                                        # start the trainer
 aimtrainer play <scenario|arena>                  # start straight into a scenario or arena
 aimtrainer toggle | show | hide                   # control a running trainer (Linux)
-aimtrainer warmup [minutes]                       # show the trainer and start a queue warm-up
+aimtrainer warmup [minutes]                       # show the trainer and start a queue warm-up (no minutes: personal dose or Settings length)
 aimtrainer micro                                  # one 20 s buy-phase drill, then hide again
 aimtrainer analyze-match <match.json> --player Name#TAG   # report + a drill of your duels
 ```
@@ -159,7 +162,7 @@ To change them later, open **Settings → Sensitivity** and enter:
 - your **DPI**;
 - your **ADS multiplier**, if you changed it.
 
-Then use **DPI check**: move the mouse exactly 10 cm along a ruler. The measured DPI should be within a few percent of the DPI you configured. If it isn't, you have OS mouse acceleration on or the wrong DPI.
+Then use **Measure DPI**: lay a ruler next to the mouse, press **Start**, hold **Shift** and move the mouse the distance you set (10 cm by default, at least 5 cm) to the right, then release Shift. The page shows the real DPI from the raw counts and its deviation from the DPI you configured; mice often differ by a few percent. A large mismatch means OS mouse acceleration is on or the DPI value is wrong. **Apply corrected sensitivity…** stores the real DPI and scales the sensitivity so your cm/360 stays the same; it asks for confirmation first, and you then need to set the same sensitivity in VALORANT so the trainer still matches the game.
 
 ## Feel settings
 
@@ -227,6 +230,36 @@ Every finished scenario run is saved as one CSV row in the data directory (`~/.l
 Rows written before snapshots existed keep their columns and load with empty snapshot fields; the next run written upgrades the file's header line. Arena runs are stored without a snapshot.
 
 **Export:** on the Progress page, **Export history (CSV)** writes a copy with the same columns, one row per run, with older rows padded with empty fields so every row has all 21 columns. Type a path in the field next to the button, or leave it empty to write `history-export-<unix time>.csv` next to `history.csv`. It never replaces an existing file (the history included); pick a new name instead. The export runs on a background thread, and the page shows where the file went or why it failed.
+
+## Score proofs
+
+Runs are deterministic: the same scenario, seed and inputs always give the same score. **Copy proof code** on the results screen of a scenario run copies a share code (base64url) that bundles the run key, a hash of the scenario as played, the seed, every input and the claimed score and accuracy.
+
+To check a friend's score, paste the code into **Verify a proof** on the Progress page. Your trainer rebuilds the scenario from your own library, checks the hash and replays the inputs on a background thread, then shows either `Verified: <scenario> score X, accuracy Y%` or why it failed: not a proof code, an unsupported version, an unknown scenario, a scenario that differs from the one played (for example an edited custom file), or a replay that gives another score. A proof shows that the inputs produce the score; it cannot show that a human produced them. Arena runs have no proof code.
+
+## Ranked journal
+
+The **Ranked journal** section of the Progress page logs a match in one tap: pick the RR change (optional, such as `+18` or `-12`), a 1–5 self-rating (3 if you skip it) and an optional tag, then press **Win**, **Loss** or **Draw**. Each entry also stores today's warm-up readiness (the coldest of the "ready for ranked?" scenarios, or unknown) and whether a fatigue warning was showing, so the page can split your results by readiness and fatigue. A pattern needs many matches; a handful says little.
+
+After **two losses in a row**, the page suggests a **tilt reset (3 min)**: a 60-second breathing timer at 6 breaths a minute (a circle grows as you breathe in and shrinks as you breathe out), then 2 minutes of easy smooth tracking. You can skip to the tracking or cancel. It is a pause before the next queue, not a treatment.
+
+Entries are kept in `journal.toml` next to `history.csv`. It is written in the background through a temporary file and a rename. If the file cannot be read, it is never overwritten: the page says so, and the file is renamed to `journal.corrupt-<unix time>.toml` before the next entry is saved.
+
+## Breaks and wrist care
+
+Time in a run counts as play; time in the menu, on the results screen or with the overlay hidden does not. After **45 min** of continuous play, a banner in the menu and on the results screen (never during a run) suggests a **5 min** break, with a short stretch list. Time away from runs as long as a break resets the count. **Dismiss** hides the banner until another full interval of play; **Snooze** hides it for 10 min of play. A separate note appears when your aim training in the last 7 days reaches the **weekly cap** (420 min, about 1 h a day).
+
+Every number is an estimate, and no trial has shown that breaks or stretches prevent wrist complaints in esports; the banner says so. Change them or turn them off in Settings → Training, or in `settings.toml`:
+
+```toml
+[breaks]
+enabled = true
+continuous_minutes = 45
+break_minutes = 5
+weekly_cap_minutes = 420
+```
+
+An invalid `[breaks]` table (an unknown key, a wrong type or a zero) resets only the breaks to these defaults. Background: "Breaks and wrist care" in [`docs/training-science.md`](docs/training-science.md).
 
 ## Architecture
 
