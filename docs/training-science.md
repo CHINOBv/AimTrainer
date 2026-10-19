@@ -135,6 +135,19 @@ Spreading the skills across the week does give VDIM spacing between sessions. Ou
 - **Our default:** train at your exact VALORANT sensitivity. The trainer converts it to the same cm/360.
 - **Sensitivity randomiser drill (opt-in, off by default).** `aim_core::sensitivity::randomizer` changes the look sensitivity to a random multiplier of your own every interval. The defaults are ×0.8–×1.2 every 10 s, with optional easing between values. The bounds are limited to ×0.5–×2.0 and the interval to at least 2 s. It is deterministic per seed. The HUD shows the current multiplier. The saved sensitivity never changes, and sensitivity-finder tests never use the drill. Because no controlled evidence supports or rejects randomisation (above), the drill is offered as an occasional robustness exercise in the spirit of Voltaic's plateau advice. The default range and the limits are **estimates**.
 
+### DPI deviation test
+
+A mouse's real counts per inch can differ from its nominal DPI, so the same in-game sensitivity gives a different cm/360 than the player thinks (inference: the size of the deviation varies by sensor and firmware and is not quantified here). `aim_core::sensitivity::dpi_check` measures it:
+
+1. Turn off pointer acceleration and use the mouse software's DPI setting you play with.
+2. Tape a ruler to the desk and put the mouse's edge on a mark.
+3. Start the test, move the mouse straight along the ruler by a known distance (10 cm or more is best; at least 5 cm is required) and stop it. The trainer counts the raw counts of the movement.
+4. Enter the distance you moved, in cm or inches.
+
+- `measure` returns the real DPI (`counts / inches`) and the deviation from the nominal DPI in percent. It rejects zero counts, a distance that is not a number, a distance below 5 cm and a nominal DPI of 0.
+- `corrected_sensitivity` stores the rounded real DPI and scales the sensitivity value so the cm/360 stays the one the player expects. Apply the corrected value in VALORANT too, or set the mouse software so its real DPI matches the nominal one.
+- The 5 cm minimum is an **estimate**: a ruler read to ±1 mm then stays within about ±2%.
+
 ## Analytics metrics
 
 Post-run analysis (`aim_core::analytics`) re-simulates the recorded run and measures it. Every number below is shown with the metric that produced it. **All thresholds are provisional:** they are estimates chosen against the simulated aimer, not calibrated on player data, and will be revised once real runs exist.
@@ -446,6 +459,61 @@ Enemies often first show up away from the crosshair, and the minimap tells where
 **Radar recall (`radar-recall`).** A radar shows two of the four enemies of a round for 1.5 s; the round then appears with all four looking alike, so only the remembered positions tell which two to shoot. Correct and incorrect picks are the go/no-go outcomes (match and non-match hits) of these rounds. Holding a few positions for a few seconds is within visual working memory, which is commonly put at about three to four items (Luck and Vogel 1997, *Nature* 390, 279–281); two dots out of four targets keeps the task inside that limit. The 1.5 s radar, the 15° minimum separation and the 3 s lifetime are **estimates** set by calibration.
 
 **Simulated aimer.** For detection it holds the crosshair still, clicks each flash one reaction time after it appears, and with no flash showing clicks anyway at its go/no-go mistake rate per second (recruit ≈ 0.22/s, elite ≈ 0.09/s, an **estimate**). For radar recall it treats the targets the radar did not show like go/no-go decoys, mistaking one for a match at the same rate. `peripheral-detect` calibrates at about 71% and `radar-recall` at about 67% contender accuracy, inside the challenge-point band. Neither model forgets the radar or misses a flash outright, so a playtest should confirm the difficulty.
+
+## Plateau detector
+
+`aim_core::training::progress::plateaus` flags a benchmark subcategory when none of its scenarios got a new personal best in the last **3 weeks** while it was still played at least **3 times** in that window. A first run counts as a personal best; a score equal to the best does not. A subcategory not played recently is a break, not a plateau. Both numbers are **estimates**.
+
+Each plateau comes with four changes of stimulus:
+
+| Suggestion | Basis |
+|---|---|
+| Play an easier or harder variant | VDIM climbs through variants of each benchmark scenario (verified, see VDIM) |
+| Train a while at a different sensitivity | Voltaic: a sensitivity change can help break a plateau (verified, see Sensitivity) |
+| Switch emphasis between speed and accuracy | In Listman 2021 accuracy plateaued while hits per second kept improving (verified, see Routine design); switching the emphasis is our inference |
+| A lighter week, then measure again | **Inference**, borrowed from deload weeks in strength training; no aim-training study tests it |
+
+## Personal warm-up dose
+
+The warm-up decrement after rest is verified (Lee & Genovese 1988, see Routine design), but how long it takes to wear off differs between people and tasks, so a fixed 5 min queue warm-up is a guess (inference). `aim_core::training::warmup::warmup_dose` estimates it from the player's own sessions:
+
+1. Each past run becomes a sample: minutes since the session started, and the score divided by the scenario's personal best (`session_samples`).
+2. In each session, a rolling mean over 3 runs is computed. The plateau is the first minute from which every later rolling mean stays within 5% of the session's best rolling mean.
+3. The dose is the median plateau minute across sessions, clamped to 2–15 min. `queue_warmup_minutes` uses it instead of the setting when it exists.
+
+- **Guards:** a session needs at least 4 runs, and the dose needs at least 3 such sessions; otherwise the player's setting is used.
+- **Estimates, not sourced values:** the 3-run window, the 5% tolerance, the 4-run and 3-session minimums, and the 2–15 min clamp.
+- **Limit:** `queue_warmup` plays at most 12 runs of 30 s (6 min), so a dose above 6 min is cut to 6 min until that cap changes.
+
+## Ranked journal and tilt reset
+
+`aim_core::training::journal` keeps a one-tap entry per ranked match: the outcome, the RR change, a 1–5 self-rating and one tag (tilted, tired, warmed-up, cold, aim-off, aim-on, team-diff, other).
+
+- **Links to warm-up and fatigue.** Each entry stores the readiness label (READY, WARMING or COLD, from `progress::readiness`) and whether a fatigue signal (`progress::fatigue`) was showing when it was logged. The journal then reports the win rate and mean self-rating for each readiness label and with or without fatigue. This lets players check, on their own matches, whether warming up pays off for them (inference: the warm-up decrement in Routine design is measured in lab tasks, not in ranked results). Draws count as matches not won. The split is descriptive: with a few matches per group it is noise, and it shows correlation, not cause.
+- **Losing streak and tilt reset.** The journal counts the losses in a row at its end; a win or a draw ends the streak. After **2** losses in a row it suggests the tilt reset. The threshold is an **estimate**.
+- **Tilt reset routine.** Three minutes: a 60 s paced-breathing timer at 6 breaths per minute (5 s in, 5 s out), then 2 min of easy smooth tracking (`track-precise` at difficulty −0.5). Slow breathing is commonly defined as under 10 breaths per minute (approximate, Zaccaro et al. 2018, *Frontiers in Human Neuroscience*, https://doi.org/10.3389/fnhum.2018.00353). The pace, the 60 s and the 2 min are **estimates**. The routine is a pause before the next queue; the app makes no health or performance claim about it.
+
+## Breaks and wrist care
+
+**Prevalence (verified, cross-sectional surveys):**
+
+- Monma et al. 2024, *Cureus* 16(8):e66496, 79 Japanese male players (https://pmc.ncbi.nlm.nih.gov/articles/PMC11380764/): self-reported stiff or sore shoulders 49.4%, neck pain 29.1%, lower back pain 29.1%, wrist pain 6.3%. Professionals reported more neck, back and wrist pain than amateurs.
+- Kurniawan et al. 2024, *Frontiers in Sports and Active Living* 6, 94 mobile esports players in Jakarta (https://doi.org/10.3389/fspor.2024.1372979): 66% reported musculoskeletal complaints, most often in the shoulder, neck and hand.
+
+**Efficacy (verified as an absence of evidence):** neither study tested breaks or stretches, and we found no trial showing that they prevent these complaints in esports. Both recommend breaks as a precaution. The app says this next to every prompt.
+
+**Implementation:** `aim_core::training::ergonomics`.
+
+- `BreakPolicy` suggests a break after continuous play and flags a rolling 7-day training cap. It can be changed or turned off.
+- `STRETCHES` is a short generic list shown with `STRETCH_DISCLAIMER` (not medical advice).
+- **Estimates, not sourced values:** 45 min of continuous play, 5 min breaks, and a 420 min weekly cap. The cap is about 1 h a day, where Listman et al. 2021 saw daily gains peak (see Routine design); it is not an injury threshold.
+
+## Verifiable score proofs
+
+Runs are deterministic, so a shared run can be checked by playing its inputs again (`aim_core::analytics::proof`). The share code carries the run key, a 64-bit FNV-1a hash of the scenario definition that was played, the seed, the input log (the replay format) and the claimed score and accuracy. Verification rebuilds the scenario from the verifier's own library, refuses it if the hash differs (an edited scenario), replays the inputs and requires the score and accuracy to match bit for bit.
+
+- **What it proves:** the inputs produce the claimed score on that exact scenario. It does not prove that a person produced the inputs, so it suits friendly challenges, not anti-cheat.
+- **Limits:** the hash is not cryptographic, and a build that changes the simulation makes older proofs fail to verify, as it does with saved replays.
 
 ## Caveat
 

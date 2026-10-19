@@ -5,7 +5,8 @@
 //! tracking ([`tracking`]), and analyses are aggregated into an explainable
 //! [`profile::SkillProfile`] using the data-driven [`rules`]. [`skills`] profiles the
 //! benchmark subcategories from run history, with weekly trends. [`codec`] stores recordings as replay files, and [`path`]
-//! turns one into per-target crosshair paths for the replay viewer.
+//! turns one into per-target crosshair paths for the replay viewer. [`proof`] bundles a run into a
+//! share code that anyone can re-simulate to confirm its score.
 
 pub mod audio_cue;
 pub mod codec;
@@ -20,6 +21,7 @@ pub mod perception;
 pub mod potential;
 pub mod priority;
 pub mod profile;
+pub mod proof;
 pub mod rules;
 pub mod sens_suggest;
 pub mod skills;

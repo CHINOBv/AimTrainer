@@ -2,10 +2,11 @@
 //! which is the only quantity that transfers exactly between games.
 //!
 //! [`Game`] profiles hold the per-game data; [`matching`] converts between games with
-//! 360° or monitor-distance matching.
+//! 360° or monitor-distance matching; [`dpi_check`] measures a mouse's real DPI.
 
 use serde::{Deserialize, Serialize};
 
+pub mod dpi_check;
 pub mod finder;
 pub mod matching;
 pub mod randomizer;
