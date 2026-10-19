@@ -1,0 +1,14 @@
+# Spanish UI text for the "settings" area. Keys are the exact English source text.
+# See docs/i18n.md before editing.
+
+# Settings sub-tabs (settings_panels.rs, SettingsTab::ALL).
+"Sensitivity" = "Sensibilidad"
+"Crosshair" = "Mira"
+"Feedback" = "Efectos"
+"Audio" = "Audio"
+"Overlay" = "Superposición"
+"Keys" = "Teclas"
+"Training" = "Entrenamiento"
+
+# Language selector (settings_panels.rs, language_panel).
+"Language" = "Idioma"

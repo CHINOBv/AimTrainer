@@ -1,0 +1,13 @@
+# Spanish UI text for the "menu" area. Keys are the exact English source text.
+# See docs/i18n.md before editing.
+
+# Main menu tabs (pages/menu.rs, TABS).
+"Today" = "Hoy"
+"Progress" = "Progreso"
+"Scenarios" = "Escenarios"
+"Routines" = "Rutinas"
+"Arenas" = "Arenas"
+"Benchmark" = "Evaluación"
+"Tools" = "Herramientas"
+"Settings" = "Ajustes"
+"Coach" = "Entrenador"
