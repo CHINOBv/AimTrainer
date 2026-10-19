@@ -131,11 +131,16 @@ fn proof_button(ui: &mut egui::Ui, rec: &Recording, result: &RunResult) {
     });
 }
 
+/// A section the page draws inside the card (the AI coach's take), returning its clicks.
+pub type CardSection<'a> = &'a mut dyn FnMut(&mut egui::Ui) -> Option<UiAction>;
+
 pub fn results_card(
     ctx: &egui::Context,
     last: &LastResult,
     rc: &ResultsContext,
+    coach: Option<CardSection>,
 ) -> Option<UiAction> {
+    let mut coach = coach;
     let r = &last.result;
     let mut action = None;
     egui::Window::new("Results")
@@ -159,6 +164,11 @@ pub fn results_card(
             }
             for note in &last.notes {
                 ui.label(note);
+            }
+            if let Some(section) = coach.as_mut()
+                && let Some(a) = section(ui)
+            {
+                action = Some(a);
             }
             ui.separator();
             egui::CollapsingHeader::new(DETAILS)

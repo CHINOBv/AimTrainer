@@ -9,7 +9,7 @@ The Coach tab (key 9) is off until you tick **Enable the AI coach**. While it is
 1. **Pick a provider** under *Provider*:
    - **OpenAI-compatible:** click a base URL preset (OpenAI, OpenCode pay-as-you-go, Ollama, LM Studio) or type one, then type a model id.
    - **Anthropic:** type a model id; the base URL defaults to `https://api.anthropic.com`.
-   - **CLI delegate:** click Codex, Claude Code or OpenCode to use your own installed, signed-in CLI. Codex can call the coach's tools through the trainer's MCP server (`aimtrainer-mcp`, found next to the trainer or on `PATH`), so it sees your stats summary. Claude Code and OpenCode are text only: they cannot call the tools and never see your stats.
+   - **CLI delegate:** click Codex, Claude Code or OpenCode to use your own installed, signed-in CLI. Codex can call the coach's tools through the trainer's MCP server (`aimtrainer-mcp`, found next to the trainer or on `PATH`), so it sees your stats summary. Claude Code and OpenCode are text only: they cannot call the tools and never see your stats summary. The one exception is the results screen: when you press **Ask the coach** or **Ask the coach why**, the run or mistake digest goes inline in the prompt to every provider (see *Coach's take and Ask why*).
 2. **Add a key** (not needed for Ollama, LM Studio or a CLI). Paste it and click **Store in keyring**. The field is cleared at once and the key is never shown again; the page only says "Key stored in OS keyring" or, when you name an environment variable in *Key env var*, "Key from env VAR". **Forget key** removes it from the keyring. Each provider has its own key, and each OpenAI-compatible base URL too.
 3. **Test connection** sends a one-line prompt without tools and shows the reply or the error.
 4. **Preview what is sent** shows the exact `CoachContext::to_prompt_json()` text the model receives when it calls `list_stats`. It holds aggregates only (skill findings, flick directions, miss compass, pace, potential score, benchmark energy, recent runs, missions, readiness, fatigue), built from your history and your newest 20 replays. **Refresh** rebuilds it; it also rebuilds after each new run.
@@ -18,6 +18,38 @@ The Coach tab (key 9) is off until you tick **Enable the AI coach**. While it is
 7. **Memory.** *Forget everything* (asks for confirmation) deletes every note in `coach.db`.
 
 Every request, keyring access, replay analysis and file write runs on a background thread; the page shows a spinner and never blocks the frame. The settings are the `[coach]` table of `settings.toml` (see below). A `[coach]` table that fails to load (for example one with an `api_key` line) resets only the coach, switched off, and the next save removes the offending line.
+
+## Coach's take and Ask why (results screen)
+
+With the coach enabled, the results screen gets two on-demand requests. Neither runs on its own: nothing is sent until the player clicks, and while the coach is off neither button is shown.
+
+- **Coach's take.** A card under the main fix. **Ask the coach** sends the run digest once and shows one to three points, most important first, and optionally one drill from the library with a **Play** button. A spinner and **Cancel** show while it waits.
+- **Ask the coach why.** In the mistake replays, under the template tip of each mistake (the tip always stays). It sends that mistake's digest once and shows why it happened and one cue.
+- **Cached per result.** Each answer is kept for the result it belongs to (per mistake for Ask why), so reopening the card, the replay window or a mistake sends nothing again. A new result starts empty.
+- **Preview what is sent.** A collapsed section next to each button shows the exact digest JSON and its size.
+
+Both use the same provider, key and background job as the Coach tab, with one model call, no tools and no retries. The rules are in `aim_core::coach::debrief`.
+
+### What is sent
+
+| Request | Content |
+|---|---|
+| Coach's take | The run digest (`RunDigest`, at most 2 KiB): the scenario id and category, and named numbers with stable metric keys, such as `accuracy_pct`, `flick.overshoot_pct`, `tracking.on_target_pct`, `moving.counter_strafe_pct`, `potential.points_gain` and `history.score_vs_previous` (the score against up to five earlier runs of the same scenario, computed by the core). Also up to 40 scenario ids the coach may suggest, the run's category first. |
+| Ask why | The mistake digest (`MistakeDigest`): the scenario id and category, the mistake kind, whether the shot hit, and its numbers (`distance_deg`, `target_radius_deg`, `direction_right_deg`, `direction_up_deg`, `endpoint_error_radii`, `edge_error_deg`, `delay_ms`, `corrections`). |
+
+Never sent: crosshair paths (the player's and the corrected example), trace sample indices, target ids, seeds, the template tip, file paths and names. Both requests also carry the coach's instructions (one external-focus cue, use only the given numbers, never touch the game process).
+
+### How a reply is checked
+
+The model must answer JSON (a fenced `json` block is accepted): `{"bullets":[{"text","cites"}],"drill":{"scenario_id","reason"}}` for the take, `{"why","cue","cites"}` for Ask why. The core rejects the reply, and the card shows the reason, when:
+
+- it is not that JSON, or the model asks for tools;
+- the take has no bullets or more than three, a bullet is longer than 160 characters or a drill reason longer than 120; a why is longer than 200 characters or a cue longer than 80;
+- a point cites no metric key, or a key that is not in the digest;
+- a number in the text is not the value of a cited key, within the rounding of the number as written ("62%" matches 62.4; "71%" does not). Digits glued to a letter, such as "M2", are names, not numbers;
+- the drill is not one of the offered scenario ids.
+
+A rejected or failed reply is never retried automatically. The rule-based main fix and tips stay on screen, and the player can click **Ask again**.
 
 ## MCP server (`aimtrainer-mcp`)
 
@@ -95,7 +127,7 @@ The coach recommends routines, reads the player's stats and can generate scenari
 | Topic | Rule |
 |---|---|
 | Default | Off. `CoachConfig.enabled = false` until the player opts in. |
-| What is sent | Only the `CoachContext` aggregates and the chat. No raw traces, file paths or names. |
+| What is sent | Only the `CoachContext` aggregates and the chat, and, when the player asks on the results screen, the run or mistake digest. No raw traces, file paths or names. |
 | Keys | In the OS keyring, or in an environment variable the player names. Never in settings files, never logged. |
 | Threading | Every call blocks. The app runs it off the frame (latency rules). |
 | Model ids | Plain strings the player sets. The code ships no default model. |
@@ -208,7 +240,8 @@ Keys never go into settings files: `CoachConfig` has no key field, and a setting
 
 - The coach is off until the player enables it and picks a provider.
 - Only what the core puts in `CoachContext` is sent: aggregates such as skill scores, flick directions, the miss compass, pace, recent run summaries and missions. Raw traces, file paths, account names and machine names are never sent.
-- The Coach tab's *Preview what is sent* shows exactly what is sent.
+- The Coach tab's *Preview what is sent* shows exactly what is sent; on the results screen, each coach button has its own preview of the digest.
+- **Results screen.** Coach's take and Ask why send the run or mistake digest only when the player clicks, once per click, with no automatic retries. Unlike the chat, the digest goes inline in the prompt, so every provider receives it, including the CLI delegates: Claude Code and OpenCode (and Codex) get the run digest through the player's own CLI and account when the player presses the button.
 - Local servers (Ollama, LM Studio) keep everything on the machine.
 - With the Codex CLI delegate, the stats summary that `list_stats` returns goes to OpenAI through Codex. Tool results from an earlier provider in the same chat are never put into a CLI prompt.
 - Plain `http://` is accepted only for `localhost`, `127.0.0.1` and `[::1]`. Any other host must use `https://`.

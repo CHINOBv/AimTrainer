@@ -285,6 +285,16 @@ pub enum PlayerAction {
 
 /// Draw the player. Returns [`PlayerAction::Close`] when the user closes it.
 pub fn mistake_player(ui: &mut egui::Ui, state: &mut MistakePlayerState) -> Option<PlayerAction> {
+    mistake_player_with(ui, state, |_, _, _| {})
+}
+
+/// [`mistake_player`] with `below_tip` drawn under the template tip, given the shown
+/// mistake and its index (the results page adds "Ask the coach why" there).
+pub fn mistake_player_with(
+    ui: &mut egui::Ui,
+    state: &mut MistakePlayerState,
+    below_tip: impl FnOnce(&mut egui::Ui, usize, &Mistake),
+) -> Option<PlayerAction> {
     let mut action = None;
     let count = state.mistakes.len();
     ui.horizontal(|ui| {
@@ -342,6 +352,7 @@ pub fn mistake_player(ui: &mut egui::Ui, state: &mut MistakePlayerState) -> Opti
         egui::Frame::group(ui.style()).show(ui, |ui| {
             ui.label(&m.tip);
         });
+        below_tip(ui, state.index, &m);
     } else {
         playback_controls(ui, state);
     }
