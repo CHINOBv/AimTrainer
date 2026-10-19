@@ -133,6 +133,45 @@ pub fn progress_panel(ui: &mut egui::Ui, m: &ProgressModel) -> Option<UiAction> 
     action
 }
 
+/// What the history export row shows.
+pub struct ExportView<'a> {
+    /// Placeholder of the path field: where the export goes when it is left empty.
+    pub default_path: &'a str,
+    pub running: bool,
+    /// Outcome of the last export.
+    pub status: Option<&'a str>,
+}
+
+/// "Export history (CSV)": a path field (empty = the default path) and the button. Returns
+/// true when the button is clicked.
+pub fn export_section(ui: &mut egui::Ui, path: &mut String, view: &ExportView) -> bool {
+    ui.add_space(10.0);
+    ui.label(big("History", 20.0));
+    ui.small("One row per run with its settings snapshot; columns are listed in the README.");
+    let mut clicked = false;
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(path)
+                .hint_text(view.default_path)
+                .desired_width(360.0),
+        );
+        let button = ui.add_enabled(!view.running, egui::Button::new("Export history (CSV)"));
+        clicked = button.clicked();
+        if view.running {
+            ui.spinner();
+        }
+    });
+    if let Some(status) = view.status {
+        let color = if status.starts_with("Export failed") {
+            BAD
+        } else {
+            GOOD
+        };
+        ui.colored_label(color, status);
+    }
+    clicked
+}
+
 /// Played weekly energies of a subcategory, oldest first (weeks before its first run are
 /// skipped).
 pub fn trend_points(s: &SubcategoryStanding) -> Vec<f32> {

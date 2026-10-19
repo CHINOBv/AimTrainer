@@ -204,6 +204,109 @@ fn parse_row(line: &str) -> Option<(RunRecord, RunSnapshot)> {
     Some((record, snapshot))
 }
 
+/// The history file `src` as a CSV export: [`HEADER`], then one row per run the history
+/// loads, padded with empty fields to every column (older rows lack the snapshot columns).
+/// Returns the CSV and the number of runs.
+pub fn export_csv(src: &str) -> (String, usize) {
+    let width = HEADER.split(',').count();
+    let mut out = format!("{HEADER}\n");
+    let mut rows = 0;
+    for line in src.lines().skip(1).filter(|l| parse_row(l).is_some()) {
+        let mut fields = split_fields(line);
+        fields.resize(width, String::new());
+        let quoted: Vec<String> = fields.iter().map(|f| quote(f)).collect();
+        out.push_str(&quoted.join(","));
+        out.push('\n');
+        rows += 1;
+    }
+    (out, rows)
+}
+
+/// Write the export of `history_file` to `out`; a missing history exports no runs.
+pub fn export_history(history_file: &Path, out: &Path) -> io::Result<usize> {
+    let src = match fs::read_to_string(history_file) {
+        Ok(src) => src,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e),
+    };
+    let (csv, rows) = export_csv(&src);
+    fs::write(out, csv)?;
+    Ok(rows)
+}
+
+/// Where an export goes when the player names no file: next to `history.csv`.
+pub fn default_export_path(paths: &Paths, timestamp: u64) -> PathBuf {
+    paths
+        .history_file
+        .with_file_name(format!("history-export-{timestamp}.csv"))
+}
+
+/// A history export running on a background thread, so the frame never waits on disk.
+#[derive(Debug, Default)]
+pub struct HistoryExport {
+    job: Option<std::thread::JoinHandle<io::Result<usize>>>,
+    out: PathBuf,
+    status: Option<String>,
+}
+
+impl HistoryExport {
+    /// Start exporting `history_file` to `out`, unless an export is already running.
+    pub fn start(&mut self, history_file: PathBuf, out: PathBuf) {
+        if self.is_running() {
+            return;
+        }
+        self.out = out.clone();
+        let spawned = std::thread::Builder::new()
+            .name("history-export".into())
+            .spawn(move || export_history(&history_file, &out));
+        match spawned {
+            Ok(handle) => {
+                self.job = Some(handle);
+                self.status = None;
+            }
+            Err(e) => self.status = Some(format!("Export failed: {e}")),
+        }
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.job.is_some()
+    }
+
+    /// Collect a finished export. Call once per frame.
+    pub fn poll(&mut self) {
+        if self.job.as_ref().is_some_and(|h| h.is_finished()) {
+            self.finish();
+        }
+    }
+
+    /// The outcome of the last export, once it finished.
+    pub fn status(&self) -> Option<&str> {
+        self.status.as_deref()
+    }
+
+    fn finish(&mut self) {
+        let Some(handle) = self.job.take() else {
+            return;
+        };
+        let status = match handle.join() {
+            Ok(Ok(rows)) => format!("Exported {rows} runs to {}", self.out.display()),
+            Ok(Err(e)) => format!("Export failed: {e}"),
+            Err(_) => "Export failed: the export thread stopped".to_owned(),
+        };
+        if status.starts_with("Export failed") {
+            bevy::log::error!("{status}");
+        }
+        self.status = Some(status);
+    }
+
+    /// Block until the running export ends and return its status (tests).
+    #[cfg(test)]
+    fn wait(&mut self) -> String {
+        self.finish();
+        self.status.clone().unwrap_or_default()
+    }
+}
+
 /// The stored (settings-file) name of a game, e.g. `valorant`.
 fn game_name(game: Game) -> String {
     match toml::Value::try_from(game) {
@@ -396,5 +499,59 @@ mod tests {
         assert_eq!(quote("a,b"), "\"a,b\"");
         assert_eq!(quote("plain"), "plain");
         assert_eq!(split_fields("1,\"a,\"\"b\"\"\",c\r"), ["1", "a,\"b\"", "c"]);
+    }
+
+    #[test]
+    fn the_export_has_one_full_width_row_per_run() {
+        let src = "timestamp,scenario,score,accuracy,kills,kills_per_min,avg_time_to_kill,headshot_rate,moving_shots\n\
+            1,micro-adjust,100.0,0.5,1,1.0,,0.0,0\n\
+            \n\
+            not-a-number,x,1\n\
+            2,flick-wide,700.0,0.6,40,40.0,0.5,0.1,0,60.0,valorant,0.314,1600,26.00,70.5,\"a,b\",240,180,1,2.5,00000000000000ff\n";
+        let (csv, rows) = export_csv(src);
+        assert_eq!(rows, 2, "blank and unreadable rows are skipped");
+        let lines: Vec<&str> = csv.lines().collect();
+        assert_eq!(lines[0], HEADER);
+        let width = HEADER.split(',').count();
+        assert_eq!(lines.len(), 3);
+        for l in &lines[1..] {
+            assert_eq!(split_fields(l).len(), width, "{l}");
+        }
+        assert_eq!(
+            lines[1],
+            format!(
+                "1,micro-adjust,100.0,0.5,1,1.0,,0.0,0{}",
+                ",".repeat(width - 9)
+            )
+        );
+        assert!(lines[2].contains(",\"a,b\","), "quoted fields stay quoted");
+    }
+
+    #[test]
+    fn exporting_writes_the_file_off_the_frame() {
+        let dir = scratch("export");
+        let paths = paths_in(&dir);
+        let mut h = History::load(&paths);
+        h.record_with(&result("flick-wide", 700.0, 60.0), &snapshot());
+        h.record(&result("arena", 5.0, 90.0));
+        let out = default_export_path(&paths, 1_700_000_000);
+        assert_eq!(out, dir.join("history-export-1700000000.csv"));
+        let mut job = HistoryExport::default();
+        assert!(!job.is_running());
+        job.start(paths.history_file.clone(), out.clone());
+        assert!(job.is_running() || job.status().is_none());
+        let status = job.wait();
+        assert_eq!(status, format!("Exported 2 runs to {}", out.display()));
+        assert_eq!(job.status(), Some(status.as_str()));
+        let written = fs::read_to_string(&out).unwrap();
+        assert_eq!(written.lines().count(), 3);
+        assert_eq!(written.lines().next(), Some(HEADER));
+        let mut failing = HistoryExport::default();
+        failing.start(
+            dir.join("missing.csv"),
+            dir.join("no-such-dir").join("x.csv"),
+        );
+        assert!(failing.wait().starts_with("Export failed: "));
+        fs::remove_dir_all(&dir).unwrap();
     }
 }

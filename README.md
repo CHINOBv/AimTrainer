@@ -225,6 +225,8 @@ Every finished scenario run is saved as one CSV row in the data directory (`~/.l
 
 Rows written before snapshots existed keep their columns and load with empty snapshot fields; the next run written upgrades the file's header line. Arena runs are stored without a snapshot.
 
+**Export:** on the Progress page, **Export history (CSV)** writes a copy with the same columns, one row per run, with older rows padded with empty fields so every row has all 21 columns. Type a path in the field next to the button, or leave it empty to write `history-export-<unix time>.csv` next to `history.csv`. The export runs on a background thread, and the page shows where the file went or why it failed.
+
 ## Architecture
 
 ```
