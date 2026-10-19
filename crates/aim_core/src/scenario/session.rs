@@ -1288,6 +1288,8 @@ mod tests {
             end: Default::default(),
             fail: Default::default(),
             phases: None,
+            view: Default::default(),
+            feedback: Default::default(),
         }
     }
 
