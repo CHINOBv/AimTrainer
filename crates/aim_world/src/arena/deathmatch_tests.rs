@@ -262,6 +262,16 @@ fn squads_are_validated() {
             .any(|e| e.contains("squad roles do not apply to site attackers")),
         "{errs:?}"
     );
+    // Huge counts are reported, never overflow the sum.
+    let max = u32::MAX;
+    let errs = bad(&format!(
+        "[[mode.squad]]\nrole = \"pusher\"\ncount = {max}\n[[mode.squad]]\nrole = \"roamer\"\ncount = {max}\n"
+    ));
+    assert!(
+        errs.iter()
+            .any(|e| e.contains("entry 2: count must be in 1..=16")),
+        "{errs:?}"
+    );
     let ok = bad(
         "[[mode.squad]]\nrole = \"pusher\"\n[[mode.squad]]\nrole = \"angle_holder\"\nskill = \"elite\"\n",
     );

@@ -143,8 +143,8 @@ pub(super) fn validate_squad(
             );
         }
     }
-    let total: u32 = squad.iter().map(|e| e.count).sum();
-    if total != bots {
+    let total: u64 = squad.iter().map(|e| u64::from(e.count)).sum();
+    if total != u64::from(bots) {
         push(
             "mode.squad",
             format!("the counts add up to {total}, but bots = {bots}"),
