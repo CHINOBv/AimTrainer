@@ -35,8 +35,8 @@ Branch: `feat/scenario-engine` (worktree `../AimTrainer-worktrees/scenario-engin
 |---|---|---|---|---|
 | T1 | plan | inline | done | 12ad695 |
 | T2 | S1, S2, S3, S4 (engine) | delegated (worktree `se-engine`) | done except target sets (deferred) | 9be6e5a, ad8a306, 3e9f019, merge a196167 |
-| T3 | S5, S6 | delegated, after T2 | pending | |
-| T4 | S7, S8 (content) | delegated, after T2 | in progress (split: se-library clicking+switching, se-library-b tracking+VALORANT; routines after) | |
+| T3 | S5, S6 | delegated, after T2 | done (playtest pending) | 57f483a, f7f4aeb, 4a4a5da, 2e9387b, abb7095, merge df98376 |
+| T4 | S7, S8 (content) | delegated, after T2 | done | library merges 18943bc, 8719057; routines 6e6760c; doc 96674f3 |
 | T5 | seam: merge, calibrate, verifier, review, merge to `main` | inline | pending | |
 
 ## Log
