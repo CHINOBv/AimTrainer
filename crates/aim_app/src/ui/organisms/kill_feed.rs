@@ -1,5 +1,6 @@
 //! Arena kill feed (top right) and the multi-kill / streak banner.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::ui::atoms::{GOOD, WARN, big, pop};
 use bevy_egui::egui::{self, Align2, RichText};
 
@@ -16,24 +17,26 @@ pub const BANNER_SECS: f32 = 1.6;
 /// The feed line of a kill: "You ▶ Bot 3", with " [HS]" for a headshot.
 pub fn kill_line(bot_id: u64, headshot: bool) -> String {
     let hs = if headshot { " [HS]" } else { "" };
-    format!("You ▶ Bot {bot_id}{hs}")
+    let line = tr_fmt("You ▶ Bot {}", &[&bot_id]);
+    format!("{line}{hs}")
 }
 
 /// The name of `count` kills in a row within the multi-kill window, from two on.
 pub fn multi_kill_name(count: u32) -> Option<String> {
     match count {
         0 | 1 => None,
-        2 => Some("Double".to_owned()),
-        3 => Some("Triple".to_owned()),
-        4 => Some("Quadra".to_owned()),
-        n => Some(format!("Multi ×{n}")),
+        2 => Some(tr("Double").to_owned()),
+        3 => Some(tr("Triple").to_owned()),
+        4 => Some(tr("Quadra").to_owned()),
+        n => Some(tr_fmt("Multi ×{}", &[&n])),
     }
 }
 
 /// The name of a kill streak (kills since the last death) at its milestones: 3, 5, then
 /// every 5.
 pub fn streak_name(streak: u32) -> Option<String> {
-    (streak == 3 || (streak >= 5 && streak.is_multiple_of(5))).then(|| format!("{streak} streak"))
+    (streak == 3 || (streak >= 5 && streak.is_multiple_of(5)))
+        .then(|| tr_fmt("{} streak", &[&streak]))
 }
 
 /// The banner for a kill that makes `multi` quick kills and a streak of `streak`. A
