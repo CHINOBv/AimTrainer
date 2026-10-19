@@ -34,7 +34,8 @@ pub const COLD_RATIO: f32 = 0.85;
 pub const BASELINE_DAYS: u64 = 30;
 
 /// How ready the player is, relative to their recent baseline.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Warmth {
     /// Clearly below the baseline.
     Cold,

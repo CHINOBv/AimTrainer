@@ -460,6 +460,14 @@ Enemies often first show up away from the crosshair, and the minimap tells where
 
 **Simulated aimer.** For detection it holds the crosshair still, clicks each flash one reaction time after it appears, and with no flash showing clicks anyway at its go/no-go mistake rate per second (recruit ≈ 0.22/s, elite ≈ 0.09/s, an **estimate**). For radar recall it treats the targets the radar did not show like go/no-go decoys, mistaking one for a match at the same rate. `peripheral-detect` calibrates at about 71% and `radar-recall` at about 67% contender accuracy, inside the challenge-point band. Neither model forgets the radar or misses a flash outright, so a playtest should confirm the difficulty.
 
+## Ranked journal and tilt reset
+
+`aim_core::training::journal` keeps a one-tap entry per ranked match: the outcome, the RR change, a 1–5 self-rating and one tag (tilted, tired, warmed-up, cold, aim-off, aim-on, team-diff, other).
+
+- **Links to warm-up and fatigue.** Each entry stores the readiness label (READY, WARMING or COLD, from `progress::readiness`) and whether a fatigue signal (`progress::fatigue`) was showing when it was logged. The journal then reports the win rate and mean self-rating for each readiness label and with or without fatigue. This lets players check, on their own matches, whether warming up pays off for them (inference: the warm-up decrement in Routine design is measured in lab tasks, not in ranked results). Draws count as matches not won. The split is descriptive: with a few matches per group it is noise, and it shows correlation, not cause.
+- **Losing streak and tilt reset.** The journal counts the losses in a row at its end; a win or a draw ends the streak. After **2** losses in a row it suggests the tilt reset. The threshold is an **estimate**.
+- **Tilt reset routine.** Three minutes: a 60 s paced-breathing timer at 6 breaths per minute (5 s in, 5 s out), then 2 min of easy smooth tracking (`track-precise` at difficulty −0.5). Slow breathing is commonly defined as under 10 breaths per minute (approximate, Zaccaro et al. 2018, *Frontiers in Human Neuroscience*, https://doi.org/10.3389/fnhum.2018.00353). The pace, the 60 s and the 2 min are **estimates**. The routine is a pause before the next queue; the app makes no health or performance claim about it.
+
 ## Breaks and wrist care
 
 **Prevalence (verified, cross-sectional surveys):**
