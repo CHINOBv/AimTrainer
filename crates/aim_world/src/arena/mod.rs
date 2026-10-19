@@ -12,9 +12,12 @@ mod behavior;
 mod bot;
 pub mod builtin;
 mod coaching;
+#[cfg(test)]
+mod deathmatch_tests;
 mod def;
 #[cfg(test)]
 mod duel_tests;
+mod recap;
 #[cfg(test)]
 mod rules_tests;
 mod session;
@@ -33,6 +36,7 @@ pub use def::{
     PRACTICE_SUFFIX, ReactiveBots, RuleConditions, ShootBackDeadline, SiteObjective, bot_profile,
     split_practice,
 };
+pub use recap::{DeathCause, DeathRecap, RECAP_PLACEMENT_DEG, RECAP_SLOW_SHOT_SECS};
 pub use session::{
     ArenaEvent, ArenaSession, ArenaStats, BOT_WEAPON, BotView, DEATH_POINTS, HEADSHOT_BONUS,
     KILL_POINTS, ObjectiveStatus, PLAYER_HEALTH, PRE_AIM_POINTS, RESPAWN_GRACE_SECS,

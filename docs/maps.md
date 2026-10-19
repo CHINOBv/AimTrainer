@@ -280,6 +280,23 @@ Once the player first sees a bot life, a clock starts. If the bot is still alive
 
 At the first frame each bot life becomes visible to the player, the arena records the angle in degrees between the player's view direction and the bot's head (`ArenaStats::crosshair_errors_deg`); `ArenaStats::median_crosshair_error_deg` summarizes it. A player who pre-aims where the head appears scores close to 0°; one who looks elsewhere scores tens of degrees. It trains pre-aim and head-level placement (roadmap Phase 7). The vertical part of the same error, how far the crosshair was above or below head level in degrees of pitch, is recorded in `ArenaStats::head_level_errors_deg` (`median_head_level_error_deg`). In an angle clear with `pre_aim_tolerance_deg`, each bot life first seen within that many degrees counts in `ArenaStats::pre_aimed`. A perfectly pre-aimed angle still measures a few degrees, because the head is first seen while only partly out of cover (about 3° on the `angles-lab` doorway), so 5° is a sensible tolerance.
 
+### Death recap
+
+Every death records why it happened (`ArenaStats::death_recaps`, `ArenaSession::last_death()`). Each bot keeps a log of the current player life, cleared at every respawn: when it first came into the player's sight and the crosshair error at that moment, when it first noticed the player, the player's first shot after seeing it, the player's shots while it was in sight (and how many were moving shots), and the damage both ways. When that bot kills the player the log becomes a `DeathRecap` with the killer's id and skill, the distance, whether the player saw it first (the same frame counts as first), those numbers and one main `DeathCause`, the first of these that applies:
+
+| Cause | When |
+|---|---|
+| `Unseen` | The killer was never in the player's line of sight this life. |
+| `Deadline` | The killing blow was a shoot-back deadline's sure shot. |
+| `MovingShots` | More than half the player's shots during the fight were moving shots. |
+| `Placement` | The crosshair was at least `RECAP_PLACEMENT_DEG` (10°) from the killer's head when it appeared. |
+| `SlowShot` | The first shot came at least `RECAP_SLOW_SHOT_SECS` (0.5 s) after first sight, or never. |
+| `Outaimed` | None of the above: placed, quick and still, and the bot still won the duel. |
+
+Both thresholds are design choices, not VALORANT values: 10° is twice the pre-aim tolerance, and 0.5 s is a human visual reaction (about 0.25 s) plus a short flick. Sight is line of sight to the head, as for the crosshair placement metric. Recording draws no random numbers, so runs are unchanged.
+
+While the player is respawn-protected, the HUD shows a recap card under the death screen: the cause as one line with its number, and three drawn icons (saw first or seen first, the crosshair error, the first-shot time or the moving shots). The results notes name the most common cause ("Most deaths: crosshair placement (3 of 5)"). The card drawing has no automated test.
+
 ### Live coaching overlay
 
 The **Live coaching overlay** checkbox on the Arenas tab (off by default, saved in settings as `arena_coaching`) shows, while an arena runs, what the post-run crosshair placement metric measures, live. `ArenaSession::coaching()` computes the values each frame as a pure read (it changes nothing and draws no random number); the app only draws them:

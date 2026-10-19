@@ -14,7 +14,7 @@ use crate::persistence::settings::Settings;
 use aim_core::math::ViewAngles;
 use aim_core::scenario::{HitZone, Shape};
 use aim_core::training::store::RunStore;
-use aim_world::arena::{ArenaEvent, ArenaSession};
+use aim_world::arena::{ArenaEvent, ArenaSession, DeathCause};
 use aim_world::map::BoxKind;
 use bevy::camera::Projection;
 use bevy::ecs::system::SystemParam;
@@ -299,6 +299,18 @@ fn look(
     run.view = apply_look(run.view, &motion, k * drill.multiplier());
 }
 
+/// A short name for a death cause, for the results notes ("Most deaths: ...").
+fn death_cause_name(cause: DeathCause) -> &'static str {
+    match cause {
+        DeathCause::Unseen => "shot by an enemy you never saw",
+        DeathCause::Deadline => "too slow, the deadline shot",
+        DeathCause::MovingShots => "shooting while moving",
+        DeathCause::Placement => "crosshair placement",
+        DeathCause::SlowShot => "slow first shot",
+        DeathCause::Outaimed => "lost the aim duel",
+    }
+}
+
 /// Record the finished arena run and show the results screen.
 #[derive(SystemParam)]
 struct ArenaFinisher<'w, 's> {
@@ -366,6 +378,13 @@ impl ArenaFinisher<'_, '_> {
                     o.attackers
                 )
             });
+        }
+        if let Some((cause, n)) = stats.top_death_cause() {
+            notes.push(format!(
+                "Most deaths: {} ({n} of {})",
+                death_cause_name(cause),
+                stats.deaths
+            ));
         }
         if let Some(d) = run.session.def().mode.deadline() {
             notes.push(format!(

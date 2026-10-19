@@ -6,6 +6,7 @@ use super::behavior::{
     PLAYER_STRAFE_MIN_SPEED, PeekSense, Phase, Push, Retreat, RetreatSense, Strafe, react_strafe,
 };
 use super::def::{BehaviorRule, BotBehavior, ReactiveBots};
+use super::recap::DuelLog;
 use crate::map::{AngleMarker, DEFAULT_PLAYER_RADIUS, MapDef};
 use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::{Range, Vec3, ViewAngles, angle_between_deg};
@@ -159,6 +160,9 @@ pub(crate) struct Bot {
     /// Eye of the player where the bot last noticed them or was shot from: where a
     /// peeking bot walks and what a retreating bot hides from.
     pub last_known_player: Option<Vec3>,
+    /// What this bot and the player did to each other during the current player life,
+    /// for the death recap.
+    pub duel: DuelLog,
 }
 
 impl Bot {
@@ -186,6 +190,7 @@ impl Bot {
             spawned_at: 0.0,
             last_hit_at: f32::NEG_INFINITY,
             last_known_player: None,
+            duel: DuelLog::default(),
         }
     }
 

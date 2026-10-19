@@ -4,6 +4,7 @@ use super::behavior::{Phase, Push, Retreat};
 use super::bot::{Bot, Brain, Ctx, PEEK_DELAY_SECS, head_of, yaw_of};
 use super::coaching::Coaching;
 use super::def::{ArenaDef, ArenaError, ArenaMode, PRACTICE_SUFFIX, SiteObjective, bot_profile};
+use super::recap::{DeathRecap, Killer, top_cause};
 use crate::corner::PeekCorner;
 use crate::map::{DEFAULT_PLAYER_RADIUS, MapDef, SpawnKind};
 use aim_core::activity::{Activity, ActivityEvent};
@@ -121,6 +122,8 @@ pub struct ArenaStats {
     pub deadline_kills: u32,
     /// Shoot-back deadline: sure shots bots landed because their deadline passed.
     pub deadline_hits: u32,
+    /// Why each death happened, in order (deathmatch and angle clear alike).
+    pub death_recaps: Vec<DeathRecap>,
 }
 
 /// The first exposure of a bot life while it lasts, for peek efficiency.
@@ -174,6 +177,12 @@ impl ArenaStats {
     /// Median seconds a first exposure lasted (peek efficiency).
     pub fn median_exposure_secs(&self) -> Option<f32> {
         median(&self.exposure_times_secs)
+    }
+
+    /// The most common cause of death and how many deaths it explains (ties go to the
+    /// cause checked first, see [`super::recap::DeathCause`]).
+    pub fn top_death_cause(&self) -> Option<(super::recap::DeathCause, u32)> {
+        top_cause(&self.death_recaps)
     }
 }
 
@@ -571,6 +580,9 @@ impl ArenaSession {
             b.visible_to_player = self.map.visible_head(eye, b.feet);
             if !b.visible_to_player {
                 end_exposure(&mut self.engagements, &mut self.stats, b.id, self.time);
+            } else if b.duel.player_saw_at.is_none() {
+                let err = angle_between_deg(dir, head_of(b.feet) - eye);
+                b.duel.player_sees(self.time, err);
             }
             if b.visible_to_player && b.first_seen_at.is_none() {
                 b.first_seen_at = Some(self.time);
@@ -630,6 +642,9 @@ impl ArenaSession {
         if moving {
             self.stats.moving_shots += 1;
         }
+        for b in self.bots.iter_mut().filter(|b| b.alive) {
+            b.duel.player_fired(self.time, b.visible_to_player, moving);
+        }
         let ray = Ray {
             origin: self.eye_position(),
             dir,
@@ -662,6 +677,7 @@ impl ArenaSession {
             moving,
         });
         bot.health -= dmg;
+        bot.duel.damage_dealt += dmg;
         // A bot that survives knows where the shot came from (roaming bots fall back).
         bot.shot_from = Some(ray.origin);
         bot.last_hit_at = now;
@@ -745,6 +761,9 @@ impl ArenaSession {
             };
             let bot = &mut self.bots[i];
             let landed = bot.think(&ctx, &mut self.rng);
+            if bot.sees_player {
+                bot.duel.bot_notices(self.time);
+            }
             let can_fire = self.time - bot.last_shot_at >= 1.0 / self.bot_weapon.fire_rate;
             // A strafing bot waits for the slow moment of its counter-strafe to fire.
             let steady = !bot.careful_fire
@@ -775,20 +794,24 @@ impl ArenaSession {
                 .filter(|&(t, _)| self.map.raycast(ray, t).is_none());
             if let Some((_, zone)) = hit {
                 let dmg = Self::damage(&self.bot_weapon, zone);
-                self.damage_player(dmg, ray.origin, Some(zone), events);
+                self.damage_player(dmg, i, Some(zone), events);
             }
         }
     }
 
-    /// Damage the player by `dmg` from a bot whose eye is at `from`; `zone` is the body
-    /// zone a bullet hit, if a bullet dealt it.
+    /// Damage the player by `dmg` from the bot at index `shooter`; `zone` is the body zone
+    /// a bullet hit, or `None` for a deadline's sure shot. A killing blow records the
+    /// death recap before the respawn.
     fn damage_player(
         &mut self,
         dmg: f32,
-        from: Vec3,
+        shooter: usize,
         zone: Option<HitZone>,
         events: &mut Vec<ArenaEvent>,
     ) {
+        let bot = &mut self.bots[shooter];
+        let from = bot.eye();
+        bot.duel.damage_taken += dmg;
         self.player.health -= dmg;
         self.stats.damage_taken += dmg;
         events.push(ArenaEvent::PlayerHit {
@@ -797,9 +820,22 @@ impl ArenaSession {
             zone,
         });
         if self.player.health <= 0.0 {
+            let bot = &self.bots[shooter];
+            let killer = Killer {
+                id: bot.id,
+                skill: self.aimer.name,
+                distance_m: (bot.feet - self.player.feet).horizontal().length(),
+            };
+            let recap = bot.duel.recap(killer, self.time, zone.is_none());
+            self.stats.death_recaps.push(recap);
             events.push(ArenaEvent::PlayerDied);
             self.player_died();
         }
+    }
+
+    /// The recap of the player's latest death, if they have died.
+    pub fn last_death(&self) -> Option<&DeathRecap> {
+        self.stats.death_recaps.last()
     }
 
     /// Shoot-back deadline: every living bot the player first saw at least `secs` ago and
@@ -825,8 +861,7 @@ impl ArenaSession {
             self.bots[i].deadline_hit = true;
             self.stats.deadline_hits += 1;
             if deadline.damage > 0.0 {
-                let from = self.bots[i].eye();
-                self.damage_player(deadline.damage, from, None, events);
+                self.damage_player(deadline.damage, i, None, events);
             }
         }
     }
@@ -851,6 +886,8 @@ impl ArenaSession {
         for b in &mut self.bots {
             b.aim.disengage();
             b.sees_player = false;
+            // A new life starts a new duel with every bot.
+            b.duel = Default::default();
             if let Brain::Angle { marker, phase } = &mut b.brain {
                 b.feet = marker.hidden_position();
                 b.vel = Vec3::ZERO;

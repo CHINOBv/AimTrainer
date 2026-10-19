@@ -16,6 +16,7 @@ use crate::ui::UiAction;
 use crate::ui::atoms::{crosshair, hit_marker};
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::damage_indicator::{self, RecentHits, screen_bearing};
+use crate::ui::organisms::death_recap;
 use crate::ui::organisms::death_screen::{self, DeathView, ShotSide, shot_side};
 use crate::ui::organisms::health_bar::{HealthBar, HealthGhost, low_hp_pulse};
 use crate::ui::organisms::kill_feed::{self, KillFeed};
@@ -458,6 +459,13 @@ fn arena_fx_hud(
             respawn_secs: s.spawn_protection_secs(),
         };
         death_screen::draw(ctx, &view);
+    }
+    // The recap stays up with the death screen (the spawn protection), even when the
+    // death screen itself is off.
+    if fx.death.is_some()
+        && let Some(recap) = s.last_death()
+    {
+        death_recap::draw(ctx, &death_recap::view(recap));
     }
     if feel.round_transitions {
         if let Some(age) = fx.go_age {
