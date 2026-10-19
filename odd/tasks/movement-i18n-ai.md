@@ -28,7 +28,7 @@ Branches: `feat/movement-space` (done inline), then one per unit in `../CustomAi
 | T2 | S1, S3, S4 | delegated (parallel writer, worktree `movement-drills`) | pending | |
 | T3 | S5 | delegated (parallel writer, worktree `movement-lab`) | pending | |
 | T4 | S6 | delegated (parallel writer, worktree `ai-debrief`) | pending | |
-| T5 | S7 foundation | delegated (parallel writer, worktree `i18n-core`) | pending | |
+| T5 | S7 foundation | delegated (parallel writer, worktree `i18n-core`) | done | 6ce3b6b, 804ac95 |
 | T6 | S7 translation sweep | delegated (parallel writers by area, after T2-T5 merge) | pending | |
 | T7 | S8 | inline (parent): merge, seam check, push, build | pending | |
 
@@ -42,3 +42,4 @@ Route evidence: T2-T5 are independent units with disjoint main surfaces, each se
 - L4: AI research. Grounding: send a byte-capped digest with stable metric keys; require citations; validate numbers, ids and lengths deterministically; no silent retries. Reuse `ChatModel::complete(messages, &[])`, `Job<T>` and `model(config)`; cache per `ResultKey`. `Mistake.player/corrected` are raw paths and must not be sent.
 - L5: i18n map. ~880 UI literals and ~290 `format!` in `aim_app/src/ui`; `'static` label tables (`TABS`, `SettingsTab::ALL`, `rows.section`); view models hold preformatted text; core builds `Finding.explanation`, `Mistake.tip`, `Metric::label()`; content TOML has names/descriptions/notes; ~340 exact-English assertions; `Settings` uses struct-level `#[serde(default)]`; no i18n crate; egui default fonts likely cover Latin-1.
 - L6 (parent): S2 done in d9ea9d6, reviewed and approved.
+- L7 (T5 writer): i18n foundation done (6ce3b6b, 804ac95). `aim_core::i18n` is pure: `Lang` (en/es), `tr_in`, `tr_fmt_in`, `tr_named_in`, `fill`, `fill_named`, `check(ES_SOURCES)`; catalogs `locales/es/{menu,settings,results,replays,coach,hud,progress,tools,content,rules,core}.toml` keyed by English text (all already listed in `ES_SOURCES`, so T6 writers only edit their own file). The current language is an atomic in the new `crates/aim_app/src/i18n.rs` (`tr`, `tr_fmt`, `tr_named`, `labels`, `labels_in`, `LanguagePlugin`), not in the core, because the core has no globals (architecture: no hidden inputs). `Settings.language` (old files and unknown codes load English), selector at the top of the Overlay tab (kept by section resets), pilot: main and settings tab labels plus "Language". Default fonts already draw the Spanish characters (new font test). Guide: `docs/i18n.md`; decision D18. Checks: fmt clean, clippy -D warnings clean, `cargo test --workspace` all green.
