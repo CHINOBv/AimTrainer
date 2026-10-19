@@ -51,3 +51,17 @@ Branch: `feat/scenario-engine` (worktree `../AimTrainer-worktrees/scenario-engin
   - Calibrate: all pre-existing rows identical; 8 `demo-*` rows ordered, contender accuracy 0.57–0.82.
   - **Deferred:** `[[target_sets]]`. Per-target definitions would rewrite most of `Session`, plus analytics and HUD files that read the scenario-wide shape, and the interaction with phases is unspecified. Phases already vary targets within a run (YAGNI).
   - T3 (FOV lock, per-scenario feedback toggles, history snapshot/CSV) waits until game-feel reaches `main`, because both touch app settings and results.
+- L-verify (2026-10-18) Independent verifier at 6f181e2: S1–S3 and S5–S8 pass; S4 is partial by design (`[[target_sets]]` deferred, a parse error rather than ignored); no blockers.
+  - History upgrade probes:
+    - legacy 9/10-column, CRLF and header-less files load identically;
+    - only line 1 changes, through a temp file and a rename;
+    - a header-less file is never rewritten.
+  - Calibrate: 41 baseline lines byte-identical; 48 new rows ordered.
+  - Fixed: the run end reads only the header line instead of the whole history file.
+  - Advisories kept:
+    - a `static` motion accepts unknown keys (pre-existing serde unit-variant behaviour);
+    - `health_bars` accepted without multi-hit targets;
+    - no fsync before the rename;
+    - an empty history.csv gets no header (pre-existing);
+    - overlays use the unshrunk radius;
+    - the FOV lock and overlays need a playtest.
