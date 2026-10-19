@@ -193,7 +193,7 @@ pub fn throughput(flicks: &[Flick]) -> Option<f32> {
     Some((de / we + 1.0).log2() / mt)
 }
 
-fn unit(v: (f32, f32)) -> Option<(f32, f32)> {
+pub(super) fn unit(v: (f32, f32)) -> Option<(f32, f32)> {
     let len = (v.0 * v.0 + v.1 * v.1).sqrt();
     (len > 1e-6).then(|| (v.0 / len, v.1 / len))
 }
@@ -203,7 +203,7 @@ pub(super) fn dot(a: (f32, f32), b: (f32, f32)) -> f32 {
 }
 
 /// Signed error of `view` relative to `target`, along `dir`, degrees.
-fn along_error_deg(view: ViewAngles, target: ViewAngles, dir: (f32, f32)) -> f32 {
+pub(super) fn along_error_deg(view: ViewAngles, target: ViewAngles, dir: (f32, f32)) -> f32 {
     dot(tangent_offset_deg(target, view), dir)
 }
 
@@ -256,7 +256,7 @@ fn analyze_one(
     target: &TargetSample,
     kind: FlickKind,
     start_secs: f32,
-) -> Flick {
+) -> (Flick, Option<usize>, Option<usize>) {
     let shot = segment
         .last()
         .expect("a segment holds at least the shot frame");
@@ -279,6 +279,7 @@ fn analyze_one(
     let (mut reaction, mut movement, mut primary_error, mut settle) = (None, None, None, None);
     let mut corrections = 0;
     let mut primary_offset = None;
+    let mut primary_end = None;
     if let Some(onset) = onset {
         let onset_time = segment[onset].time_secs - segment[onset].dt_secs;
         reaction = Some((onset_time - start_secs).max(0.0));
@@ -286,6 +287,7 @@ fn analyze_one(
         let subs = submovements(&speeds, onset, floor);
         corrections = subs.len().saturating_sub(1) as u32;
         if let Some(&(_, end)) = subs.first() {
+            primary_end = Some(end);
             let s = &segment[end];
             primary_error = Some(along_error_deg(s.view, goal_at(s), dir) / radius);
             primary_offset = Some(tangent_offset_deg(goal_at(s), s.view));
@@ -308,7 +310,7 @@ fn analyze_one(
             angle_between_deg(s.view.direction(), point.direction()) <= radius
         })
         .map(|s| (shot.time_secs - s.time_secs).max(0.0));
-    Flick {
+    let flick = Flick {
         kind,
         target_id: target.id,
         hit: shot.hit,
@@ -326,11 +328,37 @@ fn analyze_one(
         click_delay_secs: click_delay,
         direction_deg: tangent_offset_deg(start_view, goal),
         primary_offset_deg: primary_offset,
-    }
+    };
+    (flick, onset, primary_end)
+}
+
+/// Where a [`Flick`] lies in the samples it was measured from. Indices are into those
+/// samples, so a replay can show the exact frames of the flick and its key moments.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FlickSpan {
+    /// First sample of the flick (the frame after it could first be aimed).
+    pub first: usize,
+    /// The sample of the shot (last of the flick).
+    pub shot: usize,
+    /// Movement onset sample, or `None` when the crosshair never moved.
+    pub onset: Option<usize>,
+    /// Last sample of the primary sub-movement, or `None` without one.
+    pub primary_end: Option<usize>,
+    /// Crosshair orientation just before `first`.
+    pub start_view: ViewAngles,
+    /// Session time the flick started (target visible or previous shot), seconds.
+    pub start_secs: f32,
+    /// The target as seen at the shot.
+    pub target: TargetSample,
 }
 
 /// Segment `samples` into one flick per shot.
 pub fn flicks(samples: &[Sample]) -> Vec<Flick> {
+    flick_spans(samples).into_iter().map(|(f, _)| f).collect()
+}
+
+/// Segment `samples` into one flick per shot, each with where it lies in `samples`.
+pub fn flick_spans(samples: &[Sample]) -> Vec<(Flick, FlickSpan)> {
     let mut out = Vec::new();
     let mut last_shot: Option<(usize, u64, bool)> = None; // (index, target, hit)
     for (i, s) in samples.iter().enumerate() {
@@ -359,13 +387,18 @@ pub fn flicks(samples: &[Sample]) -> Vec<Flick> {
             Some((_, id, false)) if id == target.id => FlickKind::Correction,
             _ => FlickKind::Fresh,
         };
-        out.push(analyze_one(
-            &samples[first..=i],
+        let (flick, onset, primary_end) =
+            analyze_one(&samples[first..=i], start_view, &target, kind, start_secs);
+        let span = FlickSpan {
+            first,
+            shot: i,
+            onset: onset.map(|o| first + o),
+            primary_end: primary_end.map(|e| first + e),
             start_view,
-            &target,
-            kind,
             start_secs,
-        ));
+            target,
+        };
+        out.push((flick, span));
         last_shot = Some((i, target.id, s.hit));
     }
     out
