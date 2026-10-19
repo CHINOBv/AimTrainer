@@ -460,6 +460,21 @@ Enemies often first show up away from the crosshair, and the minimap tells where
 
 **Simulated aimer.** For detection it holds the crosshair still, clicks each flash one reaction time after it appears, and with no flash showing clicks anyway at its go/no-go mistake rate per second (recruit ≈ 0.22/s, elite ≈ 0.09/s, an **estimate**). For radar recall it treats the targets the radar did not show like go/no-go decoys, mistaking one for a match at the same rate. `peripheral-detect` calibrates at about 71% and `radar-recall` at about 67% contender accuracy, inside the challenge-point band. Neither model forgets the radar or misses a flash outright, so a playtest should confirm the difficulty.
 
+## Breaks and wrist care
+
+**Prevalence (verified, cross-sectional surveys):**
+
+- Monma et al. 2024, *Cureus* 16(8):e66496, 79 Japanese male players (https://pmc.ncbi.nlm.nih.gov/articles/PMC11380764/): self-reported stiff or sore shoulders 49.4%, neck pain 29.1%, lower back pain 29.1%, wrist pain 6.3%. Professionals reported more neck, back and wrist pain than amateurs.
+- Kurniawan et al. 2024, *Frontiers in Sports and Active Living* 6, 94 mobile esports players in Jakarta (https://doi.org/10.3389/fspor.2024.1372979): 66% reported musculoskeletal complaints, most often in the shoulder, neck and hand.
+
+**Efficacy (verified as an absence of evidence):** neither study tested breaks or stretches, and we found no trial showing that they prevent these complaints in esports. Both recommend breaks as a precaution. The app says this next to every prompt.
+
+**Implementation:** `aim_core::training::ergonomics`.
+
+- `BreakPolicy` suggests a break after continuous play and flags a rolling 7-day training cap. It can be changed or turned off.
+- `STRETCHES` is a short generic list shown with `STRETCH_DISCLAIMER` (not medical advice).
+- **Estimates, not sourced values:** 45 min of continuous play, 5 min breaks, and a 420 min weekly cap. The cap is about 1 h a day, where Listman et al. 2021 saw daily gains peak (see Routine design); it is not an injury threshold.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.
