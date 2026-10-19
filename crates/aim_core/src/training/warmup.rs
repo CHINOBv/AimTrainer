@@ -3,9 +3,12 @@
 //!
 //! Warm-up order follows `docs/training-science.md`: smooth tracking first, then large
 //! targets and flicks, then precision, switching and movement, with easier levels first
-//! (warm-up decrement after rest, Lee & Genovese 1988).
+//! (warm-up decrement after rest, Lee & Genovese 1988). [`warmup_dose`] sizes the queue
+//! warm-up from the player's own sessions instead of a fixed length.
 
+use super::progress::RunRecord;
 use super::routine::{Block, RoutineDef};
+use std::collections::HashMap;
 
 /// Id of the generated queue warm-up routine.
 pub const QUEUE_WARMUP_ID: &str = "queue-warmup";
@@ -70,6 +73,112 @@ pub fn micro_drill(n: usize) -> (&'static str, f32) {
     (MICRO_DRILLS[n % MICRO_DRILLS.len()], MICRO_DRILL_SECS)
 }
 
+// ---------------------------------------------------------------- personal dose
+
+/// Shortest personal warm-up, minutes.
+pub const DOSE_MIN_MINUTES: f32 = 2.0;
+/// Longest personal warm-up, minutes.
+pub const DOSE_MAX_MINUTES: f32 = 15.0;
+/// Scores within this share of the session's best rolling mean count as plateaued (estimate).
+pub const PLATEAU_TOLERANCE: f32 = 0.05;
+/// Runs averaged by the rolling mean (estimate).
+pub const ROLLING_RUNS: usize = 3;
+/// Fewer runs than this in a session say nothing about its plateau (estimate).
+pub const MIN_SESSION_RUNS: usize = 4;
+/// Fewer usable sessions than this give no personal dose (estimate).
+pub const MIN_DOSE_SESSIONS: usize = 3;
+
+/// One run of a past session, for estimating the warm-up dose.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WarmupSample {
+    /// Minutes from the start of the session to the end of the run.
+    pub minute: f32,
+    /// The run's score divided by the scenario's personal best.
+    pub score_ratio: f32,
+}
+
+/// How long this player takes to warm up, from their own sessions.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WarmupDose {
+    /// Median plateau minute across sessions, clamped to
+    /// [`DOSE_MIN_MINUTES`]..=[`DOSE_MAX_MINUTES`].
+    pub minutes: f32,
+    /// Sessions the estimate is based on.
+    pub sessions: usize,
+}
+
+/// The runs of one session as warm-up samples: minutes since the session started (the first
+/// run's start) and the score over the scenario's personal best in `bests`. Runs without a
+/// positive personal best are skipped.
+pub fn session_samples(session: &[RunRecord], bests: &HashMap<String, f32>) -> Vec<WarmupSample> {
+    let Some(first) = session.first() else {
+        return Vec::new();
+    };
+    let start = first.timestamp as f64 - f64::from(first.duration_secs);
+    session
+        .iter()
+        .filter_map(|r| {
+            let best = *bests.get(&r.scenario)?;
+            (best > 0.0).then(|| WarmupSample {
+                minute: ((r.timestamp as f64 - start) / 60.0) as f32,
+                score_ratio: r.score / best,
+            })
+        })
+        .collect()
+}
+
+/// The minute after which the rolling mean of one session stays within
+/// [`PLATEAU_TOLERANCE`] of its best, or `None` with fewer than [`MIN_SESSION_RUNS`] runs.
+fn plateau_minute(samples: &[WarmupSample]) -> Option<f32> {
+    let mut s: Vec<WarmupSample> = samples
+        .iter()
+        .copied()
+        .filter(|x| x.minute.is_finite() && x.score_ratio.is_finite())
+        .collect();
+    if s.len() < MIN_SESSION_RUNS {
+        return None;
+    }
+    s.sort_by(|a, b| a.minute.total_cmp(&b.minute));
+    let rolling: Vec<f32> = s
+        .windows(ROLLING_RUNS)
+        .map(|w| w.iter().map(|x| x.score_ratio).sum::<f32>() / ROLLING_RUNS as f32)
+        .collect();
+    let best = rolling.iter().copied().fold(f32::MIN, f32::max);
+    let floor = best * (1.0 - PLATEAU_TOLERANCE);
+    // The first window from which every later window stays at the plateau.
+    let mut first = rolling.len() - 1;
+    while first > 0 && rolling[first - 1] >= floor {
+        first -= 1;
+    }
+    Some(s[first + ROLLING_RUNS - 1].minute)
+}
+
+/// The player's warm-up dose: the median plateau minute of their past sessions. `None`
+/// until [`MIN_DOSE_SESSIONS`] sessions each have [`MIN_SESSION_RUNS`] runs.
+pub fn warmup_dose(sessions: &[Vec<WarmupSample>]) -> Option<WarmupDose> {
+    let mut minutes: Vec<f32> = sessions.iter().filter_map(|s| plateau_minute(s)).collect();
+    if minutes.len() < MIN_DOSE_SESSIONS {
+        return None;
+    }
+    minutes.sort_by(f32::total_cmp);
+    let n = minutes.len();
+    let median = if n % 2 == 1 {
+        minutes[n / 2]
+    } else {
+        (minutes[n / 2 - 1] + minutes[n / 2]) / 2.0
+    };
+    Some(WarmupDose {
+        minutes: median.clamp(DOSE_MIN_MINUTES, DOSE_MAX_MINUTES),
+        sessions: n,
+    })
+}
+
+/// Queue warm-up length: the personal dose when there is one, else the player's setting.
+/// Pass the result to [`queue_warmup`].
+pub fn queue_warmup_minutes(dose: Option<&WarmupDose>, setting_minutes: f32) -> f32 {
+    dose.map_or(setting_minutes, |d| d.minutes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,5 +215,131 @@ mod tests {
             assert!(lib.iter().any(|d| d.id == id), "{id}");
         }
         assert!(micro_drill(0).1 < 30.0);
+    }
+
+    /// One sample per minute from minute 1 to 12, rising 5% a minute to a plateau at 1.0
+    /// reached at `plateau`; the 3-run rolling mean is within 5% of it from `plateau` on.
+    fn rising_session(plateau: f32) -> Vec<WarmupSample> {
+        (1..=12)
+            .map(|m| WarmupSample {
+                minute: m as f32,
+                score_ratio: (1.0 - 0.05 * (plateau - m as f32)).min(1.0),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_dose_is_the_median_plateau_minute_of_past_sessions() {
+        let dose = warmup_dose(&[
+            rising_session(4.0),
+            rising_session(9.0),
+            rising_session(6.0),
+        ])
+        .expect("three usable sessions");
+        assert_eq!(dose.minutes, 6.0);
+        assert_eq!(dose.sessions, 3);
+        let even = warmup_dose(&[
+            rising_session(4.0),
+            rising_session(5.0),
+            rising_session(7.0),
+            rising_session(9.0),
+        ])
+        .unwrap();
+        assert_eq!(even.minutes, 6.0, "mean of the two middle sessions");
+    }
+
+    #[test]
+    fn a_later_dip_moves_the_plateau_past_it() {
+        let mut s = rising_session(4.0);
+        s[8].score_ratio = 0.5; // minute 9 dips; the rolling mean recovers by minute 12
+        let late = plateau_minute(&s).unwrap();
+        assert_eq!(late, 12.0, "{s:?}");
+        // Order of the samples does not matter.
+        let mut shuffled = rising_session(6.0);
+        shuffled.reverse();
+        assert_eq!(plateau_minute(&shuffled), Some(6.0));
+    }
+
+    #[test]
+    fn the_dose_is_clamped_and_needs_enough_data() {
+        // 30 s runs already at the plateau: the first rolling window ends at minute 1.5.
+        let flat = || -> Vec<WarmupSample> {
+            (1..=8)
+                .map(|i| WarmupSample {
+                    minute: i as f32 * 0.5,
+                    score_ratio: 1.0,
+                })
+                .collect()
+        };
+        assert_eq!(plateau_minute(&flat()), Some(1.5));
+        let quick = warmup_dose(&[flat(), flat(), flat()]).unwrap();
+        assert_eq!(quick.minutes, DOSE_MIN_MINUTES);
+        let slow: Vec<_> = (0..3)
+            .map(|_| {
+                (1..=30)
+                    .map(|m| WarmupSample {
+                        minute: m as f32,
+                        score_ratio: m as f32 / 30.0,
+                    })
+                    .collect()
+            })
+            .collect();
+        assert_eq!(warmup_dose(&slow).unwrap().minutes, DOSE_MAX_MINUTES);
+        assert_eq!(
+            warmup_dose(&[rising_session(5.0), rising_session(5.0)]),
+            None
+        );
+        let short = rising_session(5.0)[..MIN_SESSION_RUNS - 1].to_vec();
+        assert_eq!(
+            warmup_dose(&[rising_session(5.0), rising_session(5.0), short]),
+            None,
+            "a session with too few runs does not count"
+        );
+    }
+
+    #[test]
+    fn the_dose_overrides_the_setting_only_when_known() {
+        let dose = WarmupDose {
+            minutes: 8.0,
+            sessions: 4,
+        };
+        assert_eq!(queue_warmup_minutes(Some(&dose), 5.0), 8.0);
+        assert_eq!(queue_warmup_minutes(None, 5.0), 5.0);
+    }
+
+    #[test]
+    fn session_samples_use_minutes_from_the_start_and_the_personal_best() {
+        let run = |timestamp, scenario: &str, score| RunRecord {
+            timestamp,
+            scenario: scenario.into(),
+            score,
+            duration_secs: 60.0,
+        };
+        let session = [
+            run(1_060, "a", 50.0),
+            run(1_180, "b", 30.0),
+            run(1_300, "a", 100.0),
+            run(1_400, "unknown", 10.0),
+        ];
+        let bests = HashMap::from([("a".to_owned(), 100.0), ("b".to_owned(), 60.0)]);
+        let s = session_samples(&session, &bests);
+        assert_eq!(
+            s,
+            vec![
+                WarmupSample {
+                    minute: 1.0,
+                    score_ratio: 0.5
+                },
+                WarmupSample {
+                    minute: 3.0,
+                    score_ratio: 0.5
+                },
+                WarmupSample {
+                    minute: 5.0,
+                    score_ratio: 1.0
+                },
+            ]
+        );
+        assert!(session_samples(&[], &bests).is_empty());
     }
 }

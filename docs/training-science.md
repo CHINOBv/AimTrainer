@@ -460,6 +460,18 @@ Enemies often first show up away from the crosshair, and the minimap tells where
 
 **Simulated aimer.** For detection it holds the crosshair still, clicks each flash one reaction time after it appears, and with no flash showing clicks anyway at its go/no-go mistake rate per second (recruit ≈ 0.22/s, elite ≈ 0.09/s, an **estimate**). For radar recall it treats the targets the radar did not show like go/no-go decoys, mistaking one for a match at the same rate. `peripheral-detect` calibrates at about 71% and `radar-recall` at about 67% contender accuracy, inside the challenge-point band. Neither model forgets the radar or misses a flash outright, so a playtest should confirm the difficulty.
 
+## Personal warm-up dose
+
+The warm-up decrement after rest is verified (Lee & Genovese 1988, see Routine design), but how long it takes to wear off differs between people and tasks, so a fixed 5 min queue warm-up is a guess (inference). `aim_core::training::warmup::warmup_dose` estimates it from the player's own sessions:
+
+1. Each past run becomes a sample: minutes since the session started, and the score divided by the scenario's personal best (`session_samples`).
+2. In each session, a rolling mean over 3 runs is computed. The plateau is the first minute from which every later rolling mean stays within 5% of the session's best rolling mean.
+3. The dose is the median plateau minute across sessions, clamped to 2–15 min. `queue_warmup_minutes` uses it instead of the setting when it exists.
+
+- **Guards:** a session needs at least 4 runs, and the dose needs at least 3 such sessions; otherwise the player's setting is used.
+- **Estimates, not sourced values:** the 3-run window, the 5% tolerance, the 4-run and 3-session minimums, and the 2–15 min clamp.
+- **Limit:** `queue_warmup` plays at most 12 runs of 30 s (6 min), so a dose above 6 min is cut to 6 min until that cap changes.
+
 ## Ranked journal and tilt reset
 
 `aim_core::training::journal` keeps a one-tap entry per ranked match: the outcome, the RR change, a 1–5 self-rating and one tag (tilted, tired, warmed-up, cold, aim-off, aim-on, team-diff, other).
