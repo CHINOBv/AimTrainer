@@ -14,6 +14,7 @@ use aim_core::sensitivity::Game;
 use aim_core::sensitivity::randomizer::{
     MAX_MULTIPLIER, MIN_INTERVAL_SECS, MIN_MULTIPLIER, RandomizerConfig,
 };
+use aim_core::training::ergonomics::{BreakPolicy, EVIDENCE_NOTE};
 use aim_core::training::missions::Commitment;
 use aim_core::training::warmup::{MIN_DOSE_SESSIONS, MIN_SESSION_RUNS, WarmupDose};
 use bevy_egui::egui;
@@ -79,6 +80,7 @@ pub fn reset_section(settings: &mut Settings, tab: SettingsTab) {
             settings.mission_commitment = d.mission_commitment;
             settings.arena_coaching = d.arena_coaching;
             settings.sens_randomizer = d.sens_randomizer;
+            settings.breaks = d.breaks;
         }
     }
 }
@@ -302,6 +304,35 @@ pub fn training_panel(
     );
     rows.block(ui, "Sensitivity randomiser drill", |ui| {
         sens_randomizer(ui, &mut settings.sens_randomizer)
+    });
+}
+
+/// Break prompts and the weekly volume cap. Every default is an estimate.
+pub fn breaks_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, b: &mut BreakPolicy) {
+    rows.section(ui, "Breaks and wrist care");
+    rows.check(ui, "Break reminders", &mut b.enabled, EVIDENCE_NOTE);
+    rows.row(ui, "Break after", |ui| {
+        ui.add(
+            egui::DragValue::new(&mut b.continuous_minutes)
+                .range(10..=240)
+                .suffix(" min of play"),
+        );
+    });
+    rows.row(ui, "Break length", |ui| {
+        ui.add(
+            egui::DragValue::new(&mut b.break_minutes)
+                .range(1..=60)
+                .suffix(" min"),
+        )
+        .on_hover_text("Time away from runs that counts as a break and resets the count.");
+    });
+    rows.row(ui, "Weekly cap", |ui| {
+        ui.add(
+            egui::DragValue::new(&mut b.weekly_cap_minutes)
+                .range(30..=5000)
+                .suffix(" min / 7 days"),
+        )
+        .on_hover_text("An informational note when your aim training in the last 7 days reaches this. The default (about 1 h a day) is an estimate.");
     });
 }
 
@@ -660,6 +691,7 @@ mod tests {
         s.feel.apply_preset(FeelPreset::Juicy);
         s.target_visibility.outline = true;
         s.sens_randomizer.enabled = true;
+        s.breaks.enabled = false;
         s
     }
 

@@ -261,7 +261,8 @@ fn settings_section(
             settings_panels::keys_panel(ui, rows, settings, &mut cfg.hotkey_capture.recording)
         }
         SettingsTab::Training => {
-            settings_panels::training_panel(ui, rows, settings, cfg.personal_warmup.0.as_ref())
+            settings_panels::training_panel(ui, rows, settings, cfg.personal_warmup.0.as_ref());
+            settings_panels::breaks_panel(ui, rows, &mut settings.breaks);
         }
     }
 }

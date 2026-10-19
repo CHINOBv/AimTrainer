@@ -45,6 +45,7 @@ impl Plugin for UiPlugin {
                 ),
             )
             .add_plugins((
+                pages::breaks::BreaksPage,
                 pages::menu::MenuPage,
                 pages::hud::HudPage,
                 pages::results::ResultsPage,

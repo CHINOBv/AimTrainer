@@ -27,6 +27,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - A **"ready for ranked?" check.**
   - **Fatigue warnings.**
   - **Daily goals and streaks.**
+  - **Break reminders** after continuous play, a weekly volume cap and a short stretch list. All of it can be changed or turned off.
   - A **daily challenge** that everyone plays with the same seed.
   - **Compound daily missions** built from your own recent bests (for example "accuracy ≥ 75% AND kills ≥ 62"), with mastery missions and a low/medium/high commitment level.
 - **Feedback**
@@ -227,6 +228,22 @@ Every finished scenario run is saved as one CSV row in the data directory (`~/.l
 Rows written before snapshots existed keep their columns and load with empty snapshot fields; the next run written upgrades the file's header line. Arena runs are stored without a snapshot.
 
 **Export:** on the Progress page, **Export history (CSV)** writes a copy with the same columns, one row per run, with older rows padded with empty fields so every row has all 21 columns. Type a path in the field next to the button, or leave it empty to write `history-export-<unix time>.csv` next to `history.csv`. It never replaces an existing file (the history included); pick a new name instead. The export runs on a background thread, and the page shows where the file went or why it failed.
+
+## Breaks and wrist care
+
+Time in a run counts as play; time in the menu, on the results screen or with the overlay hidden does not. After **45 min** of continuous play, a banner in the menu and on the results screen (never during a run) suggests a **5 min** break, with a short stretch list. Time away from runs as long as a break resets the count. **Dismiss** hides the banner until another full interval of play; **Snooze** hides it for 10 min of play. A separate note appears when your aim training in the last 7 days reaches the **weekly cap** (420 min, about 1 h a day).
+
+Every number is an estimate, and no trial has shown that breaks or stretches prevent wrist complaints in esports; the banner says so. Change them or turn them off in Settings → Training, or in `settings.toml`:
+
+```toml
+[breaks]
+enabled = true
+continuous_minutes = 45
+break_minutes = 5
+weekly_cap_minutes = 420
+```
+
+An invalid `[breaks]` table (an unknown key, a wrong type or a zero) resets only the breaks to these defaults. Background: "Breaks and wrist care" in [`docs/training-science.md`](docs/training-science.md).
 
 ## Architecture
 

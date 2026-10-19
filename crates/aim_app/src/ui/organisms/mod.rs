@@ -4,6 +4,7 @@ pub mod analysis_panel;
 pub mod arena_list;
 pub mod audio_cue_panel;
 pub mod benchmark_panel;
+pub mod break_banner;
 pub mod coach_panel;
 pub mod coaching_overlay;
 pub mod damage_indicator;
