@@ -508,6 +508,13 @@ The warm-up decrement after rest is verified (Lee & Genovese 1988, see Routine d
 - `STRETCHES` is a short generic list shown with `STRETCH_DISCLAIMER` (not medical advice).
 - **Estimates, not sourced values:** 45 min of continuous play, 5 min breaks, and a 420 min weekly cap. The cap is about 1 h a day, where Listman et al. 2021 saw daily gains peak (see Routine design); it is not an injury threshold.
 
+## Verifiable score proofs
+
+Runs are deterministic, so a shared run can be checked by playing its inputs again (`aim_core::analytics::proof`). The share code carries the run key, a 64-bit FNV-1a hash of the scenario definition that was played, the seed, the input log (the replay format) and the claimed score and accuracy. Verification rebuilds the scenario from the verifier's own library, refuses it if the hash differs (an edited scenario), replays the inputs and requires the score and accuracy to match bit for bit.
+
+- **What it proves:** the inputs produce the claimed score on that exact scenario. It does not prove that a person produced the inputs, so it suits friendly challenges, not anti-cheat.
+- **Limits:** the hash is not cryptographic, and a build that changes the simulation makes older proofs fail to verify, as it does with saved replays.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.
