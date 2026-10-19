@@ -98,7 +98,7 @@ The menu tabs (keys 1–9 switch tabs while no text field has focus):
 aimtrainer                                        # start the trainer
 aimtrainer play <scenario|arena>                  # start straight into a scenario or arena
 aimtrainer toggle | show | hide                   # control a running trainer (Linux)
-aimtrainer warmup [minutes]                       # show the trainer and start a queue warm-up
+aimtrainer warmup [minutes]                       # show the trainer and start a queue warm-up (no minutes: personal dose or Settings length)
 aimtrainer micro                                  # one 20 s buy-phase drill, then hide again
 aimtrainer analyze-match <match.json> --player Name#TAG   # report + a drill of your duels
 ```

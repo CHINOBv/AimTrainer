@@ -148,8 +148,9 @@ fn plateau_minute(samples: &[WarmupSample]) -> Option<f32> {
         .collect();
     let best = rolling.iter().copied().fold(f32::MIN, f32::max);
     let floor = best * (1.0 - PLATEAU_TOLERANCE);
-    // The first window from which every later window stays at the plateau.
-    let mut first = rolling.len() - 1;
+    // The first window from which every later window stays at the plateau, up to the
+    // last window at the plateau: a drop at the end of a session is fatigue, not warm-up.
+    let mut first = rolling.iter().rposition(|&r| r >= floor).unwrap_or(0);
     while first > 0 && rolling[first - 1] >= floor {
         first -= 1;
     }
@@ -300,6 +301,14 @@ mod tests {
         let mut shuffled = rising_session(6.0);
         shuffled.reverse();
         assert_eq!(plateau_minute(&shuffled), Some(6.0));
+    }
+
+    #[test]
+    fn a_dip_at_the_end_of_a_session_is_fatigue_not_warm_up() {
+        let mut s = rising_session(4.0);
+        s[10].score_ratio = 0.5; // minutes 11 and 12 drop and never recover
+        s[11].score_ratio = 0.5;
+        assert_eq!(plateau_minute(&s), Some(4.0), "{s:?}");
     }
 
     #[test]

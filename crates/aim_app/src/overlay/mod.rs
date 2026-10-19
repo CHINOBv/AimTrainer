@@ -125,7 +125,7 @@ mod tests {
     fn session_commands_show_the_overlay_and_queue_a_launch() {
         let mut o = Overlay { visible: false };
         let mut q = QuickLaunch::default();
-        for cmd in [Command::Micro, Command::Warmup(3)] {
+        for cmd in [Command::Micro, Command::Warmup(Some(3))] {
             o.visible = false;
             o.apply(cmd);
             q.request(cmd);

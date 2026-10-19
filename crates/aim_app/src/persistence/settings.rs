@@ -128,8 +128,9 @@ fn deserialize_coach<'de, D>(deserializer: D) -> Result<aim_ai::CoachConfig, D::
 where
     D: serde::Deserializer<'de>,
 {
-    let table = toml::Table::deserialize(deserializer)?;
-    Ok(table.try_into().unwrap_or_else(|_| {
+    // Any value, so that a non-table (`coach = 1`) also resets only the coach.
+    let value = toml::Value::deserialize(deserializer)?;
+    Ok(value.try_into().unwrap_or_else(|_| {
         // The error is not logged: a type error quotes the value, which may be a key.
         bevy::log::warn!("invalid [coach] settings; the coach is reset and off");
         aim_ai::CoachConfig::default()
@@ -142,8 +143,9 @@ fn deserialize_breaks<'de, D>(deserializer: D) -> Result<BreakPolicy, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let table = toml::Table::deserialize(deserializer)?;
-    let policy = table
+    // Any value, so that a non-table (`breaks = 45`) also resets only the breaks.
+    let value = toml::Value::deserialize(deserializer)?;
+    let policy = value
         .try_into::<BreakPolicy>()
         .ok()
         .filter(|p| p.validate().is_empty());
@@ -1032,6 +1034,31 @@ mod tests {
         };
         let back: Settings = toml::from_str(&toml::to_string_pretty(&on).unwrap()).unwrap();
         assert_eq!(back.coach, on.coach);
+    }
+
+    #[test]
+    fn a_coach_or_breaks_value_that_is_not_a_table_resets_only_itself() {
+        let settings = Settings::parse(
+            "breaks = 45
+coach = \"sk-secret\"
+fullscreen = false
+",
+        );
+        assert!(!settings.fullscreen, "the rest of the file still loads");
+        assert_eq!(settings.coach, aim_ai::CoachConfig::default());
+        assert_eq!(settings.breaks, BreakPolicy::default());
+    }
+
+    #[test]
+    fn the_personal_warmup_dose_is_on_for_old_settings_files() {
+        let old: Settings = toml::from_str("warmup_minutes = 4").unwrap();
+        assert!(old.personal_warmup);
+        assert_eq!(old.warmup_minutes, 4);
+        let off = Settings::parse(
+            "personal_warmup = false
+",
+        );
+        assert!(!off.personal_warmup);
     }
 
     #[test]

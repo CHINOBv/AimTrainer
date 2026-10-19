@@ -117,7 +117,11 @@ impl JournalStore {
             && let Some(job) = self.job.take()
         {
             self.write_error = match job.join() {
-                Ok(Ok(())) => None,
+                Ok(Ok(())) => {
+                    self.corrupt_backup = None;
+                    self.load_error = None;
+                    None
+                }
                 Ok(Err(e)) => Some(format!("could not save the journal: {e}")),
                 Err(_) => Some("could not save the journal: the writer stopped".to_owned()),
             };
@@ -131,11 +135,9 @@ impl JournalStore {
         let (Some(text), Some(file)) = (self.pending.take(), self.file.clone()) else {
             return;
         };
-        // The broken file is moved aside by the first write only.
-        let backup = self.corrupt_backup.take();
-        if backup.is_some() {
-            self.load_error = None;
-        }
+        // The broken file is moved aside before the first successful write; the backup
+        // path is kept until a write succeeds, so a failed move is retried next time.
+        let backup = self.corrupt_backup.clone();
         let spawned = std::thread::Builder::new()
             .name("journal-save".into())
             .spawn(move || write_atomic(&file, &text, backup.as_deref()));
@@ -283,6 +285,34 @@ mod tests {
         store.flush();
         assert_eq!(fs::read_to_string(&backup).unwrap(), broken);
         assert_eq!(load_from(&file).0.entries.len(), 2);
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_failed_move_aside_keeps_the_corrupt_file_for_the_next_save() {
+        let d = dir("corrupt-retry");
+        let file = d.join(JOURNAL_FILE);
+        let broken = "[[entries]]\noutcome = \"maybe\"\n";
+        fs::write(&file, broken).unwrap();
+        let backup = d.join("journal.corrupt-7.toml");
+        // A directory in the backup's place makes the first move aside fail.
+        fs::create_dir(&backup).unwrap();
+        let mut store = JournalStore::load_file(file.clone(), 7);
+        store.add(entry(Outcome::Loss)).unwrap();
+        store.flush();
+        assert_eq!(fs::read_to_string(&file).unwrap(), broken, "still there");
+        assert!(store.problem().is_some());
+
+        fs::remove_dir(&backup).unwrap();
+        store.add(entry(Outcome::Win)).unwrap();
+        store.flush();
+        assert_eq!(
+            fs::read_to_string(&backup).unwrap(),
+            broken,
+            "nothing is lost"
+        );
+        assert_eq!(load_from(&file).0.entries.len(), 2);
+        assert_eq!(store.problem(), None);
         fs::remove_dir_all(&d).unwrap();
     }
 

@@ -141,7 +141,7 @@ A mouse's real counts per inch can differ from its nominal DPI, so the same in-g
 
 1. Turn off pointer acceleration and use the mouse software's DPI setting you play with.
 2. Tape a ruler to the desk and put the mouse's edge on a mark.
-3. Start the test, move the mouse straight along the ruler by a known distance (10 cm or more is best; at least 5 cm is required) and stop it. The trainer counts the raw counts of the movement.
+3. Press Start, then hold Shift while moving the mouse straight along the ruler by a known distance (10 cm or more is best; at least 5 cm is required), and release Shift. The trainer counts the raw counts of the movement.
 4. Enter the distance you moved, in cm or inches.
 
 - `measure` returns the real DPI (`counts / inches`) and the deviation from the nominal DPI in percent. It rejects zero counts, a distance that is not a number, a distance below 5 cm and a nominal DPI of 0.
@@ -490,7 +490,7 @@ Each plateau comes with four changes of stimulus:
 The warm-up decrement after rest is verified (Lee & Genovese 1988, see Routine design), but how long it takes to wear off differs between people and tasks, so a fixed 5 min queue warm-up is a guess (inference). `aim_core::training::warmup::warmup_dose` estimates it from the player's own sessions:
 
 1. Each past run becomes a sample: minutes since the session started, and the score divided by the scenario's personal best (`session_samples`).
-2. In each session, a rolling mean over 3 runs is computed. The plateau is the first minute from which every later rolling mean stays within 5% of the session's best rolling mean.
+2. In each session, a rolling mean over 3 runs is computed. The plateau is the first minute from which every later rolling mean stays within 5% of the session's best rolling mean, up to the last one that does: a drop at the end of a session is treated as fatigue, not warm-up (an inference).
 3. The dose is the median plateau minute across sessions, clamped to 2–15 min. `queue_warmup_minutes` uses it instead of the setting when it exists.
 
 - **Guards:** a session needs at least 4 runs, and the dose needs at least 3 such sessions; otherwise the player's setting is used.

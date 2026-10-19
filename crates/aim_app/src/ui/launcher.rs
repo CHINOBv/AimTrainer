@@ -66,8 +66,15 @@ pub fn launch_requested(
     };
     let action = match cmd {
         Command::Warmup(minutes) => {
-            let dose = dose.0.as_ref().filter(|_| settings.personal_warmup);
-            let minutes = warmup::queue_warmup_minutes(dose, minutes as f32);
+            // A length typed on the command line is played as given; otherwise the
+            // personal dose (when on and known) or the Settings length.
+            let minutes = match minutes {
+                Some(m) => m as f32,
+                None => {
+                    let dose = dose.0.as_ref().filter(|_| settings.personal_warmup);
+                    warmup::queue_warmup_minutes(dose, settings.warmup_minutes as f32)
+                }
+            };
             UiAction::StartRoutineDef(Box::new(warmup::queue_warmup(minutes)))
         }
         Command::Micro => {
@@ -147,7 +154,8 @@ mod tests {
     #[test]
     fn warmup_requests_start_the_queue_warmup_routine() {
         let mut w = world();
-        w.resource_mut::<QuickLaunch>().request(Command::Warmup(3));
+        w.resource_mut::<QuickLaunch>()
+            .request(Command::Warmup(Some(3)));
         w.run_system_once(launch_requested).unwrap();
         let routine = w.resource::<ActiveRoutine>().0.clone().unwrap();
         assert_eq!(routine.routine_id, warmup::QUEUE_WARMUP_ID);
@@ -162,7 +170,8 @@ mod tests {
             minutes: 12.0,
             sessions: 4,
         })));
-        w.resource_mut::<QuickLaunch>().request(Command::Warmup(5));
+        w.resource_mut::<QuickLaunch>()
+            .request(Command::Warmup(None));
         w.run_system_once(launch_requested).unwrap();
         let routine = w.resource::<ActiveRoutine>().0.clone().unwrap();
         assert_eq!(routine.plan.len(), 24, "12 min of 30 s runs");
@@ -176,10 +185,37 @@ mod tests {
             sessions: 4,
         })));
         w.resource_mut::<Settings>().personal_warmup = false;
-        w.resource_mut::<QuickLaunch>().request(Command::Warmup(5));
+        w.resource_mut::<QuickLaunch>()
+            .request(Command::Warmup(None));
         w.run_system_once(launch_requested).unwrap();
         let routine = w.resource::<ActiveRoutine>().0.clone().unwrap();
         assert_eq!(routine.plan.len(), 10, "the player's 5 min, not the dose");
+    }
+
+    #[test]
+    fn an_explicit_length_beats_the_dose_and_no_length_uses_the_setting() {
+        let mut w = world();
+        w.insert_resource(PersonalWarmup(Some(WarmupDose {
+            minutes: 12.0,
+            sessions: 4,
+        })));
+        w.resource_mut::<QuickLaunch>()
+            .request(Command::Warmup(Some(3)));
+        w.run_system_once(launch_requested).unwrap();
+        let routine = w.resource::<ActiveRoutine>().0.clone().unwrap();
+        assert_eq!(routine.plan.len(), 6, "`aimtrainer warmup 3` plays 3 min");
+
+        let mut w = world();
+        w.resource_mut::<Settings>().warmup_minutes = 4;
+        w.resource_mut::<QuickLaunch>()
+            .request(Command::Warmup(None));
+        w.run_system_once(launch_requested).unwrap();
+        let routine = w.resource::<ActiveRoutine>().0.clone().unwrap();
+        assert_eq!(
+            routine.plan.len(),
+            8,
+            "no length and no dose: the Settings length"
+        );
     }
 
     fn rec(timestamp: u64, scenario: &str, score: f32) -> RunRecord {

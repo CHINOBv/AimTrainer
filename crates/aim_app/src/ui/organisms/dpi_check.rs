@@ -59,6 +59,21 @@ impl DpiMeter {
         self.held = held;
     }
 
+    /// Start or Stop: Start begins a new reading; Stop keeps the last one so it can be
+    /// applied.
+    pub fn toggle(&mut self) {
+        if self.armed {
+            self.armed = false;
+            self.held = false;
+        } else {
+            *self = DpiMeter {
+                armed: true,
+                distance_cm: self.distance_cm,
+                ..DpiMeter::default()
+            };
+        }
+    }
+
     /// Whether the key is held right now (counting).
     pub fn holding(&self) -> bool {
         self.held
@@ -101,13 +116,7 @@ pub fn dpi_check(ui: &mut egui::Ui, settings: &mut Settings, meter: &mut DpiMete
             .button(if meter.armed { "Stop" } else { "Start" })
             .clicked()
         {
-            let distance_cm = meter.distance_cm;
-            let armed = !meter.armed;
-            *meter = DpiMeter {
-                armed,
-                distance_cm,
-                ..DpiMeter::default()
-            };
+            meter.toggle();
         }
     });
     if meter.armed {
@@ -191,6 +200,22 @@ mod tests {
         m.update(false, 999.0);
         assert!(!m.holding());
         assert_eq!(m.counts(), 3150, "released: the count is kept");
+    }
+
+    #[test]
+    fn stop_keeps_the_reading_and_start_begins_a_new_one() {
+        let mut m = DpiMeter::default();
+        m.toggle();
+        m.update(true, 800.0);
+        m.update(false, 0.0);
+        m.toggle();
+        assert!(!m.armed);
+        assert_eq!(m.counts(), 800, "the reading stays for Apply");
+        m.update(true, 50.0);
+        assert_eq!(m.counts(), 800, "a stopped meter does not count");
+        m.toggle();
+        assert!(m.armed);
+        assert_eq!(m.counts(), 0, "Start begins a new reading");
     }
 
     #[test]

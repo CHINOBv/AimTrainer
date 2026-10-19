@@ -11,14 +11,12 @@ pub enum Command {
     Toggle,
     Show,
     Hide,
-    /// Show the overlay and start a queue warm-up of this many minutes.
-    Warmup(u32),
+    /// Show the overlay and start a queue warm-up of this many minutes; without minutes,
+    /// of the personal dose (when on and known) or the Settings length.
+    Warmup(Option<u32>),
     /// Show the overlay, play one buy-phase micro drill, then hide again.
     Micro,
 }
-
-/// Default queue warm-up length when `warmup` has no minutes argument.
-pub const DEFAULT_WARMUP_MINUTES: u32 = 5;
 
 impl Command {
     pub fn parse(s: &str) -> Option<Self> {
@@ -30,8 +28,8 @@ impl Command {
             "micro" => Self::Micro,
             "warmup" => {
                 let minutes = match words.next() {
-                    Some(m) => m.parse::<u32>().ok().filter(|m| (1..=30).contains(m))?,
-                    None => DEFAULT_WARMUP_MINUTES,
+                    Some(m) => Some(m.parse::<u32>().ok().filter(|m| (1..=30).contains(m))?),
+                    None => None,
                 };
                 Self::Warmup(minutes)
             }
@@ -47,7 +45,8 @@ impl Command {
             Self::Show => "show".into(),
             Self::Hide => "hide".into(),
             Self::Micro => "micro".into(),
-            Self::Warmup(m) => format!("warmup {m}"),
+            Self::Warmup(Some(m)) => format!("warmup {m}"),
+            Self::Warmup(None) => "warmup".into(),
         }
     }
 }
@@ -139,11 +138,8 @@ mod tests {
         assert_eq!(Command::parse("toggle\n"), Some(Command::Toggle));
         assert_eq!(Command::parse("hide"), Some(Command::Hide));
         assert_eq!(Command::parse("explode"), None);
-        assert_eq!(
-            Command::parse("warmup"),
-            Some(Command::Warmup(DEFAULT_WARMUP_MINUTES))
-        );
-        assert_eq!(Command::parse("warmup 3"), Some(Command::Warmup(3)));
+        assert_eq!(Command::parse("warmup"), Some(Command::Warmup(None)));
+        assert_eq!(Command::parse("warmup 3"), Some(Command::Warmup(Some(3))));
         assert_eq!(Command::parse("warmup 0"), None);
         assert_eq!(Command::parse("warmup x"), None);
         assert_eq!(Command::parse("micro"), Some(Command::Micro));

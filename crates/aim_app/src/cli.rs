@@ -8,6 +8,7 @@ usage:
   aimtrainer                                   start the trainer
   aimtrainer toggle|show|hide                  control a running trainer (Linux)
   aimtrainer warmup [minutes]                  show the trainer and start a queue warm-up
+                                               (no minutes: personal dose or Settings length)
   aimtrainer micro                             one 20 s buy-phase drill, then hide again
   aimtrainer play <scenario|arena>             start the trainer directly in a scenario or arena
   aimtrainer analyze-match <match.json> --player <Name#TAG|puuid>
@@ -174,7 +175,7 @@ mod tests {
         );
         assert_eq!(
             parse(&args(&["warmup", "3"])),
-            Ok(Some(CliCommand::Overlay(ipc::Command::Warmup(3))))
+            Ok(Some(CliCommand::Overlay(ipc::Command::Warmup(Some(3)))))
         );
         assert_eq!(
             parse(&args(&["micro"])),
