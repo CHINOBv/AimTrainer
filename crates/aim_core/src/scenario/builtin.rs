@@ -10,6 +10,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/ammo-discipline.toml"),
     ),
     (
+        "angle-flyers.toml",
+        include_str!("../../../../content/scenarios/angle-flyers.toml"),
+    ),
+    (
         "burst-control.toml",
         include_str!("../../../../content/scenarios/burst-control.toml"),
     ),
@@ -50,6 +54,14 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/demo-shrink.toml"),
     ),
     (
+        "diag-drifters.toml",
+        include_str!("../../../../content/scenarios/diag-drifters.toml"),
+    ),
+    (
+        "diamond-pair.toml",
+        include_str!("../../../../content/scenarios/diamond-pair.toml"),
+    ),
+    (
         "dodge-crouch-spam.toml",
         include_str!("../../../../content/scenarios/dodge-crouch-spam.toml"),
     ),
@@ -70,6 +82,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/dodge-peek.toml"),
     ),
     (
+        "drifting-heads.toml",
+        include_str!("../../../../content/scenarios/drifting-heads.toml"),
+    ),
+    (
         "dynamic-strafe-heads.toml",
         include_str!("../../../../content/scenarios/dynamic-strafe-heads.toml"),
     ),
@@ -84,6 +100,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "go-no-go.toml",
         include_str!("../../../../content/scenarios/go-no-go.toml"),
+    ),
+    (
+        "hop-field.toml",
+        include_str!("../../../../content/scenarios/hop-field.toml"),
     ),
     (
         "long-range-heads.toml",
@@ -124,6 +144,14 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "regen-track.toml",
         include_str!("../../../../content/scenarios/regen-track.toml"),
+    ),
+    (
+        "ricochet-ring.toml",
+        include_str!("../../../../content/scenarios/ricochet-ring.toml"),
+    ),
+    (
+        "six-pin.toml",
+        include_str!("../../../../content/scenarios/six-pin.toml"),
     ),
     (
         "sound-turn.toml",
@@ -188,6 +216,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "track-reactive-strafe.toml",
         include_str!("../../../../content/scenarios/track-reactive-strafe.toml"),
+    ),
+    (
+        "wide-wall-five.toml",
+        include_str!("../../../../content/scenarios/wide-wall-five.toml"),
     ),
 ];
 

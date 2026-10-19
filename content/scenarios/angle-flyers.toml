@@ -1,0 +1,20 @@
+# Idea: Aim Lab "Angleshot" (evasive flyers on a mostly flat wall with some depth).
+# Own name and parameters. Approximation: the targets wander with `drift` inside a
+# 10–18 m depth band instead of flying on a fixed plane.
+id = "angle-flyers"
+name = "Angle Flyers"
+category = "flicking"
+description = """
+Dynamic clicking. Five spheres wander across a wide wall and drift towards and away from you,
+changing direction often. Click each one; a new flyer replaces it. Trains reading a moving
+target's path and clicking on it without chasing."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.2 }
+spawn = { kind = "angular", yaw_deg = [-30.0, 30.0], pitch_deg = [0.0, 14.0], distance = [12.0, 16.0] }
+motion = { kind = "drift", speed = [2.0, 3.2], change_secs = [0.3, 0.7], max_offset = 3.0, depth = { change_secs = [0.6, 1.2], distance = [10.0, 18.0] } }
+max_alive = 5
+min_separation_deg = 8
+
+[scoring]
+miss_penalty = 15
