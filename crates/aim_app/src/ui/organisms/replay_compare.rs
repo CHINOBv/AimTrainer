@@ -5,6 +5,7 @@
 //! The figures come from the core's [`PathSummary`]; this module only formats them.
 
 use super::replay_viewer::timestamp_label;
+use crate::i18n::{tr, tr_fmt};
 use crate::persistence::replays::ReplayEntry;
 use crate::ui::atoms::{BAD, GOOD};
 use aim_core::analytics::{PathSummary, ReplayPath};
@@ -180,13 +181,13 @@ pub fn compare_picker(
         .as_ref()
         .and_then(|p| candidates.iter().find(|c| &c.path == p))
         .map_or_else(
-            || "None".to_owned(),
+            || tr("None").to_owned(),
             |c| timestamp_label(c.timestamp_millis),
         );
     ui.horizontal(|ui| {
-        ui.label("Compare with an earlier run:");
+        ui.label(tr("Compare with an earlier run:"));
         if candidates.is_empty() {
-            ui.small("none saved for this scenario yet");
+            ui.small(tr("none saved for this scenario yet"));
             return;
         }
         let mut pick: Option<Option<&ReplayEntry>> = None;
@@ -194,7 +195,7 @@ pub fn compare_picker(
             .selected_text(shown)
             .show_ui(ui, |ui| {
                 if ui
-                    .selectable_label(state.selected.is_none(), "None")
+                    .selectable_label(state.selected.is_none(), tr("None"))
                     .clicked()
                 {
                     pick = Some(None);
@@ -215,7 +216,7 @@ pub fn compare_picker(
         }
     });
     if state.selected.is_some() && state.path.is_none() {
-        ui.colored_label(BAD, "The earlier replay could not be read.");
+        ui.colored_label(BAD, tr("The earlier replay could not be read."));
     }
 }
 
@@ -226,27 +227,27 @@ pub fn differences_table(ui: &mut egui::Ui, current: &PathSummary, earlier: &Pat
         .num_columns(4)
         .striped(true)
         .show(ui, |ui| {
-            ui.strong("Whole run");
-            ui.strong("This run");
-            ui.strong("Earlier");
-            ui.strong("Change");
+            ui.strong(tr("Whole run"));
+            ui.strong(tr("This run"));
+            ui.strong(tr("Earlier"));
+            ui.strong(tr("Change"));
             ui.end_row();
             for r in compare_rows(current, earlier) {
-                ui.label(r.label);
+                ui.label(tr(r.label));
                 ui.label(&r.current);
                 ui.label(&r.earlier);
                 match r.better {
-                    Some(true) => ui.colored_label(GOOD, format!("{} ▲ better", r.change)),
-                    Some(false) => ui.colored_label(BAD, format!("{} ▼ worse", r.change)),
+                    Some(true) => ui.colored_label(GOOD, tr_fmt("{} ▲ better", &[&r.change])),
+                    Some(false) => ui.colored_label(BAD, tr_fmt("{} ▼ worse", &[&r.change])),
                     None => ui.label(&r.change),
                 };
                 ui.end_row();
             }
         });
-    ui.small(
+    ui.small(tr(
         "Overshoot and undershoot: share of engagements with at least one. \
          Reaction: median time to start the first flick on each target.",
-    );
+    ));
 }
 
 #[cfg(test)]
@@ -349,5 +350,16 @@ mod tests {
             "no change, no verdict"
         );
         assert_eq!(same[1].change, "+0 pts");
+    }
+
+    #[test]
+    fn the_comparison_reads_in_spanish() {
+        use aim_core::i18n::{Lang, tr_fmt_in, tr_in};
+        assert_eq!(tr_in(Lang::Es, "Hit rate"), "Tasa de aciertos");
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "{} ▲ better", &[&"+5 pts"]),
+            "+5 pts ▲ mejor"
+        );
+        assert_eq!(tr_fmt_in(Lang::En, "{} ▼ worse", &[&"-2"]), "-2 ▼ worse");
     }
 }
