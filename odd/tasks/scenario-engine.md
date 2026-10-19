@@ -33,10 +33,10 @@ Branch: `feat/scenario-engine` (worktree `../AimTrainer-worktrees/scenario-engin
 
 | ID | Specs | Route | Status | Commit |
 |---|---|---|---|---|
-| T1 | plan | inline | done | this commit |
-| T2 | S1, S2, S3, S4 (engine) | delegated (worktree `se-engine`) | in progress | |
+| T1 | plan | inline | done | 12ad695 |
+| T2 | S1, S2, S3, S4 (engine) | delegated (worktree `se-engine`) | done except target sets (deferred) | 9be6e5a, ad8a306, 3e9f019, merge a196167 |
 | T3 | S5, S6 | delegated, after T2 | pending | |
-| T4 | S7, S8 (content) | delegated, after T2 | pending | |
+| T4 | S7, S8 (content) | delegated, after T2 | in progress (split: se-library clicking+switching, se-library-b tracking+VALORANT; routines after) | |
 | T5 | seam: merge, calibrate, verifier, review, merge to `main` | inline | pending | |
 
 ## Log
@@ -46,3 +46,8 @@ Branch: `feat/scenario-engine` (worktree `../AimTrainer-worktrees/scenario-engin
   - Binaries were not reverse-engineered (EULA). Only plain-text `.sce`/JSON data that KovaaK's exposes to players was read.
 - L3 (2026-10-18) Research (Voltaic API and docs, the KovaaK's `.sce` vocabulary, aim-training methods) ranks these engine gaps by need: ballistic/gravity motion (~12 of 28 KovaaK's drills), capsule shapes (~17), accuracy multiplier (~12), depth movement (~15), multi-profile targets (~9), FOV lock (13).
   - Training methods: click dwell and corrections are the strongest skill markers (Warburton 2023); external-focus cues; contextual interference is weak in applied settings; drill parameters are our inference.
+- L4 (2026-10-18) T2 merged.
+  - Blocks: ballistic (with `on_floor` expire/fail and the new `FailReason::Dropped`), depth band on strafe/dodge/drift, `linear_bounce` (box or N-gon), orbit, capsule with optional head, `accuracy_mult` none/linear/sqrt, `shrink_per_kill`, spawn `grid`, `motion_profiles`.
+  - Calibrate: all pre-existing rows identical; 8 `demo-*` rows ordered, contender accuracy 0.57–0.82.
+  - **Deferred:** `[[target_sets]]`. Per-target definitions would rewrite most of `Session`, plus analytics and HUD files that read the scenario-wide shape, and the interaction with phases is unspecified. Phases already vary targets within a run (YAGNI).
+  - T3 (FOV lock, per-scenario feedback toggles, history snapshot/CSV) waits until game-feel reaches `main`, because both touch app settings and results.
