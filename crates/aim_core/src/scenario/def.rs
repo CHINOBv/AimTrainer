@@ -719,9 +719,11 @@ impl ScenarioDef {
                 && self
                     .id
                     .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_'),
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+                && !is_windows_device_name(&self.id),
             "id",
-            "must be non-empty and only contain a-z, 0-9, '-' or '_'",
+            "must be non-empty, only contain a-z, 0-9, '-' or '_', and not be a Windows \
+             device name (con, nul, aux, prn, com1-9, lpt1-9)",
         );
         check(!self.name.trim().is_empty(), "name", "must not be empty");
         check(
@@ -1039,6 +1041,15 @@ impl ScenarioDef {
     }
 }
 
+/// Whether `id` is a reserved Windows device name, which cannot be a file name there.
+fn is_windows_device_name(id: &str) -> bool {
+    matches!(id, "con" | "nul" | "aux" | "prn")
+        || ((id.starts_with("com") || id.starts_with("lpt"))
+            && id.len() == 4
+            && id.as_bytes()[3].is_ascii_digit()
+            && id.as_bytes()[3] != b'0')
+}
+
 /// Whether a behaviour rule sets at least one condition and every set condition is in range.
 fn behavior_when_is_valid(w: &BehaviorWhen) -> bool {
     let set = [
@@ -1170,6 +1181,24 @@ mod tests {
         shape = { kind = "sphere", radius = 0.2 }
         spawn = { kind = "around_crosshair", offset_deg = [10, 40], distance = [10, 10] }
     "#;
+
+    #[test]
+    fn windows_device_names_are_not_valid_ids() {
+        let mut d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        for bad in ["con", "nul", "aux", "prn", "com1", "lpt9"] {
+            d.id = bad.into();
+            assert_eq!(
+                d.validate()
+                    .into_iter()
+                    .map(|e| e.field)
+                    .collect::<Vec<_>>(),
+                ["id"],
+                "{bad} names a device on Windows, so its file could not be saved"
+            );
+        }
+        d.id = "console-flicks".into();
+        assert!(d.validate().is_empty());
+    }
 
     #[test]
     fn minimal_definition_uses_defaults() {

@@ -1,0 +1,25 @@
+{
+  "id": "msg_fixture_1",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-5-5",
+  "content": [
+    { "type": "thinking", "thinking": "", "signature": "sig-fixture" },
+    { "type": "text", "text": "Let me check your stats." },
+    {
+      "type": "tool_use",
+      "id": "toolu_01",
+      "name": "list_stats",
+      "input": {}
+    },
+    {
+      "type": "tool_use",
+      "id": "toolu_02",
+      "name": "recall",
+      "input": { "query": "goals" }
+    }
+  ],
+  "stop_reason": "tool_use",
+  "stop_details": null,
+  "usage": { "input_tokens": 1200, "output_tokens": 64 }
+}

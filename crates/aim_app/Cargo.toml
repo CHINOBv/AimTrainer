@@ -19,6 +19,8 @@ match-analysis = ["dep:aim_integrations"]
 aim_core.workspace = true
 aim_world.workspace = true
 aim_integrations = { workspace = true, optional = true }
+# The AI coach's providers, key storage and memory; every call runs off the frame.
+aim_ai.workspace = true
 serde.workspace = true
 toml.workspace = true
 bevy.workspace = true
@@ -32,3 +34,6 @@ global-hotkey.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

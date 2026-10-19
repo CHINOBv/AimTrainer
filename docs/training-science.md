@@ -447,6 +447,52 @@ Enemies often first show up away from the crosshair, and the minimap tells where
 
 **Simulated aimer.** For detection it holds the crosshair still, clicks each flash one reaction time after it appears, and with no flash showing clicks anyway at its go/no-go mistake rate per second (recruit ≈ 0.22/s, elite ≈ 0.09/s, an **estimate**). For radar recall it treats the targets the radar did not show like go/no-go decoys, mistaking one for a match at the same rate. `peripheral-detect` calibrates at about 71% and `radar-recall` at about 67% contender accuracy, inside the challenge-point band. Neither model forgets the radar or misses a flash outright, so a playtest should confirm the difficulty.
 
+## Coaching knowledge base
+
+`aim_core::coach::knowledge` holds what the AI coach knows about ten aim sub-skills: the signals that reveal a weakness, a method with an external-focus cue, drill parameters, a progression rule and the measure of progress. `aim_core::coach::drills` turns an entry and a level (−1 to +1, the difficulty scale) into a scenario. Each entry carries a confidence tag: **strong** (replicated evidence or a measured game mechanic), **moderate** (one study or indirect evidence), **expert** (coaching consensus, no controlled study) or **estimate** (our own number). Every drill number is an **estimate**, and generated drills are labelled uncalibrated.
+
+The claims below come from the coach research brief (2026-10-18). They are tagged **approximate** because the primary sources were not re-read for this page.
+
+| Claim | Source | How the coach uses it |
+|---|---|---|
+| Click dwell (r = 0.87) and online corrections (r = 0.76) correlate with FPS skill; primary movement time does not (r = −0.09). Early gains come from committing to the click and from corrections | Warburton et al. 2023, *PNAS Nexus* (approximate) | Click timing and micro-adjustment are separate sub-skills; the flick method says "commit, then correct" instead of "move faster" |
+| External-focus cues ("land on the head in one motion", "match the target's speed first") beat internal cues ("relax your wrist") | Chua et al. 2021, meta-analysis (approximate) | Every entry has one external-focus cue |
+| Contextual interference (interleaving) has a weak effect in applied settings | Czyż et al. 2024, meta-analysis (approximate); see also Brady 2004 under Routine design | The coach does not force interleaving; blocked practice of one emphasis is allowed |
+| Letting learners choose their practice (self-controlled practice) has a near-null effect | McKay et al. 2022/2023, meta-analysis (approximate) | Choice is offered for engagement, not as a learning benefit |
+| Novices learn well from nearly errorless practice | Maxwell et al. 2001, errorless learning (approximate) | Low levels start with large, slow, long-lived targets |
+| Peeker's advantage is about 141 → 100 → 71 ms as netcode improvements apply | Riot Games, "Peeking into VALORANT's netcode", 2020 (approximate; not yet in `valorant-mechanics.md`) | The peek-and-hold method explains why the holder must react inside a short exposure |
+
+**Sub-skills.** Diagnosis reuses the weakness rules of `content/rules/recommendations.toml`: a signal names a metric and a direction, and the threshold is that rule's. A weakness finding adds its severity; a benchmark skill (clicking, tracking, switching, movement) that stands out as weak adds 0.25 (estimate).
+
+| Sub-skill | Signals | Drill parameters (estimates) | Progression (estimate) | Confidence |
+|---|---|---|---|---|
+| Flick accuracy vs speed | undershoot rate, weakest-direction gap, path efficiency | radius 1.5–3°, flicks 10–60°, 60 s, 3 runs per emphasis | shrink 10% at a median accuracy ≥ 85%, grow back below 60% | moderate |
+| Micro-adjustment | overshoot rate, corrections, misses above | radius 0.6–1.2° at 2–8° | as flicks | moderate |
+| Click timing | click delay | radius 1.5–2.5° at 3–12°, lifetime from 900 ms | −50 ms per block with < 10% expired | moderate |
+| Reactive acquisition | reaction time, opening pace | spawn delay 0.4–2.0 s, radius 1.2–2.5°, lifetime 1.5–2.5 s | lifetime −10% | expert |
+| Smooth tracking | time on target, speed match, edge share | 30–60°/s, radius 0.8–1.5° | +10% speed at ≥ 75% time on target | expert |
+| Reactive tracking | reversal response, time behind the target | strafing agent, 0.15–0.9 s between changes | shorter changes at ≥ 70% on target | expert |
+| Target switching | nearest-first share, missed opportunities | 3–6 targets, 8–40° apart, radius 1.2–2.0° | more targets or wider spacing at ≥ 80% accuracy | expert |
+| Crosshair placement | misses below | 1–3 real-size heads at head height | deeper and wider at ≥ 80% accuracy | expert |
+| Counter-strafe / moving shots | shots fired while moving | lifetime 2.5–4 s, the `counter-strafe` setup | lifetime −10% with < 10% moving shots | strong (the accuracy speed limit is a measured mechanic) |
+| Peek and hold | reaction time | appear delay 0.6–2.5 s, lifetime 1.1–1.5 s | exposure −10% with < 20% escaped | moderate |
+
+**Departures set by the playability gate** (every generated drill must let the simulated contender score, as the built-in sim test requires):
+
+- **Peek-and-hold exposure.** The brief suggests 150–400 ms exposure windows. The simulated contender needs about 0.27 s to react plus its movement, so it cannot kill inside 400 ms, and the drill lifetimes are 1.1–1.5 s instead.
+- **Click timing.** The hardest level stops at a 650 ms lifetime; at 600 ms the contender scored nothing.
+- **Reactive tracking.** The simulated aimer follows targets with a first-order lag and does not react to reversals, so faster reversals make it score *higher*. Real players should find them harder; playtest before relying on the levels.
+
+**Folk wisdom the coach does not repeat**, because no source supports it as a rule:
+
+- Accuracy first, always, as a fixed rule. Speed and accuracy trade off (Fitts' law above); the right emphasis depends on the player and the drill.
+- Randomising sensitivity improves aim. No controlled evidence supports or rejects it (see Sensitivity), so the randomiser stays an opt-in drill.
+- Eye-training apps transfer to aiming.
+- Reaction-time drills make you react faster in game.
+- Grip myths: one "correct" grip or arm-versus-wrist rule for everyone.
+- "10,000 hours" as a target.
+- Numbers from blogs and videos without a source.
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.
