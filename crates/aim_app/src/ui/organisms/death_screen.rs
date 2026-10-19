@@ -1,5 +1,6 @@
 //! Arena death screen: a fade, the direction of the killing shot and the respawn timer.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::ui::atoms::{BAD, big};
 use bevy_egui::egui::{self, Align2};
 use std::f32::consts::FRAC_PI_4;
@@ -78,11 +79,14 @@ pub fn draw(ctx: &egui::Context, view: &DeathView) {
         .interactable(false)
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                ui.label(big("ELIMINATED", 30.0).color(BAD));
+                ui.label(big(tr("ELIMINATED"), 30.0).color(BAD));
                 if let Some(side) = view.side {
-                    ui.label(big(side.label(), 20.0));
+                    ui.label(big(tr(side.label()), 20.0));
                 }
-                ui.label(format!("Respawned · protected {:.1} s", view.respawn_secs));
+                ui.label(tr_fmt(
+                    "Respawned · protected {} s",
+                    &[&format!("{:.1}", view.respawn_secs)],
+                ));
             });
         });
 }

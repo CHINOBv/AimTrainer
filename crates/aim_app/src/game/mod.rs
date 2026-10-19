@@ -7,6 +7,7 @@ pub mod feedback;
 pub mod hit_effect;
 
 use crate::audio::CueHeard;
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::overlay::Overlay;
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::history::History;
@@ -720,7 +721,7 @@ impl RunFinisher<'_, '_> {
         if !tuning.is_default() {
             let mut note = tuning_text(&tuning);
             if run.adaptive {
-                note.push_str(" · tuned runs do not move your adaptive level");
+                note.push_str(tr(" · tuned runs do not move your adaptive level"));
             }
             notes.insert(0, note);
         }
@@ -765,38 +766,54 @@ pub fn outcome_note(session: &Session) -> Option<String> {
             .phases
             .as_ref()
             .map_or_else(String::new, |p| p[i].label(i));
-        format!("phase {}/{} ({name})", i + 1, session.phase_count())
+        tr_named(
+            "phase {n}/{count} ({name})",
+            &[
+                ("n", &(i + 1)),
+                ("count", &session.phase_count()),
+                ("name", &tr(&name)),
+            ],
+        )
     });
     Some(match (outcome, phase) {
-        (RunOutcome::Completed, Some(p)) => format!("Completed · reached {p}"),
-        (RunOutcome::Completed, None) => "Completed".to_owned(),
-        (RunOutcome::Failed(r), Some(p)) => format!("Failed in {p}: {}", r.label()),
-        (RunOutcome::Failed(r), None) => format!("Failed: {}", r.label()),
+        (RunOutcome::Completed, Some(p)) => tr_fmt("Completed · reached {}", &[&p]),
+        (RunOutcome::Completed, None) => tr("Completed").to_owned(),
+        (RunOutcome::Failed(r), Some(p)) => tr_named(
+            "Failed in {phase}: {reason}",
+            &[("phase", &p), ("reason", &r.label())],
+        ),
+        (RunOutcome::Failed(r), None) => tr_fmt("Failed: {}", &[&r.label()]),
     })
 }
 
 /// The tuning of a run, e.g. "Tuned: size 120% · distance 80% · speed 150%".
 pub fn tuning_text(t: &Tuning) -> String {
-    format!(
-        "Tuned: size {}% · distance {}% · speed {}%",
-        t.size_pct, t.distance_pct, t.speed_pct
+    tr_named(
+        "Tuned: size {size}% · distance {distance}% · speed {speed}%",
+        &[
+            ("size", &t.size_pct),
+            ("distance", &t.distance_pct),
+            ("speed", &t.speed_pct),
+        ],
     )
 }
 
 /// Where the sensitivity finder stands, for the results screen.
 pub(crate) fn finder_note(f: &SensFinder) -> String {
     if f.is_done() {
-        format!(
-            "Sensitivity finder done: about {:.1} cm/360 suits you best. Apply it in Settings.",
-            f.center_cm
+        tr_fmt(
+            "Sensitivity finder done: about {} cm/360 suits you best. Apply it in Settings.",
+            &[&format!("{:.1}", f.center_cm)],
         )
     } else {
-        format!(
-            "Sensitivity finder round {}/{}: comparing {:.1} vs {:.1} cm/360.",
-            f.round + 1,
-            aim_core::sensitivity::finder::MAX_ROUNDS,
-            f.cm_for(Slot::Fast),
-            f.cm_for(Slot::Slow)
+        tr_named(
+            "Sensitivity finder round {round}/{rounds}: comparing {fast} vs {slow} cm/360.",
+            &[
+                ("round", &(f.round + 1)),
+                ("rounds", &aim_core::sensitivity::finder::MAX_ROUNDS),
+                ("fast", &format!("{:.1}", f.cm_for(Slot::Fast))),
+                ("slow", &format!("{:.1}", f.cm_for(Slot::Slow))),
+            ],
         )
     }
 }
@@ -1544,5 +1561,44 @@ mod tests {
         let finder = Sensitivity::valorant(0.5, 800);
         run.sens_override = Some(finder);
         assert_eq!(run.snapshot(&settings).sensitivity, Some(finder));
+    }
+}
+
+#[cfg(test)]
+mod i18n_tests {
+    use aim_core::i18n::{Lang, tr_fmt_in, tr_in, tr_named_in};
+
+    #[test]
+    fn the_results_notes_read_in_spanish() {
+        assert_eq!(
+            tr_named_in(
+                Lang::Es,
+                "Tuned: size {size}% · distance {distance}% · speed {speed}%",
+                &[("size", &150), ("distance", &100), ("speed", &80)]
+            ),
+            "Ajustado: tamaño 150% · distancia 100% · velocidad 80%"
+        );
+        assert_eq!(tr_in(Lang::Es, "Completed"), "Completado");
+        assert_eq!(
+            tr_named_in(
+                Lang::Es,
+                "Kills {kills} · deaths {deaths} · damage taken {damage}",
+                &[("kills", &9), ("deaths", &3), ("damage", &"240")]
+            ),
+            "Bajas 9 · muertes 3 · daño recibido 240"
+        );
+        assert_eq!(
+            tr_named_in(
+                Lang::Es,
+                "Most deaths: {cause} ({n} of {deaths})",
+                &[
+                    ("cause", &tr_in(Lang::Es, "slow first shot")),
+                    ("n", &2),
+                    ("deaths", &3)
+                ]
+            ),
+            "Más muertes por: primer disparo lento (2 de 3)"
+        );
+        assert_eq!(tr_fmt_in(Lang::En, "Failed: {}", &[&"x"]), "Failed: x");
     }
 }

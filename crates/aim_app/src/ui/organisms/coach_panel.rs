@@ -13,6 +13,7 @@ use aim_core::coach::{CoachContext, Message, Turn, TurnEnd};
 use aim_core::scenario::ScenarioDef;
 use bevy_egui::egui;
 
+use crate::i18n::{tr, tr_fmt};
 use crate::persistence::coach::{Job, KeyStatus, MAX_STEPS, Phase};
 use crate::ui::atoms::{ERROR, GOOD, WARN};
 
@@ -130,7 +131,7 @@ impl CoachState {
         self.key.poll();
         match self.key.take() {
             Some(Ok(status)) => self.key_status = Some(status),
-            Some(Err(e)) => self.notice = Some(format!("OS keyring: {e}")),
+            Some(Err(e)) => self.notice = Some(tr_fmt("OS keyring: {}", &[&e])),
             None => {}
         }
         self.context.poll();
@@ -171,9 +172,10 @@ impl CoachState {
             }));
         self.notice = match turn.end {
             TurnEnd::Answer(_) => None,
-            TurnEnd::StepLimit => Some(format!(
-                "The coach was still calling tools after {MAX_STEPS} steps and stopped. Ask \
-                 again, more specifically."
+            TurnEnd::StepLimit => Some(tr_fmt(
+                "The coach was still calling tools after {} steps and stopped. Ask again, more \
+                 specifically.",
+                &[&MAX_STEPS],
             )),
         };
     }
@@ -215,9 +217,9 @@ pub fn transcript(history: &[Message]) -> Vec<Line> {
                         .filter(|(_, is_error)| *is_error)
                         .map(|(name, _)| name.as_str())
                         .collect();
-                    let mut summary = format!("Used {}", names.join(", "));
+                    let mut summary = tr_fmt("Used {}", &[&names.join(", ")]);
                     if !failed.is_empty() {
-                        summary.push_str(&format!(" ({} returned an error)", failed.join(", ")));
+                        summary.push_str(&tr_fmt(" ({} returned an error)", &[&failed.join(", ")]));
                     }
                     lines.push(Line::Tools(summary));
                 }
@@ -250,24 +252,24 @@ pub fn coach_panel(
     memory_file: &str,
 ) -> Option<CoachAction> {
     let mut action = None;
-    ui.heading("AI coach");
+    ui.heading(tr("AI coach"));
     ui.checkbox(
         &mut config.enabled,
-        "Enable the AI coach (sends your stats summary and the chat to the provider you pick)",
+        tr("Enable the AI coach (sends your stats summary and the chat to the provider you pick)"),
     );
-    ui.small(
+    ui.small(tr(
         "Off by default. While it is off, nothing is sent. Only aggregates are sent: no raw \
          traces, file paths or names.",
-    );
+    ));
     ui.separator();
 
-    egui::CollapsingHeader::new("Provider")
+    egui::CollapsingHeader::new(tr("Provider"))
         .default_open(config.validate().is_err())
         .show(ui, |ui| {
             action = provider_section(ui, state, config).or(action.take());
         });
 
-    egui::CollapsingHeader::new("Preview what is sent")
+    egui::CollapsingHeader::new(tr("Preview what is sent"))
         .default_open(false)
         .show(ui, |ui| {
             action = preview_section(ui, state, config).or(action.take());
@@ -296,20 +298,20 @@ fn provider_section(
         .num_columns(2)
         .spacing([12.0, 6.0])
         .show(ui, |ui| {
-            ui.label("Provider");
+            ui.label(tr("Provider"));
             ui.horizontal(|ui| {
                 for (kind, label) in PROVIDERS {
-                    ui.selectable_value(&mut config.provider, kind, label);
+                    ui.selectable_value(&mut config.provider, kind, tr(label));
                 }
             });
             ui.end_row();
 
             match config.provider {
                 ProviderKind::OpenaiCompatible | ProviderKind::Anthropic => {
-                    ui.label("Base URL");
+                    ui.label(tr("Base URL"));
                     ui.vertical(|ui| {
                         let hint = if config.provider == ProviderKind::Anthropic {
-                            "default: https://api.anthropic.com"
+                            tr("default: https://api.anthropic.com")
                         } else {
                             "https://…/v1"
                         };
@@ -317,7 +319,7 @@ fn provider_section(
                         if config.provider == ProviderKind::OpenaiCompatible {
                             ui.horizontal_wrapped(|ui| {
                                 for (label, url) in BASE_URLS {
-                                    if ui.small_button(label).clicked() {
+                                    if ui.small_button(tr(label)).clicked() {
                                         config.base_url = Some(url.to_owned());
                                     }
                                 }
@@ -326,33 +328,33 @@ fn provider_section(
                     });
                     ui.end_row();
 
-                    ui.label("Model");
+                    ui.label(tr("Model"));
                     ui.add(
                         egui::TextEdit::singleline(&mut config.model)
-                            .hint_text("model id, e.g. llama3.1 or claude-sonnet-5-5")
+                            .hint_text(tr("model id, e.g. llama3.1 or claude-sonnet-5-5"))
                             .desired_width(280.0),
                     );
                     ui.end_row();
 
-                    ui.label("API key");
+                    ui.label(tr("API key"));
                     ui.vertical(|ui| {
                         action = key_rows(ui, state).or(action.take());
                     });
                     ui.end_row();
 
-                    ui.label("Key env var");
+                    ui.label(tr("Key env var"));
                     optional_text(
                         ui,
                         &mut config.api_key_env,
-                        "optional fallback, e.g. OPENAI_API_KEY",
+                        tr("optional fallback, e.g. OPENAI_API_KEY"),
                     );
                     ui.end_row();
                 }
                 ProviderKind::CliDelegate => {
-                    ui.label("Command");
+                    ui.label(tr("Command"));
                     ui.vertical(|ui| {
                         if config.cli_command.is_empty() {
-                            ui.colored_label(WARN, "Pick your installed CLI:");
+                            ui.colored_label(WARN, tr("Pick your installed CLI:"));
                         } else {
                             ui.monospace(config.cli_command.join(" "));
                         }
@@ -369,17 +371,17 @@ fn provider_section(
                                 }
                             }
                         });
-                        ui.small(
+                        ui.small(tr(
                             "Codex calls the coach's tools through aimtrainer-mcp, so it sees \
                              your stats summary. Claude Code and OpenCode are text only. Each \
                              uses its own sign-in.",
-                        );
+                        ));
                     });
                     ui.end_row();
                 }
             }
 
-            ui.label("Timeout");
+            ui.label(tr("Timeout"));
             ui.add(
                 egui::DragValue::new(&mut config.request_timeout_secs)
                     .range(1..=aim_ai::config::MAX_REQUEST_TIMEOUT_SECS)
@@ -397,19 +399,22 @@ fn provider_section(
     ui.horizontal(|ui| {
         let can_test = config.enabled && config.validate().is_ok() && !state.test.is_pending();
         if ui
-            .add_enabled(can_test, egui::Button::new("Test connection"))
-            .on_disabled_hover_text("Enable the coach and fix the settings first.")
+            .add_enabled(can_test, egui::Button::new(tr("Test connection")))
+            .on_disabled_hover_text(tr("Enable the coach and fix the settings first."))
             .clicked()
         {
             action = Some(CoachAction::TestConnection);
         }
         if state.test.is_pending() {
             ui.spinner();
-            ui.label("Testing…");
+            ui.label(tr("Testing…"));
         } else {
             match &state.test_result {
                 Some(Ok(reply)) => {
-                    ui.colored_label(GOOD, format!("Connected. Reply: {}", one_line(reply, 80)));
+                    ui.colored_label(
+                        GOOD,
+                        tr_fmt("Connected. Reply: {}", &[&one_line(reply, 80)]),
+                    );
                 }
                 Some(Err(e)) => {
                     ui.colored_label(ERROR, e);
@@ -428,20 +433,20 @@ fn key_rows(ui: &mut egui::Ui, state: &mut CoachState) -> Option<CoachAction> {
         _ if state.key.is_pending() => {
             ui.horizontal(|ui| {
                 ui.spinner();
-                ui.label("Checking the OS keyring…");
+                ui.label(tr("Checking the OS keyring…"));
             });
         }
         Some(KeyStatus::Keyring) => {
-            ui.colored_label(GOOD, "Key stored in OS keyring");
+            ui.colored_label(GOOD, tr("Key stored in OS keyring"));
         }
         Some(KeyStatus::Env(var)) => {
-            ui.colored_label(GOOD, format!("Key from env {var}"));
+            ui.colored_label(GOOD, tr_fmt("Key from env {}", &[var]));
         }
         Some(KeyStatus::Missing) => {
-            ui.colored_label(WARN, "No key stored (local servers need none)");
+            ui.colored_label(WARN, tr("No key stored (local servers need none)"));
         }
         Some(KeyStatus::Unavailable(e)) => {
-            ui.colored_label(ERROR, format!("OS keyring unavailable: {e}"));
+            ui.colored_label(ERROR, tr_fmt("OS keyring unavailable: {}", &[e]));
         }
         Some(KeyStatus::NotNeeded) | None => {}
     }
@@ -449,19 +454,19 @@ fn key_rows(ui: &mut egui::Ui, state: &mut CoachState) -> Option<CoachAction> {
         ui.add(
             egui::TextEdit::singleline(&mut state.key_input)
                 .password(true)
-                .hint_text("paste a key to store it")
+                .hint_text(tr("paste a key to store it"))
                 .desired_width(220.0),
         );
         let ready = !state.key_input.trim().is_empty() && !state.key.is_pending();
         if ui
-            .add_enabled(ready, egui::Button::new("Store in keyring"))
+            .add_enabled(ready, egui::Button::new(tr("Store in keyring")))
             .clicked()
         {
             action = Some(CoachAction::StoreKey);
         }
         if state.key_status == Some(KeyStatus::Keyring)
             && ui
-                .add_enabled(!state.key.is_pending(), egui::Button::new("Forget key"))
+                .add_enabled(!state.key.is_pending(), egui::Button::new(tr("Forget key")))
                 .clicked()
         {
             action = Some(CoachAction::ForgetKey);
@@ -476,15 +481,18 @@ fn preview_section(
     config: &CoachConfig,
 ) -> Option<CoachAction> {
     let mut action = None;
-    ui.small(if config.provider == ProviderKind::CliDelegate {
+    ui.small(tr(if config.provider == ProviderKind::CliDelegate {
         "The CLI delegate never receives this: it sees only the chat."
     } else {
         "This exact JSON is what the model receives when it calls list_stats, plus the chat \
          and the coach's instructions."
-    });
+    }));
     ui.horizontal(|ui| {
         if ui
-            .add_enabled(!state.context.is_pending(), egui::Button::new("Refresh"))
+            .add_enabled(
+                !state.context.is_pending(),
+                egui::Button::new(tr("Refresh")),
+            )
             .clicked()
         {
             action = Some(CoachAction::RefreshContext);
@@ -496,7 +504,7 @@ fn preview_section(
     match &state.context_value {
         Some(ctx) => {
             let json = ctx.to_prompt_json();
-            ui.small(format!("{} bytes", json.len()));
+            ui.small(tr_fmt("{} bytes", &[&json.len()]));
             egui::ScrollArea::vertical()
                 .id_salt("coach_preview")
                 .max_height(220.0)
@@ -505,7 +513,7 @@ fn preview_section(
                 });
         }
         None => {
-            ui.label("Preparing your stats summary…");
+            ui.label(tr("Preparing your stats summary…"));
         }
     }
     action
@@ -517,12 +525,12 @@ fn chat_section(
     config: &CoachConfig,
 ) -> Option<CoachAction> {
     let mut action = None;
-    ui.heading("Chat");
+    ui.heading(tr("Chat"));
     let ready = config.enabled
         && config.validate().is_ok()
         && state.context_value.is_some()
         && !state.turn.is_pending();
-    let why_not = if !config.enabled {
+    let why_not = tr(if !config.enabled {
         "Enable the coach first."
     } else if config.validate().is_err() {
         "Fix the provider settings first."
@@ -530,14 +538,14 @@ fn chat_section(
         "Your stats summary is still being prepared."
     } else {
         "Wait for the current answer."
-    };
+    });
     ui.horizontal(|ui| {
         for (label, prompt) in [
             ("Analyse my stats", ANALYSE_PROMPT),
             ("Recommend a routine", ROUTINE_PROMPT),
         ] {
             if ui
-                .add_enabled(ready, egui::Button::new(label))
+                .add_enabled(ready, egui::Button::new(tr(label)))
                 .on_disabled_hover_text(why_not)
                 .clicked()
             {
@@ -546,7 +554,7 @@ fn chat_section(
         }
         if !state.history.is_empty()
             && ui
-                .add_enabled(!state.turn.is_pending(), egui::Button::new("New chat"))
+                .add_enabled(!state.turn.is_pending(), egui::Button::new(tr("New chat")))
                 .clicked()
         {
             action = Some(CoachAction::ClearChat);
@@ -561,7 +569,7 @@ fn chat_section(
             for line in transcript(&state.history) {
                 match line {
                     Line::Player(text) => {
-                        ui.label(egui::RichText::new(format!("You: {text}")).strong());
+                        ui.label(egui::RichText::new(tr_fmt("You: {}", &[&text])).strong());
                     }
                     Line::Coach(text) => {
                         ui.label(format!("Coach: {text}"));
@@ -577,13 +585,13 @@ fn chat_section(
     ui.horizontal(|ui| {
         let response = ui.add(
             egui::TextEdit::singleline(&mut state.input)
-                .hint_text("Ask the coach…")
+                .hint_text(tr("Ask the coach…"))
                 .desired_width(360.0),
         );
         let enter = response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         let can_send = ready && !state.input.trim().is_empty();
         let clicked = ui
-            .add_enabled(can_send, egui::Button::new("Send"))
+            .add_enabled(can_send, egui::Button::new(tr("Send")))
             .on_disabled_hover_text(why_not)
             .clicked();
         if (clicked || enter) && can_send {
@@ -591,12 +599,12 @@ fn chat_section(
         }
         if state.turn.is_pending() {
             ui.spinner();
-            ui.label("The coach is thinking…");
-            if ui.button("Cancel").clicked() {
+            ui.label(tr("The coach is thinking…"));
+            if ui.button(tr("Cancel")).clicked() {
                 action = Some(CoachAction::Cancel);
             }
         } else if let Phase::Cancelled = state.turn.request().phase() {
-            ui.small("Cancelled.");
+            ui.small(tr("Cancelled."));
         }
     });
     if let Some(notice) = &state.notice {
@@ -607,8 +615,8 @@ fn chat_section(
 
 fn cards_section(ui: &mut egui::Ui, state: &CoachState) -> Option<CoachAction> {
     let mut action = None;
-    ui.heading("Generated scenarios");
-    ui.small("Uncalibrated: the coach's numbers are estimates. Check, play, then save the ones you like.");
+    ui.heading(tr("Generated scenarios"));
+    ui.small(tr("Uncalibrated: the coach's numbers are estimates. Check, play, then save the ones you like."));
     let busy = state.card_job.is_pending();
     for (i, card) in state.cards.iter().enumerate() {
         egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -618,7 +626,10 @@ fn cards_section(ui: &mut egui::Ui, state: &CoachState) -> Option<CoachAction> {
                 Some(Ok(score)) => {
                     ui.colored_label(
                         GOOD,
-                        format!("Valid and playable (simulated contender scored {score:.0})"),
+                        tr_fmt(
+                            "Valid and playable (simulated contender scored {})",
+                            &[&format!("{score:.0}")],
+                        ),
                     );
                 }
                 Some(Err(errors)) => {
@@ -632,9 +643,9 @@ fn cards_section(ui: &mut egui::Ui, state: &CoachState) -> Option<CoachAction> {
                 Some(Ok(path)) => {
                     ui.colored_label(
                         GOOD,
-                        format!(
+                        tr_fmt(
                             "Saved to {} (listed under Scenarios after a restart)",
-                            path.display()
+                            &[&path.display()],
                         ),
                     );
                 }
@@ -645,17 +656,17 @@ fn cards_section(ui: &mut egui::Ui, state: &CoachState) -> Option<CoachAction> {
             }
             ui.horizontal(|ui| {
                 if ui
-                    .add_enabled(!busy, egui::Button::new("Validate"))
+                    .add_enabled(!busy, egui::Button::new(tr("Validate")))
                     .clicked()
                 {
                     action = Some(CoachAction::Check(i));
                 }
-                if ui.button("Play").clicked() {
+                if ui.button(tr("Play")).clicked() {
                     action = Some(CoachAction::Play(i));
                 }
                 let saved = matches!(card.saved, Some(Ok(_)));
                 if ui
-                    .add_enabled(!busy && !saved, egui::Button::new("Save"))
+                    .add_enabled(!busy && !saved, egui::Button::new(tr("Save")))
                     .clicked()
                 {
                     action = Some(CoachAction::Save(i));
@@ -672,31 +683,32 @@ fn memory_section(
     memory_file: &str,
 ) -> Option<CoachAction> {
     let mut action = None;
-    ui.heading("Memory");
-    ui.small(format!(
-        "What the coach remembers about your goals and habits stays on this computer: {memory_file}"
+    ui.heading(tr("Memory"));
+    ui.small(tr_fmt(
+        "What the coach remembers about your goals and habits stays on this computer: {}",
+        &[&memory_file],
     ));
     ui.horizontal(|ui| {
         if state.wipe.is_pending() {
             ui.spinner();
-            ui.label("Forgetting…");
+            ui.label(tr("Forgetting…"));
         } else if state.confirm_wipe {
-            ui.label("Delete every note the coach kept?");
-            if ui.button("Forget everything").clicked() {
+            ui.label(tr("Delete every note the coach kept?"));
+            if ui.button(tr("Forget everything")).clicked() {
                 action = Some(CoachAction::WipeMemory);
                 state.confirm_wipe = false;
             }
-            if ui.button("Cancel").clicked() {
+            if ui.button(tr("Cancel")).clicked() {
                 state.confirm_wipe = false;
             }
         } else {
-            if ui.button("Forget everything").clicked() {
+            if ui.button(tr("Forget everything")).clicked() {
                 state.confirm_wipe = true;
                 state.wipe_result = None;
             }
             match &state.wipe_result {
                 Some(Ok(())) => {
-                    ui.colored_label(GOOD, "The coach's memory is empty.");
+                    ui.colored_label(GOOD, tr("The coach's memory is empty."));
                 }
                 Some(Err(e)) => {
                     ui.colored_label(ERROR, e);
@@ -821,5 +833,23 @@ mod tests {
     fn long_replies_are_cut_on_one_line() {
         assert_eq!(one_line("a\nb  c", 10), "a b c");
         assert_eq!(one_line("abcdef", 3), "abc…");
+    }
+
+    #[test]
+    fn the_coach_tab_chrome_reads_in_spanish_but_prompts_stay_english() {
+        use aim_core::i18n::{Lang, tr_fmt_in, tr_in};
+        assert_eq!(tr_in(Lang::Es, "AI coach"), "Coach de IA");
+        assert_eq!(tr_in(Lang::Es, "Test connection"), "Probar conexión");
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "Used {}", &[&"list_stats"]),
+            "Usó list_stats"
+        );
+        assert_eq!(
+            tr_in(Lang::Es, "OpenAI-compatible"),
+            "Compatible con OpenAI"
+        );
+        // What the model receives is never in the catalog.
+        assert_eq!(tr_in(Lang::Es, ANALYSE_PROMPT), ANALYSE_PROMPT);
+        assert_eq!(tr_in(Lang::Es, ROUTINE_PROMPT), ROUTINE_PROMPT);
     }
 }

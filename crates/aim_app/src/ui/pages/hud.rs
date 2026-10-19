@@ -219,7 +219,7 @@ fn sens_drill_hud(
         .interactable(false)
         .show(contexts.ctx_mut()?, |ui| {
             ui.label(crate::ui::atoms::big(
-                format!("Sens ×{multiplier:.2}"),
+                crate::i18n::tr_fmt("Sens ×{}", &[&format!("{multiplier:.2}")]),
                 18.0,
             ));
         });
