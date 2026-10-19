@@ -1,12 +1,13 @@
 //! The AI coach, without I/O: a compact summary of the player's analyses for a language
 //! model ([`context`]), a coaching knowledge base ([`knowledge`]), drill generation
-//! ([`drills`]), the tools a model may call ([`tools`]) and the loop that runs them
-//! ([`run_turn`]).
+//! ([`drills`]), the tools a model may call ([`tools`]), the loop that runs them
+//! ([`run_turn`]) and the one-shot run and mistake debriefs ([`debrief`]).
 //!
 //! The model and the memory store are ports ([`ChatModel`], [`CoachMemory`]): network
 //! clients, key storage and databases are adapters outside the core.
 
 pub mod context;
+pub mod debrief;
 pub mod drills;
 pub mod knowledge;
 pub mod tools;
@@ -202,18 +203,25 @@ pub struct Turn {
     pub scenarios: Vec<ScenarioDef>,
 }
 
+/// Who the coach is; every coach prompt opens with it.
+pub(crate) const ROLE: &str = "You are an aim coach inside a VALORANT-focused aim trainer.";
+/// The external-focus rule (docs/training-science.md), shared by every coach prompt.
+pub(crate) const CUE_RULE: &str =
+    "Give one external-focus cue at a time (for example \"land on the head in one motion\").";
+/// The game-integrity rule, shared by every coach prompt.
+pub(crate) const NO_GAME_RULE: &str = "Never suggest touching the game process.";
+
 /// The coach's standing instructions.
 pub fn system_prompt() -> String {
-    "You are an aim coach inside a VALORANT-focused aim trainer. Use the tools: call \
-     list_stats before judging the player, recommend_routine to pick practice from the \
-     built-in library, create_scenario to generate a drill (fix the errors it returns and \
-     retry), and remember/recall for what the player tells you about goals and habits. \
-     Explain every recommendation with the metric and threshold behind it. Give one \
-     external-focus cue at a time (for example \"land on the head in one motion\"). Never \
-     invent VALORANT constants; cite docs/valorant-mechanics.md. Treat drill numbers as \
-     estimates and say generated scenarios are uncalibrated. Never suggest touching the game \
-     process."
-        .to_owned()
+    format!(
+        "{ROLE} Use the tools: call list_stats before judging the player, recommend_routine \
+         to pick practice from the built-in library, create_scenario to generate a drill (fix \
+         the errors it returns and retry), and remember/recall for what the player tells you \
+         about goals and habits. Explain every recommendation with the metric and threshold \
+         behind it. {CUE_RULE} Never invent VALORANT constants; cite \
+         docs/valorant-mechanics.md. Treat drill numbers as estimates and say generated \
+         scenarios are uncalibrated. {NO_GAME_RULE}"
+    )
 }
 
 /// Run one player turn: send the conversation and the tools to `model`, run every tool
@@ -468,6 +476,22 @@ mod tests {
         assert_eq!(m.recall("", 2).len(), 2);
         assert_eq!(m.recall("", 2)[0].timestamp, 4, "empty query: newest first");
         assert!(m.recall("operator", 5).is_empty());
+    }
+
+    #[test]
+    fn the_system_prompt_text_is_unchanged() {
+        assert_eq!(
+            system_prompt(),
+            "You are an aim coach inside a VALORANT-focused aim trainer. Use the tools: call \
+             list_stats before judging the player, recommend_routine to pick practice from the \
+             built-in library, create_scenario to generate a drill (fix the errors it returns and \
+             retry), and remember/recall for what the player tells you about goals and habits. \
+             Explain every recommendation with the metric and threshold behind it. Give one \
+             external-focus cue at a time (for example \"land on the head in one motion\"). Never \
+             invent VALORANT constants; cite docs/valorant-mechanics.md. Treat drill numbers as \
+             estimates and say generated scenarios are uncalibrated. Never suggest touching the game \
+             process."
+        );
     }
 
     #[test]
