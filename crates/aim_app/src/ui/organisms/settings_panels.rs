@@ -5,7 +5,7 @@
 
 use super::dpi_check::DpiMeter;
 use super::{hotkey_settings, restart_key_setting};
-use crate::persistence::settings::{EnemyHighlight, Settings, TargetVisibility};
+use crate::persistence::settings::{COUNTDOWN_RANGE, EnemyHighlight, Settings, TargetVisibility};
 use crate::ui::molecules::SettingsRows;
 use aim_core::crosshair::{
     CUSTOM_COLOR_INDEX, Crosshair, DOT_THICKNESS_PX, ERROR_MULTIPLIER_MAX, LINE_THICKNESS_MAX_PX,
@@ -79,6 +79,7 @@ pub fn reset_section(settings: &mut Settings, tab: SettingsTab) {
             settings.warmup_minutes = d.warmup_minutes;
             settings.personal_warmup = d.personal_warmup;
             settings.daily_goal_minutes = d.daily_goal_minutes;
+            settings.countdown_secs = d.countdown_secs;
             settings.mission_commitment = d.mission_commitment;
             settings.arena_coaching = d.arena_coaching;
             settings.sens_randomizer = d.sens_randomizer;
@@ -259,6 +260,14 @@ pub fn training_panel(
                 .range(5.0..=120.0)
                 .suffix(" min"),
         );
+    });
+    rows.row(ui, "Start countdown", |ui| {
+        ui.add(
+            egui::Slider::new(&mut settings.countdown_secs, COUNTDOWN_RANGE)
+                .step_by(0.5)
+                .suffix(" s"),
+        )
+        .on_hover_text("Seconds before a run starts; 0 starts at once. In movement scenarios you can walk into position during it, and the run starts from where you are and how fast you move at GO.");
     });
     rows.row(ui, "Mission commitment", |ui| {
         for c in Commitment::ALL {
@@ -638,6 +647,7 @@ mod tests {
             warmup_minutes: 9,
             personal_warmup: false,
             daily_goal_minutes: 50.0,
+            countdown_secs: 1.0,
             target_color: [0.0, 1.0, 0.0],
             offscreen_arrows: false,
             mission_commitment: Commitment::High,
