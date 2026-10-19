@@ -29,7 +29,8 @@ fn initialize_then_tools_list_returns_the_six_coach_tools() {
             }
         }
     });
-    let mut send = |msg: Value| {
+    // The closure owns stdin, so dropping it closes the server's input.
+    let mut send = move |msg: Value| {
         writeln!(stdin, "{msg}").unwrap();
         stdin.flush().unwrap();
     };
@@ -83,7 +84,6 @@ fn initialize_then_tools_list_returns_the_six_coach_tools() {
     );
 
     drop(send);
-    drop(stdin);
     let status = child.wait().expect("the server exits when stdin closes");
     assert!(status.success(), "{status}");
 }
