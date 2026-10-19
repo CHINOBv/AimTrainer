@@ -225,7 +225,8 @@ pub fn export_csv(src: &str) -> (String, usize) {
     (out, rows)
 }
 
-/// Write the export of `history_file` to `out`; a missing history exports no runs.
+/// Write the export of `history_file` to a new file `out`; a missing history exports no
+/// runs. An existing file (the history itself included) is never replaced.
 pub fn export_history(history_file: &Path, out: &Path) -> io::Result<usize> {
     let src = match fs::read_to_string(history_file) {
         Ok(src) => src,
@@ -233,7 +234,11 @@ pub fn export_history(history_file: &Path, out: &Path) -> io::Result<usize> {
         Err(e) => return Err(e),
     };
     let (csv, rows) = export_csv(&src);
-    fs::write(out, csv)?;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(out)?;
+    io::Write::write_all(&mut file, csv.as_bytes())?;
     Ok(rows)
 }
 
@@ -555,6 +560,17 @@ mod tests {
             dir.join("no-such-dir").join("x.csv"),
         );
         assert!(failing.wait().starts_with("Export failed: "));
+
+        // An existing file, the history itself included, is never replaced.
+        let history_before = fs::read(&paths.history_file).unwrap();
+        for existing in [out.clone(), paths.history_file.clone()] {
+            let before = fs::read(&existing).unwrap();
+            let mut again = HistoryExport::default();
+            again.start(paths.history_file.clone(), existing.clone());
+            assert!(again.wait().starts_with("Export failed: "));
+            assert_eq!(fs::read(&existing).unwrap(), before);
+        }
+        assert_eq!(fs::read(&paths.history_file).unwrap(), history_before);
         fs::remove_dir_all(&dir).unwrap();
     }
 }

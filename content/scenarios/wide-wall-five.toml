@@ -5,7 +5,7 @@ name = "Wide Wall Five"
 category = "flicking"
 description = """
 Static clicking with an ammo economy. Five medium spheres spread over a 100° wall. Each shot
-costs 30 of a 100 clip and each hit refunds 37, so two misses in a row force a reload.
+costs 30 of a 100 clip and each hit refunds 37, so three misses in a row force a reload.
 Trains long flicks that still land on the first click."""
 
 [weapon]
