@@ -447,6 +447,15 @@ Enemies often first show up away from the crosshair, and the minimap tells where
 
 **Simulated aimer.** For detection it holds the crosshair still, clicks each flash one reaction time after it appears, and with no flash showing clicks anyway at its go/no-go mistake rate per second (recruit ≈ 0.22/s, elite ≈ 0.09/s, an **estimate**). For radar recall it treats the targets the radar did not show like go/no-go decoys, mistaking one for a match at the same rate. `peripheral-detect` calibrates at about 71% and `radar-recall` at about 67% contender accuracy, inside the challenge-point band. Neither model forgets the radar or misses a flash outright, so a playtest should confirm the difficulty.
 
+## Attentional focus in drill notes
+
+Routine block notes (`docs/library.md`) use **external-focus** cues: they describe the effect on screen, such as "land on the head in one motion" or "match the target's speed first", never the movement of the hand or arm. Studies found external focus better than internal focus for both performance and learning:
+- Wulf, Höß and Prinz (1998), *Journal of Motor Behavior* 30(2);
+- the review by Wulf (2013), *International Review of Sport and Exercise Psychology* 6(1);
+- the meta-analysis by Chua et al. (2021), *Psychological Bulletin* 147(6).
+
+Later work warns that reporting bias may inflate the effect size (McKay and Carter, sportRxiv). Treat the benefit as **moderate** evidence. No study tested it for mouse aiming specifically (inference).
+
 ## Caveat
 
 No controlled study yet shows that aim-trainer practice transfers to in-game performance (verified as an absence of evidence). What the evidence does show is in-trainer learning and reliable measurement (Rogers et al. 2024: https://pmc.ncbi.nlm.nih.gov/articles/PMC10925653/). Use the trainer alongside real games, such as Deathmatch with the crosshair kept at head level.
