@@ -119,6 +119,9 @@ pub struct Settings {
     /// settings file yet); a file without this key comes from an existing player.
     #[serde(default = "first_run_done_in_old_files")]
     pub first_run_done: bool,
+    /// The last Movement Lab settings (`[movement_lab]`).
+    #[serde(deserialize_with = "deserialize_movement_lab")]
+    pub movement_lab: aim_core::scenario::lab::LabSettings,
 }
 
 fn first_run_done_in_old_files() -> bool {
@@ -169,6 +172,22 @@ where
     Ok(policy.unwrap_or_else(|| {
         bevy::log::warn!("invalid [breaks] settings; using the default break policy");
         BreakPolicy::default()
+    }))
+}
+
+/// An invalid `[movement_lab]` table (a wrong type, or not a table) resets only the lab to
+/// its defaults instead of every setting. Out-of-range numbers are kept: the lab clamps
+/// them when it builds the drill.
+fn deserialize_movement_lab<'de, D>(
+    deserializer: D,
+) -> Result<aim_core::scenario::lab::LabSettings, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = toml::Value::deserialize(deserializer)?;
+    Ok(value.try_into().unwrap_or_else(|_| {
+        bevy::log::warn!("invalid [movement_lab] settings; using the lab defaults");
+        aim_core::scenario::lab::LabSettings::default()
     }))
 }
 
@@ -517,6 +536,7 @@ impl Default for Settings {
             coach: aim_ai::CoachConfig::default(),
             breaks: BreakPolicy::default(),
             first_run_done: false,
+            movement_lab: aim_core::scenario::lab::LabSettings::default(),
         }
     }
 }
@@ -1015,6 +1035,50 @@ fullscreen = false",
         assert_eq!(ch.color_index, CUSTOM_COLOR_INDEX);
         assert_eq!(ch.custom_color, Rgba::opaque(255, 128, 0));
         assert!(!ch.outlines);
+    }
+
+    #[test]
+    fn movement_lab_uses_the_defaults_for_old_settings_files_and_round_trips() {
+        use aim_core::scenario::lab::{LabMotion, LabSettings};
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(old.movement_lab, LabSettings::default());
+        assert!(!old.fullscreen, "the rest of the file still loads");
+        let custom = Settings {
+            movement_lab: LabSettings {
+                motion: LabMotion::Dodge,
+                max_alive: 5,
+                until_killed: true,
+                ..LabSettings::default()
+            },
+            ..Settings::default()
+        };
+        let text = toml::to_string_pretty(&custom).unwrap();
+        assert!(text.contains("[movement_lab]"), "{text}");
+        let back: Settings = toml::from_str(&text).unwrap();
+        assert_eq!(back.movement_lab, custom.movement_lab);
+        let partial = Settings::parse("[movement_lab]\nmax_alive = 4\n");
+        assert_eq!(partial.movement_lab.max_alive, 4);
+        assert_eq!(
+            partial.movement_lab.motion,
+            LabMotion::Strafe,
+            "missing keys default"
+        );
+    }
+
+    #[test]
+    fn an_invalid_movement_lab_table_resets_only_the_lab() {
+        for table in [
+            "[movement_lab]\nmax_alive = \"many\"\n",
+            "movement_lab = 3\n",
+        ] {
+            let settings = Settings::parse(&format!("fullscreen = false\n{table}"));
+            assert_eq!(
+                settings.movement_lab,
+                aim_core::scenario::lab::LabSettings::default(),
+                "{table}"
+            );
+            assert!(!settings.fullscreen, "other settings survive: {table}");
+        }
     }
 
     #[test]

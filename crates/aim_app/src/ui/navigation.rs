@@ -68,6 +68,10 @@ impl Navigator<'_, '_> {
                 }
             }
             UiAction::StartRoutineDef(def) => self.start_routine_def(&def, 0.0, 0, routine_seed()),
+            UiAction::StartLab(lab) => {
+                self.routine.0 = None;
+                start_run(&mut self.commands, &mut self.next, lab.to_def());
+            }
             UiAction::StartArena(id) => {
                 self.routine.0 = None;
                 self.launch_arena(&id, None, false);
@@ -514,6 +518,22 @@ mod tests {
         let run = w.resource::<Run>();
         assert!(run.adaptive);
         assert_eq!(run.session.def().id, "micro-adjust@+0.25");
+    }
+
+    #[test]
+    fn lab_drills_start_their_generated_scenario_and_leave_the_routine() {
+        let mut w = world();
+        apply(&mut w, UiAction::StartRoutine("quick-warmup".into()));
+        let lab = aim_core::scenario::lab::LabSettings {
+            max_alive: 3,
+            ..Default::default()
+        };
+        apply(&mut w, UiAction::StartLab(lab.clone()));
+        let run = w.resource::<Run>();
+        assert_eq!(*run.session.def(), lab.to_def());
+        assert!(aim_core::scenario::lab::is_lab_id(&run.session.def().id));
+        assert_eq!(routine_index(&w), None);
+        assert_eq!(pending(&w), Some(AppState::Playing));
     }
 
     #[test]

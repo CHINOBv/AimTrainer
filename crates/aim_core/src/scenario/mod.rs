@@ -6,6 +6,7 @@ pub mod cue;
 pub mod def;
 pub mod difficulty;
 pub mod hit;
+pub mod lab;
 mod motion;
 pub mod phase;
 mod recoil;
