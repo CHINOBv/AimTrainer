@@ -238,7 +238,10 @@ pub fn export_history(history_file: &Path, out: &Path) -> io::Result<usize> {
         .write(true)
         .create_new(true)
         .open(out)?;
-    io::Write::write_all(&mut file, csv.as_bytes())?;
+    // A half-written export would block a retry with the same name, so it is removed.
+    io::Write::write_all(&mut file, csv.as_bytes()).inspect_err(|_| {
+        let _ = fs::remove_file(out);
+    })?;
     Ok(rows)
 }
 
