@@ -27,7 +27,7 @@ Rules:
 |---|---|---|---|---|
 | T1 | plan | inline | done | 1b76f80 |
 | T2 | S1–S6 core (pure) | delegated (worktree `creative-core`) | done | b1838d7..7381cf1, merged |
-| T3 | S1–S6 app UI + persistence | delegated, after T2 and after the coach/history app pieces merge | pending | |
+| T3 | S1–S6 app UI + persistence | delegated, after T2 and after the coach/history app pieces merge | done (playtest pending) | 0626583, 8d7a634, c9b574e, ac5f554, 1ad8880, 9e36b92, 81b5d13, merge 6766410 |
 | T4 | seam: verifier, review, merge to `main` | inline | pending | |
 
 ## Log
@@ -42,3 +42,8 @@ Rules:
 - L4 (2026-10-18) T2 merged.
   - Modules: `training::journal` (tilt reset), `sensitivity::dpi_check`, `training::warmup::warmup_dose`, `training::ergonomics`, `progress::plateaus`, `analytics::proof` (FNV-1a content hash, base64url share code, replay re-simulation).
   - Decision for T3: `queue_warmup` silently caps at 12 runs × 30 s = 6 min, although the Settings slider allows 30 and the dose goes up to 15. Raise the cap to 15 min (30 runs) so explicit settings are honoured, with a test.
+- L5 (2026-10-18) T3 merged (all of S1–S6 in the app); main merged into the branch (3bf5973).
+  - The first writer stalled without changes and was restarted.
+  - Added after review: a "Use my personal dose" switch (default on), because the dose silently replaced the explicit warm-up length; RED observed.
+  - New persisted data: the `[breaks]` settings table, the `personal_warmup` setting, and `journal.toml`.
+  - Needs a playtest: panel layouts, the break banner, live DPI counting, clipboard copy, the breathing timer.
