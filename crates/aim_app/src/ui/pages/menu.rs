@@ -260,7 +260,9 @@ fn settings_section(
         SettingsTab::Keys => {
             settings_panels::keys_panel(ui, rows, settings, &mut cfg.hotkey_capture.recording)
         }
-        SettingsTab::Training => settings_panels::training_panel(ui, rows, settings),
+        SettingsTab::Training => {
+            settings_panels::training_panel(ui, rows, settings, cfg.personal_warmup.0.as_ref())
+        }
     }
 }
 
@@ -304,6 +306,7 @@ struct SettingsAccess<'w> {
     sound_previews: MessageWriter<'w, SoundPreview>,
     saver: ResMut<'w, SettingsSaver>,
     time: Res<'w, Time<Real>>,
+    personal_warmup: Res<'w, crate::ui::launcher::PersonalWarmup>,
 }
 
 fn menu(

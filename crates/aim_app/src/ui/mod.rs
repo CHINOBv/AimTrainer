@@ -30,12 +30,19 @@ pub struct StartupPlay(pub Option<String>);
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<StartupPlay>()
+            .init_resource::<launcher::PersonalWarmup>()
             .init_resource::<crate::platform::frame_stats::FrameStats>()
             .add_systems(Update, crate::platform::frame_stats::track_frames)
             .add_systems(EguiPrimaryContextPass, install_fonts)
             .add_systems(
                 Update,
-                (launcher::launch_requested, launcher::launch_startup),
+                (
+                    launcher::refresh_personal_warmup
+                        .run_if(resource_exists_and_changed::<crate::persistence::history::History>)
+                        .before(launcher::launch_requested),
+                    launcher::launch_requested,
+                    launcher::launch_startup,
+                ),
             )
             .add_plugins((
                 pages::menu::MenuPage,

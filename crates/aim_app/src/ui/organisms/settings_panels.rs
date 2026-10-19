@@ -15,6 +15,7 @@ use aim_core::sensitivity::randomizer::{
     MAX_MULTIPLIER, MIN_INTERVAL_SECS, MIN_MULTIPLIER, RandomizerConfig,
 };
 use aim_core::training::missions::Commitment;
+use aim_core::training::warmup::{MIN_DOSE_SESSIONS, MIN_SESSION_RUNS, WarmupDose};
 use bevy_egui::egui;
 
 /// The Settings sub-tabs.
@@ -263,7 +264,14 @@ pub fn keys_panel(
     );
 }
 
-pub fn training_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mut Settings) {
+/// The Training section. `dose` is the personal warm-up dose, which replaces the queue
+/// warm-up length when known.
+pub fn training_panel(
+    ui: &mut egui::Ui,
+    rows: &mut SettingsRows,
+    settings: &mut Settings,
+    dose: Option<&WarmupDose>,
+) {
     rows.section(ui, "Training");
     rows.row(ui, "Queue warm-up length", |ui| {
         ui.add(
@@ -271,6 +279,7 @@ pub fn training_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mut
                 .range(1..=30)
                 .suffix(" min"),
         );
+        ui.label(personal_warmup_text(dose));
     });
     rows.row(ui, "Daily goal", |ui| {
         ui.add(
@@ -294,6 +303,19 @@ pub fn training_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mut
     rows.block(ui, "Sensitivity randomiser drill", |ui| {
         sens_randomizer(ui, &mut settings.sens_randomizer)
     });
+}
+
+/// The personal warm-up line shown next to the queue warm-up length.
+pub fn personal_warmup_text(dose: Option<&WarmupDose>) -> String {
+    match dose {
+        Some(d) => format!(
+            "Personal warm-up: {:.0} min (from {} sessions), used instead of this length",
+            d.minutes, d.sessions
+        ),
+        None => format!(
+            "Personal warm-up: not enough data yet ({MIN_DOSE_SESSIONS} sessions of {MIN_SESSION_RUNS}+ runs)"
+        ),
+    }
 }
 
 /// The sensitivity randomiser drill. It only scales the look while playing; the saved
@@ -585,6 +607,19 @@ fn code_import_export(ui: &mut egui::Ui, ch: &mut Crosshair) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_personal_warmup_line_names_the_dose_and_its_sessions() {
+        let dose = WarmupDose {
+            minutes: 7.0,
+            sessions: 4,
+        };
+        assert_eq!(
+            personal_warmup_text(Some(&dose)),
+            "Personal warm-up: 7 min (from 4 sessions), used instead of this length"
+        );
+        assert!(personal_warmup_text(None).contains("not enough data"));
+    }
 
     #[test]
     fn dpi_meter_converts_counts_over_ten_centimeters() {
