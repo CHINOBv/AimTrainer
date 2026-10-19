@@ -65,3 +65,16 @@ Branch: `feat/scenario-engine` (worktree `../AimTrainer-worktrees/scenario-engin
     - an empty history.csv gets no header (pre-existing);
     - overlays use the unshrunk radius;
     - the FOV lock and overlays need a playtest.
+- L-review (2026-10-18) RDD reviews on 5 slices (engine, two library parts, routines, history) were all approved and acknowledged. From their warnings, fixed:
+  - the CSV export refuses an existing path, the history itself included (RED observed);
+  - the wide-wall-five description now says three misses force a reload (clip 100, cost 30);
+  - orbit-track's display name now matches its id.
+  - Checked and dismissed:
+    - reactive-flick triggers correctly (`health_below` compares the health fraction, 0.5 < 1.0);
+    - an infinite-health click efficiency cannot occur (validation refuses inf without hold).
+  - Kept as advisories:
+    - SOURCES ordering;
+    - the ranked-prep-15 id vs ≈13 min;
+    - duplicated shrink-aware aim code in sim.rs;
+    - a ballistic multi-bounce per step at large dt;
+    - the struck-animation scale on shrinking spheres.
