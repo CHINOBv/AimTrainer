@@ -9,6 +9,7 @@ use crate::game::{
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::library::Library;
 use aim_core::activity::ActivityKind;
+use aim_core::analytics::proof::variant_for_key;
 use aim_core::scenario::{RunKey, ScenarioDef, Tuning};
 use aim_core::training::routine::{PlannedRun, RoutineDef};
 use aim_world::arena::{ArenaSession, PRACTICE_SUFFIX};
@@ -51,10 +52,8 @@ impl Navigator<'_, '_> {
             UiAction::StartScenario(id) | UiAction::Retry(id) => {
                 self.routine.0 = None;
                 // Results carry run keys (`id@+0.50~20s%s80d120v150^+1.50m`); retry the
-                // same variant.
-                let key = RunKey::parse(&id);
-                if let Some(def) = self.library.scenario(key.base) {
-                    let def = variant(def, &key, key.tuning, key.elevation);
+                // same variant, rebuilt exactly as a score proof rebuilds it.
+                if let Some(def) = variant_for_key(&self.library.scenarios, &id) {
                     start_run(&mut self.commands, &mut self.next, def);
                 }
             }
@@ -319,6 +318,52 @@ mod tests {
     use aim_core::scenario::parse_run_key_full;
     use aim_core::sensitivity::finder::Slot;
     use bevy::ecs::system::RunSystemOnce;
+
+    /// Run keys covering every part a key can carry, built by the same methods a run uses.
+    fn sample_keys() -> Vec<String> {
+        let lib = aim_core::scenario::builtin::all();
+        let mut keys = Vec::new();
+        for def in lib.iter().take(12) {
+            keys.push(def.id.clone());
+            keys.push(def.at_difficulty(0.5).id);
+            keys.push(def.at_difficulty(-0.25).with_duration(20.0).id);
+            let tuning = Tuning {
+                size_pct: 80,
+                distance_pct: 120,
+                speed_pct: 150,
+            };
+            keys.push(
+                def.at_difficulty(0.25)
+                    .with_duration(30.0)
+                    .with_tuning(tuning)
+                    .with_elevation(1.5)
+                    .id,
+            );
+            keys.push(def.with_elevation(-0.75).id);
+        }
+        keys
+    }
+
+    #[test]
+    fn scenario_starts_rebuild_the_same_variant_as_score_proofs() {
+        let lib = aim_core::scenario::builtin::all();
+        for key in sample_keys() {
+            let k = RunKey::parse(&key);
+            let base = lib.iter().find(|d| d.id == k.base).unwrap();
+            let app = variant(base, &k, k.tuning, k.elevation);
+            let core = variant_for_key(&lib, &key).unwrap();
+            assert_eq!(app, core, "{key}");
+            assert_eq!(core.id, key, "the id matches the key");
+        }
+    }
+
+    #[test]
+    fn retrying_a_variant_starts_that_exact_variant() {
+        let mut w = world();
+        let key = sample_keys()[3].clone();
+        apply(&mut w, UiAction::Retry(key.clone()));
+        assert_eq!(w.resource::<Run>().session.def().id, key);
+    }
 
     fn world() -> World {
         let mut world = World::new();
