@@ -53,7 +53,12 @@ impl PriorityReport {
                     Metric::NearestFirstShare | Metric::MissedOpportunityRate
                 )
             })
-            .map(|f| (f.verdict == Verdict::Strength, f.explanation.clone()))
+            .map(|f| {
+                (
+                    f.verdict == Verdict::Strength,
+                    f.explanation_in(crate::i18n::language()),
+                )
+            })
             .collect();
         Self {
             rows: vec![(NEAREST, nearest), (MISSED, missed)],

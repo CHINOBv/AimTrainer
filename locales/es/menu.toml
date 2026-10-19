@@ -162,3 +162,13 @@
 "Back" = "Atrás"
 "Next" = "Siguiente"
 "Finish" = "Terminar"
+
+# Scenario categories (aim_core Category::label)
+"Flicking" = "Flicking"
+"Microcorrections" = "Microcorrecciones"
+"Target switching" = "Cambio de objetivo"
+"Tracking" = "Tracking"
+"Movement" = "Movimiento"
+"Reaction" = "Reacción"
+"Precision" = "Precisión"
+"Custom" = "Personalizado"

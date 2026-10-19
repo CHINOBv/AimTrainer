@@ -200,7 +200,7 @@ fn filter_controls(ui: &mut egui::Ui, filter: &mut ScenarioFilter) {
             &mut filter.category,
             tr("Any category"),
             &Category::ALL,
-            |c| c.label(),
+            |c| tr(c.label()),
         );
         option_combo(
             ui,
@@ -265,7 +265,7 @@ pub fn scenario_details(
     });
     ui.label(format!(
         "{} · {:.0}s · {} · {fire}",
-        def.category.label(),
+        tr(def.category.label()),
         def.duration_secs,
         def.weapon.kind.stats().display_name,
     ));

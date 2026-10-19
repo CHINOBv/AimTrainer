@@ -1219,7 +1219,7 @@ fn today_model(
         }
     };
     Some(TodayModel {
-        weekday: weekday.label(),
+        weekday: weekday.label_in(crate::i18n::language()),
         method_name: method.name.clone(),
         method_description: method.description.clone(),
         credit: method.credit.clone(),
@@ -1281,7 +1281,7 @@ fn missions_model(
 ) -> MissionsModel {
     let list = missions.0.today.as_ref().map_or(&[][..], |d| &d.missions);
     MissionsModel {
-        commitment: commitment.label(),
+        commitment: commitment.label_in(crate::i18n::language()),
         missions: list
             .iter()
             .map(|m| MissionModel {
@@ -1289,7 +1289,11 @@ fn missions_model(
                 scenario_name: lib
                     .scenario(&m.scenario)
                     .map_or(m.scenario.clone(), |d| d.name.clone()),
-                conditions: m.conditions.iter().map(|c| c.describe()).collect(),
+                conditions: m
+                    .conditions
+                    .iter()
+                    .map(|c| c.describe_in(crate::i18n::language()))
+                    .collect(),
                 mastery: m.mastery,
                 done: m.done,
                 best_met: m.best_met,

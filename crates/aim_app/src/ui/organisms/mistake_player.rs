@@ -333,7 +333,7 @@ pub fn mistake_player_with(
         ui.small(tr(text::NO_MISTAKES));
         return action;
     };
-    ui.colored_label(BAD, m.kind.label());
+    ui.colored_label(BAD, m.kind.label_in(crate::i18n::language()));
 
     let step = state.step();
     let i = step.number() - 1;
@@ -359,7 +359,7 @@ pub fn mistake_player_with(
     let step = state.step();
     if step == Step::Tip {
         egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.label(&m.tip);
+            ui.label(m.tip_in(crate::i18n::language()));
         });
         below_tip(ui, state.index, &m);
     } else {

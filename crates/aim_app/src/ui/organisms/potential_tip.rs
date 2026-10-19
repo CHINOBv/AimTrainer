@@ -23,12 +23,15 @@ impl PotentialLine {
             headline: tr_fmt(
                 "Fix {} → about {} points (+{}%)",
                 &[
-                    &tip.gain.fix.label(),
+                    &tip.gain.fix.label_in(crate::i18n::language()),
                     &format!("{:.0}", tip.potential_score()),
                     &format!("{:.0}", tip.gain_share() * 100.0),
                 ],
             ),
-            assumption: tr_fmt("Estimate: {}.", &[&tip.gain.assumption()]),
+            assumption: tr_fmt(
+                "Estimate: {}.",
+                &[&tip.gain.assumption_in(crate::i18n::language())],
+            ),
         }
     }
 }

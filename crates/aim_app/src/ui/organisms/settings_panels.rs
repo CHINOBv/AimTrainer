@@ -298,7 +298,7 @@ pub fn training_panel(
     });
     rows.row(ui, "Mission commitment", |ui| {
         for c in Commitment::ALL {
-            ui.selectable_value(&mut settings.mission_commitment, c, tr(c.label()))
+            ui.selectable_value(&mut settings.mission_commitment, c, c.label_in(crate::i18n::language()))
                 .on_hover_text(tr("Low: 2 missions a day. Medium: 3, one of them mastery. High: 4, two mastery, closer to your bests. Changing it regenerates today's missions."));
         }
     });

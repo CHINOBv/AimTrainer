@@ -103,7 +103,6 @@
 "Press Ctrl/Alt/Shift + a key, or an F-key… (Esc to cancel)" = "Pulsa Ctrl/Alt/Shift + una tecla, o una tecla F… (Esc para cancelar)"
 "Cancel" = "Cancelar"
 "Record" = "Grabar"
-"Clear" = "Quitar"
 "Disable this hotkey" = "Desactivar este atajo"
 "Not set" = "Sin asignar"
 "Restart run" = "Reiniciar partida"
@@ -250,8 +249,6 @@
 # Crosshair preset names (content/crosshairs, shown in the crosshair editor).
 "Classic cyan plus" = "Cruz cian clásica"
 "Small dot" = "Punto pequeño"
-"Tiny plus, no outlines" = "Cruz diminuta, sin bordes"
-"VALORANT default" = "Predeterminada de VALORANT"
 
 # Placeholder for an unknown restart key (restart_key_setting.rs, game_key::label).
 "unbound" = "sin asignar"

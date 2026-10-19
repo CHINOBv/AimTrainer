@@ -63,7 +63,7 @@ impl DirectionGrid {
         let rows = Quadrant::ALL
             .iter()
             .map(|&q| DirectionRow {
-                quadrant: q.label(),
+                quadrant: q.label_in(crate::i18n::language()),
                 near: cell(summary.bucket(q, DistanceClass::Near)),
                 far: cell(summary.bucket(q, DistanceClass::Far)),
             })
@@ -88,7 +88,7 @@ impl DirectionGrid {
             tr_fmt(
                 "Weakest direction: {} hits {} vs {} elsewhere ({} points lower).",
                 &[
-                    &w.quadrant.label(),
+                    &w.quadrant.label_in(crate::i18n::language()),
                     &pct(w.hit_rate),
                     &pct(w.others_hit_rate),
                     &(w.gap() * 100.0).round(),
@@ -99,7 +99,7 @@ impl DirectionGrid {
             let verdict = match summary.weak_axis {
                 Some(axis) => tr_fmt(
                     "{} is your weak axis (more than {} points worse).",
-                    &[&axis.label(), &(WEAK_AXIS_MARGIN * 100.0).round()],
+                    &[&axis.label_in(crate::i18n::language()), &(WEAK_AXIS_MARGIN * 100.0).round()],
                 ),
                 None => tr("No clear weak axis.").to_owned(),
             };

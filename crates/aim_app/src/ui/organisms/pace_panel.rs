@@ -34,8 +34,8 @@ pub struct PaceReport {
 
 fn rate(unit: PaceUnit, per_sec: f32) -> String {
     match unit {
-        PaceUnit::Kills => format!("{per_sec:.2} {}/s", unit.noun()),
-        PaceUnit::Score => format!("{per_sec:.0} {}/s", unit.noun()),
+        PaceUnit::Kills => format!("{per_sec:.2} {}/s", unit.noun_in(crate::i18n::language())),
+        PaceUnit::Score => format!("{per_sec:.0} {}/s", unit.noun_in(crate::i18n::language())),
     }
 }
 
@@ -67,7 +67,10 @@ impl PaceReport {
         let rows = vec![
             (BEST, window(unit, pace.best())),
             (WORST, window(unit, pace.worst())),
-            (PER_WINDOW, format!("{per_window} {}/s", unit.noun())),
+            (
+                PER_WINDOW,
+                format!("{per_window} {}/s", unit.noun_in(crate::i18n::language())),
+            ),
         ];
         let mut flags = Vec::new();
         if let Some(r) = pace.start_ratio() {

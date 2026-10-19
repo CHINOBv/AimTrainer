@@ -180,7 +180,7 @@ fn metric_gauge(
         tone: metric_tone(rules, metric, value),
         hint: format!(
             "{}: {}. {}",
-            metric.label(),
+            metric.label_in(crate::i18n::language()),
             metric.format(value),
             threshold_hint(rules, metric)
         ),

@@ -163,15 +163,22 @@ impl RunReport {
         };
 
         let profile = SkillProfile::build(std::slice::from_ref(analysis));
-        let strengths = profile.strengths().map(|f| f.explanation.clone()).collect();
+        let strengths = profile
+            .strengths()
+            .map(|f| f.explanation_in(crate::i18n::language()))
+            .collect();
         let advice = profile
             .recommendations()
             .into_iter()
             .filter_map(|f| f.recommendation.as_ref().map(|r| (f, r)))
             .take(MAX_RECOMMENDATIONS)
             .map(|(f, r)| Advice {
-                headline: format!("{} {}", f.metric.label(), f.metric.format(f.value)),
-                explanation: f.explanation.clone(),
+                headline: format!(
+                    "{} {}",
+                    f.metric.label_in(crate::i18n::language()),
+                    f.metric.format(f.value)
+                ),
+                explanation: f.explanation_in(crate::i18n::language()),
                 tip: tr(&r.tip).to_owned(),
                 practice: r
                     .scenario_ids

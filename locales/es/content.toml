@@ -401,10 +401,8 @@
 "Structure adapted from VDIM (Voltaic Daily Improvement Method) by Lowgravity56 and 4rK, published by Voltaic. Scenarios are original." = "Estructura adaptada de VDIM (Voltaic Daily Improvement Method) de Lowgravity56 y 4rK, publicado por Voltaic. Los escenarios son originales."
 
 # Crosshair presets (content/crosshairs)
-"VALORANT default" = "Predeterminado de VALORANT"
 "Small dot" = "Punto pequeño"
 "Classic cyan plus" = "Cruz cian clásica"
-"Tiny plus, no outlines" = "Cruz diminuta, sin contorno"
 
 # Arenas (content/arenas)
 "Angles Lab Clear" = "Angles Lab: limpieza"
@@ -458,3 +456,6 @@
 "40 x 40 m yard with a Z-shaped center, four pillars with crates, stacked crates beside every spawn, wall stubs at the edges and single crates on the lanes. For deathmatch against bots." = "Patio de 40 x 40 m con un centro en forma de Z, cuatro pilares con cajas, cajas apiladas junto a cada aparición, muros cortos en los bordes y cajas sueltas en los carriles. Para deathmatch contra bots."
 "Center east" = "Centro este"
 "Center west" = "Centro oeste"
+
+"Tiny plus, no outlines" = "Cruz diminuta, sin bordes"
+"VALORANT default" = "Predeterminada de VALORANT"

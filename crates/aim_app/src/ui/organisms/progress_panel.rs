@@ -210,7 +210,7 @@ pub fn plateau_section(ui: &mut egui::Ui, plateaus: &[Plateau]) {
         let tries: Vec<String> = p
             .suggestions
             .iter()
-            .map(|s| format!("• {}", tr(s.text())))
+            .map(|s| format!("• {}", s.text_in(crate::i18n::language())))
             .collect();
         ui.horizontal(|ui| {
             chip(ui, tr("PLATEAU"), WARN);
@@ -273,9 +273,19 @@ pub fn skills_section(
                 let bar = skill_bar(s, top);
                 let hint = match trend_text(s) {
                     Some(t) => {
-                        format!("{} ({})\n{}\n{t}", tr(&s.name), tr(&s.skill), s.explanation)
+                        format!(
+                            "{} ({})\n{}\n{t}",
+                            tr(&s.name),
+                            tr(&s.skill),
+                            profile.explanation_in(crate::i18n::language(), s)
+                        )
                     }
-                    None => format!("{} ({})\n{}", tr(&s.name), tr(&s.skill), s.explanation),
+                    None => format!(
+                        "{} ({})\n{}",
+                        tr(&s.name),
+                        tr(&s.skill),
+                        profile.explanation_in(crate::i18n::language(), s)
+                    ),
                 };
                 ui.label(tr(&s.name)).on_hover_text(&hint);
                 ui.add(
