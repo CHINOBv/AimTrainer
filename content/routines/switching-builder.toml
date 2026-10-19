@@ -1,0 +1,56 @@
+# Switching builder, built on the library's switching scenarios (docs/library.md).
+# Blocked and in order, from static dots to evasive and regenerating targets, because the
+# drills are still being learned (docs/training-science.md, "Routine design"). Run counts
+# are our estimate.
+id = "switching-builder"
+name = "Switching Builder (≈27 min)"
+description = """
+Builds target switching: static dots, steady movers, evasive jitter and flyers, low-gravity hops, ricochets and regenerating targets.
+Blocks run in order (no interleaving) while you learn the drills.
+Every drill kills by holding fire on the target, so the skill is settling at once and leaving the moment it dies.
+≈27 min."""
+
+[[blocks]]
+scenario = "track-precise"
+runs = 2
+note = "Warm-up: keep the crosshair glued to the sphere, don't chase score."
+
+[[blocks]]
+scenario = "flick-wide"
+runs = 2
+note = "Warm-up: land the crosshair on the sphere's center and stop there."
+
+[[blocks]]
+scenario = "dot-sweep"
+runs = 4
+note = "Settle on the dot at once, leave the moment it dies."
+
+[[blocks]]
+scenario = "tempo-movers"
+runs = 4
+note = "Match the movers' speed, switch on a steady rhythm."
+
+[[blocks]]
+scenario = "jitter-switch"
+runs = 3
+note = "Stay on the sphere through its quick reversals."
+
+[[blocks]]
+scenario = "fly-switch"
+runs = 3
+note = "Keep the crosshair on the sphere as it comes closer or moves away."
+
+[[blocks]]
+scenario = "hop-switch"
+runs = 3
+note = "Ride the arc, switch before the next one lands."
+
+[[blocks]]
+scenario = "prism-bounce"
+runs = 3
+note = "Re-acquire the sphere right after it bounces off a wall."
+
+[[blocks]]
+scenario = "mini-regen-switch"
+runs = 3
+note = "Finish the kill before you switch, or the target heals."

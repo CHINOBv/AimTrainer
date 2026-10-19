@@ -1,0 +1,81 @@
+# Flick technique for VALORANT, built on the library's flick scenarios (docs/library.md).
+# Structure: ordered warm-up, one blocked pass per drill to learn it, then the same drills
+# interleaved (docs/training-science.md, "Routine design"). Run counts are our estimate.
+id = "valorant-flick-tech"
+name = "VALORANT Flick Tech (≈28 min)"
+description = """
+Flick technique for VALORANT: static pins, moving flyers, reflex snaps, shrinking targets and multi-phase flicks.
+A short warm-up in order, then one blocked pass of each drill, then the same drills interleaved.
+The blocked pass lets you learn each drill; the interleaved half feels harder but retains better (Shea & Morgan 1979).
+≈28 min, near the 30–50 min window where Listman et al. (2021) saw most daily gains."""
+interleave_from = 8
+
+[[blocks]]
+scenario = "track-precise"
+runs = 2
+note = "Warm-up: keep the crosshair glued to the sphere, don't chase score."
+
+[[blocks]]
+scenario = "flick-wide"
+runs = 2
+note = "Warm-up: land the crosshair on the sphere's center and stop there."
+
+[[blocks]]
+scenario = "six-pin"
+runs = 2
+note = "Learn it: click only once the crosshair rests on the pin."
+
+[[blocks]]
+scenario = "angle-flyers"
+runs = 2
+note = "Learn it: aim where the flyer is going, not where it was."
+
+[[blocks]]
+scenario = "snap-reflex"
+runs = 2
+note = "Learn it: snap to the head and stop dead on it."
+
+[[blocks]]
+scenario = "four-shrink"
+runs = 2
+note = "Learn it: aim at the center; the target keeps getting smaller."
+
+[[blocks]]
+scenario = "mini-phase"
+runs = 2
+note = "Learn it: watch the targets change and match the crosshair to them."
+
+[[blocks]]
+scenario = "reflex-flick"
+runs = 2
+note = "Learn it: one path from crosshair to sphere, one click."
+
+[[blocks]]
+scenario = "six-pin"
+runs = 2
+note = "Mixed: every pin is a fresh landing spot."
+
+[[blocks]]
+scenario = "angle-flyers"
+runs = 2
+note = "Mixed: read the flyer's path, then click on it."
+
+[[blocks]]
+scenario = "snap-reflex"
+runs = 2
+note = "Mixed: the dot lands on the head before the click."
+
+[[blocks]]
+scenario = "four-shrink"
+runs = 2
+note = "Mixed: small target, same calm click on its center."
+
+[[blocks]]
+scenario = "mini-phase"
+runs = 2
+note = "Mixed: match the crosshair to each phase's targets."
+
+[[blocks]]
+scenario = "reflex-flick"
+runs = 2
+note = "Mixed: hit the sphere before it vanishes."
