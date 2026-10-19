@@ -1,7 +1,7 @@
 //! Scoring: which hit zones count, how many points each is worth, how shots, hits, burst
 //! bullets, kills and expiries update the run's [`Stats`], and the final [`RunResult`].
 
-use super::def::{AccuracyMult, FireMode, ScenarioDef, ScoringDef, Shape};
+use super::def::{AccuracyMult, FireMode, ScenarioDef, ScoringDef, Shape, StopWindow};
 use super::hit::HitZone;
 use super::session::{RunResult, Stats};
 
@@ -83,6 +83,13 @@ pub(super) fn record_on_target(
         stats.head_on_target_secs += dt;
     }
     stats.score += zone_points(scoring, zone) * dt * multiplier;
+}
+
+/// Counts a hit fired inside the `scoring.stop_window` after an accurate stop and awards
+/// its bonus.
+pub(super) fn record_stop_hit(stats: &mut Stats, window: StopWindow) {
+    stats.stop_hits += 1;
+    stats.score += window.bonus;
 }
 
 pub(super) fn record_kill(stats: &mut Stats, time_to_kill: f32) {

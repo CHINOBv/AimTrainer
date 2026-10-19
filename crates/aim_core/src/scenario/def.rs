@@ -293,7 +293,26 @@ pub struct TargetsDef {
     /// again every `switch_secs`. When set, they replace `motion`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub motion_profiles: Vec<MotionProfile>,
+    /// Spider-shot pattern: spawns alternate between a centre target, drawn from `spawn`,
+    /// and a peripheral target placed around the last centre target. Needs `max_alive = 1`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spider: Option<SpiderDef>,
 }
+
+/// Spider-shot spawning (`targets.spider`). The 1st, 3rd, 5th… spawn is a centre target,
+/// drawn from `targets.spawn` as usual (a fixed spawn area gives a fixed centre). Every
+/// other spawn is a peripheral target `ring_deg` away from the last centre target, seen
+/// from the player's eye at spawn time, in a random direction (humanoids: left or right)
+/// and at the same distance.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpiderDef {
+    /// Angle between the centre target and a peripheral one, degrees, within (0, 60].
+    pub ring_deg: Range,
+}
+
+/// Widest `targets.spider.ring_deg`, degrees: peripheral targets stay on screen.
+pub const MAX_SPIDER_RING_DEG: f32 = 60.0;
 
 /// How a target reacts to the player (`targets.reactions`). A reaction sets the target's
 /// strafe direction and holds it for `react_secs`, overriding the motion's own decisions
@@ -805,7 +824,28 @@ pub struct ScoringDef {
     /// (`sqrt`); `none` by default.
     #[serde(default, skip_serializing_if = "AccuracyMult::is_none")]
     pub accuracy_mult: AccuracyMult,
+    /// Stop-timing reward: extra points for a hit fired soon after the player came to an
+    /// accurate stop (needs `player.movement`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop_window: Option<StopWindow>,
 }
+
+/// Stop-timing reward (`scoring.stop_window`). A hit fired while accurate, at most `secs`
+/// after the last moment the player moved faster than the accuracy speed limit, scores
+/// `bonus` extra points. Every bullet of a short burst fired inside the window earns it, so
+/// a 2–4 shot burst right after a counter-strafe does and a long spray does not.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StopWindow {
+    /// Seconds after reaching accurate speed during which a hit earns the bonus, in (0, 2].
+    pub secs: f32,
+    /// Points added per hit inside the window, ≥ 0.
+    pub bonus: f32,
+}
+
+/// Longest `scoring.stop_window.secs`, seconds: a design choice, well past the ≈0.16 s a
+/// counter-strafe takes, so the window still means "right after the stop".
+pub const MAX_STOP_WINDOW_SECS: f32 = 2.0;
 
 /// Score decay (`scoring.decay`). Points for hitting a target fall linearly from full value
 /// when it appears to `floor` × full value after `window_secs`, and stay at the floor after
@@ -961,6 +1001,7 @@ impl Default for ScoringDef {
             decoy_penalty: 0.0,
             decay: None,
             accuracy_mult: AccuracyMult::None,
+            stop_window: None,
         }
     }
 }
@@ -1354,6 +1395,38 @@ impl ScenarioDef {
                 d.window_secs.is_finite() && d.window_secs > 0.0 && (0.0..=1.0).contains(&d.floor),
                 "scoring.decay",
                 "needs window_secs > 0 and floor in [0, 1]",
+            );
+        }
+        if let Some(w) = self.scoring.stop_window {
+            check(
+                w.secs.is_finite()
+                    && w.secs > 0.0
+                    && w.secs <= MAX_STOP_WINDOW_SECS
+                    && w.bonus.is_finite()
+                    && w.bonus >= 0.0,
+                "scoring.stop_window",
+                "needs secs in (0, 2] and a finite bonus >= 0",
+            );
+            check(
+                self.player.movement && self.weapon.fire == FireMode::Click,
+                "scoring.stop_window",
+                "rewards shots after the player stops: needs player.movement = true and \
+                 weapon.fire = \"click\"",
+            );
+        }
+        if let Some(s) = t.spider {
+            check(
+                s.ring_deg.is_valid()
+                    && s.ring_deg.min > 0.0
+                    && s.ring_deg.max <= MAX_SPIDER_RING_DEG,
+                "targets.spider.ring_deg",
+                "must be a [min, max] within (0, 60]",
+            );
+            check(
+                t.max_alive == 1 && t.decoy_chance == 0.0 && t.perception.is_none(),
+                "targets.spider",
+                "alternates one target at a time: needs max_alive = 1, no decoys and no \
+                 perception drill",
             );
         }
         if let Some(r) = &t.spawn_rules {
@@ -3034,5 +3107,79 @@ mod tests {
             .map(ScenarioDef::content_hash)
             .collect();
         assert_eq!(hashes.len(), crate::scenario::builtin::all().len());
+    }
+    #[test]
+    fn stop_window_defaults_off_stays_out_of_saved_files_parses_and_is_validated() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!(d.scoring.stop_window, None);
+        assert!(!toml::to_string(&d).unwrap().contains("stop_window"));
+
+        let src = format!(
+            "{MINIMAL}
+[player]
+movement = true
+[scoring]
+stop_window = {{ secs = 0.4, bonus = 50 }}
+"
+        );
+        let w = ScenarioDef::from_toml(&src).unwrap();
+        assert_eq!(
+            w.scoring.stop_window,
+            Some(StopWindow {
+                secs: 0.4,
+                bonus: 50.0
+            })
+        );
+        assert!(w.validate().is_empty(), "{:?}", w.validate());
+        assert!(
+            ScenarioDef::from_toml(&src.replace("bonus = 50", "bonus = 50, extra = 1")).is_err()
+        );
+
+        for (secs, bonus) in [(0.0, 50.0), (2.5, 50.0), (f32::NAN, 50.0), (0.4, -1.0)] {
+            let mut b = w.clone();
+            b.scoring.stop_window = Some(StopWindow { secs, bonus });
+            assert_eq!(fields_of(&b), ["scoring.stop_window"], "{secs} {bonus}");
+        }
+        let mut still = w.clone();
+        still.player.movement = false;
+        assert_eq!(fields_of(&still), ["scoring.stop_window"]);
+        let mut hold = w.clone();
+        hold.weapon.fire = FireMode::Hold;
+        assert_eq!(fields_of(&hold), ["scoring.stop_window"]);
+    }
+
+    #[test]
+    fn spider_defaults_off_stays_out_of_saved_files_parses_and_is_validated() {
+        let d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!(d.targets.spider, None);
+        assert!(!toml::to_string(&d).unwrap().contains("spider"));
+
+        let src = MINIMAL.replace(
+            "distance = [10, 10] }",
+            "distance = [10, 10] }
+spider = { ring_deg = [5, 12] }",
+        );
+        let s = ScenarioDef::from_toml(&src).unwrap();
+        assert_eq!(
+            s.targets.spider,
+            Some(SpiderDef {
+                ring_deg: Range::new(5.0, 12.0)
+            })
+        );
+        assert!(s.validate().is_empty(), "{:?}", s.validate());
+        assert!(ScenarioDef::from_toml(&src.replace("ring_deg", "ring")).is_err());
+
+        for ring in [
+            Range::new(0.0, 12.0),
+            Range::new(12.0, 5.0),
+            Range::new(5.0, 61.0),
+        ] {
+            let mut b = s.clone();
+            b.targets.spider = Some(SpiderDef { ring_deg: ring });
+            assert_eq!(fields_of(&b), ["targets.spider.ring_deg"], "{ring:?}");
+        }
+        let mut crowd = s.clone();
+        crowd.targets.max_alive = 2;
+        assert_eq!(fields_of(&crowd), ["targets.spider"]);
     }
 }
