@@ -27,7 +27,7 @@ Branches: `feat/movement-space` (done inline), then one per unit in `../CustomAi
 | T1 | S2 | inline | done | d9ea9d6 |
 | T2 | S1, S3, S4 | delegated (parallel writer, worktree `movement-drills`) | pending | |
 | T3 | S5 | delegated (parallel writer, worktree `movement-lab`) | pending | |
-| T4 | S6 | delegated (parallel writer, worktree `ai-debrief`) | pending | |
+| T4 | S6 | delegated (parallel writer, worktree `ai-debrief`) | done (writer); awaiting parent merge | b521594, 13a7120 |
 | T5 | S7 foundation | delegated (parallel writer, worktree `i18n-core`) | pending | |
 | T6 | S7 translation sweep | delegated (parallel writers by area, after T2-T5 merge) | pending | |
 | T7 | S8 | inline (parent): merge, seam check, push, build | pending | |
@@ -42,3 +42,4 @@ Route evidence: T2-T5 are independent units with disjoint main surfaces, each se
 - L4: AI research. Grounding: send a byte-capped digest with stable metric keys; require citations; validate numbers, ids and lengths deterministically; no silent retries. Reuse `ChatModel::complete(messages, &[])`, `Job<T>` and `model(config)`; cache per `ResultKey`. `Mistake.player/corrected` are raw paths and must not be sent.
 - L5: i18n map. ~880 UI literals and ~290 `format!` in `aim_app/src/ui`; `'static` label tables (`TABS`, `SettingsTab::ALL`, `rows.section`); view models hold preformatted text; core builds `Finding.explanation`, `Mistake.tip`, `Metric::label()`; content TOML has names/descriptions/notes; ~340 exact-English assertions; `Settings` uses struct-level `#[serde(default)]`; no i18n crate; egui default fonts likely cover Latin-1.
 - L6 (parent): S2 done in d9ea9d6, reviewed and approved.
+- L7 (2026-10-19, T4 writer): S6 built. Core `aim_core::coach::debrief` (RunDigest/MistakeDigest with stable metric keys, 2 KiB cap, numbers only; one tool-free call; validator: JSON, 1-3 bullets, length limits, cites exist, every number matches a cited value within its written rounding, drill id offered) with RED then GREEN tests through `run_debrief`/`run_mistake_why` (b521594). App: background `run_debrief_request`/`run_why_request` over the same `model(config)` and `Job`; `coach_take` organism (Coach's take card with Ask/Cancel/Play and preview; Ask why under the mistake tip), cached per result and per mistake, hidden when the coach is off; disabled-sends-nothing test extended; docs/coach.md and README (13a7120). Checks: fmt, clippy -D warnings, cargo test --workspace all green. UI painting untested; needs a playtest with a real provider.
