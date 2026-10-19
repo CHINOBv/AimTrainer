@@ -242,12 +242,24 @@ pub mod builtin {
             include_str!("../../../../content/routines/aim-and-duel.toml"),
         ),
         (
+            "dynamic-clicking.toml",
+            include_str!("../../../../content/routines/dynamic-clicking.toml"),
+        ),
+        (
             "fundamentals-hour.toml",
             include_str!("../../../../content/routines/fundamentals-hour.toml"),
         ),
         (
             "quick-warmup.toml",
             include_str!("../../../../content/routines/quick-warmup.toml"),
+        ),
+        (
+            "ranked-prep-15.toml",
+            include_str!("../../../../content/routines/ranked-prep-15.toml"),
+        ),
+        (
+            "reaction-and-decision.toml",
+            include_str!("../../../../content/routines/reaction-and-decision.toml"),
         ),
         (
             "skill-clicking-dynamic.toml",
@@ -274,8 +286,28 @@ pub mod builtin {
             include_str!("../../../../content/routines/skill-tracking-reactive.toml"),
         ),
         (
+            "switching-builder.toml",
+            include_str!("../../../../content/routines/switching-builder.toml"),
+        ),
+        (
+            "tracking-builder.toml",
+            include_str!("../../../../content/routines/tracking-builder.toml"),
+        ),
+        (
             "valorant-daily.toml",
             include_str!("../../../../content/routines/valorant-daily.toml"),
+        ),
+        (
+            "valorant-flick-tech.toml",
+            include_str!("../../../../content/routines/valorant-flick-tech.toml"),
+        ),
+        (
+            "valorant-micros.toml",
+            include_str!("../../../../content/routines/valorant-micros.toml"),
+        ),
+        (
+            "valorant-stability.toml",
+            include_str!("../../../../content/routines/valorant-stability.toml"),
         ),
     ];
 
@@ -307,6 +339,37 @@ mod tests {
             );
             let m = r.minutes(&lib);
             assert!((5.0..=60.0).contains(&m), "{}: {m} min", r.id);
+        }
+    }
+
+    #[test]
+    fn library_routines_ship_and_stay_within_a_fifth_of_their_target_length() {
+        let lib = scenario::builtin::all();
+        let routines = builtin::all();
+        let targets = [
+            ("valorant-flick-tech", 30.0),
+            ("valorant-micros", 25.0),
+            ("valorant-stability", 30.0),
+            ("tracking-builder", 30.0),
+            ("switching-builder", 30.0),
+            ("dynamic-clicking", 25.0),
+            ("reaction-and-decision", 20.0),
+            ("ranked-prep-15", 12.5),
+        ];
+        for (id, target) in targets {
+            let r = routines
+                .iter()
+                .find(|r| r.id == id)
+                .unwrap_or_else(|| panic!("missing routine {id}"));
+            let m = r.minutes(&lib);
+            assert!(
+                (m - target).abs() <= 0.2 * target,
+                "{id}: {m} min, target {target}"
+            );
+        }
+        for (file, src) in builtin::SOURCES {
+            let r = RoutineDef::from_toml(src).unwrap();
+            assert_eq!(*file, format!("{}.toml", r.id));
         }
     }
 

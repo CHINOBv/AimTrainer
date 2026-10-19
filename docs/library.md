@@ -104,3 +104,26 @@ The engine cannot model these ideas exactly; each file explains its approximatio
 | `thin-glide` | Purely horizontal glides | `drift` also moves vertically; the tall capsule absorbs it. `orbit` and `linear_bounce` keep one constant speed per target, which the varied-speed goal rules out |
 | `fade-track` | Health that drains on its own | No negative regeneration exists: a 3 s `lifetime_secs` plus score `decay` to 10% |
 | `angle-hold-peek`, `peek-track` | Peeking from behind cover | No cover in scenarios: the target appears after a wait, strafes and vanishes on `lifetime_secs` |
+
+## Routines
+
+Eight built-in routines in `content/routines/` use the library. Durations come from `RoutineDef::minutes` (scenario `duration_secs` × runs) and leave out the time between runs. A test keeps each one within ±20% of its target length. Run counts and block order are our design choices, not measured training effects (estimate).
+
+| Routine | Purpose | Structure | Minutes |
+|---|---|---|---|
+| `valorant-flick-tech` | VALORANT flicks | Warm-up (`track-precise`, `flick-wide`), then 2 blocked runs each of `six-pin`, `angle-flyers`, `snap-reflex`, `four-shrink`, `mini-phase` and `reflex-flick`, then the same six interleaved | ≈28 |
+| `valorant-micros` | Small, exact corrections | Warm-up (`track-precise`, `micro-adjust`), then 2 blocked runs each of `micro-cluster`, `micro-pace`, `angle-hold-peek` and `diamond-pair`, then those four interleaved with `track-reactive-micro` | ≈23 |
+| `valorant-stability` | Head-level tracking and movement | Warm-up (`track-precise`, `counter-strafe`), then 2 blocked runs each of `head-strafe-track`, `peek-track`, `adjust-track`, `ground-reactive` and `strafe-shot`, then those interleaved with `counter-strafe` | ≈28 |
+| `tracking-builder` | Smooth before reactive tracking | Blocked, in order: `track-precise`, then `thin-glide`, `smooth-xyz`, `orbit-track`, then `sky-reactive`, `ground-reactive`, `fade-track` | ≈27 |
+| `switching-builder` | Target switching | Blocked, in order: warm-up, then `dot-sweep`, `tempo-movers`, `jitter-switch`, `fly-switch`, `hop-switch`, `prism-bounce`, `mini-regen-switch` | ≈27 |
+| `dynamic-clicking` | Clicking moving targets | Warm-up, then 2 blocked runs each of `diag-drifters`, `hop-field`, `ricochet-ring`, `drifting-heads`, `skeet-arcs` and `popcorn-burst`, then a shorter interleaved pass | ≈25 |
+| `reaction-and-decision` | Reaction and decisions under time pressure | Warm-up, then `reflex-flick`, `reactive-flick`, `pressure-balloons`, `go-no-go`, `peripheral-detect`, `radar-recall` and `sound-turn` interleaved | ≈19 |
+| `ranked-prep-15` | Warm-up before ranked | In order, easiest first: `track-precise` and `flick-wide` at −0.25 difficulty, then `dot-sweep`, `micro-pace`, `head-strafe-track`, `snap-reflex`, `counter-strafe` | ≈13 |
+
+### Evidence notes
+
+- **Warm-up first.** Every routine opens with ordered, easy blocks: performance drops after a rest until you warm up (warm-up decrement, Lee & Genovese 1988; see `training-science.md`, "Routine design").
+- **Length.** The routines last 19–28 min, so one or two of them fit the 30–50 min window where Listman et al. (2021) saw about 90% of daily gains. `ranked-prep-15` is shorter on purpose: it is for warming up, not training. Split longer days into separate sessions.
+- **Blocked, then interleaved.** Random-order practice performs worse while you learn but retains better (Shea & Morgan 1979), and the effect is smaller in applied settings (Brady 2004). So the builders stay blocked while the drills are new, and the VALORANT and dynamic-clicking routines give each drill one blocked pass before the interleaved half (`interleave_from`). Splitting the two halves this way is our inference, not a tested design.
+- **External-focus cues.** Block notes describe the effect on the screen (the crosshair, the target, the head line) rather than the hand or arm. Motor-learning studies find an external focus of attention helps performance and learning more than an internal one (Wulf, Höß & Prinz 1998, *Journal of Motor Behavior* 30(2); review in Wulf 2013, *International Review of Sport and Exercise Psychology* 6(1)). These are general findings, not tested for aim training.
+- **Order inside the builders.** `tracking-builder` goes from smooth to reactive, and `switching-builder` from static to evasive targets, so each block adds one difficulty to the last. This easy-to-hard order is our design choice (estimate).
