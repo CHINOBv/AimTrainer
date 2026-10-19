@@ -3,6 +3,7 @@
 use crate::audio::synth::{HitSound, KillSound};
 use crate::game::feedback::{HitMarkerStyle, MarkerColor, TargetEffect};
 use aim_core::crosshair::{CUSTOM_COLOR_INDEX, Crosshair, PRESET_COLORS, Rgba};
+use aim_core::i18n::Lang;
 use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::randomizer::RandomizerConfig;
 use aim_core::training::ergonomics::BreakPolicy;
@@ -62,6 +63,9 @@ impl Paths {
 #[derive(Resource, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// UI language. Old files and unknown codes load as English.
+    #[serde(deserialize_with = "deserialize_language")]
+    pub language: Lang,
     /// Your in-game sensitivity. Rotation uses its exact degrees per count.
     pub sensitivity: Sensitivity,
     /// VALORANT "ADS sensitivity multiplier" (1.0 = 100% horizontal monitor match).
@@ -119,6 +123,19 @@ pub struct Settings {
 
 fn first_run_done_in_old_files() -> bool {
     true
+}
+
+/// An unknown language code (`language = "fr"`) falls back to English instead of
+/// resetting every setting.
+fn deserialize_language<'de, D>(deserializer: D) -> Result<Lang, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = toml::Value::deserialize(deserializer)?;
+    Ok(value.try_into().unwrap_or_else(|_| {
+        bevy::log::warn!("unknown language in the settings; using English");
+        Lang::En
+    }))
 }
 
 /// An invalid `[coach]` table (for example one holding an `api_key`, which
@@ -473,6 +490,7 @@ impl Default for FeelSettings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            language: Lang::En,
             sensitivity: Sensitivity::default(),
             ads_multiplier: 1.0,
             crosshair: Crosshair::default(),
@@ -663,6 +681,30 @@ mod tests {
             "a folder that does not exist cannot be written"
         );
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn language_is_english_for_old_settings_files_and_round_trips() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(old.language, Lang::En);
+        let unknown: Settings = toml::from_str(
+            "language = \"fr\"
+fullscreen = false",
+        )
+        .unwrap();
+        assert_eq!(
+            unknown.language,
+            Lang::En,
+            "an unknown code keeps the other settings"
+        );
+        assert!(!unknown.fullscreen);
+        let spanish = Settings {
+            language: Lang::Es,
+            ..Settings::default()
+        };
+        let text = toml::to_string_pretty(&spanish).unwrap();
+        assert!(text.contains("language = \"es\""), "{text}");
+        assert_eq!(toml::from_str::<Settings>(&text).unwrap(), spanish);
     }
 
     #[test]

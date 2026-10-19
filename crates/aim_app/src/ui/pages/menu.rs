@@ -228,7 +228,7 @@ fn settings_page(root: &mut egui::Ui, state: &mut MenuState, cfg: &mut SettingsA
                 state.settings_query.clear();
             }
             ui.separator();
-            tab_bar(ui, &mut state.settings_tab, &SettingsTab::ALL);
+            tab_bar(ui, &mut state.settings_tab, &SettingsTab::localized());
         });
         let searching = !state.settings_query.trim().is_empty();
         ui.horizontal(|ui| {
@@ -303,7 +303,10 @@ fn settings_section(
                 cfg.sound_previews.write(SoundPreview(clip));
             }
         }
-        SettingsTab::Overlay => settings_panels::overlay_panel(ui, rows, settings),
+        SettingsTab::Overlay => {
+            settings_panels::language_panel(ui, rows, settings);
+            settings_panels::overlay_panel(ui, rows, settings);
+        }
         SettingsTab::Keys => {
             settings_panels::keys_panel(ui, rows, settings, &mut cfg.hotkey_capture.recording)
         }
@@ -414,7 +417,7 @@ fn menu(
         ui.horizontal(|ui| {
             ui.strong("CustomAimTrainer");
             ui.separator();
-            tab_bar(ui, &mut state.tab, &TABS);
+            tab_bar(ui, &mut state.tab, &crate::i18n::labels(&TABS));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("Quit").clicked() {
                     action = Some(UiAction::Quit);
@@ -1394,6 +1397,44 @@ mod tests {
         assert_eq!(e.readiness, Some(Warmth::Warming));
         assert!(e.fatigued);
         assert!(e.validate().is_ok());
+    }
+
+    #[test]
+    fn tab_labels_are_spanish_in_spanish_and_unchanged_in_english() {
+        use crate::i18n::{Lang, labels_in};
+        let names = |table: &[(Tab, &'static str)]| table.iter().map(|t| t.1).collect::<Vec<_>>();
+        assert_eq!(labels_in(Lang::En, &TABS), TABS);
+        assert_eq!(
+            names(&labels_in(Lang::Es, &TABS)),
+            [
+                "Hoy",
+                "Progreso",
+                "Escenarios",
+                "Rutinas",
+                "Arenas",
+                "Evaluación",
+                "Herramientas",
+                "Ajustes",
+                "Entrenador",
+            ]
+        );
+        let settings_names =
+            |table: &[(SettingsTab, &'static str)]| table.iter().map(|t| t.1).collect::<Vec<_>>();
+        assert_eq!(labels_in(Lang::En, &SettingsTab::ALL), SettingsTab::ALL);
+        assert_eq!(
+            settings_names(&labels_in(Lang::Es, &SettingsTab::ALL)),
+            [
+                "Sensibilidad",
+                "Mira",
+                "Efectos",
+                "Audio",
+                "Superposición",
+                "Teclas",
+                "Entrenamiento",
+            ]
+        );
+        assert_eq!(aim_core::i18n::tr_in(Lang::Es, "Language"), "Idioma");
+        assert_eq!(aim_core::i18n::tr_in(Lang::En, "Language"), "Language");
     }
 
     #[test]

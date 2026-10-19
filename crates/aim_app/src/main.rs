@@ -5,6 +5,7 @@
 mod audio;
 mod cli;
 mod game;
+mod i18n;
 mod overlay;
 mod persistence;
 mod platform;
@@ -30,6 +31,7 @@ fn main() -> AppExit {
 
     let paths = settings::Paths::resolve();
     let settings = settings::Settings::load(&paths);
+    i18n::set_language(settings.language);
     let ipc_rx = match ipc::listen() {
         Ok(rx) => rx,
         Err(e) => {
@@ -83,6 +85,7 @@ fn main() -> AppExit {
         .insert_resource(persistence::method_progress::MethodProgress::load(&paths))
         .insert_resource(persistence::adaptive::AdaptiveLevels::load(&paths))
         .add_plugins((
+            i18n::LanguagePlugin,
             overlay::OverlayPlugin,
             game::GamePlugin,
             audio::SoundPlugin,
