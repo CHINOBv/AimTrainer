@@ -81,3 +81,8 @@ Rules:
     - the MCP returns the absolute saved path;
     - lowercase-only custom ids pass the privacy filter;
     - aws-lc-sys needs a C toolchain when cross-compiling.
+- L6 (2026-10-18) RDD reviews of the four slices (core, MCP, providers, app) were all approved and acknowledged. From their warnings, fixed:
+  - a custom Anthropic base URL gets its own keyring account, so it never receives the official key (RED observed);
+  - the CLI delegate runs each reply in a fresh private temp dir instead of a fixed shared one (RED observed);
+  - `create_scenario` refuses `level` together with `toml` instead of ignoring it (test written with the fix; no RED run).
+  - Kept as advisories: OpenAI `finish_reason` is not surfaced; `max_completion_tokens` only; the CLI pipe join after exit has no deadline (background thread); MCP partial write on disk full; drill numbering within one turn; the prompt JSON bound at the minimum limits.
