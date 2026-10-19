@@ -1,0 +1,18 @@
+# Idea: long-strafe clicking on a target that also bobs smoothly (dynamic clicking
+# playlists of Voltaic and KovaaK's). Original scenario: no file, name or value was copied.
+id = "wave-runners"
+name = "Wave Runners"
+category = "flicking"
+description = """
+Dynamic clicking. Spheres glide across a wide band while bobbing up and down on a smooth wave.
+Read where the wave is heading and click as the sphere slows at the top or bottom."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.18 }
+spawn = { kind = "angular", yaw_deg = [-30.0, 30.0], pitch_deg = [4.0, 10.0], distance = [14.0, 14.0] }
+motion = { kind = "wave", speed = [2.5, 3.5], amplitude = [0.4, 0.7], frequency_hz = [0.5, 0.9], max_offset = 5.0 }
+max_alive = 2
+min_separation_deg = 8
+
+[scoring]
+miss_penalty = 15

@@ -1,0 +1,19 @@
+# Idea: the shrinking-target drills of the Voltaic VALORANT playlists, on moving targets.
+# Original scenario: no file, name or value was copied.
+id = "shrinking-movers"
+name = "Shrinking Movers"
+category = "flicking"
+description = """
+Dynamic clicking under growing pressure. Three spheres wander across the wall, and every kill shrinks
+all of them a little, down to 40% of their size. Keep clicking cleanly as they get smaller."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.32 }
+spawn = { kind = "angular", yaw_deg = [-30.0, 30.0], pitch_deg = [2.0, 14.0], distance = [12.0, 12.0] }
+motion = { kind = "drift", speed = [2.0, 3.5], change_secs = [0.5, 1.2], max_offset = 3.0 }
+max_alive = 3
+min_separation_deg = 8
+shrink_per_kill = { factor = 0.97, floor = 0.4 }
+
+[scoring]
+miss_penalty = 15

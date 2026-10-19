@@ -1,0 +1,18 @@
+# Idea: zig-zag movers from the dynamic clicking playlists of Voltaic and KovaaK's.
+# Original scenario: no file, name or value was copied.
+id = "zigzag-sparks"
+name = "Zigzag Sparks"
+category = "flicking"
+description = """
+Dynamic clicking. Small spheres drift sideways on a sharp zigzag: they climb and fall at a steady speed
+and snap into each turn. Trains clicking a target whose vertical direction flips without warning."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.14 }
+spawn = { kind = "angular", yaw_deg = [-25.0, 25.0], pitch_deg = [3.0, 12.0], distance = [12.0, 12.0] }
+motion = { kind = "wave", form = "zigzag", speed = [1.5, 2.5], amplitude = [0.3, 0.5], frequency_hz = [1.0, 1.6], max_offset = 4.0 }
+max_alive = 2
+min_separation_deg = 8
+
+[scoring]
+miss_penalty = 15

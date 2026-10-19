@@ -1,0 +1,20 @@
+# Idea: close-range duels against a strafing enemy, as in VALORANT site retakes. Original
+# scenario: no file, name or value was copied.
+id = "close-strafe-heads"
+name = "Close Quarters Strafe"
+category = "flicking"
+description = """
+Dynamic clicking at close range. One agent at 5-9 m A/D strafes with real VALORANT rifle movement
+(5.4 m/s, measured stopping curves): close up, the head crosses your screen fast.
+Tap the head on its stops and reversals; it leaves after 2.5 s."""
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-4.0, 4.0], z = [-9.0, -5.0] }
+motion = { kind = "strafe", weapon = "vandal", change_secs = [0.2, 0.6], stop_chance = 0.25, max_offset = 2.0 }
+max_alive = 1
+lifetime_secs = 2.5
+
+[scoring]
+miss_penalty = 20
+expire_penalty = 50

@@ -24,6 +24,13 @@ The "Trains" column is our inference from the drill's mechanic, not a measured t
 | `popcorn-burst` Popcorn Burst | KovaaK's popcorn drills | `ballistic` spheres with launch speeds from 4 to 10 m/s and three bounces | Adapting click timing to arcs of different heights |
 | `pressure-balloons` Pressure Balloons | KovaaK's pressure drills | Large spheres that `drift` in from 16–20 m to a 10–14 m band, 3.5 s lifetime, `[fail] max_expired = 5` | Staying fast and accurate while targets pile up |
 | `cockroach-hop` Cockroach Hop | KovaaK's tiny-jumper drills | Tiny spheres in quick, low `ballistic` hops; `accuracy_mult = "sqrt"`; `[end] kills = 15` | Precise clicks on small, erratic targets |
+| `wave-runners` Wave Runners | Voltaic and KovaaK's dynamic clicking playlists | Spheres on a sine `wave`: long sideways glides with a smooth 0.4–0.7 m bob | Timing a click to the slow top or bottom of a smooth path |
+| `zigzag-sparks` Zigzag Sparks | Voltaic and KovaaK's dynamic clicking playlists | Small spheres on a zigzag `wave` (`form = "zigzag"`): steady climbs and falls with sharp turns | Clicking a target whose vertical direction flips without slowing down |
+| `bobbing-heads` Bobbing Heads | Voltaic and KovaaK's dynamic clicking playlists | Head-sized spheres on a `wave` with almost no sideways speed, bobbing more than their own height | Vertical timing on a small target |
+| `stop-go-weavers` Stop-and-Go Weavers | Voltaic and KovaaK's dynamic clicking playlists | Spheres whose `motion_profiles` switch between a sine wave, a zigzag and short stops | Re-reading a target's motion after every change |
+| `shrinking-movers` Shrinking Movers | Voltaic VALORANT shrinking drills | Three drifting spheres with `shrink_per_kill` down to 40% | Keeping clicks clean on moving targets that keep getting smaller |
+| `pill-crossfire` Pill Crossfire | Voltaic dynamic clicking slots | Three capsules with `dodge` jukes and stops on a 70° arc; the head is worth more than twice the body | Picking the next moving target quickly and going for the head |
+| `close-strafe-heads` Close Quarters Strafe | VALORANT close-range duels (own design) | One agent at 5–9 m with VALORANT rifle `strafe` physics, 2.5 s lifetime | Tapping a head that crosses the screen fast at close range, on its stops and reversals |
 
 ### Switching
 
@@ -116,7 +123,7 @@ Eight built-in routines in `content/routines/` use the library. Durations come f
 | `valorant-stability` | Head-level tracking and movement | Warm-up (`track-precise`, `counter-strafe`), then 2 blocked runs each of `head-strafe-track`, `peek-track`, `adjust-track`, `ground-reactive` and `strafe-shot`, then those interleaved with `counter-strafe` | ≈28 |
 | `tracking-builder` | Smooth before reactive tracking | Blocked, in order: `track-precise`, then `thin-glide`, `smooth-xyz`, `orbit-track`, then `sky-reactive`, `ground-reactive`, `fade-track` | ≈27 |
 | `switching-builder` | Target switching | Blocked, in order: warm-up, then `dot-sweep`, `tempo-movers`, `jitter-switch`, `fly-switch`, `hop-switch`, `prism-bounce`, `mini-regen-switch` | ≈27 |
-| `dynamic-clicking` | Clicking moving targets | Warm-up, then 2 blocked runs each of `diag-drifters`, `hop-field`, `ricochet-ring`, `drifting-heads`, `skeet-arcs` and `popcorn-burst`, then a shorter interleaved pass | ≈25 |
+| `dynamic-clicking` | Clicking moving targets | Warm-up (`track-precise`, `flick-wide`), then 1 blocked run each of `diag-drifters`, `wave-runners`, `bobbing-heads`, `ricochet-ring`, `drifting-heads`, `zigzag-sparks`, `hop-field`, `skeet-arcs`, `popcorn-burst`, `stop-go-weavers`, `shrinking-movers`, `pill-crossfire` and `close-strafe-heads`, then a shorter interleaved pass of ten of them | ≈25 |
 | `reaction-and-decision` | Reaction and decisions under time pressure | Warm-up, then `reflex-flick`, `reactive-flick`, `pressure-balloons`, `go-no-go`, `peripheral-detect`, `radar-recall` and `sound-turn` interleaved | ≈19 |
 | `ranked-prep-15` | Warm-up before ranked | In order, easiest first: `track-precise` and `flick-wide` at −0.25 difficulty, then `dot-sweep`, `micro-pace`, `head-strafe-track`, `snap-reflex`, `counter-strafe` | ≈13 |
 

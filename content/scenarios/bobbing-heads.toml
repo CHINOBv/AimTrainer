@@ -1,0 +1,18 @@
+# Idea: vertical clicking drills with bobbing targets (Voltaic and KovaaK's dynamic
+# clicking playlists). Original scenario: no file, name or value was copied.
+id = "bobbing-heads"
+name = "Bobbing Heads"
+category = "flicking"
+description = """
+Vertical dynamic clicking. Head-sized spheres barely drift sideways but bob up and down by more than
+their own height. Trains vertical timing: meet the head at the top or bottom of its bob."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.12 }
+spawn = { kind = "angular", yaw_deg = [-25.0, 25.0], pitch_deg = [2.0, 10.0], distance = [10.0, 14.0] }
+motion = { kind = "wave", speed = [0.0, 0.6], amplitude = [0.5, 0.8], frequency_hz = [0.6, 1.0], max_offset = 2.0 }
+max_alive = 2
+min_separation_deg = 8
+
+[scoring]
+miss_penalty = 15

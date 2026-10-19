@@ -4,60 +4,101 @@
 id = "dynamic-clicking"
 name = "Dynamic Clicking (≈25 min)"
 description = """
-Clicking on targets that move: diagonal drifters, bouncing hops, ricochets, drifting heads, skeet arcs and popcorn bursts.
-A warm-up in order, one blocked pass of each drill, then a shorter interleaved pass.
+Clicking on targets that move: drifters, waves and zigzags, bobbing heads, ricochets, hops and arcs,
+pattern switchers, shrinking movers, capsules and close-range strafers.
+A warm-up in order, one blocked run of each drill, then a shorter interleaved pass.
 ≈25 min."""
-interleave_from = 8
+interleave_from = 15
 
 [[blocks]]
 scenario = "track-precise"
-runs = 2
+runs = 1
 note = "Warm-up: keep the crosshair glued to the sphere, don't chase score."
 
 [[blocks]]
 scenario = "flick-wide"
-runs = 2
+runs = 1
 note = "Warm-up: land the crosshair on the sphere's center and stop there."
 
 [[blocks]]
 scenario = "diag-drifters"
-runs = 2
+runs = 1
 note = "Learn it: put the crosshair on the drifter's path and click as it arrives."
 
 [[blocks]]
-scenario = "hop-field"
-runs = 2
-note = "Learn it: click near the top of the hop, where the sphere slows down."
+scenario = "wave-runners"
+runs = 1
+note = "Learn it: click as the sphere slows at the top or bottom of its wave."
+
+[[blocks]]
+scenario = "bobbing-heads"
+runs = 1
+note = "Learn it: hold the head's column and time the click to the bob."
 
 [[blocks]]
 scenario = "ricochet-ring"
-runs = 2
+runs = 1
 note = "Learn it: re-read the sphere's path after every ricochet."
 
 [[blocks]]
 scenario = "drifting-heads"
-runs = 2
+runs = 1
 note = "Learn it: keep the crosshair on the head line and let the target come."
 
 [[blocks]]
+scenario = "zigzag-sparks"
+runs = 1
+note = "Learn it: expect the sharp turn; click on the straight part of the zigzag."
+
+[[blocks]]
+scenario = "hop-field"
+runs = 1
+note = "Learn it: click near the top of the hop, where the sphere slows down."
+
+[[blocks]]
 scenario = "skeet-arcs"
-runs = 2
+runs = 1
 note = "Learn it: lead the sphere along its arc."
 
 [[blocks]]
 scenario = "popcorn-burst"
-runs = 2
+runs = 1
 note = "Learn it: each arc has its own height; time the click to it."
 
 [[blocks]]
-scenario = "diag-drifters"
+scenario = "stop-go-weavers"
 runs = 1
-note = "Mixed: meet the drifter on its path."
+note = "Learn it: re-read the motion after every change of pattern."
+
+[[blocks]]
+scenario = "shrinking-movers"
+runs = 1
+note = "Learn it: same calm click as the targets get smaller."
+
+[[blocks]]
+scenario = "pill-crossfire"
+runs = 1
+note = "Learn it: pick the next capsule while the shot lands; aim for the head."
+
+[[blocks]]
+scenario = "close-strafe-heads"
+runs = 1
+note = "Learn it: up close, wait for the stop or reversal and tap the head."
+
+[[blocks]]
+scenario = "wave-runners"
+runs = 1
+note = "Mixed: meet the wave at its top or bottom."
 
 [[blocks]]
 scenario = "hop-field"
-runs = 2
+runs = 1
 note = "Mixed: click where the hop peaks."
+
+[[blocks]]
+scenario = "zigzag-sparks"
+runs = 1
+note = "Mixed: click between the turns."
 
 [[blocks]]
 scenario = "ricochet-ring"
@@ -65,16 +106,31 @@ runs = 1
 note = "Mixed: follow the new path after each bounce."
 
 [[blocks]]
-scenario = "drifting-heads"
-runs = 2
-note = "Mixed: small head, long path, calm click."
-
-[[blocks]]
-scenario = "skeet-arcs"
+scenario = "bobbing-heads"
 runs = 1
-note = "Mixed: lead the arc."
+note = "Mixed: vertical timing on a small head."
 
 [[blocks]]
 scenario = "popcorn-burst"
-runs = 2
+runs = 1
 note = "Mixed: read the arc's height before you click."
+
+[[blocks]]
+scenario = "stop-go-weavers"
+runs = 1
+note = "Mixed: trust the motion you see now, not the last one."
+
+[[blocks]]
+scenario = "pill-crossfire"
+runs = 1
+note = "Mixed: heads first, then the next target."
+
+[[blocks]]
+scenario = "drifting-heads"
+runs = 1
+note = "Mixed: small head, long path, calm click."
+
+[[blocks]]
+scenario = "close-strafe-heads"
+runs = 1
+note = "Mixed: close range, tap on the stop."
