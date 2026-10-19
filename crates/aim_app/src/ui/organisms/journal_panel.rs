@@ -2,6 +2,7 @@
 //! streak, results split by readiness and fatigue, and the tilt reset (a paced-breathing
 //! timer, then easy smooth tracking) after two losses in a row.
 
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::ui::UiAction;
 use crate::ui::atoms::{ERROR, WARN, big};
 use aim_core::training::journal::{
@@ -61,7 +62,12 @@ pub fn parse_rr(text: &str) -> Result<Option<i32>, String> {
     t.trim_start_matches('+')
         .parse::<i32>()
         .map(Some)
-        .map_err(|_| format!("RR change must be a whole number such as +18 or -12 (got {t:?})"))
+        .map_err(|_| {
+            tr_fmt(
+                "RR change must be a whole number such as +18 or -12 (got {})",
+                &[&format!("{t:?}")],
+            )
+        })
 }
 
 /// The readiness stored with an entry: the coldest of today's reference scenarios, or
@@ -91,17 +97,30 @@ pub fn breath_cue(elapsed: f32, breath_secs: f32) -> (f32, &'static str) {
 /// One line for a group of matches.
 pub fn split_text(s: &Split) -> String {
     if s.matches == 0 {
-        return "no matches yet".to_owned();
+        return tr("no matches yet").to_owned();
     }
-    let won = s
-        .win_rate
-        .map_or(String::new(), |w| format!(" · {:.0}% won", w * 100.0));
-    let rating = s
-        .avg_self_rating
-        .map_or(String::new(), |r| format!(" · rating {r:.1}"));
-    format!(
-        "{} matches · {}W {}L {}D{won}{rating}",
-        s.matches, s.wins, s.losses, s.draws
+    let won = s.win_rate.map(|w| format!("{:.0}", w * 100.0));
+    let rating = s.avg_self_rating.map(|r| format!("{r:.1}"));
+    let template = match (&won, &rating) {
+        (Some(_), Some(_)) => {
+            "{matches} matches · {wins}W {losses}L {draws}D · {won}% won · rating {rating}"
+        }
+        (Some(_), None) => "{matches} matches · {wins}W {losses}L {draws}D · {won}% won",
+        (None, Some(_)) => "{matches} matches · {wins}W {losses}L {draws}D · rating {rating}",
+        (None, None) => "{matches} matches · {wins}W {losses}L {draws}D",
+    };
+    let won = won.unwrap_or_default();
+    let rating = rating.unwrap_or_default();
+    tr_named(
+        template,
+        &[
+            ("matches", &s.matches),
+            ("wins", &s.wins),
+            ("losses", &s.losses),
+            ("draws", &s.draws),
+            ("won", &won),
+            ("rating", &rating),
+        ],
     )
 }
 
@@ -133,11 +152,13 @@ pub fn journal_panel(
     v: &JournalView,
 ) -> Option<JournalAction> {
     let mut action = None;
-    ui.label(big("Ranked journal", 20.0));
-    ui.small(format!(
+    ui.label(big(tr("Ranked journal"), 20.0));
+    ui.small(tr_fmt(
         "Log each match in one tap. Today's readiness ({}) and fatigue ({}) are stored with it.",
-        warmth_label(v.readiness),
-        if v.fatigued { "showing" } else { "none" }
+        &[
+            &tr(warmth_label(v.readiness)),
+            &tr(if v.fatigued { "showing" } else { "none" }),
+        ],
     ));
     if let Some(p) = &v.problem {
         ui.colored_label(ERROR, p);
@@ -149,7 +170,7 @@ pub fn journal_panel(
                 .hint_text("+18 / -12")
                 .desired_width(60.0),
         );
-        ui.label("Rating");
+        ui.label(tr("Rating"));
         let current = if state.rating == 0 {
             DEFAULT_RATING
         } else {
@@ -160,13 +181,13 @@ pub fn journal_panel(
                 state.rating = r;
             }
         }
-        ui.label("Tag");
+        ui.label(tr("Tag"));
         egui::ComboBox::from_id_salt("journal_tag")
-            .selected_text(state.tag.map_or("none", tag_label))
+            .selected_text(tr(state.tag.map_or("none", tag_label)))
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut state.tag, None, "none");
+                ui.selectable_value(&mut state.tag, None, tr("none"));
                 for t in JournalTag::ALL {
-                    ui.selectable_value(&mut state.tag, Some(t), tag_label(t));
+                    ui.selectable_value(&mut state.tag, Some(t), tr(tag_label(t)));
                 }
             });
     });
@@ -176,7 +197,7 @@ pub fn journal_panel(
             (Outcome::Loss, "Loss"),
             (Outcome::Draw, "Draw"),
         ] {
-            if ui.button(label).clicked() {
+            if ui.button(tr(label)).clicked() {
                 match parse_rr(&state.rr) {
                     Ok(rr_change) => {
                         action = Some(JournalAction::Log(Draft {
@@ -205,10 +226,12 @@ pub fn journal_panel(
     let j = v.journal;
     let streak = j.losing_streak();
     if streak > 0 {
-        ui.label(format!(
-            "Losing streak: {streak} match{}",
-            if streak == 1 { "" } else { "es" }
-        ));
+        let template = if streak == 1 {
+            "Losing streak: {} match"
+        } else {
+            "Losing streak: {} matches"
+        };
+        ui.label(tr_fmt(template, &[&streak]));
     }
     if let Some(started) = state.breathing_since {
         if let Some(a) = breathing_timer(ui, state, started) {
@@ -218,21 +241,24 @@ pub fn journal_panel(
         let reset = tilt_reset();
         ui.colored_label(
             WARN,
-            format!(
-                "{streak} losses in a row. Try a {:.0}-minute reset before the next queue: {} s of slow breathing, then easy smooth tracking.",
-                reset.minutes(),
-                reset.breathing_secs
+            tr_named(
+                "{streak} losses in a row. Try a {minutes}-minute reset before the next queue: {secs} s of slow breathing, then easy smooth tracking.",
+                &[
+                    ("streak", &streak),
+                    ("minutes", &format!("{:.0}", reset.minutes())),
+                    ("secs", &reset.breathing_secs),
+                ],
             ),
         );
-        if ui.button("Tilt reset (3 min)").clicked() {
+        if ui.button(tr("Tilt reset (3 min)")).clicked() {
             state.breathing_since = Some(ui.input(|i| i.time));
         }
     }
 
     if !j.entries.is_empty() {
-        egui::CollapsingHeader::new(format!(
+        egui::CollapsingHeader::new(tr_fmt(
             "Results by readiness and fatigue ({} matches)",
-            j.entries.len()
+            &[&j.entries.len()],
         ))
         .default_open(false)
         .show(ui, |ui| {
@@ -249,12 +275,12 @@ pub fn journal_panel(
                         ("No fatigue signal", &f.fresh),
                         ("Fatigue signal", &f.fatigued),
                     ] {
-                        ui.label(label);
+                        ui.label(tr(label));
                         ui.label(split_text(s));
                         ui.end_row();
                     }
                 });
-            ui.small("A pattern needs many matches; a handful says little.");
+            ui.small(tr("A pattern needs many matches; a handful says little."));
         });
     }
     action
@@ -271,7 +297,7 @@ fn breathing_timer(ui: &mut egui::Ui, state: &mut JournalState, started: f64) ->
         return Some(start_run());
     }
     let (size, cue) = breath_cue(elapsed, reset.breath_secs());
-    ui.label(&reset.breathing_note);
+    ui.label(tr(&reset.breathing_note));
     let (rect, _) = ui.allocate_exact_size(egui::vec2(140.0, 140.0), egui::Sense::hover());
     let radius = 18.0 + 50.0 * size;
     ui.painter().circle_filled(
@@ -284,18 +310,21 @@ fn breathing_timer(ui: &mut egui::Ui, state: &mut JournalState, started: f64) ->
         68.0,
         egui::Stroke::new(1.0, egui::Color32::GRAY),
     );
-    ui.label(format!(
-        "{cue} · {:.0} s left",
-        (BREATHING_SECS as f32 - elapsed).ceil()
+    ui.label(tr_fmt(
+        "{} · {} s left",
+        &[
+            &tr(cue),
+            &format!("{:.0}", (BREATHING_SECS as f32 - elapsed).ceil()),
+        ],
     ));
     ui.ctx().request_repaint();
     let mut out = None;
     ui.horizontal(|ui| {
-        if ui.button("Skip to tracking").clicked() {
+        if ui.button(tr("Skip to tracking")).clicked() {
             state.breathing_since = None;
             out = Some(start_run());
         }
-        if ui.button("Cancel").clicked() {
+        if ui.button(tr("Cancel")).clicked() {
             state.breathing_since = None;
         }
     });
@@ -388,5 +417,32 @@ mod tests {
         let r = tilt_reset();
         assert!((r.minutes() - 3.0).abs() < 1e-6);
         assert_eq!(r.routine.blocks[0].scenario, "track-precise");
+    }
+
+    #[test]
+    fn journal_lines_read_in_spanish() {
+        use aim_core::i18n::{Lang, tr_fmt_in, tr_in, tr_named_in};
+        assert_eq!(
+            tr_named_in(
+                Lang::Es,
+                "{matches} matches · {wins}W {losses}L {draws}D",
+                &[("matches", &3), ("wins", &2), ("losses", &1), ("draws", &0)]
+            ),
+            "3 partidas · 2V 1D 0E"
+        );
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "Losing streak: {} match", &[&1]),
+            "Racha de derrotas: 1 partida"
+        );
+        assert_eq!(tr_in(Lang::Es, "Breathe in"), "Inhala");
+        let s = Split {
+            matches: 2,
+            wins: 1,
+            losses: 1,
+            draws: 0,
+            win_rate: Some(0.5),
+            avg_self_rating: None,
+        };
+        assert_eq!(split_text(&s), "2 matches · 1W 1L 0D · 50% won");
     }
 }

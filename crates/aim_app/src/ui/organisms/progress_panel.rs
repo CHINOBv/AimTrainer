@@ -2,6 +2,7 @@
 //! personal bests and per-skill standings with their trends. Every verdict shows the
 //! numbers behind it.
 
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::ui::UiAction;
 use crate::ui::atoms::{BAD, GOOD, Tone, WARN, big};
 use crate::ui::molecules::chip;
@@ -37,38 +38,45 @@ pub struct ProgressModel {
 /// One line explaining a fatigue signal.
 pub fn fatigue_text(f: &FatigueSignal) -> String {
     match f {
-        FatigueSignal::LongSession { minutes } => format!(
-            "You have trained {minutes:.0} min this session. Gains flatten after about an hour; stopping now keeps today's progress."
+        FatigueSignal::LongSession { minutes } => tr_fmt(
+            "You have trained {} min this session. Gains flatten after about an hour; stopping now keeps today's progress.",
+            &[&format!("{minutes:.0}")],
         ),
         FatigueSignal::ScoreDrop {
             scenario,
             peak,
             recent,
             drop,
-        } => format!(
-            "{scenario}: your last runs average {recent:.0}, {:.0}% below this session's peak of {peak:.0}. That usually means fatigue; take a break.",
-            drop * 100.0
+        } => tr_named(
+            "{scenario}: your last runs average {recent}, {drop}% below this session's peak of {peak}. That usually means fatigue; take a break.",
+            &[
+                ("scenario", &tr(scenario)),
+                ("recent", &format!("{recent:.0}")),
+                ("drop", &format!("{:.0}", drop * 100.0)),
+                ("peak", &format!("{peak:.0}")),
+            ],
         ),
     }
 }
 
 /// One line for the daily goal (also used on the results screen).
 pub fn goal_text(g: &DailyGoal) -> String {
-    let streak = if g.streak_days > 0 {
-        format!(" · {} day streak", g.streak_days)
+    let today = format!("{:.0}", g.minutes_today);
+    let goal = format!("{:.0}", g.goal_minutes);
+    if g.streak_days > 0 {
+        tr_fmt(
+            "Today {}/{} min · {} day streak",
+            &[&today, &goal, &g.streak_days],
+        )
     } else {
-        String::new()
-    };
-    format!(
-        "Today {:.0}/{:.0} min{streak}",
-        g.minutes_today, g.goal_minutes
-    )
+        tr_fmt("Today {}/{} min", &[&today, &goal])
+    }
 }
 
 pub fn progress_panel(ui: &mut egui::Ui, m: &ProgressModel) -> Option<UiAction> {
     let mut action = None;
     egui::ScrollArea::vertical().show(ui, |ui| {
-        ui.label(big("Today", 22.0));
+        ui.label(big(tr("Today"), 22.0));
         let g = &m.goal;
         ui.add(
             egui::ProgressBar::new((g.minutes_today / g.goal_minutes).clamp(0.0, 1.0))
@@ -77,7 +85,7 @@ pub fn progress_panel(ui: &mut egui::Ui, m: &ProgressModel) -> Option<UiAction> 
         if g.met_today() {
             ui.colored_label(
                 GOOD,
-                "Daily goal reached. More time today adds little; rest or play.",
+                tr("Daily goal reached. More time today adds little; rest or play."),
             );
         }
         for f in &m.fatigue {
@@ -85,20 +93,22 @@ pub fn progress_panel(ui: &mut egui::Ui, m: &ProgressModel) -> Option<UiAction> 
         }
 
         ui.add_space(10.0);
-        ui.label(big("Ready for ranked?", 20.0))
-            .on_hover_text(READINESS_HINT);
+        ui.label(big(tr("Ready for ranked?"), 20.0))
+            .on_hover_text(tr(READINESS_HINT));
         ui.horizontal_wrapped(|ui| {
             for (name, r) in &m.readiness {
                 let (label, tone) = readiness_chip(r.warmth);
-                chip(ui, label, tone.color()).on_hover_text(readiness_text(name, r));
+                let name = tr(name);
+                chip(ui, tr(label), tone.color()).on_hover_text(readiness_text(name, r));
                 ui.label(name).on_hover_text(readiness_text(name, r));
                 ui.add_space(8.0);
             }
         });
         for (id, name) in &m.readiness_missing {
             ui.horizontal(|ui| {
-                ui.label(format!(
-                    "{name}: play it today (and on 3 different days) to get a readiness check."
+                ui.label(tr_fmt(
+                    "{}: play it today (and on 3 different days) to get a readiness check.",
+                    &[&tr(name)],
                 ));
                 if ui.small_button("▶").clicked() {
                     action = Some(UiAction::StartScenario(id.clone()));
@@ -107,24 +117,24 @@ pub fn progress_panel(ui: &mut egui::Ui, m: &ProgressModel) -> Option<UiAction> 
         }
 
         ui.add_space(10.0);
-        ui.label(big("Benchmark trend", 20.0));
+        ui.label(big(tr("Benchmark trend"), 20.0));
         let points: Vec<f32> = m.trend.iter().flatten().copied().collect();
         if points.len() >= 2 {
-            ui.small(format!("Overall energy, last {} weeks", m.trend.len()));
+            ui.small(tr_fmt("Overall energy, last {} weeks", &[&m.trend.len()]));
             history_chart(ui, &points);
         } else {
-            ui.small("Score every benchmark subcategory to start a trend.");
+            ui.small(tr("Score every benchmark subcategory to start a trend."));
         }
 
         ui.add_space(10.0);
-        ui.label(big("Personal bests", 20.0));
+        ui.label(big(tr("Personal bests"), 20.0));
         egui::Grid::new("bests")
             .striped(true)
             .num_columns(3)
             .show(ui, |ui| {
                 for (sub, name, best) in &m.bests {
-                    ui.label(sub);
-                    ui.label(name);
+                    ui.label(tr(sub));
+                    ui.label(tr(name));
                     ui.label(best.map_or("—".to_owned(), |b| format!("{b:.0}")));
                     ui.end_row();
                 }
@@ -146,8 +156,10 @@ pub struct ExportView<'a> {
 /// true when the button is clicked.
 pub fn export_section(ui: &mut egui::Ui, path: &mut String, view: &ExportView) -> bool {
     ui.add_space(10.0);
-    ui.label(big("History", 20.0));
-    ui.small("One row per run with its settings snapshot; columns are listed in the README.");
+    ui.label(big(tr("History"), 20.0));
+    ui.small(tr(
+        "One row per run with its settings snapshot; columns are listed in the README.",
+    ));
     let mut clicked = false;
     ui.horizontal(|ui| {
         ui.add(
@@ -155,7 +167,7 @@ pub fn export_section(ui: &mut egui::Ui, path: &mut String, view: &ExportView) -
                 .hint_text(view.default_path)
                 .desired_width(360.0),
         );
-        let button = ui.add_enabled(!view.running, egui::Button::new("Export history (CSV)"));
+        let button = ui.add_enabled(!view.running, egui::Button::new(tr("Export history (CSV)")));
         clicked = button.clicked();
         if view.running {
             ui.spinner();
@@ -174,34 +186,35 @@ pub fn export_section(ui: &mut egui::Ui, path: &mut String, view: &ExportView) -
 
 /// The headline of one plateau.
 pub fn plateau_text(p: &Plateau) -> String {
-    format!(
-        "{}: no new personal best in {} week{}, although you kept playing it.",
-        p.subcategory,
-        p.weeks,
-        if p.weeks == 1 { "" } else { "s" }
-    )
+    let template = if p.weeks == 1 {
+        "{}: no new personal best in {} week, although you kept playing it."
+    } else {
+        "{}: no new personal best in {} weeks, although you kept playing it."
+    };
+    tr_fmt(template, &[&tr(&p.subcategory), &p.weeks])
 }
 
 /// Benchmark subcategories without a new personal best for [`PLATEAU_WEEKS`] weeks, each
 /// with the changes of stimulus to try.
 pub fn plateau_section(ui: &mut egui::Ui, plateaus: &[Plateau]) {
     ui.add_space(10.0);
-    ui.label(big("Plateaus", 20.0)).on_hover_text(format!(
-        "A subcategory you still play with no new personal best in {PLATEAU_WEEKS} weeks (an estimate, not a sourced threshold)."
+    ui.label(big(tr("Plateaus"), 20.0)).on_hover_text(tr_fmt(
+        "A subcategory you still play with no new personal best in {} weeks (an estimate, not a sourced threshold).",
+        &[&PLATEAU_WEEKS],
     ));
     if plateaus.is_empty() {
-        chip(ui, "NO PLATEAU", GOOD);
+        chip(ui, tr("NO PLATEAU"), GOOD);
         return;
     }
     for p in plateaus {
         let tries: Vec<String> = p
             .suggestions
             .iter()
-            .map(|s| format!("• {}", s.text()))
+            .map(|s| format!("• {}", tr(s.text())))
             .collect();
         ui.horizontal(|ui| {
-            chip(ui, "PLATEAU", WARN);
-            ui.label(&p.subcategory).on_hover_text(format!(
+            chip(ui, tr("PLATEAU"), WARN);
+            ui.label(tr(&p.subcategory)).on_hover_text(format!(
                 "{}\n{}",
                 plateau_text(p),
                 tries.join("\n")
@@ -228,8 +241,12 @@ pub fn trend_text(s: &SubcategoryStanding) -> Option<String> {
     let (i0, first) = played().next()?;
     let (i1, last) = played().next_back()?;
     let weeks = i1 - i0;
-    let unit = if weeks == 1 { "week" } else { "weeks" };
-    (weeks >= 1).then(|| format!("{:+.0} energy over the last {weeks} {unit}", last - first))
+    let template = if weeks == 1 {
+        "{} energy over the last {} week"
+    } else {
+        "{} energy over the last {} weeks"
+    };
+    (weeks >= 1).then(|| tr_fmt(template, &[&format!("{:+.0}", last - first), &weeks]))
 }
 
 /// Skills section: each benchmark subcategory's strength or weakness, its weekly energy
@@ -241,7 +258,8 @@ pub fn skills_section(
 ) -> Option<UiAction> {
     let mut action = None;
     ui.add_space(10.0);
-    ui.label(big("Skills", 20.0)).on_hover_text(SKILLS_HINT);
+    ui.label(big(tr("Skills"), 20.0))
+        .on_hover_text(tr(SKILLS_HINT));
     let top = profile
         .subcategories
         .iter()
@@ -254,10 +272,12 @@ pub fn skills_section(
             for s in &profile.subcategories {
                 let bar = skill_bar(s, top);
                 let hint = match trend_text(s) {
-                    Some(t) => format!("{} ({})\n{}\n{t}", s.name, s.skill, s.explanation),
-                    None => format!("{} ({})\n{}", s.name, s.skill, s.explanation),
+                    Some(t) => {
+                        format!("{} ({})\n{}\n{t}", tr(&s.name), tr(&s.skill), s.explanation)
+                    }
+                    None => format!("{} ({})\n{}", tr(&s.name), tr(&s.skill), s.explanation),
                 };
-                ui.label(&s.name).on_hover_text(&hint);
+                ui.label(tr(&s.name)).on_hover_text(&hint);
                 ui.add(
                     egui::ProgressBar::new(bar.fraction)
                         .desired_width(SKILL_BAR_WIDTH_PX)
@@ -278,7 +298,7 @@ pub fn skills_section(
                 {
                     if ui
                         .small_button("▶")
-                        .on_hover_text(format!("Practice {}", name_of(id)))
+                        .on_hover_text(tr_fmt("Practice {}", &[&tr(&name_of(id))]))
                         .clicked()
                     {
                         action = Some(UiAction::StartScenario(id.clone()));
@@ -303,11 +323,14 @@ pub fn readiness_chip(warmth: Warmth) -> (&'static str, Tone) {
 
 /// Hover text of a readiness chip: today against the usual, with the numbers.
 pub fn readiness_text(name: &str, r: &Readiness) -> String {
-    format!(
-        "{name}: today {:.0} vs usual {:.0} ({:.0}%)",
-        r.today_best,
-        r.baseline,
-        r.ratio * 100.0
+    tr_named(
+        "{name}: today {today} vs usual {usual} ({ratio}%)",
+        &[
+            ("name", &name),
+            ("today", &format!("{:.0}", r.today_best)),
+            ("usual", &format!("{:.0}", r.baseline)),
+            ("ratio", &format!("{:.0}", r.ratio * 100.0)),
+        ],
     )
 }
 
@@ -333,9 +356,9 @@ pub fn skill_bar(s: &SubcategoryStanding, top_energy: f32) -> SkillBar {
     SkillBar {
         fraction,
         tone,
-        value: s
-            .energy
-            .map_or("—".to_owned(), |e| format!("{e:.0} energy")),
+        value: s.energy.map_or("—".to_owned(), |e| {
+            tr_fmt("{} energy", &[&format!("{e:.0}")])
+        }),
     }
 }
 
@@ -444,5 +467,25 @@ mod tests {
             t.contains("850") && t.contains("15%") && t.contains("1000"),
             "{t}"
         );
+    }
+
+    #[test]
+    fn progress_lines_read_in_spanish() {
+        use aim_core::i18n::{Lang, tr_fmt_in, tr_in};
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "Today {}/{} min · {} day streak", &[&12, &30, &3]),
+            "Hoy 12/30 min · racha de 3 días"
+        );
+        assert_eq!(tr_in(Lang::Es, "WARMING UP"), "CALENTANDO");
+        assert_eq!(
+            tr_fmt_in(Lang::Es, "{} energy over the last {} weeks", &[&"+120", &2]),
+            "+120 de energía en las últimas 2 semanas"
+        );
+        let g = DailyGoal {
+            minutes_today: 12.4,
+            goal_minutes: 30.0,
+            streak_days: 0,
+        };
+        assert_eq!(goal_text(&g), "Today 12/30 min");
     }
 }
