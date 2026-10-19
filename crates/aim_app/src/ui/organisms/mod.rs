@@ -36,4 +36,5 @@ pub mod sens_finder;
 pub mod sens_suggestion;
 pub mod settings_panels;
 pub mod system_check;
+pub mod target_overlays;
 pub mod today_panel;

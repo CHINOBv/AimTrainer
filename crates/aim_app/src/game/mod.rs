@@ -17,8 +17,8 @@ use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::ViewAngles;
 use aim_core::movement::MoveInput;
 use aim_core::scenario::{
-    FrameInput, Recording, RunKey, RunOutcome, RunResult, ScenarioDef, Session, SessionEvent,
-    Shape, Target, Tuning, parse_run_key,
+    FrameInput, HitZone, Recording, RunKey, RunOutcome, RunResult, ScenarioDef, Session,
+    SessionEvent, Shape, Target, Tuning, parse_run_key,
 };
 use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::finder::{SensFinder, Slot};
@@ -30,7 +30,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
-use feedback::{HitFrame, MarkerKind, ShotFeedback, ShotOutcome};
+use feedback::{DamagePop, HitFrame, HitMarkerStyle, MarkerKind, ShotFeedback, ShotOutcome};
 use hit_effect::{BaseMaterial, EffectAssets, Struck};
 use std::collections::HashMap;
 
@@ -84,6 +84,8 @@ pub struct Run {
     entities: HashMap<u64, Entity>,
     /// Targets hit this frame, for their visual effect.
     struck: Vec<Struck>,
+    /// Floating damage numbers on screen (`[feedback] damage_numbers`).
+    pub damage_pops: Vec<DamagePop>,
 }
 
 impl Run {
@@ -114,6 +116,7 @@ impl Run {
             kill_flash: 0.0,
             entities: HashMap::new(),
             struck: Vec::new(),
+            damage_pops: Vec::new(),
         }
     }
 
@@ -752,10 +755,25 @@ fn tick(
     }
     let input = frame_input(dt, run.view, &keys, &buttons);
     run.recording.inputs.push(input);
+    feedback::age_pops(&mut run.damage_pops, dt);
+    let shown = run.session.def().feedback;
+    let markers =
+        shown.hit_markers_shown(finisher.settings.hit_feedback.marker != HitMarkerStyle::Off);
+    // The audio plugin applies the player's own sound choices; the scenario can only mute.
+    let sounds = shown.hit_sounds_played(true);
+    // Where each target's top is before the update: a killed target is gone after it.
+    let tops = if shown.damage_numbers {
+        target_tops(&run.session)
+    } else {
+        Vec::new()
+    };
+    let weapon = run.session.def().weapon.kind.stats();
     let mut marker = None;
     for event in run.session.update(input) {
         if let Some(outcome) = ShotOutcome::from_session(&event) {
-            feedback.write(ShotFeedback(outcome));
+            if sounds {
+                feedback.write(ShotFeedback(outcome));
+            }
             marker = marker.max(MarkerKind::of(outcome));
         }
         match event {
@@ -763,7 +781,14 @@ fn tick(
                 hit: Some((id, zone)),
                 ..
             } => {
-                run.hit_flash = finisher.settings.hit_feedback.marker_secs();
+                if markers {
+                    run.hit_flash = finisher.settings.hit_feedback.marker_secs();
+                }
+                if let Some(&(_, top)) = tops.iter().find(|(t, _)| *t == id) {
+                    let amount = feedback::damage_amount(&weapon, zone);
+                    run.damage_pops
+                        .push(DamagePop::new(top, amount, zone == HitZone::Head));
+                }
                 hit_effect::record(&mut run.struck, id, Some(zone), false);
             }
             SessionEvent::Killed { id, .. } => {
@@ -783,6 +808,15 @@ fn tick(
     if let Some(kind) = marker {
         run.marker = kind;
     }
+}
+
+/// The top of every visible target, by id: where its damage numbers and health bar float.
+pub fn target_tops(s: &Session) -> Vec<(u64, aim_core::math::Vec3)> {
+    let shape = &s.def().targets.shape;
+    s.targets()
+        .filter(|t| t.is_visible(s.time()))
+        .map(|t| (t.id, feedback::target_top(shape, s.dims(), t.position)))
+        .collect()
 }
 
 /// The core's per-frame input from keys and buttons (WASD, Shift walk, left click).
@@ -1065,6 +1099,14 @@ fn update_camera(
         run.zoomed,
         zoom,
     );
+    // A scenario's `[view] fov_lock` replaces VALORANT's FOV for that scenario only.
+    let view = run.session.def().view;
+    if view.fov_lock.is_some()
+        && let Projection::Perspective(p) = &mut *projection
+    {
+        let zoom = (run.zoomed && zoom > 1.0).then_some(zoom);
+        p.fov = (view.vertical_fov_deg(zoom) as f32).to_radians();
+    }
 }
 
 /// Put the camera at `eye` looking along `view`, with VALORANT's FOV for the zoom state.

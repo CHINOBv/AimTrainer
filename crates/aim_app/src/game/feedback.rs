@@ -1,8 +1,10 @@
 //! What the player's shots did this frame, as the app reports it to sound and hit
 //! feedback. Read from the sessions' events; decides no gameplay.
 
+use aim_core::games::valorant::{HumanoidDims, WeaponStats};
+use aim_core::math::Vec3;
 use aim_core::movement::MovementProfile;
-use aim_core::scenario::{HitZone, SessionEvent};
+use aim_core::scenario::{HitZone, SessionEvent, Shape};
 use aim_world::arena::ArenaEvent;
 use bevy::prelude::Message;
 use serde::{Deserialize, Serialize};
@@ -329,6 +331,84 @@ pub fn marker_alpha(t: f32) -> f32 {
     MARKER_PEAK_ALPHA * (1.0 - t.clamp(0.0, 1.0)).powi(2)
 }
 
+/// How long a floating damage number stays on screen, seconds.
+pub const DAMAGE_POP_SECS: f32 = 0.8;
+/// How far a damage number rises over its life, meters.
+const DAMAGE_POP_RISE_M: f32 = 0.4;
+
+/// The damage number shown for a hit on `zone`: the weapon's VALORANT damage for that zone.
+/// Display only (targets lose one health per hit). A sphere counts as a body hit.
+pub fn damage_amount(weapon: &WeaponStats, zone: HitZone) -> f32 {
+    match zone {
+        HitZone::Head => weapon.damage_head,
+        HitZone::Body | HitZone::Sphere => weapon.damage_body,
+        HitZone::Legs => weapon.damage_legs,
+    }
+}
+
+/// A floating damage number (`[feedback] damage_numbers`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DamagePop {
+    /// Where the hit target's top was when it was hit.
+    pub position: Vec3,
+    pub amount: f32,
+    pub head: bool,
+    age_secs: f32,
+}
+
+impl DamagePop {
+    pub fn new(position: Vec3, amount: f32, head: bool) -> Self {
+        Self {
+            position,
+            amount,
+            head,
+            age_secs: 0.0,
+        }
+    }
+
+    fn progress(&self) -> f32 {
+        (self.age_secs / DAMAGE_POP_SECS).clamp(0.0, 1.0)
+    }
+
+    /// Opacity: starts opaque and fades faster towards the end of its life.
+    pub fn alpha(&self) -> f32 {
+        1.0 - self.progress().powi(2)
+    }
+
+    /// Height risen since the hit, meters.
+    pub fn rise_m(&self) -> f32 {
+        DAMAGE_POP_RISE_M * self.progress()
+    }
+}
+
+/// Age every number by `dt` seconds and drop those past [`DAMAGE_POP_SECS`].
+pub fn age_pops(pops: &mut Vec<DamagePop>, dt: f32) {
+    for p in pops.iter_mut() {
+        p.age_secs += dt;
+    }
+    pops.retain(|p| p.age_secs < DAMAGE_POP_SECS);
+}
+
+/// Share of health left (0–1) for a target's health bar, or `None` when it gets no bar:
+/// only targets whose starting health is finite and above 1 do.
+pub fn health_fraction(health: f32, max_health: f32) -> Option<f32> {
+    (max_health.is_finite() && max_health > 1.0).then(|| (health / max_health).clamp(0.0, 1.0))
+}
+
+/// The top of a target at `position` (sphere center, humanoid feet, capsule center), where
+/// its health bar and damage numbers float.
+pub fn target_top(shape: &Shape, dims: &HumanoidDims, position: Vec3) -> Vec3 {
+    let above = match *shape {
+        Shape::Sphere { radius } => radius,
+        Shape::Humanoid { .. } => dims.height,
+        Shape::Capsule { height, head, .. } => {
+            let body = height / 2.0;
+            head.map_or(body, |h| body.max(h.offset + h.radius))
+        }
+    };
+    Vec3::new(position.x, position.y + above, position.z)
+}
+
 /// Scale factor of a popping target at `t`: up and back to its size.
 pub fn pop_scale(t: f32) -> f32 {
     1.0 + POP_AMOUNT * (PI * t.clamp(0.0, 1.0)).sin()
@@ -578,5 +658,76 @@ mod tests {
         };
         assert_eq!(ShotOutcome::from_arena(&body), Some(Hit { head: false }));
         assert_eq!(ShotOutcome::from_arena(&ArenaEvent::PlayerDied), None);
+    }
+
+    #[test]
+    fn damage_numbers_show_the_weapons_damage_for_the_zone_hit() {
+        let vandal = aim_core::games::valorant::Weapon::Vandal.stats();
+        assert_eq!(damage_amount(&vandal, HitZone::Head), 160.0);
+        assert_eq!(damage_amount(&vandal, HitZone::Body), 40.0);
+        assert_eq!(damage_amount(&vandal, HitZone::Legs), 34.0);
+        assert_eq!(
+            damage_amount(&vandal, HitZone::Sphere),
+            40.0,
+            "a sphere counts as a body hit"
+        );
+    }
+
+    #[test]
+    fn damage_pops_rise_fade_and_expire() {
+        let mut pops = vec![DamagePop::new(aim_core::math::Vec3::ZERO, 40.0, false)];
+        assert_eq!(pops[0].alpha(), 1.0);
+        assert_eq!(pops[0].rise_m(), 0.0);
+        age_pops(&mut pops, DAMAGE_POP_SECS / 2.0);
+        assert!(pops[0].alpha() < 1.0 && pops[0].alpha() > 0.0);
+        assert!(pops[0].rise_m() > 0.0);
+        age_pops(&mut pops, DAMAGE_POP_SECS);
+        assert!(pops.is_empty());
+    }
+
+    #[test]
+    fn health_bars_show_only_for_targets_with_more_than_one_health() {
+        assert_eq!(health_fraction(3.0, 4.0), Some(0.75));
+        assert_eq!(health_fraction(-0.5, 2.0), Some(0.0));
+        assert_eq!(
+            health_fraction(1.0, 1.0),
+            None,
+            "one-hit targets need no bar"
+        );
+        assert_eq!(health_fraction(0.3, 0.5), None);
+        assert_eq!(health_fraction(f32::INFINITY, f32::INFINITY), None);
+    }
+
+    #[test]
+    fn bars_sit_on_top_of_each_shape() {
+        use aim_core::math::Vec3;
+        use aim_core::scenario::Shape;
+        let dims = aim_core::games::valorant::HumanoidDims::default();
+        let p = Vec3::new(1.0, 2.0, -10.0);
+        let top = |shape, want: f32| {
+            let got = target_top(&shape, &dims, p);
+            assert!(
+                (got.y - want).abs() < 1e-5,
+                "{shape:?}: {} vs {want}",
+                got.y
+            );
+            assert_eq!((got.x, got.z), (p.x, p.z));
+        };
+        top(Shape::Sphere { radius: 0.3 }, 2.3);
+        let capsule = |head| Shape::Capsule {
+            radius: 0.3,
+            height: 1.6,
+            head,
+        };
+        top(capsule(None), 2.8);
+        // A head above the capsule raises the bar.
+        top(
+            capsule(Some(aim_core::scenario::def::CapsuleHead {
+                radius: 0.2,
+                offset: 0.9,
+            })),
+            3.1,
+        );
+        top(Shape::Humanoid { head_only: false }, 2.0 + dims.height);
     }
 }
