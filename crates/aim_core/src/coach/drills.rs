@@ -299,7 +299,7 @@ mod tests {
             .shape
         {
             Shape::Sphere { radius } => radius,
-            Shape::Humanoid { .. } => unreachable!("flick drills use spheres"),
+            other => unreachable!("flick drills use spheres, not {other:?}"),
         };
         assert!(radius(1.0) < radius(0.0) && radius(0.0) < radius(-1.0));
         let life = |level| {

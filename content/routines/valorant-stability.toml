@@ -1,0 +1,76 @@
+# Tracking stability and movement for VALORANT, built on the library's stability scenarios
+# (docs/library.md) plus the counter-strafe and strafe-shot movement drills.
+# Structure: ordered warm-up, one blocked pass per drill, then interleaved
+# (docs/training-science.md, "Routine design"). Run counts are our estimate.
+id = "valorant-stability"
+name = "VALORANT Stability (≈28 min)"
+description = """
+Staying on the head through strafes and peeks, plus the counter-strafe that makes your own shots accurate.
+A warm-up in order, one blocked pass of each drill, then the drills interleaved.
+≈28 min, near the 30–50 min window where Listman et al. (2021) saw most daily gains."""
+interleave_from = 7
+
+[[blocks]]
+scenario = "track-precise"
+runs = 2
+note = "Warm-up: keep the crosshair glued to the sphere, don't chase score."
+
+[[blocks]]
+scenario = "counter-strafe"
+runs = 2
+note = "Warm-up: bring the crosshair to a stop, then shoot."
+
+[[blocks]]
+scenario = "head-strafe-track"
+runs = 2
+note = "Learn it: the crosshair stays on the head through each reversal."
+
+[[blocks]]
+scenario = "peek-track"
+runs = 2
+note = "Learn it: catch the peeker and ride it until it leaves."
+
+[[blocks]]
+scenario = "adjust-track"
+runs = 2
+note = "Learn it: after each dart, one clean move back onto the sphere."
+
+[[blocks]]
+scenario = "ground-reactive"
+runs = 2
+note = "Learn it: follow the target's jukes, don't guess them."
+
+[[blocks]]
+scenario = "strafe-shot"
+runs = 2
+note = "Learn it: the shot goes off the moment you are still."
+
+[[blocks]]
+scenario = "head-strafe-track"
+runs = 3
+note = "Mixed: the crosshair stays on the head, not the body."
+
+[[blocks]]
+scenario = "peek-track"
+runs = 3
+note = "Mixed: be on the target the moment it appears."
+
+[[blocks]]
+scenario = "adjust-track"
+runs = 2
+note = "Mixed: one smooth correction per dart."
+
+[[blocks]]
+scenario = "ground-reactive"
+runs = 2
+note = "Mixed: react to the target's change of direction."
+
+[[blocks]]
+scenario = "counter-strafe"
+runs = 2
+note = "Mixed: stop moving, then click."
+
+[[blocks]]
+scenario = "strafe-shot"
+runs = 2
+note = "Mixed: stop, shoot, move again."

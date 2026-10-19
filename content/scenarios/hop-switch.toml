@@ -1,0 +1,24 @@
+# Idea: Voltaic benchmark "switching" slots (small, slow targets hopping gently).
+# Own name and parameters.
+id = "hop-switch"
+name = "Hop Switch"
+category = "switching"
+description = """
+Switching on hoppers. Spheres hop slowly under low gravity; each needs 0.35 s of tracking
+while firing, and one that lands for good is lost. Trains following a smooth vertical arc
+and switching before the next one lands."""
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.22 }
+spawn = { kind = "floor", x = [-5.0, 5.0], z = [-13.0, -10.0], height = [0.2, 0.2] }
+motion = { kind = "ballistic", speed = [1.6, 2.2], angle_deg = [65.0, 85.0], gravity = 2.0, bounces = 6, restitution = 0.95 }
+max_alive = 3
+health = 0.35
+min_separation_deg = 8
+
+[scoring]
+sphere = 400   # points per second on target; a kill is worth ≈140
+expire_penalty = 25

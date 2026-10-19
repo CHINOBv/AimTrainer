@@ -105,7 +105,13 @@ pub fn tangent_offset_deg(from: ViewAngles, to: ViewAngles) -> (f32, f32) {
 /// simulated aimer goes for.
 fn aim_zone(session: &Session, t: &Target) -> (Vec3, f32) {
     let eye = session.eye_position();
-    match session.def().targets.shape {
+    // Shrinking targets are aimed at at their current size; others at the defined one.
+    let shape = if session.def().targets.shrink_per_kill.is_some() {
+        &session.active_targets().shape
+    } else {
+        &session.def().targets.shape
+    };
+    match *shape {
         Shape::Sphere { radius } => {
             let d = (t.position - eye).length().max(1e-3);
             (t.position, (radius / d).atan().to_degrees())
@@ -115,6 +121,12 @@ fn aim_zone(session: &Session, t: &Target) -> (Vec3, f32) {
             let head = t.position + Vec3::new(0.0, dims.head_center_height(), 0.0);
             let d = (head - eye).length().max(1e-3);
             (head, (dims.head_size / 2.0 / d).atan().to_degrees())
+        }
+        Shape::Capsule { .. } => {
+            let (up, r) = shape.capsule_aim().expect("a capsule");
+            let p = t.position + Vec3::UP * up;
+            let d = (p - eye).length().max(1e-3);
+            (p, (r / d).atan().to_degrees())
         }
     }
 }

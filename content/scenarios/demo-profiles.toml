@@ -1,0 +1,30 @@
+id = "demo-profiles"
+name = "Demo: Motion Profiles"
+category = "tracking"
+description = """
+Engine demo for motion profiles. The sphere switches every one to two seconds between a
+slow drift, a quick strafe and short pauses, picked by weight. Stay on it through each change."""
+duration_secs = 45
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.3 }
+spawn = { kind = "angular", yaw_deg = [-15.0, 15.0], pitch_deg = [2.0, 8.0], distance = [12.0, 12.0] }
+health = inf
+
+[[targets.motion_profiles]]
+weight = 2
+switch_secs = [1.0, 2.0]
+motion = { kind = "drift", speed = [1.5, 2.5], change_secs = [0.8, 1.5], max_offset = 4.0 }
+
+[[targets.motion_profiles]]
+weight = 2
+switch_secs = [1.0, 2.0]
+motion = { kind = "strafe", change_secs = [0.4, 0.8], max_offset = 3.0 }
+
+[[targets.motion_profiles]]
+weight = 1
+switch_secs = [0.5, 1.0]
+motion = { kind = "static" }

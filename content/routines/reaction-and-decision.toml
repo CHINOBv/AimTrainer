@@ -1,0 +1,56 @@
+# Reaction and decision drills, built on the library's reflex scenarios (docs/library.md)
+# and the perception drills (docs/training-science.md, "Perception drills"). Interleaved
+# after the warm-up, so each run asks for a different kind of decision. Run counts are our
+# estimate.
+id = "reaction-and-decision"
+name = "Reaction and Decision (≈19 min)"
+description = """
+Reacting and deciding under time pressure: reflex and reactive flicks, piling-up balloons, friend-or-foe clicks, peripheral and sound cues.
+A short warm-up in order, then every drill interleaved, so you never know which decision comes next.
+Sound turn needs headphones. ≈19 min; add it after a skill routine or play it on its own."""
+interleave_from = 2
+
+[[blocks]]
+scenario = "track-precise"
+runs = 1
+note = "Warm-up: keep the crosshair glued to the sphere, don't chase score."
+
+[[blocks]]
+scenario = "flick-wide"
+runs = 2
+note = "Warm-up: land the crosshair on the sphere's center and stop there."
+
+[[blocks]]
+scenario = "reflex-flick"
+runs = 3
+note = "Hit the sphere before it vanishes."
+
+[[blocks]]
+scenario = "reactive-flick"
+runs = 2
+note = "First click on the sphere, then follow it when it starts moving."
+
+[[blocks]]
+scenario = "pressure-balloons"
+runs = 2
+note = "Clear the closest balloons before they pile up."
+
+[[blocks]]
+scenario = "go-no-go"
+runs = 3
+note = "Check the target's color first, then click only the foes."
+
+[[blocks]]
+scenario = "peripheral-detect"
+runs = 2
+note = "Keep your eyes on the center; let the edge of the screen tell you."
+
+[[blocks]]
+scenario = "radar-recall"
+runs = 2
+note = "Remember where the targets were, then point there."
+
+[[blocks]]
+scenario = "sound-turn"
+runs = 2
+note = "Turn toward the sound before you see anything."

@@ -9,7 +9,7 @@ Scenarios, routines and benchmarks are plain TOML files. To add one, drop the fi
 
 **Overrides:** a user file with the same `id` as a built-in replaces it, which is the way to tweak a built-in.
 
-**Examples:** the built-in files are in `content/scenarios/` and `content/routines/`; copy one and edit it.
+**Examples:** the built-in files are in `content/scenarios/` and `content/routines/`; copy one and edit it. `library.md` lists the drill library and the idea behind each scenario.
 
 **Typos fail loudly:** unknown keys are rejected. The menu lists files that failed to load, with the field that is wrong.
 
@@ -35,7 +35,7 @@ bounds_z = [-1.0, 1.0]       # +Z is behind the player, so a larger max leaves r
 elevation = 0.0              # player's floor above the targets' floor (meters), within [-3, 6]
 
 [targets]
-shape = { kind = "sphere", radius = 0.15 }        # or { kind = "humanoid", head_only = true }
+shape = { kind = "sphere", radius = 0.15 }        # or { kind = "humanoid", head_only = true }, or a capsule (see below)
 spawn = { kind = "around_crosshair", offset_deg = [5.0, 30.0], distance = [10.0, 20.0] }
 motion = { kind = "static" }
 max_alive = 1                # simultaneous targets
@@ -47,6 +47,7 @@ decoy_chance = 0             # go/no-go: share of spawns that are decoys, in [0,
 regen = { interval_secs = 0.5, amount = 1, reset_on_hit = false }   # optional health regeneration
 spawn_rules = { avoid_last_deg = 10, min_flick_deg = 15 }          # optional spawn-pattern controls
 perception = { kind = "sound_cue", sound = "footsteps", reveal_after_secs = 0.8 }   # optional perception drill
+shrink_per_kill = { factor = 0.97, floor = 0.5 }                  # optional: every kill shrinks spheres
 
 [scoring]                    # all optional
 head = 100                   # per hit (click) or per second (hold)
@@ -60,6 +61,16 @@ burst_bonus = 0              # per hit within the weapon's protected bullets; ne
 rings = { radius = [0.25, 0.5, 1.0], multiplier = [3.0, 2.0, 1.0] }   # optional score-zone rings
 decoy_penalty = 0            # per shot on a go/no-go decoy
 decay = { window_secs = 2.0, floor = 0.3 }   # optional: a target's value fades after it appears
+accuracy_mult = "none"       # "linear" or "sqrt": the final score × accuracy (or its square root)
+
+[view]                       # optional
+fov_lock = [60, 80]          # vertical FOV in degrees: a fixed value (60) or a [min, max] clamp
+
+[feedback]                   # optional; see "Per-scenario feedback"
+hit_markers = true           # false hides hit markers in this scenario
+hit_sounds = true            # false mutes hit and kill sounds in this scenario
+damage_numbers = false       # true: floating damage numbers at each hit (click only)
+health_bars = false          # true: a small bar over targets whose health is above 1
 ```
 
 ### Go/no-go decoys
@@ -104,11 +115,92 @@ decay = { window_secs = 3.0, floor = 0.4 }
 
 The value falls linearly: a hit `age` seconds after the target appeared scores its points × `1 − (1 − floor) × min(age / window_secs, 1)`. It multiplies the score-ring multiplier, and in hold mode it scales the points per second. The built-in `regen-track` combines both: breaking off lets the sphere heal, and a slow kill earns less, so steady tracking pays twice.
 
+### Capsule targets
+
+`shape = { kind = "capsule", radius, height, head }` is an upright capsule: a cylinder with rounded ends, centered on the target's position, with an optional round head above it. Body hits score `scoring.body` and head hits `scoring.head`; `rings` apply to the head. The built-in `demo-capsule`:
+
+```toml
+[targets]
+shape = { kind = "capsule", radius = 0.25, height = 1.4, head = { radius = 0.14, offset = 0.85 } }
+```
+
+| Field | Meaning |
+|---|---|
+| `radius` | Radius of the cylinder and its end caps, meters, > 0. |
+| `height` | Total height including both caps, meters, ≥ 2 × `radius`. |
+| `head` | Optional `{ radius, offset }`: a head sphere of `radius` (> 0) whose center is `offset` meters (≥ 0) above the capsule's center. When the ray passes through both, the nearer one counts. |
+
+Capsules spawn like spheres, with their center at least `height / 2` above the floor so they never sink into it, and the aim point (for spacing, spawn rules and the simulated aimer) is the head's center, or the capsule's center without a head. Ballistic capsules touch the floor with their bottom. The difficulty size knob and size tuning scale every length of a capsule; `shrink_per_kill` needs a sphere.
+
+### Accuracy multiplier and shrinking targets
+
+`scoring.accuracy_mult` makes accuracy part of the score, and `targets.shrink_per_kill` makes every kill harder than the last. Both are optional and off by default.
+
+```toml
+[targets]
+shrink_per_kill = { factor = 0.97, floor = 0.5 }
+
+[scoring]
+accuracy_mult = "linear"
+```
+
+| Field | Meaning |
+|---|---|
+| `accuracy_mult` | `"none"` (default), `"linear"` or `"sqrt"`. The final score (on the results screen and in history) is multiplied by the run's accuracy, or by its square root, a gentler penalty. Accuracy is hits ÷ shots in click mode and time on target ÷ time firing in hold mode. The live score during the run is not multiplied. |
+| `shrink_per_kill.factor` | Every kill multiplies the sphere radius by this, in (0, 1). Live targets shrink too. |
+| `shrink_per_kill.floor` | The smallest radius, as a fraction of the starting one, in (0, 1]. |
+
+Shrinking needs a sphere. With phases, each phase starts again at its own radius. The built-in `demo-shrink` uses both.
+
+### Motion profiles
+
+`[[targets.motion_profiles]]` (optional, at most 8) gives each target several motions to switch between. A target picks a profile by weight when it spawns, and again every `switch_secs`; picking the same profile keeps it moving without interruption. When profiles are set they replace `targets.motion`, which must be left out. The built-in `demo-profiles`:
+
+```toml
+[[targets.motion_profiles]]
+weight = 2
+switch_secs = [1.0, 2.0]
+motion = { kind = "drift", speed = [1.5, 2.5], change_secs = [0.8, 1.5], max_offset = 4.0 }
+
+[[targets.motion_profiles]]
+weight = 1
+switch_secs = [0.5, 1.0]
+motion = { kind = "static" }
+```
+
+| Field | Meaning |
+|---|---|
+| `weight` | Relative chance of picking the profile, ≥ 0 (default 1); the weights must add up to more than 0. A zero weight is never picked. |
+| `switch_secs` | Time until the target picks again, seconds (a positive range). Without it the first pick lasts the target's life. |
+| `motion` | Any motion except `ballistic`, written like `targets.motion`. When a pick changes the motion, the new motion decides at once and movement it has no part in stops, as with behaviour rules. |
+
+Behaviour rules still override the profile in force. `reactions` need every profile's motion to be `strafe` or `dodge`. The difficulty speed knob and speed tuning scale every profile's motion.
+
 ### Play area and floor height
 
 With `movement = true`, the player's feet stay inside `bounds_x` and `bounds_z`; pushing into an edge stops only that direction, so you slide along it. The edges are drawn as low, see-through strips on the floor, a few centimeters high, so they never block the view. The built-in movement drills use `counter-strafe` x [−8, 8], z [−2, 5] and `strafe-shot` x [−7, 7], z [−3, 5].
 
 `elevation` raises (or lowers, when negative) the player's floor; targets keep theirs at 0. The trainer draws a translucent slab at that height under the play area. You can also change it during a run: press Esc, set **Floor height** in 0.5 m steps, and choose **Apply and restart**. The run restarts at the same difficulty and duration, and a routine stays at the same run.
+
+### FOV lock
+
+By default every scenario uses VALORANT's camera: a vertical FOV of ≈70.53° (103° horizontal at 16:9, see `valorant-mechanics.md`). `[view] fov_lock` changes it for this scenario only:
+
+- `fov_lock = 60` always renders at 60° vertical.
+- `fov_lock = [min, max]` clamps VALORANT's FOV into the range, so `[60, 80]` keeps 70.53° while `[40, 55]` renders at 55°.
+
+Zoom narrows the locked FOV the way VALORANT zooms: the horizontal FOV is divided by the weapon's zoom. Every bound must lie within 30–120° and `min <= max`. The lock changes only what you see: hit tests and spawns still use world angles, so an `on_screen` spawn tuned for VALORANT's FOV can land off screen under a much narrower lock.
+
+### Per-scenario feedback
+
+`[feedback]` adjusts hit feedback for one scenario. It never turns on what the player switched off in Settings:
+
+| Field | Default | Effect |
+|---|---|---|
+| `hit_markers` | `true` | `false` hides hit markers, whatever the player's marker style. |
+| `hit_sounds` | `true` | `false` mutes hit, headshot and kill sounds. |
+| `damage_numbers` | `false` | `true` floats the weapon's VALORANT damage for the zone hit (e.g. Vandal 160 head, 40 body; a sphere counts as body) above each hit. Needs `fire = "click"`. |
+| `health_bars` | `false` | `true` draws a small bar over every target whose starting health is above 1 (click: hits, hold: seconds); it shows the share of health left. |
 
 ### Recoil
 
@@ -127,7 +219,7 @@ Recoil moves the bullets, not the camera. `simulate_spread` still adds running i
 
 | `kind` | Fields | Meaning |
 |---|---|---|
-| `angular` | `yaw_deg`, `pitch_deg`, `distance` | A direction relative to the starting view. Humanoids ignore pitch and stand on the floor. |
+| `angular` | `yaw_deg`, `pitch_deg`, `distance`, `grid` (optional) | A direction relative to the starting view. Humanoids ignore pitch and stand on the floor. `grid = { rows, cols }` (each 1–16) snaps spawns to a grid of points: `cols` yaws from `yaw_deg.min` to `yaw_deg.max` and `rows` pitches from `pitch_deg.min` to `pitch_deg.max`, evenly spaced (a single row or column sits in the middle); each spawn picks a random point, so use `min_separation_deg` to keep live targets on different points. Humanoids use the columns only. The built-in `demo-grid` uses a 3 × 5 grid. |
 | `around_crosshair` | `offset_deg`, `distance`, `pitch_limit_deg` (default `[-15, 30]`), `on_screen` (default `false`) | Spawns relative to where you aim right now. Use it for flicks (large offsets) and microcorrections (1–6°). `pitch_limit_deg` keeps every spawn inside a vertical band around the horizon, so chained flicks cannot drift into the sky or the floor. `on_screen = true` keeps every spawn inside VALORANT's view from the crosshair at spawn time, with a 4° margin: at most 47.5° sideways and ≈31.3° up or down (half of 103° × 70.53°, minus the margin). `offset_deg.max` must then be ≤ 47.5, and difficulty scaling clamps the offset to that limit. Humanoids only use the horizontal offset. |
 | `floor` | `x`, `z`, `height` | A world-space box. Use it for agents at realistic positions, or spheres at head height (`height = [1.8, 1.95]`). |
 
@@ -157,6 +249,11 @@ Angles are measured from the eye between aim points (a humanoid's head, a sphere
 | `strafe` | `weapon`, `change_secs`, `stop_chance`, `max_offset` | A/D strafing with real VALORANT acceleration and stopping. |
 | `dodge` | `weapon`, `change_secs`, `juke_secs` (default `[0.1, 0.25]`), `juke_chance`, `stop_chance`, `crouch_chance`, `jump_chance` (chances default `0`), `max_offset` | An evasive duelist: `strafe` physics plus jukes, stop-and-go, crouches and jumps. At each decision the target jumps, crouches in place, stops, or moves (reversing if it was moving); `stop_chance + crouch_chance + jump_chance` must be ≤ 1. After a decision, `juke_chance` picks the short `juke_secs` wait instead of `change_secs`, which produces quick A-D jukes. A crouch lowers the head 0.5 m; a jump rises 0.9 m and lands after 0.85 s with no air control (estimates, see `valorant-mechanics.md`). Spheres drop by the crouch height. |
 | `drift` | `speed`, `change_secs`, `max_offset` | Smooth wandering, for tracking and evasive switching. |
+| `ballistic` | `speed`, `angle_deg`, `gravity` (default 9.81), `bounces` (default 0), `restitution` (default 0.5), `on_floor` (default `"expire"`) | Thrown once under gravity, then lands. See "Ballistic targets". |
+| `linear_bounce` | `speed_deg`, `arena = { yaw_deg, pitch_deg, sides }` | Straight lines at a constant angular speed, reflecting off the walls of a box or polygon. See "Bouncing and orbiting targets". |
+| `orbit` | `speed_deg`, `radius` (optional), `change_secs` (optional), `reverse_chance` (default 0.5) | Circles around the player. See "Bouncing and orbiting targets". |
+
+`strafe`, `dodge` and `drift` also take an optional `depth` block, which adds forward/back movement (see "Depth movement").
 
 The built-in `dodge-*` scenarios are dynamic clicking drills against evasive enemies:
 
@@ -167,6 +264,81 @@ The built-in `dodge-*` scenarios are dynamic clicking drills against evasive ene
 | `dodge-jump-spot` | jumps | Clicking an airborne head or pre-aiming the landing spot |
 | `dodge-peek` | jiggle peek, appears after a delay | Reacting to a peek without firing while the agent crosses at full speed |
 | `dodge-micro-spheres` | jukes on a head-sized sphere | Small corrections that do not overshoot into a reversal |
+
+#### Ballistic targets
+
+A `ballistic` target is launched once, when it appears: at a random `speed` (m/s) and a random `angle_deg` above the horizon, towards a random side along the line across your view. 90° throws it straight up, 0° sideways, and negative angles throw it downwards; a target spawned high with `speed = [0, 0]` simply drops. Gravity pulls it down at `gravity` m/s² (Earth's 9.81 by default). Each of its `bounces` reflects it off the floor, keeping `restitution` (in (0, 1]) of its vertical speed. A sphere touches the floor when its center comes down to its radius, a humanoid when its feet reach the floor.
+
+When it comes down after its last bounce, it lands:
+
+| `on_floor` | Landing |
+|---|---|
+| `"expire"` | The target expires: it counts in `expired` and costs `expire_penalty`, like a target whose `lifetime_secs` ran out. |
+| `"fail"` | The same, and the run fails at once ("a target hit the floor"). |
+
+Landing ballistic targets satisfy `fail.max_expired` without a `lifetime_secs`, so `[fail] max_expired = 3` gives three drops. A ballistic target cannot be switched by `[[targets.behaviors]]` (nor be a rule's motion) or be part of `motion_profiles`, because its flight is one throw. Target speed tuning and the difficulty speed knob fly the same arc faster: launch speed × k and gravity × k². The built-in `demo-ballistic` tosses spheres up from the floor:
+
+```toml
+[targets]
+shape = { kind = "sphere", radius = 0.3 }
+spawn = { kind = "floor", x = [-4.0, 4.0], z = [-14.0, -10.0], height = [0.5, 0.5] }
+motion = { kind = "ballistic", speed = [6.0, 8.0], angle_deg = [70.0, 85.0], bounces = 1, restitution = 0.5 }
+```
+
+| Field | Meaning |
+|---|---|
+| `speed` | Launch speed, m/s: a non-negative range. |
+| `angle_deg` | Launch angle above the horizon, degrees within [-90, 90]. |
+| `gravity` | Downward acceleration, m/s², > 0. |
+| `bounces` | Floor bounces before it lands, 0–16. |
+| `restitution` | Share of the vertical speed a bounce keeps, in (0, 1]. |
+| `on_floor` | `"expire"` or `"fail"`. |
+
+#### Depth movement
+
+`depth = { change_secs, distance }` makes a `strafe`, `dodge` or `drift` target also walk towards and away from you:
+
+```toml
+motion = { kind = "strafe", change_secs = [0.4, 0.9], depth = { change_secs = [0.6, 1.4], distance = [10.0, 18.0] } }
+```
+
+| Field | Meaning |
+|---|---|
+| `change_secs` | Time between forward/back decisions, seconds (a positive range). Each decision reverses the direction; the first one picks a random direction. |
+| `distance` | Horizontal distance from your eye (where it was when the target spawned) that the target stays within, meters, ≥ 1. It turns back at either edge. A target that spawns outside the band first walks into it. |
+
+`strafe` and `dodge` walk with the weapon's VALORANT movement on both axes, and diagonal movement is normalized as it is for the player, so a target moving on both axes is no faster than one strafing. `dodge` targets keep their depth speed in the air. `drift` moves in depth at a speed drawn from its own `speed` at every depth decision, on top of its drift. The built-in `demo-depth` uses it.
+
+#### Bouncing and orbiting targets
+
+**`linear_bounce`** moves in a straight line at a constant angular speed `speed_deg` (degrees per second, seen from your eye where it was at spawn), in a random direction, and reflects off the walls of `arena`, keeping its distance from you:
+
+```toml
+motion = { kind = "linear_bounce", speed_deg = [10.5, 13.5], arena = { yaw_deg = [-20.0, 20.0], pitch_deg = [0.0, 18.0], sides = 5 } }
+```
+
+| `arena` field | Meaning |
+|---|---|
+| `yaw_deg` | Yaw range, degrees within [-180, 180], min < max. |
+| `pitch_deg` | Pitch range, degrees within ±89. |
+| `sides` | 0 (default) bounces off the box itself. 3 to 12 bounces off the regular polygon inscribed in the box, with a vertex at the top (5 makes a pentagon); its pitch range must then not be empty. |
+
+The arena is angular so it lines up with an `angular` spawn area; spawn inside it. A target that starts outside drifts in and is held from then on. Humanoids move only horizontally and need the box.
+
+**`orbit`** circles around you (your eye where it was at spawn) at `speed_deg` degrees per second, keeping its height:
+
+```toml
+motion = { kind = "orbit", speed_deg = [12.0, 26.0], change_secs = [1.0, 2.5], reverse_chance = 0.5 }
+```
+
+| Field | Meaning |
+|---|---|
+| `speed_deg` | Angular speed, degrees per second (a positive range); the direction is random. |
+| `radius` | Horizontal radius, meters, ≥ 1. Default: the target's distance when it spawned. With a radius, the target moves onto that circle on its first frame. |
+| `change_secs` | Time between direction decisions, seconds. Without it the target never turns back. |
+| `reverse_chance` | Chance that a decision reverses the direction, in [0, 1]. |
+
+The built-in `demo-bounce` and `demo-orbit` use them. Speed tuning and the difficulty speed knob scale `speed_deg`. Every new motion draws random numbers only when it is used, so other scenarios replay exactly as before.
 
 ### Reactive targets
 
@@ -231,7 +403,7 @@ kills = 30                   # kills only
 
 [fail]                       # optional; the first one reached fails the run
 max_misses = 3               # click fire only; a shot on a decoy is a miss
-max_expired = 2              # needs lifetime_secs on the targets or a phase
+max_expired = 2              # needs lifetime_secs on the targets or a phase, or a ballistic motion
 
 [[phases]]
 name = "Close trio"
@@ -359,7 +531,7 @@ Training methods and adaptive mode play a scenario at a level from −1 (easiest
 ```toml
 [difficulty]
 size = { easy = 0.5, hard = 0.1 }   # spheres: 50% bigger at −1, 10% smaller at +1
-speed = 0.3                         # drift speed and how soon targets change direction or juke (default)
+speed = 0.3                         # motion speeds and how soon targets change direction or juke (default)
 lifetime = 0.25                     # target lifetime (default)
 distance = 0.25                     # humanoid spawn distance (default)
 offset = 0.2                        # crosshair-relative flick offset (default)
@@ -376,9 +548,9 @@ During a library scenario run, press Esc to tune its targets, from 50% to 200% i
 
 | Knob | Changes |
 |---|---|
-| Target size | Sphere radius. Agents (humanoids) keep their VALORANT size; use Distance to make their heads smaller or larger on screen. |
+| Target size | Sphere radius, and every length of a capsule. Agents (humanoids) keep their VALORANT size; use Distance to make their heads smaller or larger on screen. |
 | Distance | Spawn distance: `angular` and `around_crosshair` `distance`, and `floor` `z`. |
-| Target speed | Motion speed: drift `speed`, and strafe run speed and acceleration together, so the strafe keeps its timing. |
+| Target speed | Motion speed: drift `speed`; strafe run speed and acceleration together, so the strafe keeps its timing; `linear_bounce` and `orbit` `speed_deg`; and a `ballistic` launch speed (× k) with its gravity (× k²), so it flies the same arc faster. |
 
 A tuned run is stored under its own key (`%s80d120v150`: size, distance and speed percentages); the default 100/100/100 adds no suffix. Tuned runs never move the adaptive level, even when started adaptively, and never count for the benchmark, which reads only exact untuned keys. The results screen lists the tuning, and the HUD shows a "tuned" tag.
 

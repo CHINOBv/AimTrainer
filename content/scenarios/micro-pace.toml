@@ -1,0 +1,17 @@
+# Idea credit: the accuracy-weighted VALORANT micro drills of the Voltaic VALORANT playlists.
+# Original scenario: no file, name or value was copied.
+id = "micro-pace"
+name = "Micro Pace"
+category = "microcorrection"
+description = """
+Micro distances at your own pace. A tiny sphere appears 1-4 degrees from your crosshair.
+The final score is multiplied by your accuracy, so a miss costs more than a slower click."""
+duration_secs = 60
+
+[targets]
+shape = { kind = "sphere", radius = 0.1 }
+spawn = { kind = "around_crosshair", offset_deg = [1.0, 4.0], distance = [10.0, 10.0] }
+max_alive = 1
+
+[scoring]
+accuracy_mult = "linear"

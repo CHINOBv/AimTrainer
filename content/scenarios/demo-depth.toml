@@ -1,0 +1,13 @@
+id = "demo-depth"
+name = "Demo: Depth Strafe"
+category = "flicking"
+description = """
+Engine demo for the depth axis. Agents strafe left and right and also walk towards and
+away from you between 10 and 18 m, so their heads change size as well as position."""
+duration_secs = 45
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "angular", yaw_deg = [-25.0, 25.0], pitch_deg = [0.0, 0.0], distance = [12.0, 16.0] }
+motion = { kind = "strafe", change_secs = [0.4, 0.9], stop_chance = 0.2, depth = { change_secs = [0.6, 1.4], distance = [10.0, 18.0] } }
+max_alive = 1

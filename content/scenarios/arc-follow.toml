@@ -1,0 +1,28 @@
+# Idea credit: the low-arc bouncing precise-tracking drills of the Voltaic tracking playlists.
+# Original scenario: no file, name or value was copied.
+# Approximation: the engine has no slanted floor. A raised player floor (elevation) makes the
+# flat floor read as a slope falling away from you, and the spawn depth varies the arc's angle.
+id = "arc-follow"
+name = "Arc Follow"
+category = "tracking"
+description = """
+Precise tracking. A small sphere is tossed in low arcs across the floor below you and
+bounces a few times before it lands. Hold fire and ride each arc smoothly through the bounces."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[player]
+elevation = 1.5
+
+[targets]
+shape = { kind = "sphere", radius = 0.28 }
+spawn = { kind = "floor", x = [-2.5, 2.5], z = [-13.0, -9.0], height = [0.3, 0.6] }
+motion = { kind = "ballistic", speed = [2.0, 4.0], angle_deg = [35.0, 60.0], gravity = 6.0, bounces = 3, restitution = 0.75 }
+max_alive = 1
+health = inf
+appear_delay_secs = [0.2, 0.4]
+
+[scoring]
+sphere = 100   # points per second on target

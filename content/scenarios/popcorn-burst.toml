@@ -1,0 +1,20 @@
+# Idea: KovaaK's popcorn drills (bouncing, arcing pigeons with varied launch speed).
+# Own name and parameters.
+id = "popcorn-burst"
+name = "Popcorn Burst"
+category = "flicking"
+description = """
+Bouncing arcs. Spheres pop up at very different launch speeds and bounce three times before
+they land for good. Click each one; low hops and high pops need different leads. Trains
+adapting the click timing to each arc."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.2 }
+spawn = { kind = "floor", x = [-6.0, 6.0], z = [-15.0, -11.0], height = [0.2, 0.2] }
+motion = { kind = "ballistic", speed = [4.0, 10.0], angle_deg = [60.0, 88.0], bounces = 3, restitution = 0.7 }
+max_alive = 3
+min_separation_deg = 6
+appear_delay_secs = [0.1, 0.4]
+
+[scoring]
+expire_penalty = 25

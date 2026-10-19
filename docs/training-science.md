@@ -380,6 +380,18 @@ Why 10 misses and 65% (estimates, not calibrated): with no bias, 3 of the 8 sect
 
 Why these values (estimates, not calibrated): fixing half the misses, rather than all of them, keeps the projection reachable. The 200 ms reference is the click-delay weakness threshold above. The 3% floor stops tips on runs with nothing to fix. For the simulated aimer (seed 2, six click scenarios), the elite gets no tip, and the other presets get a misses tip worth about +4% to +35%, largest for the recruit. Its movements rarely overshoot by design, so the overshoot fix rarely shows for it. **Limits:** the model assumes saved time turns into points at the average pace. That holds when targets respawn on a kill, and overstates the gain when targets appear on a fixed schedule. No published source gives these assumptions; they are provisional until real player data exists.
 
+### Time-to-kill spread and damage efficiency
+
+`aim_core::analytics::damage` re-simulates the run and adds two rows to the results card. Both are descriptive: they set no weakness threshold and give no advice.
+
+- **Time-to-kill spread:** the median of the per-kill times to kill (target visible → dead) with its interquartile range (IQR = Q3 − Q1), e.g. "412 ms (IQR 150 ms, 12 kills)". Quartiles interpolate linearly between the sorted times (the common "type 7" definition). The average time to kill above it hides inconsistency; the IQR shows it, and unlike a standard deviation one slow outlier barely moves it. It needs at least 4 kills; the minimum is our choice, not a published value.
+- **Damage efficiency:** damage dealt ÷ damage available, at most 100%, shown as "75% (30 of 40)".
+  - **Hold runs:** seconds on target ÷ seconds during which at least one target was visible, i.e. the share of the time a target was up that the player was damaging it. Unlike time on target (accuracy), which divides by the seconds the button was held, it also counts time spent not firing.
+  - **Click runs with multi-hit targets** (starting health above 1): hits ÷ the health of every target presented. A killed or expired target offers its whole health, rounded up to whole hits; a target still up when the run ends offers only the damage it took, so the run's end costs nothing. Misses are not counted (accuracy covers them), so the metric shows targets left damaged but alive.
+  - One-hit click runs get no efficiency: it would repeat the kill count.
+
+The definitions are our own design (inference); no aim-training source defines them this way. Regenerating targets can heal and be damaged again, which is why the ratio is capped at 100%.
+
 ## Compound missions
 
 `aim_core::training::missions` builds the Today page's daily missions. A mission names one scenario and two conditions that must all hold in the **same run**, for example "accuracy ≥ 75% AND kills ≥ 62".
@@ -559,6 +571,14 @@ The claims below come from the coach research brief (2026-10-18). They are tagge
 - Grip myths: one "correct" grip or arm-versus-wrist rule for everyone.
 - "10,000 hours" as a target.
 - Numbers from blogs and videos without a source.
+## Attentional focus in drill notes
+
+Routine block notes (`docs/library.md`) use **external-focus** cues: they describe the effect on screen, such as "land on the head in one motion" or "match the target's speed first", never the movement of the hand or arm. Studies found external focus better than internal focus for both performance and learning:
+- Wulf, Höß and Prinz (1998), *Journal of Motor Behavior* 30(2);
+- the review by Wulf (2013), *International Review of Sport and Exercise Psychology* 6(1);
+- the meta-analysis by Chua et al. (2021), *Psychological Bulletin* 147(6).
+
+Later work warns that reporting bias may inflate the effect size (McKay and Carter, sportRxiv). Treat the benefit as **moderate** evidence. No study tested it for mouse aiming specifically (inference).
 
 ## Caveat
 

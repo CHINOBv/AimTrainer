@@ -8,7 +8,7 @@ use crate::overlay::{Overlay, background};
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::coach::context::{ContextData, load_context};
 use crate::persistence::coach::{self, TurnRequest};
-use crate::persistence::history::History;
+use crate::persistence::history::{self, History};
 use crate::persistence::library::Library;
 use crate::persistence::method_progress::{DayProgress, MethodProgress};
 use crate::persistence::missions::Missions;
@@ -161,6 +161,10 @@ struct MenuState {
     scenario_filter: scenario_browser::ScenarioFilter,
     wizard_step: first_run::WizardStep,
     coach: CoachState,
+    /// History export in progress or finished (Progress tab).
+    export: history::HistoryExport,
+    /// Path typed for the export; empty uses the default.
+    export_path: String,
 }
 
 /// The Settings tab: search, sub-tabs, a reset per section, and the rows.
@@ -422,6 +426,25 @@ fn menu(
                         action = action
                             .take()
                             .or(progress_panel::skills_section(ui, &skills, name));
+                    }
+                    state.export.poll();
+                    let default_path = cfg
+                        .paths
+                        .history_file
+                        .with_file_name("history-export-<unix time>.csv")
+                        .display()
+                        .to_string();
+                    let view = progress_panel::ExportView {
+                        default_path: &default_path,
+                        running: state.export.is_running(),
+                        status: state.export.status(),
+                    };
+                    if progress_panel::export_section(ui, &mut state.export_path, &view) {
+                        let out = match state.export_path.trim() {
+                            "" => history::default_export_path(&cfg.paths, now_secs()),
+                            p => std::path::PathBuf::from(p),
+                        };
+                        state.export.start(cfg.paths.history_file.clone(), out);
                     }
                     ui.separator();
                     // One directory scan per frame feeds both the suggestion and the replays.

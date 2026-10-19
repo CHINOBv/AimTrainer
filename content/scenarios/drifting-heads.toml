@@ -1,0 +1,20 @@
+# Idea: Voltaic benchmark "linear clicking" slot (small spheres with long horizontal
+# strafes and a gentle vertical bob). Own name and parameters. Approximation: the bob is
+# a linear_bounce inside a 2°-tall band, so it is a zig-zag rather than a smooth wave.
+id = "drifting-heads"
+name = "Drifting Heads"
+category = "flicking"
+description = """
+Linear clicking. Head-sized spheres slide across a wide, low band in long horizontal runs,
+rising and falling a little as they bounce between its top and bottom edges. Trains
+clicking a small target on a long, mostly horizontal path."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.12 }
+spawn = { kind = "angular", yaw_deg = [-30.0, 30.0], pitch_deg = [7.0, 9.0], distance = [12.0, 12.0] }
+motion = { kind = "linear_bounce", speed_deg = [10.0, 14.0], arena = { yaw_deg = [-35.0, 35.0], pitch_deg = [7.0, 9.0] } }
+max_alive = 2
+min_separation_deg = 8
+
+[scoring]
+miss_penalty = 15

@@ -6,7 +6,9 @@ use crate::game::AppState;
 use crate::game::MainCamera;
 use crate::game::SensDrill;
 use crate::game::arena::{ArenaFeedback, ArenaRun};
-use crate::game::feedback::{HitFrame, HitMarkerStyle, kill_flash_alpha, marker_look};
+use crate::game::feedback::{
+    HitFrame, HitMarkerStyle, health_fraction, kill_flash_alpha, marker_look,
+};
 use crate::overlay::Overlay;
 use crate::persistence::settings::{Settings, Toggle};
 use crate::platform::game_key;
@@ -18,6 +20,7 @@ use crate::ui::organisms::death_screen::{self, DeathView, ShotSide, shot_side};
 use crate::ui::organisms::health_bar::{HealthBar, HealthGhost, low_hp_pulse};
 use crate::ui::organisms::kill_feed::{self, KillFeed};
 use crate::ui::organisms::radar_overlay::{self, RadarPanel};
+use crate::ui::organisms::target_overlays::{self, BarView};
 use crate::ui::organisms::{coaching_overlay, hud_panels};
 use aim_core::scenario::{RunKey, Tuning};
 use bevy::prelude::*;
@@ -126,6 +129,23 @@ fn hud(
         hud_panels::offscreen_arrows(ctx, &points, &cam, settings.target_color);
     }
     hit_feedback(ctx, &settings, run.hit_frame());
+    let shown = run.session.def().feedback;
+    if (shown.damage_numbers || shown.health_bars)
+        && let Ok(Projection::Perspective(p)) = camera.single()
+    {
+        let cam = hud_panels::ArrowCamera {
+            eye: run.session.eye_position(),
+            view: run.view,
+            vfov_deg: p.fov.to_degrees(),
+            aspect: p.aspect_ratio,
+        };
+        let bars = if shown.health_bars {
+            health_bars(&run.session)
+        } else {
+            Vec::new()
+        };
+        target_overlays::target_overlays(ctx, &cam, &run.damage_pops, &bars);
+    }
     hud_panels::run_status(ctx, &run.session);
     // The session stands still during the countdown and the pause: hide the radar then, so
     // it is never on screen longer than `show_secs`.
@@ -168,6 +188,18 @@ fn hud(
         nav.apply(action);
     }
     Ok(())
+}
+
+/// A health bar for every visible target whose starting health is above 1.
+fn health_bars(s: &aim_core::scenario::Session) -> Vec<BarView> {
+    let tops = crate::game::target_tops(s);
+    s.targets()
+        .filter_map(|t| {
+            let fraction = health_fraction(t.health, t.max_health)?;
+            let &(_, top) = tops.iter().find(|(id, _)| *id == t.id)?;
+            Some(BarView { top, fraction })
+        })
+        .collect()
 }
 
 /// The sensitivity randomiser's current multiplier, bottom left, while the drill runs.

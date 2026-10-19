@@ -1,0 +1,20 @@
+# Idea: Voltaic benchmark "dynamic clicking" slot (diagonal movers repelled by the walls).
+# Own name and parameters. Approximation: linear_bounce picks a random direction, so paths
+# are straight and wall-reflected but not strictly diagonal.
+id = "diag-drifters"
+name = "Diagonal Drifters"
+category = "flicking"
+description = """
+Dynamic clicking. Three medium-small spheres glide in straight lines and bounce off the walls
+of a box in front of you. The final score is multiplied by the square root of your accuracy.
+Trains timing a click on a target with a steady, readable velocity."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.2 }
+spawn = { kind = "angular", yaw_deg = [-22.0, 22.0], pitch_deg = [2.0, 16.0], distance = [12.0, 12.0] }
+motion = { kind = "linear_bounce", speed_deg = [12.0, 18.0], arena = { yaw_deg = [-25.0, 25.0], pitch_deg = [0.0, 18.0] } }
+max_alive = 3
+min_separation_deg = 8
+
+[scoring]
+accuracy_mult = "sqrt"

@@ -1,0 +1,38 @@
+# Idea credit: the airborne reactive-tracking drills of the Voltaic reactive-tracking slot.
+# Original scenario: no file, name or value was copied.
+id = "sky-reactive"
+name = "Sky Reactive"
+category = "tracking"
+description = """
+Reactive tracking. A sphere flies above the horizon and changes direction often and fast.
+Four 15 s phases alternate far and close: far trains small corrections, close trains fast ones."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.25 }
+spawn = { kind = "angular", yaw_deg = [-10.0, 10.0], pitch_deg = [12.0, 20.0], distance = [16.0, 16.0] }
+motion = { kind = "drift", speed = [1.5, 4.0], change_secs = [0.2, 0.5], max_offset = 3.0 }
+health = inf
+
+[scoring]
+sphere = 100   # points per second on target
+
+[[phases]]
+name = "Far"
+advance = { kind = "time", secs = 15.0 }
+
+[[phases]]
+name = "Close"
+targets = { spawn = { kind = "angular", yaw_deg = [-10.0, 10.0], pitch_deg = [15.0, 25.0], distance = [8.0, 8.0] } }
+advance = { kind = "time", secs = 15.0 }
+
+[[phases]]
+name = "Far again"
+advance = { kind = "time", secs = 15.0 }
+
+[[phases]]
+name = "Close again"
+targets = { spawn = { kind = "angular", yaw_deg = [-10.0, 10.0], pitch_deg = [15.0, 25.0], distance = [8.0, 8.0] } }

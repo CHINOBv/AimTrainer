@@ -1,0 +1,44 @@
+# Tracking builder: smooth tracking before reactive tracking, built on the library's
+# tracking scenarios (docs/library.md). Blocked and in order, because the drills are still
+# being learned (docs/training-science.md, "Routine design"). Run counts are our estimate.
+id = "tracking-builder"
+name = "Tracking Builder (≈27 min)"
+description = """
+Builds tracking from smooth to reactive: thin glides, 3D control and orbits first, then airborne, ground and fading targets.
+Blocks run in order (no interleaving) while you learn the drills; once they feel familiar, mix them into an interleaved routine.
+≈27 min. Play it on days you want to focus on tracking."""
+
+[[blocks]]
+scenario = "track-precise"
+runs = 3
+note = "Warm-up: keep the crosshair glued to the sphere, don't chase score."
+
+[[blocks]]
+scenario = "thin-glide"
+runs = 4
+note = "Smooth: match the capsule's speed, keep the crosshair on its middle."
+
+[[blocks]]
+scenario = "smooth-xyz"
+runs = 4
+note = "Smooth: the sphere grows and shrinks; the crosshair stays on its center."
+
+[[blocks]]
+scenario = "orbit-track"
+runs = 4
+note = "Smooth: move with the sphere around you, at its pace."
+
+[[blocks]]
+scenario = "sky-reactive"
+runs = 4
+note = "Reactive: follow each change of direction, don't predict it."
+
+[[blocks]]
+scenario = "ground-reactive"
+runs = 4
+note = "Reactive: stay on the target through jukes and stops."
+
+[[blocks]]
+scenario = "fade-track"
+runs = 4
+note = "Reactive: get onto each new sphere at once and stay on it."

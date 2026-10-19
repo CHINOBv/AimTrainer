@@ -1,0 +1,17 @@
+id = "demo-ballistic"
+name = "Demo: Ballistic"
+category = "reaction"
+description = """
+Engine demo for the ballistic motion. Spheres are tossed up from the floor ahead and fall
+back under gravity, bouncing once. Shoot each one before it lands for good."""
+duration_secs = 45
+
+[targets]
+shape = { kind = "sphere", radius = 0.3 }
+spawn = { kind = "floor", x = [-4.0, 4.0], z = [-14.0, -10.0], height = [0.5, 0.5] }
+motion = { kind = "ballistic", speed = [6.0, 8.0], angle_deg = [70.0, 85.0], bounces = 1, restitution = 0.5 }
+max_alive = 1
+appear_delay_secs = [0.2, 0.5]
+
+[scoring]
+expire_penalty = 50

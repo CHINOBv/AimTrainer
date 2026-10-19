@@ -1,0 +1,80 @@
+# Dynamic clicking on moving targets, built on the library's clicking scenarios
+# (docs/library.md). Structure: ordered warm-up, one blocked pass per drill, then a shorter
+# interleaved pass (docs/training-science.md, "Routine design"). Run counts are our estimate.
+id = "dynamic-clicking"
+name = "Dynamic Clicking (≈25 min)"
+description = """
+Clicking on targets that move: diagonal drifters, bouncing hops, ricochets, drifting heads, skeet arcs and popcorn bursts.
+A warm-up in order, one blocked pass of each drill, then a shorter interleaved pass.
+≈25 min."""
+interleave_from = 8
+
+[[blocks]]
+scenario = "track-precise"
+runs = 2
+note = "Warm-up: keep the crosshair glued to the sphere, don't chase score."
+
+[[blocks]]
+scenario = "flick-wide"
+runs = 2
+note = "Warm-up: land the crosshair on the sphere's center and stop there."
+
+[[blocks]]
+scenario = "diag-drifters"
+runs = 2
+note = "Learn it: put the crosshair on the drifter's path and click as it arrives."
+
+[[blocks]]
+scenario = "hop-field"
+runs = 2
+note = "Learn it: click near the top of the hop, where the sphere slows down."
+
+[[blocks]]
+scenario = "ricochet-ring"
+runs = 2
+note = "Learn it: re-read the sphere's path after every ricochet."
+
+[[blocks]]
+scenario = "drifting-heads"
+runs = 2
+note = "Learn it: keep the crosshair on the head line and let the target come."
+
+[[blocks]]
+scenario = "skeet-arcs"
+runs = 2
+note = "Learn it: lead the sphere along its arc."
+
+[[blocks]]
+scenario = "popcorn-burst"
+runs = 2
+note = "Learn it: each arc has its own height; time the click to it."
+
+[[blocks]]
+scenario = "diag-drifters"
+runs = 1
+note = "Mixed: meet the drifter on its path."
+
+[[blocks]]
+scenario = "hop-field"
+runs = 2
+note = "Mixed: click where the hop peaks."
+
+[[blocks]]
+scenario = "ricochet-ring"
+runs = 1
+note = "Mixed: follow the new path after each bounce."
+
+[[blocks]]
+scenario = "drifting-heads"
+runs = 2
+note = "Mixed: small head, long path, calm click."
+
+[[blocks]]
+scenario = "skeet-arcs"
+runs = 1
+note = "Mixed: lead the arc."
+
+[[blocks]]
+scenario = "popcorn-burst"
+runs = 2
+note = "Mixed: read the arc's height before you click."
