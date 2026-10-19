@@ -33,10 +33,10 @@ Rules:
 
 | ID | Specs | Route | Status | Commit |
 |---|---|---|---|---|
-| T1 | plan | inline | done | this commit |
-| T2 | S1 | delegated (worktree `coach-core`) | in progress | |
-| T3 | S2, S4 | delegated, after T2 | pending | |
-| T4 | S6 | delegated, after T2 (parallel with T3) | pending | |
+| T1 | plan | inline | done | d888322 |
+| T2 | S1 | delegated (worktree `coach-core`) | done | a10d935, 7afa6ed, e5b7b50, merge 3d7b16d |
+| T3 | S2, S4 | delegated, after T2 | done | 366401f..501cf5e, merge 1a71f7e |
+| T4 | S6 | delegated, after T2 (parallel with T3) | done | 3a49673, f3c6286, merge 8e8016c |
 | T5 | S5 | delegated, after T3 | pending | |
 | T6 | S3 | later, gated on OpenAI eligibility | pending | |
 | T7 | seam: merge, verifier, review, merge to `main` | inline | pending | |
@@ -50,3 +50,13 @@ Rules:
   - OpenCode: the pay-as-you-go Console key is fine; the Go subscription is for coding-agent traffic (avoid).
   - Hindsight is MIT but heavy, so a local SQLite store is the default.
   - rmcp 3.x is the official Rust MCP SDK.
+- L3 (2026-10-18) T2–T4 merged.
+  - **Core:** `CoachContext` (aggregates only, ≤ 8 KiB, privacy filter on run keys); knowledge base of 10 sub-skills, whose diagnosis thresholds come from the rules table; drill generation passing `validate()` and the playability gate; tool registry; `run_turn` with history.
+  - **`aim_ai`:** OpenAI-compatible (OpenAI/OpenCode/Ollama/LM Studio), Anthropic (strict tools, auto `tool_choice`, thinking replay), CLI delegate; keys in the OS keyring with an env fallback; redacted errors; `SqliteMemory` (FTS5, bm25 then recency, secure wipe).
+  - **`aim_mcp`:** an rmcp 3.5.1 stdio server mirroring the six tools; `create_scenario dry_run` defaults to true; built-in scenarios as resources.
+  - The merge regenerated `Cargo.lock` additively (no pinned version changed).
+  - Open items for T5:
+    - MCP memory should switch to `SqliteMemory`;
+    - the app page needs settings, key entry and the data preview;
+    - Windows cross-compile from Linux may need a C toolchain (aws-lc-sys, bundled SQLite);
+    - the opencode/codex CLI flags need a real-CLI check.
