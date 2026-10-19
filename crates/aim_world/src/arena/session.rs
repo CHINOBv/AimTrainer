@@ -5,6 +5,7 @@ use super::bot::{Bot, Brain, Ctx, PEEK_DELAY_SECS, head_of, yaw_of};
 use super::coaching::Coaching;
 use super::def::{ArenaDef, ArenaError, ArenaMode, PRACTICE_SUFFIX, SiteObjective, bot_profile};
 use super::recap::{DeathRecap, Killer, top_cause};
+use super::squad::{self, BotRole};
 use crate::corner::PeekCorner;
 use crate::map::{DEFAULT_PLAYER_RADIUS, MapDef, SpawnKind};
 use aim_core::activity::{Activity, ActivityEvent};
@@ -253,6 +254,8 @@ pub struct ArenaSession {
     engagements: Vec<Engagement>,
     /// The player fired this frame; reactive bots see it in the next frame.
     shot_fired: bool,
+    /// Deathmatch squad: the role and fixed skill of each bot slot (empty without a squad).
+    squad_slots: Vec<(BotRole, Option<AimerProfile>)>,
 }
 
 /// The aimer preset angle bots use for flick speed and endpoint error; their reaction time
@@ -309,6 +312,10 @@ impl ArenaSession {
             site: None,
             engagements: Vec::new(),
             shot_fired: false,
+            squad_slots: match &def.mode {
+                ArenaMode::Deathmatch { squad, .. } => squad::slots(squad),
+                ArenaMode::AngleClear { .. } => Vec::new(),
+            },
             def,
             map,
         };
@@ -737,6 +744,7 @@ impl ArenaSession {
         };
         let player_vel = self.player.vel.to_world(self.player.view.yaw_deg);
         for i in 0..self.bots.len() {
+            let aimer = self.bots[i].aimer.unwrap_or(self.aimer);
             let ctx = Ctx {
                 map: &self.map,
                 now: self.time,
@@ -744,7 +752,7 @@ impl ArenaSession {
                 player_feet: self.player.feet,
                 player_targetable: self.time >= self.grace_until,
                 movement: &self.bot_movement,
-                aimer: &self.aimer,
+                aimer: &aimer,
                 reaction,
                 hold_secs,
                 peek_delay,
@@ -823,7 +831,8 @@ impl ArenaSession {
             let bot = &self.bots[shooter];
             let killer = Killer {
                 id: bot.id,
-                skill: self.aimer.name,
+                skill: bot.aimer.unwrap_or(self.aimer).name,
+                role: bot.role,
                 distance_m: (bot.feet - self.player.feet).horizontal().length(),
             };
             let recap = bot.duel.recap(killer, self.time, zone.is_none());
@@ -1046,6 +1055,10 @@ impl ArenaSession {
         };
         let mut bot = Bot::new(id, feet, yaw, brain);
         bot.spawned_at = self.time;
+        if let Some(&(role, aimer)) = self.squad_slots.get(slot.unwrap_or(self.bots.len())) {
+            bot.role = Some(role);
+            bot.aimer = aimer;
+        }
         match slot {
             Some(i) => self.bots[i] = bot,
             None => self.bots.push(bot),

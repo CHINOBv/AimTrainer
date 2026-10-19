@@ -3,7 +3,9 @@
 //! moving shots). The data comes from `aim_world::arena::DeathRecap`; this only draws it.
 
 use crate::ui::atoms::{BAD, GOOD, WARN, big};
-use aim_world::arena::{DeathCause, DeathRecap, RECAP_PLACEMENT_DEG, RECAP_SLOW_SHOT_SECS};
+use aim_world::arena::{
+    BotRole, DeathCause, DeathRecap, RECAP_PLACEMENT_DEG, RECAP_SLOW_SHOT_SECS,
+};
 use bevy_egui::egui::{self, Align2, Color32, Pos2, Sense, Stroke, Vec2};
 
 /// Crosshair error at first sight under which placement shows as good, degrees: the
@@ -121,9 +123,24 @@ pub fn view(r: &DeathRecap) -> RecapView {
         headline: headline(r),
         chips,
         detail: format!(
-            "{} bot · {:.0} m · dealt {:.0} / took {:.0}",
-            r.killer_skill, r.distance_m, r.damage_dealt, r.damage_taken
+            "{} {} · {:.0} m · dealt {:.0} / took {:.0}",
+            r.killer_skill,
+            role_name(r.killer_role),
+            r.distance_m,
+            r.damage_dealt,
+            r.damage_taken
         ),
+    }
+}
+
+/// What the detail line calls the killer.
+fn role_name(role: Option<BotRole>) -> &'static str {
+    match role {
+        None => "bot",
+        Some(BotRole::Roamer) => "roamer",
+        Some(BotRole::Pusher) => "pusher",
+        Some(BotRole::AngleHolder) => "angle holder",
+        Some(BotRole::JigglePeeker) => "jiggle peeker",
     }
 }
 
@@ -222,6 +239,7 @@ mod tests {
             at_secs: 4.0,
             killer_id: 2,
             killer_skill: "veteran",
+            killer_role: None,
             distance_m: 12.4,
             saw_first: false,
             crosshair_error_deg: Some(18.2),

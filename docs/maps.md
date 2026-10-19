@@ -213,6 +213,13 @@ behavior = "retreat"          # hold | peek | strafe | retreat (optional)
 speed_multiplier = 1.0        # optional, (0, 2]: scales run speed and acceleration
 ```
 
+```toml
+[[mode.squad]]                # optional: bot personalities, one entry per group
+role = "pusher"               # roamer | pusher | angle_holder | jiggle_peeker
+skill = "veteran"             # optional: this group's aimer preset, default bot_skill
+count = 1                     # optional, default 1; the counts must add up to `bots`
+```
+
 Rule conditions (all optional; at most `MAX_RULES` = 16 rules; not allowed with `[mode.objective]`):
 
 | Condition | Holds when |
@@ -230,6 +237,17 @@ Rule conditions (all optional; at most `MAX_RULES` = 16 rules; not allowed with 
 | `peek` | Walks along `MapDef::path` to where it last noticed the player, or was shot from, until it sees them and stops to fight. On arrival it forgets the spot and roams. |
 | `strafe` | Strafes (ADAD) while it fights, as with `bot_strafe`, instead of falling back when shot. |
 | `retreat` | Falls back to the nearest cover spot (`MapDef::cover_from`) out of sight of where it last knew the player to be, holding its fire while it runs, and stays hidden there until it sees the player. With no cover within `RETREAT_MAX_ROUTE_M` it holds its ground. |
+
+Squad roles (not allowed with `[mode.objective]`) give each bot slot a personality. Slots are filled in entry order and keep their role and skill when the bot respawns. A role is a fixed set of the rules above, checked after the arena's own `[[mode.rules]]`, plus strafing:
+
+| Role | What the bot does |
+|---|---|
+| `roamer` | The plain roaming bot of the bot model below. |
+| `pusher` | While it cannot see the player it walks to where it last noticed them or was shot from (`peek`); while it can, it strafes (`strafe`) and never falls back. Before it has met the player it roams. |
+| `angle_holder` | Holds the angle from its spawn without moving (`hold`); under half health it falls back to cover and stays hidden until it sees the player (`retreat`). |
+| `jiggle_peeker` | Roams, strafes (ADAD) in every fight as with `bot_strafe`, falls back to cover when shot and re-peeks. |
+
+A squad entry's `skill` replaces `bot_skill` for its bots. An arena without `[[mode.squad]]` behaves exactly as before. The death recap names the killer's role.
 
 A rule without `behavior` only changes the speed. When no rule holds, the bot behaves as described in the bot model below. Rules only read what the bot could know (its health, its own sight, the last place it saw the player), never the player's position through walls; distance and player speed are a simplification, read directly. Evaluating rules draws no random numbers.
 
@@ -330,3 +348,4 @@ Corners come from the box geometry only, so a corner counts even if no bot would
 | `outpost-site-hold` | `signal-outpost` | Site hold: 6 contender attackers, 2 at a time, strafing and shooting back; capture 3 s within 2.5 m; 90 s. |
 | `lanes-deathmatch` | `freight-lanes` | Deathmatch, 3 contender bots that strafe and shoot back, 120 s. |
 | `corridor-reactive` | `duel-corridor` | Reactive duels: 2 contender bots that shoot back. They copy (35%) or oppose (35%) the player's strafe, juke when the crosshair is within 4° (50%) or the player fires; they hold long angles beyond 20 m, strafe for 1.5 s after a hit and retreat under half health. Shoot-back deadline 1.5 s (40 damage, −25 points). 90 s. |
+| `yard-squad` | `training-yard` | Mixed-squad free-for-all, 5 bots that shoot back: 2 contender roamers, a veteran pusher, a contender angle holder and a contender jiggle peeker. 120 s. |

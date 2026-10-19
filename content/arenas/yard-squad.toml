@@ -1,0 +1,29 @@
+# Free-for-all on the original Training Yard against a mixed squad: every bot plays a
+# different personality, so no two fights look the same.
+id = "yard-squad"
+name = "Yard Squad"
+description = "Five bots with different personalities: two roamers, a veteran pusher that hunts you down, an angle holder that never leaves its spot and a jiggle peeker that strafes every fight. Read who you are fighting and change your peek."
+map = "training-yard"
+duration_secs = 120.0
+weapon = "vandal"
+
+[mode]
+kind = "deathmatch"
+bots = 5
+bot_skill = "contender"
+respawn_secs = 3.0
+bots_shoot_back = true
+
+[[mode.squad]]
+role = "roamer"
+count = 2
+
+[[mode.squad]]
+role = "pusher"
+skill = "veteran"
+
+[[mode.squad]]
+role = "angle_holder"
+
+[[mode.squad]]
+role = "jiggle_peeker"

@@ -21,6 +21,7 @@ mod recap;
 #[cfg(test)]
 mod rules_tests;
 mod session;
+mod squad;
 #[cfg(test)]
 mod tests;
 
@@ -42,3 +43,4 @@ pub use session::{
     KILL_POINTS, ObjectiveStatus, PLAYER_HEALTH, PRE_AIM_POINTS, RESPAWN_GRACE_SECS,
     SITE_HELD_BONUS,
 };
+pub use squad::{BotRole, SquadEntry};

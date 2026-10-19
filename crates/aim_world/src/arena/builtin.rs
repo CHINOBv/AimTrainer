@@ -36,6 +36,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         "yard-deathmatch.toml",
         include_str!("../../../../content/arenas/yard-deathmatch.toml"),
     ),
+    (
+        "yard-squad.toml",
+        include_str!("../../../../content/arenas/yard-squad.toml"),
+    ),
 ];
 
 /// Parse every built-in arena. Panics only if a shipped file is broken, which the test

@@ -1,5 +1,6 @@
 //! Arena definition: the TOML format, loading and semantic validation.
 
+use super::squad::{SquadEntry, validate_squad};
 use crate::map::{MapDef, SpawnKind};
 use aim_core::games::valorant::Weapon;
 use aim_core::math::Range;
@@ -60,6 +61,10 @@ pub enum ArenaMode {
         /// overrides the bot's behavior and speed this frame. Not with a site objective.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         rules: Vec<BehaviorRule>,
+        /// Bot personalities: each entry gives `count` bots a role and, optionally, their
+        /// own skill. The counts must add up to `bots`. Not with a site objective.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        squad: Vec<SquadEntry>,
     },
     /// One bot per angle marker, in order. Each bot waits hidden, peeks when the player can
     /// see the marker, holds for `hold_secs` and hides again until it is killed.
@@ -432,8 +437,16 @@ impl ArenaDef {
                 objective,
                 reactive,
                 rules,
+                squad,
                 ..
             } => {
+                validate_squad(squad, *bots, &mut push);
+                if !squad.is_empty() && objective.is_some() {
+                    push(
+                        "mode.squad",
+                        "squad roles do not apply to site attackers; drop [mode.objective] or the squad".into(),
+                    );
+                }
                 if let Some(r) = reactive {
                     validate_reactive(r, &mut push);
                 }

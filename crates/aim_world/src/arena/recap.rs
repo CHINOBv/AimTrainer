@@ -3,6 +3,8 @@
 //! moving shots, damage both ways); when that bot kills the player the log becomes a
 //! [`DeathRecap`] with one main [`DeathCause`]. Pure bookkeeping: no random numbers.
 
+use super::squad::BotRole;
+
 /// A crosshair this many degrees or more from the killer's head at first sight counts as
 /// misplaced. A design choice: twice the pre-aim tolerance (5°), so only clearly wrong
 /// placement is blamed, not the few degrees a partly hidden head always measures.
@@ -38,6 +40,8 @@ pub struct DeathRecap {
     pub killer_id: u64,
     /// The killer's aimer preset (`sim::AimerProfile::name`).
     pub killer_skill: &'static str,
+    /// The killer's squad role, when the arena gives bots roles.
+    pub killer_role: Option<BotRole>,
     /// Horizontal distance from the player to the killer at the death, meters.
     pub distance_m: f32,
     /// The player had the killer in sight before (or in the same frame as) it noticed them.
@@ -131,6 +135,7 @@ impl DuelLog {
             at_secs: now,
             killer_id: killer.id,
             killer_skill: killer.skill,
+            killer_role: killer.role,
             distance_m: killer.distance_m,
             saw_first,
             crosshair_error_deg: self.sight_error_deg,
@@ -149,6 +154,7 @@ impl DuelLog {
 pub(crate) struct Killer {
     pub id: u64,
     pub skill: &'static str,
+    pub role: Option<BotRole>,
     pub distance_m: f32,
 }
 
@@ -174,6 +180,7 @@ mod tests {
     const KILLER: Killer = Killer {
         id: 1,
         skill: "veteran",
+        role: None,
         distance_m: 10.0,
     };
 
