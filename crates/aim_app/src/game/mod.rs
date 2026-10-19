@@ -12,6 +12,7 @@ use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::history::History;
 use crate::persistence::missions::{Missions, MissionsPlugin};
 use crate::persistence::settings::{Paths, Settings};
+use crate::platform::frame_stats::{FrameStats, RUN_WINDOW};
 use aim_core::fov;
 use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::ViewAngles;
@@ -24,7 +25,7 @@ use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::finder::{SensFinder, Slot};
 use aim_core::sensitivity::randomizer::SensRandomizer;
 use aim_core::training::routine::PlannedRun;
-use aim_core::training::store::RunStore;
+use aim_core::training::store::{RunSnapshot, RunStore};
 use bevy::camera::{PerspectiveProjection, Projection};
 use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::AccumulatedMouseMotion;
@@ -86,6 +87,29 @@ pub struct Run {
     struck: Vec<Struck>,
     /// Floating damage numbers on screen (`[feedback] damage_numbers`).
     pub damage_pops: Vec<DamagePop>,
+    /// Frame times while the run is live, for the settings snapshot.
+    frames: FrameStats,
+    /// Pauses during the run, for the settings snapshot.
+    pauses: PauseLog,
+}
+
+/// How often and how long a run was paused.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct PauseLog {
+    pub count: u32,
+    pub secs: f32,
+    paused: bool,
+}
+
+impl PauseLog {
+    /// Follow the pause state over a frame of `dt` seconds: entering a pause counts one.
+    pub fn track(&mut self, paused: bool, dt: f32) {
+        if paused {
+            self.count += u32::from(!self.paused);
+            self.secs += dt;
+        }
+        self.paused = paused;
+    }
 }
 
 impl Run {
@@ -117,6 +141,26 @@ impl Run {
             entities: HashMap::new(),
             struck: Vec::new(),
             damage_pops: Vec::new(),
+            frames: FrameStats::with_window(RUN_WINDOW),
+            pauses: PauseLog::default(),
+        }
+    }
+
+    /// The settings this run is played with, stored with its result.
+    pub fn snapshot(&self, settings: &Settings) -> RunSnapshot {
+        // The definition as the run started: the session's copy changes during a run
+        // (shrinking targets, phases).
+        let def = &self.recording.def;
+        let frames = self.frames.summary();
+        RunSnapshot {
+            sensitivity: Some(self.sens_override.unwrap_or(settings.sensitivity)),
+            vertical_fov_deg: Some(def.view.vertical_fov_deg(None) as f32),
+            crosshair_code: Some(aim_core::crosshair::code::encode(&settings.crosshair)),
+            avg_fps: frames.map(|(avg, _, _)| avg),
+            low_fps: frames.map(|(_, low, _)| low),
+            pause_count: Some(self.pauses.count),
+            pause_secs: Some(self.pauses.secs),
+            content_hash: Some(def.content_hash()),
         }
     }
 
@@ -617,7 +661,8 @@ impl RunFinisher<'_, '_> {
             notes.insert(0, finder_note(finder));
         } else {
             // Finder test runs do not enter the regular history.
-            self.history.record(&result);
+            self.history
+                .record_with(&result, &run.snapshot(&self.settings));
             self.missions
                 .record(&result, session.stats().hits, &self.paths);
         }
@@ -743,16 +788,19 @@ fn tick(
         keys,
         buttons,
     } = input;
-    if run.paused {
+    let dt = time.delta_secs();
+    let paused = run.paused;
+    run.pauses.track(paused, dt);
+    if paused {
         return;
     }
-    let dt = time.delta_secs();
     run.hit_flash = (run.hit_flash - dt).max(0.0);
     run.kill_flash = (run.kill_flash - dt).max(0.0);
     if run.countdown > 0.0 {
         run.countdown -= dt;
         return;
     }
+    run.frames.push(dt);
     let input = frame_input(dt, run.view, &keys, &buttons);
     run.recording.inputs.push(input);
     feedback::age_pops(&mut run.damage_pops, dt);
@@ -1323,5 +1371,53 @@ mod tests {
             PlayArea::of(&movement_def().with_elevation(2.0)).unwrap(),
             "a new height rebuilds the area"
         );
+    }
+
+    #[test]
+    fn pauses_count_each_entry_and_add_up_their_time() {
+        let mut p = PauseLog::default();
+        for (paused, dt) in [
+            (false, 1.0),
+            (true, 0.5),
+            (true, 0.5),
+            (false, 1.0),
+            (true, 2.0),
+        ] {
+            p.track(paused, dt);
+        }
+        assert_eq!((p.count, p.secs), (2, 3.0));
+    }
+
+    #[test]
+    fn a_run_snapshot_holds_the_settings_frames_pauses_and_content_hash() {
+        let def = movement_def();
+        let mut run = Run::new(def.clone());
+        let settings = Settings::default();
+        let empty = run.snapshot(&settings);
+        assert_eq!(
+            (empty.avg_fps, empty.low_fps),
+            (None, None),
+            "too few frames"
+        );
+        for _ in 0..100 {
+            run.frames.push(1.0 / 200.0);
+        }
+        run.pauses.track(true, 1.5);
+        let s = run.snapshot(&settings);
+        assert_eq!(s.sensitivity, Some(settings.sensitivity));
+        assert_eq!(
+            s.vertical_fov_deg,
+            Some(aim_core::fov::valorant_vertical_fov_deg() as f32)
+        );
+        assert_eq!(
+            s.crosshair_code,
+            Some(aim_core::crosshair::code::encode(&settings.crosshair))
+        );
+        assert!((s.avg_fps.unwrap() - 200.0).abs() < 0.1);
+        assert_eq!((s.pause_count, s.pause_secs), (Some(1), Some(1.5)));
+        assert_eq!(s.content_hash, Some(def.content_hash()));
+        let finder = Sensitivity::valorant(0.5, 800);
+        run.sens_override = Some(finder);
+        assert_eq!(run.snapshot(&settings).sensitivity, Some(finder));
     }
 }

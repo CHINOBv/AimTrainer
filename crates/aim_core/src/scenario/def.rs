@@ -1064,6 +1064,18 @@ impl ScenarioDef {
         toml::from_str(src)
     }
 
+    /// A stable 64-bit hash of the definition's content (FNV-1a over its canonical TOML), so
+    /// run history can tell an edited scenario from the original. Formatting and comments
+    /// in the source file do not change it; any changed value does. Blocks left at their
+    /// defaults are not serialized, so adding an optional block to the engine keeps the
+    /// hashes of scenarios that do not use it.
+    pub fn content_hash(&self) -> u64 {
+        // Every definition serializes (replays embed it the same way); the debug form is a
+        // stable fallback that still changes with every value.
+        let canonical = toml::to_string(self).unwrap_or_else(|_| format!("{self:?}"));
+        fnv1a_64(canonical.as_bytes())
+    }
+
     /// Semantic checks that serde cannot express. Returns every problem found.
     pub fn validate(&self) -> Vec<ValidationError> {
         let mut errs = Vec::new();
@@ -1736,6 +1748,15 @@ fn motion_problems(m: &Motion) -> Vec<(&'static str, &'static str)> {
         );
     }
     out
+}
+
+/// 64-bit FNV-1a: tiny, dependency-free and identical on every platform and release.
+fn fnv1a_64(bytes: &[u8]) -> u64 {
+    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    bytes
+        .iter()
+        .fold(OFFSET, |h, &b| (h ^ b as u64).wrapping_mul(PRIME))
 }
 
 /// Most floor bounces a `ballistic` motion may have.
@@ -2871,5 +2892,38 @@ mod tests {
         d.targets.health = 2.0;
         let fields: Vec<_> = d.validate().into_iter().map(|e| e.field).collect();
         assert_eq!(fields, ["feedback.damage_numbers"]);
+    }
+
+    #[test]
+    fn the_content_hash_is_stable_and_changes_with_any_edit() {
+        let a = ScenarioDef::from_toml(MINIMAL).unwrap();
+        let b = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!(
+            a.content_hash(),
+            b.content_hash(),
+            "same definition, same hash"
+        );
+        assert_eq!(a.content_hash(), a.clone().content_hash());
+        // Formatting and comments are not content.
+        let reformatted = format!("# a comment\n{}", MINIMAL.replace("    ", "  "));
+        assert_eq!(
+            ScenarioDef::from_toml(&reformatted).unwrap().content_hash(),
+            a.content_hash()
+        );
+        let mut edited = a.clone();
+        edited.targets.max_alive = 2;
+        assert_ne!(edited.content_hash(), a.content_hash());
+        let mut faster = a.clone();
+        faster.duration_secs = 30.0;
+        assert_ne!(faster.content_hash(), a.content_hash());
+        let locked =
+            ScenarioDef::from_toml(&format!("{MINIMAL}\n[view]\nfov_lock = 60\n")).unwrap();
+        assert_ne!(locked.content_hash(), a.content_hash());
+        // Every built-in scenario hashes, and no two share a hash.
+        let hashes: std::collections::HashSet<u64> = crate::scenario::builtin::all()
+            .iter()
+            .map(ScenarioDef::content_hash)
+            .collect();
+        assert_eq!(hashes.len(), crate::scenario::builtin::all().len());
     }
 }
