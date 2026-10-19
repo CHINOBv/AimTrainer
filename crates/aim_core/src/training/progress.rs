@@ -1,5 +1,5 @@
-//! Progress signals from run history: readiness before ranked, fatigue during a session, and
-//! daily goals with streaks.
+//! Progress signals from run history: readiness before ranked, fatigue during a session,
+//! daily goals with streaks, and plateaus in benchmark subcategories.
 //!
 //! These are heuristics built on the evidence in `docs/training-science.md` (warm-up
 //! decrement after rest; daily gains peaking around 30–60 min, Listman et al. 2021). Their
@@ -338,6 +338,115 @@ pub fn subcategory_trend(
         .collect()
 }
 
+// ---------------------------------------------------------------- plateau
+
+/// Weeks without a personal best that count as a plateau (estimate).
+pub const PLATEAU_WEEKS: u32 = 3;
+/// Runs within the plateau window that show the subcategory is still trained (estimate).
+pub const PLATEAU_MIN_RUNS: usize = 3;
+
+const SECS_PER_WEEK: u64 = 7 * SECS_PER_DAY;
+
+/// A change of stimulus suggested for a plateau (see "Plateau detector" in
+/// `docs/training-science.md`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlateauSuggestion {
+    /// Play an easier or harder variant of the subcategory's scenarios.
+    Variant,
+    /// Train a while at a different sensitivity.
+    SensitivityVariation,
+    /// Put the emphasis on speed if you trained accuracy, or the other way round.
+    EmphasisSwitch,
+    /// Train less for a week, then measure again.
+    DeloadWeek,
+}
+
+impl PlateauSuggestion {
+    /// Every suggestion, in the order they are shown.
+    pub const ALL: [PlateauSuggestion; 4] = [
+        PlateauSuggestion::Variant,
+        PlateauSuggestion::SensitivityVariation,
+        PlateauSuggestion::EmphasisSwitch,
+        PlateauSuggestion::DeloadWeek,
+    ];
+
+    /// What to tell the player.
+    pub fn text(self) -> &'static str {
+        match self {
+            PlateauSuggestion::Variant => {
+                "Play a variant: the same scenarios one difficulty step easier or harder."
+            }
+            PlateauSuggestion::SensitivityVariation => {
+                "Try a few sessions at a slightly different sensitivity (or the randomiser drill)."
+            }
+            PlateauSuggestion::EmphasisSwitch => {
+                "Switch emphasis: chase speed if you have been chasing accuracy, or the reverse."
+            }
+            PlateauSuggestion::DeloadWeek => {
+                "Take a lighter week (about half the volume), then benchmark again."
+            }
+        }
+    }
+}
+
+/// A benchmark subcategory still trained but without a new personal best for a while.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Plateau {
+    /// Display name of the subcategory.
+    pub subcategory: String,
+    /// Skill key of the subcategory.
+    pub skill: String,
+    /// Whole weeks since the last personal best.
+    pub weeks: u32,
+    /// Unix seconds of the last personal best on any of its scenarios.
+    pub last_best_at: u64,
+    /// Changes of stimulus to try.
+    pub suggestions: Vec<PlateauSuggestion>,
+}
+
+/// Subcategories of `benchmark` (resolve a tier with `BenchmarkDef::at_tier` first) with no
+/// new personal best on any of their scenarios in the last `weeks` weeks, while they were
+/// played at least [`PLATEAU_MIN_RUNS`] times in that window. A scenario's first run counts
+/// as a personal best, and a score equal to the best does not.
+pub fn plateaus(
+    benchmark: &BenchmarkDef,
+    records: &[RunRecord],
+    now: u64,
+    weeks: u32,
+) -> Vec<Plateau> {
+    let window_start = now.saturating_sub(u64::from(weeks) * SECS_PER_WEEK);
+    benchmark
+        .subcategories
+        .iter()
+        .filter_map(|sub| {
+            let mut runs: Vec<&RunRecord> = records
+                .iter()
+                .filter(|r| r.timestamp <= now)
+                .filter(|r| sub.scenarios.iter().any(|s| s.id == r.scenario))
+                .collect();
+            runs.sort_by_key(|r| r.timestamp);
+            let mut bests = HashMap::<&str, f32>::new();
+            let mut last_best_at = None;
+            for r in &runs {
+                let best = bests.entry(r.scenario.as_str()).or_insert(f32::MIN);
+                if r.score > *best {
+                    *best = r.score;
+                    last_best_at = Some(r.timestamp);
+                }
+            }
+            let last_best_at = last_best_at?;
+            let recent = runs.iter().filter(|r| r.timestamp > window_start).count();
+            (last_best_at <= window_start && recent >= PLATEAU_MIN_RUNS).then(|| Plateau {
+                subcategory: sub.name.clone(),
+                skill: sub.skill.clone(),
+                weeks: ((now - last_best_at) / SECS_PER_WEEK) as u32,
+                last_best_at,
+                suggestions: PlateauSuggestion::ALL.to_vec(),
+            })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -505,5 +614,54 @@ mod tests {
         // 23:30 UTC is the next day at UTC+1.
         assert_eq!(day_of(DAY - 1800, 3600), 1);
         assert_eq!(day_of(DAY - 1800, 0), 0);
+    }
+
+    #[test]
+    fn a_subcategory_trained_without_a_new_best_for_three_weeks_is_a_plateau() {
+        let b = crate::training::benchmark::builtin::all().remove(0);
+        let first = &b.subcategories[0].scenarios[0].id;
+        let week = 7 * DAY;
+        let mut r = vec![
+            rec(NOW - 6 * week, first, 100.0),
+            rec(NOW - 4 * week, first, 120.0), // the last personal best
+            rec(NOW - 2 * week, first, 110.0),
+            rec(NOW - week, first, 120.0), // equal, not a new best
+        ];
+        assert!(
+            plateaus(&b, &r, NOW, PLATEAU_WEEKS).is_empty(),
+            "only 2 runs in the window: not trained enough to call it a plateau"
+        );
+        r.push(rec(NOW - DAY, first, 90.0));
+        let p = plateaus(&b, &r, NOW, PLATEAU_WEEKS);
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert_eq!(p[0].subcategory, b.subcategories[0].name);
+        assert_eq!(p[0].skill, b.subcategories[0].skill);
+        assert_eq!(p[0].weeks, 4);
+        assert_eq!(p[0].last_best_at, NOW - 4 * week);
+        assert_eq!(p[0].suggestions, PlateauSuggestion::ALL.to_vec());
+        assert!(p[0].suggestions.iter().all(|s| !s.text().is_empty()));
+        // A longer window does not call it a plateau yet.
+        assert!(plateaus(&b, &r, NOW, 5).is_empty());
+        // A new best on any scenario of the subcategory ends it.
+        let other = b.subcategories[0]
+            .scenarios
+            .get(1)
+            .map_or(first.clone(), |s| s.id.clone());
+        r.push(rec(NOW - 3600, &other, 500.0));
+        assert!(plateaus(&b, &r, NOW, PLATEAU_WEEKS).is_empty());
+    }
+
+    #[test]
+    fn untrained_or_unplayed_subcategories_are_no_plateau() {
+        let b = crate::training::benchmark::builtin::all().remove(0);
+        let first = &b.subcategories[0].scenarios[0].id;
+        assert!(plateaus(&b, &[], NOW, PLATEAU_WEEKS).is_empty());
+        let old: Vec<_> = (0..5)
+            .map(|i| rec(NOW - 10 * 7 * DAY + i, first, 100.0 + i as f32))
+            .collect();
+        assert!(
+            plateaus(&b, &old, NOW, PLATEAU_WEEKS).is_empty(),
+            "not played recently: a break, not a plateau"
+        );
     }
 }

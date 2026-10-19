@@ -460,6 +460,19 @@ Enemies often first show up away from the crosshair, and the minimap tells where
 
 **Simulated aimer.** For detection it holds the crosshair still, clicks each flash one reaction time after it appears, and with no flash showing clicks anyway at its go/no-go mistake rate per second (recruit ≈ 0.22/s, elite ≈ 0.09/s, an **estimate**). For radar recall it treats the targets the radar did not show like go/no-go decoys, mistaking one for a match at the same rate. `peripheral-detect` calibrates at about 71% and `radar-recall` at about 67% contender accuracy, inside the challenge-point band. Neither model forgets the radar or misses a flash outright, so a playtest should confirm the difficulty.
 
+## Plateau detector
+
+`aim_core::training::progress::plateaus` flags a benchmark subcategory when none of its scenarios got a new personal best in the last **3 weeks** while it was still played at least **3 times** in that window. A first run counts as a personal best; a score equal to the best does not. A subcategory not played recently is a break, not a plateau. Both numbers are **estimates**.
+
+Each plateau comes with four changes of stimulus:
+
+| Suggestion | Basis |
+|---|---|
+| Play an easier or harder variant | VDIM climbs through variants of each benchmark scenario (verified, see VDIM) |
+| Train a while at a different sensitivity | Voltaic: a sensitivity change can help break a plateau (verified, see Sensitivity) |
+| Switch emphasis between speed and accuracy | In Listman 2021 accuracy plateaued while hits per second kept improving (verified, see Routine design); switching the emphasis is our inference |
+| A lighter week, then measure again | **Inference**, borrowed from deload weeks in strength training; no aim-training study tests it |
+
 ## Personal warm-up dose
 
 The warm-up decrement after rest is verified (Lee & Genovese 1988, see Routine design), but how long it takes to wear off differs between people and tasks, so a fixed 5 min queue warm-up is a guess (inference). `aim_core::training::warmup::warmup_dose` estimates it from the player's own sessions:
