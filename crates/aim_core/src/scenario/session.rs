@@ -7,7 +7,7 @@
 
 use super::behavior::{self, BehaviorState, Situation};
 use super::cue::{self, CueSound, Perception, RadarView};
-use super::def::{FireMode, ScenarioDef, Shape, TargetsDef};
+use super::def::{FireMode, FloorAction, Motion, MotionProfile, ScenarioDef, Shape, TargetsDef};
 use super::hit::{HitZone, Ray};
 use super::motion::{Drive, MotionState};
 use super::phase::{self, FailReason, PhaseRun, RunEnd, RunOutcome};
@@ -126,6 +126,10 @@ pub struct Target {
     cue_played: bool,
     /// Detection drills: a blank trial, a slot in the trial sequence that never shows.
     blank: bool,
+    /// Index of the `targets.motion_profiles` entry in force (`None` without profiles).
+    profile: Option<usize>,
+    /// Session time when the target picks a motion profile again.
+    profile_until: f32,
 }
 
 impl Target {
@@ -308,6 +312,10 @@ pub struct Session {
     radar_dots: Vec<Vec3>,
     /// Radar drills: session time when the current round's radar disappears.
     radar_until: f32,
+    /// Sphere radius when the run or phase started, for `targets.shrink_per_kill`.
+    shrink_base: f32,
+    /// A ballistic target with `on_floor = "fail"` landed: the run fails.
+    dropped: bool,
 }
 
 impl Session {
@@ -346,6 +354,8 @@ impl Session {
             outcome: None,
             radar_dots: Vec::new(),
             radar_until: f32::NEG_INFINITY,
+            dropped: false,
+            shrink_base: 0.0,
         };
         s.ammo = s.def.weapon.ammo.map_or(0.0, |a| a.clip);
         if let Some(first) = s.def.phases.as_ref().and_then(|p| p.first()) {
@@ -354,6 +364,11 @@ impl Session {
             s.def.targets = targets;
             s.phase = Some(PhaseRun::start(0, 0.0, &s.stats));
         }
+        if s.def.targets.shrink_per_kill.is_some() && s.source.is_none() {
+            // Shrinking rewrites the active targets; `def()` keeps the definition.
+            s.source = Some(Box::new(s.def.clone()));
+        }
+        s.shrink_base = s.sphere_radius();
         s.refill(&mut Vec::new());
         s
     }
@@ -507,6 +522,9 @@ impl Session {
                 return self.finish(failed, events);
             }
         }
+        if self.dropped {
+            return self.finish(RunOutcome::Failed(FailReason::Dropped), events);
+        }
         if let Some(reason) = phase::failed(&self.def.fail, &self.stats) {
             return self.finish(RunOutcome::Failed(reason), events);
         }
@@ -526,6 +544,7 @@ impl Session {
         let phases = source.phases.as_deref().expect("a phased run has phases");
         self.def.targets = phases[index].targets.apply(&source.targets);
         self.targets.clear();
+        self.shrink_base = self.sphere_radius();
         self.phase = Some(PhaseRun::start(index, self.time, &self.stats));
         events.push(SessionEvent::PhaseStarted { index });
     }
@@ -580,22 +599,42 @@ impl Session {
             if !t.is_visible(now) {
                 continue;
             }
+            if let Some(i) = t.profile
+                && now >= t.profile_until
+            {
+                let profiles = &targets.motion_profiles;
+                let next = pick_profile(profiles, &mut self.rng);
+                t.profile_until = profile_until(&profiles[next], now, &mut self.rng);
+                if profiles[next].motion != profiles[i].motion {
+                    t.motion.switch_to(&profiles[next].motion, now);
+                }
+                t.profile = Some(next);
+            }
+            let base = t
+                .profile
+                .map_or(&targets.motion, |i| &targets.motion_profiles[i].motion);
             if !reactive {
-                t.motion
-                    .step(&mut t.position, Drive::of(targets), &mut self.rng, now, dt);
+                t.motion.step(
+                    &mut t.position,
+                    Drive {
+                        motion: base,
+                        ..Drive::of(targets)
+                    },
+                    &mut self.rng,
+                    now,
+                    dt,
+                );
                 continue;
             }
             let s = seen_from.situation(t, now);
             let rule = t
                 .behavior
-                .select(&targets.behaviors, &targets.motion, &s, &mut t.motion);
+                .select(&targets.behaviors, base, &s, &mut t.motion);
             if let Some(r) = &targets.reactions {
                 behavior::react(r, &mut t.behavior, &mut t.motion, &s, &mut self.rng);
             }
             let drive = Drive {
-                motion: rule
-                    .and_then(|r| r.motion.as_ref())
-                    .unwrap_or(&targets.motion),
+                motion: rule.and_then(|r| r.motion.as_ref()).unwrap_or(base),
                 speed_k: targets.speed_scale * rule.map_or(1.0, |r| r.speed_scale),
                 ..Drive::of(targets)
             };
@@ -897,14 +936,46 @@ impl Session {
             id: t.id,
             time_to_kill,
         });
+        self.shrink();
+    }
+
+    /// The active sphere radius (0 for other shapes).
+    fn sphere_radius(&self) -> f32 {
+        match self.def.targets.shape {
+            Shape::Sphere { radius } => radius,
+            Shape::Humanoid { .. } | Shape::Capsule { .. } => 0.0,
+        }
+    }
+
+    /// `targets.shrink_per_kill`: a kill shrinks the active sphere radius by the factor,
+    /// down to the floor fraction of the radius the run (or phase) started with.
+    fn shrink(&mut self) {
+        let Some(s) = self.def.targets.shrink_per_kill else {
+            return;
+        };
+        let floor = self.shrink_base * s.floor;
+        if let Shape::Sphere { radius } = &mut self.def.targets.shape {
+            *radius = (*radius * s.factor).max(floor);
+        }
     }
 
     fn expire(&mut self, events: &mut Vec<SessionEvent>) {
         let now = self.time;
         let scoring_def = &self.def.scoring;
         let stats = &mut self.stats;
+        let fail_on_floor = matches!(
+            self.def.targets.motion,
+            Motion::Ballistic {
+                on_floor: FloorAction::Fail,
+                ..
+            }
+        );
+        let mut dropped = false;
         self.targets.retain(|t| {
-            let alive = t.expires_at.is_none_or(|e| now < e);
+            // A ballistic target that lands expires like one whose lifetime ran out.
+            let landed = t.motion.landed;
+            let alive = !landed && t.expires_at.is_none_or(|e| now < e);
+            dropped |= landed && fail_on_floor && !t.decoy;
             if !alive && t.blank {
                 stats.blank_trials += 1;
             } else if !alive && t.decoy {
@@ -916,6 +987,7 @@ impl Session {
             }
             alive
         });
+        self.dropped |= dropped;
     }
 
     fn refill(&mut self, events: &mut Vec<SessionEvent>) {
@@ -1081,6 +1153,15 @@ impl Session {
             }
             _ => false,
         };
+        // Draw only with motion profiles, so other scenarios keep their random sequences.
+        let profiles = &self.def.targets.motion_profiles;
+        let (profile, profile_until) = if profiles.is_empty() {
+            (None, f32::INFINITY)
+        } else {
+            let i = pick_profile(profiles, &mut self.rng);
+            let until = profile_until(&profiles[i], visible_at, &mut self.rng);
+            (Some(i), until)
+        };
         let id = self.next_id;
         self.next_id += 1;
         Target {
@@ -1092,12 +1173,14 @@ impl Session {
             visible_at,
             decoy,
             expires_at: self.def.targets.lifetime_secs.map(|l| visible_at + l),
-            motion: MotionState::new(point, lateral, visible_at),
+            motion: MotionState::new(point, lateral, visible_at, self.eye_position()),
             last_hit_at: f32::NEG_INFINITY,
             behavior: BehaviorState::new(lateral),
             cue_at,
             cue_played: false,
             blank,
+            profile,
+            profile_until,
             regen_at: self
                 .def
                 .targets
@@ -1105,6 +1188,26 @@ impl Session {
                 .map_or(f32::INFINITY, |r| visible_at + r.interval_secs),
         }
     }
+}
+
+/// A motion profile index drawn by weight (zero-weight profiles are never picked).
+fn pick_profile(profiles: &[MotionProfile], rng: &mut Rng) -> usize {
+    let total: f32 = profiles.iter().map(|p| p.weight).sum();
+    let roll = rng.next_f32() * total;
+    let mut sum = 0.0;
+    for (i, p) in profiles.iter().enumerate() {
+        sum += p.weight;
+        if roll < sum {
+            return i;
+        }
+    }
+    profiles.iter().rposition(|p| p.weight > 0.0).unwrap_or(0)
+}
+
+/// When a target that picked `p` at `now` picks again (`inf` without `switch_secs`).
+fn profile_until(p: &MotionProfile, now: f32, rng: &mut Rng) -> f32 {
+    p.switch_secs
+        .map_or(f32::INFINITY, |s| now + rng.in_range(s))
 }
 
 /// Where the player is looking from and how he moves, as targets perceive it.
@@ -1162,6 +1265,7 @@ mod tests {
                     yaw_deg: Range::new(-30.0, 30.0),
                     pitch_deg: Range::new(-5.0, 10.0),
                     distance: Range::fixed(10.0),
+                    grid: None,
                 },
                 motion: Motion::Static,
                 max_alive: 3,
@@ -1176,12 +1280,16 @@ mod tests {
                 reactions: None,
                 behaviors: Vec::new(),
                 perception: None,
+                shrink_per_kill: None,
+                motion_profiles: Vec::new(),
             },
             scoring: ScoringDef::default(),
             difficulty: Default::default(),
             end: Default::default(),
             fail: Default::default(),
             phases: None,
+            view: Default::default(),
+            feedback: Default::default(),
         }
     }
 
@@ -1365,6 +1473,7 @@ mod tests {
             change_secs: Range::new(0.5, 0.8),
             stop_chance: 0.0,
             max_offset: 2.0,
+            depth: None,
         };
         let mut s = Session::new(def, 4);
         let mut max_speed: f32 = 0.0;
@@ -1390,6 +1499,7 @@ mod tests {
             crouch_chance: crouch,
             jump_chance: jump,
             max_offset: 2.0,
+            depth: None,
         }
     }
 
@@ -2026,6 +2136,7 @@ mod tests {
             yaw_deg: Range::fixed(0.0),
             pitch_deg: Range::fixed(0.0),
             distance: Range::fixed(10.0),
+            grid: None,
         };
         let mut s = Session::new(def, 1);
         let feet = s.targets().next().unwrap().position;
@@ -2351,6 +2462,7 @@ mod tests {
             change_secs: Range::fixed(100.0),
             stop_chance: 1.0,
             max_offset: 3.0,
+            depth: None,
         }
     }
 
@@ -2361,6 +2473,7 @@ mod tests {
             change_secs: Range::fixed(secs),
             stop_chance: 0.0,
             max_offset: 3.0,
+            depth: None,
         }
     }
 

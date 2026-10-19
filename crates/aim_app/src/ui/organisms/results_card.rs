@@ -64,6 +64,12 @@ pub fn results_card(
                 if let Some(t) = r.avg_time_to_kill {
                     stat_row(ui, "Avg time to kill", format!("{:.0} ms", t * 1000.0));
                 }
+                if let Some(spread) = rc.report.and_then(|rep| rep.ttk_spread.as_ref()) {
+                    stat_row(ui, "Time to kill (median)", spread.as_str());
+                }
+                if let Some(e) = rc.report.and_then(|rep| rep.damage_efficiency.as_ref()) {
+                    stat_row(ui, "Damage efficiency", e.as_str());
+                }
                 stat_row(
                     ui,
                     "Headshot rate",

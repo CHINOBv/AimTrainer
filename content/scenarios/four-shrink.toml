@@ -1,0 +1,19 @@
+# Idea credit: the shrinking multi-target VALORANT flick-tech drills of the Voltaic VALORANT playlists.
+# Original scenario: no file, name or value was copied.
+id = "four-shrink"
+name = "Four Shrink"
+category = "flicking"
+description = """
+Four spheres on a wide wall. Every kill shrinks all of them a little, down to 40% of their size.
+Keep flicking accurately as the targets get smaller."""
+duration_secs = 60
+
+[targets]
+shape = { kind = "sphere", radius = 0.3 }
+spawn = { kind = "angular", yaw_deg = [-40.0, 40.0], pitch_deg = [0.0, 15.0], distance = [12.0, 12.0] }
+max_alive = 4
+min_separation_deg = 8
+shrink_per_kill = { factor = 0.97, floor = 0.4 }
+
+[scoring]
+miss_penalty = 15

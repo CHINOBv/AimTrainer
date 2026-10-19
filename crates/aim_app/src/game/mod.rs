@@ -12,25 +12,26 @@ use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::history::History;
 use crate::persistence::missions::{Missions, MissionsPlugin};
 use crate::persistence::settings::{Paths, Settings};
+use crate::platform::frame_stats::{FrameStats, RUN_WINDOW};
 use aim_core::fov;
 use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::ViewAngles;
 use aim_core::movement::MoveInput;
 use aim_core::scenario::{
-    FrameInput, Recording, RunKey, RunOutcome, RunResult, ScenarioDef, Session, SessionEvent,
-    Shape, Target, Tuning, parse_run_key,
+    FrameInput, HitZone, Recording, RunKey, RunOutcome, RunResult, ScenarioDef, Session,
+    SessionEvent, Shape, Target, Tuning, parse_run_key,
 };
 use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::finder::{SensFinder, Slot};
 use aim_core::sensitivity::randomizer::SensRandomizer;
 use aim_core::training::routine::PlannedRun;
-use aim_core::training::store::RunStore;
+use aim_core::training::store::{RunSnapshot, RunStore};
 use bevy::camera::{PerspectiveProjection, Projection};
 use bevy::ecs::system::SystemParam;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
-use feedback::{HitFrame, MarkerKind, ShotFeedback, ShotOutcome};
+use feedback::{DamagePop, HitFrame, HitMarkerStyle, MarkerKind, ShotFeedback, ShotOutcome};
 use hit_effect::{BaseMaterial, EffectAssets, Struck};
 use std::collections::HashMap;
 
@@ -84,6 +85,31 @@ pub struct Run {
     entities: HashMap<u64, Entity>,
     /// Targets hit this frame, for their visual effect.
     struck: Vec<Struck>,
+    /// Floating damage numbers on screen (`[feedback] damage_numbers`).
+    pub damage_pops: Vec<DamagePop>,
+    /// Frame times while the run is live, for the settings snapshot.
+    frames: FrameStats,
+    /// Pauses during the run, for the settings snapshot.
+    pauses: PauseLog,
+}
+
+/// How often and how long a run was paused.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct PauseLog {
+    pub count: u32,
+    pub secs: f32,
+    paused: bool,
+}
+
+impl PauseLog {
+    /// Follow the pause state over a frame of `dt` seconds: entering a pause counts one.
+    pub fn track(&mut self, paused: bool, dt: f32) {
+        if paused {
+            self.count += u32::from(!self.paused);
+            self.secs += dt;
+        }
+        self.paused = paused;
+    }
 }
 
 impl Run {
@@ -114,6 +140,27 @@ impl Run {
             kill_flash: 0.0,
             entities: HashMap::new(),
             struck: Vec::new(),
+            damage_pops: Vec::new(),
+            frames: FrameStats::with_window(RUN_WINDOW),
+            pauses: PauseLog::default(),
+        }
+    }
+
+    /// The settings this run is played with, stored with its result.
+    pub fn snapshot(&self, settings: &Settings) -> RunSnapshot {
+        // The definition as the run started: the session's copy changes during a run
+        // (shrinking targets, phases).
+        let def = &self.recording.def;
+        let frames = self.frames.summary();
+        RunSnapshot {
+            sensitivity: Some(self.sens_override.unwrap_or(settings.sensitivity)),
+            vertical_fov_deg: Some(def.view.vertical_fov_deg(None) as f32),
+            crosshair_code: Some(aim_core::crosshair::code::encode(&settings.crosshair)),
+            avg_fps: frames.map(|(avg, _, _)| avg),
+            low_fps: frames.map(|(_, low, _)| low),
+            pause_count: Some(self.pauses.count),
+            pause_secs: Some(self.pauses.secs),
+            content_hash: Some(def.content_hash()),
         }
     }
 
@@ -203,6 +250,8 @@ pub(crate) struct WorldAssets {
     head: Handle<StandardMaterial>,
     body: Handle<StandardMaterial>,
     unit_sphere: Handle<Mesh>,
+    /// Unit cylinder (radius 1, height 1), scaled per capsule target.
+    unit_cylinder: Handle<Mesh>,
     head_box: Handle<Mesh>,
     body_box: Handle<Mesh>,
     legs_box: Handle<Mesh>,
@@ -404,6 +453,7 @@ fn setup_world(
         head: unlit(&mut materials, target_color),
         body: unlit(&mut materials, Color::srgb(0.55, 0.2, 0.25)),
         unit_sphere: meshes.add(Sphere::new(1.0).mesh().ico(5).expect("valid icosphere")),
+        unit_cylinder: meshes.add(Cylinder::new(1.0, 1.0)),
         head_box: meshes.add(Cuboid::new(d.head_size, d.head_size, d.head_size)),
         body_box: meshes.add(Cuboid::new(
             d.body_width,
@@ -611,7 +661,8 @@ impl RunFinisher<'_, '_> {
             notes.insert(0, finder_note(finder));
         } else {
             // Finder test runs do not enter the regular history.
-            self.history.record(&result);
+            self.history
+                .record_with(&result, &run.snapshot(&self.settings));
             self.missions
                 .record(&result, session.stats().hits, &self.paths);
         }
@@ -737,22 +788,40 @@ fn tick(
         keys,
         buttons,
     } = input;
-    if run.paused {
+    let dt = time.delta_secs();
+    let paused = run.paused;
+    run.pauses.track(paused, dt);
+    if paused {
         return;
     }
-    let dt = time.delta_secs();
     run.hit_flash = (run.hit_flash - dt).max(0.0);
     run.kill_flash = (run.kill_flash - dt).max(0.0);
     if run.countdown > 0.0 {
         run.countdown -= dt;
         return;
     }
+    run.frames.push(dt);
     let input = frame_input(dt, run.view, &keys, &buttons);
     run.recording.inputs.push(input);
+    feedback::age_pops(&mut run.damage_pops, dt);
+    let shown = run.session.def().feedback;
+    let markers =
+        shown.hit_markers_shown(finisher.settings.hit_feedback.marker != HitMarkerStyle::Off);
+    // The audio plugin applies the player's own sound choices; the scenario can only mute.
+    let sounds = shown.hit_sounds_played(true);
+    // Where each target's top is before the update: a killed target is gone after it.
+    let tops = if shown.damage_numbers {
+        target_tops(&run.session)
+    } else {
+        Vec::new()
+    };
+    let weapon = run.session.def().weapon.kind.stats();
     let mut marker = None;
     for event in run.session.update(input) {
         if let Some(outcome) = ShotOutcome::from_session(&event) {
-            feedback.write(ShotFeedback(outcome));
+            if sounds {
+                feedback.write(ShotFeedback(outcome));
+            }
             marker = marker.max(MarkerKind::of(outcome));
         }
         match event {
@@ -760,7 +829,14 @@ fn tick(
                 hit: Some((id, zone)),
                 ..
             } => {
-                run.hit_flash = finisher.settings.hit_feedback.marker_secs();
+                if markers {
+                    run.hit_flash = finisher.settings.hit_feedback.marker_secs();
+                }
+                if let Some(&(_, top)) = tops.iter().find(|(t, _)| *t == id) {
+                    let amount = feedback::damage_amount(&weapon, zone);
+                    run.damage_pops
+                        .push(DamagePop::new(top, amount, zone == HitZone::Head));
+                }
                 hit_effect::record(&mut run.struck, id, Some(zone), false);
             }
             SessionEvent::Killed { id, .. } => {
@@ -780,6 +856,15 @@ fn tick(
     if let Some(kind) = marker {
         run.marker = kind;
     }
+}
+
+/// The top of every visible target, by id: where its damage numbers and health bar float.
+pub fn target_tops(s: &Session) -> Vec<(u64, aim_core::math::Vec3)> {
+    let shape = &s.def().targets.shape;
+    s.targets()
+        .filter(|t| t.is_visible(s.time()))
+        .map(|t| (t.id, feedback::target_top(shape, s.dims(), t.position)))
+        .collect()
 }
 
 /// The core's per-frame input from keys and buttons (WASD, Shift walk, left click).
@@ -909,6 +994,56 @@ fn spawn_target_visual(
                 }
             });
         }
+        Shape::Capsule {
+            radius,
+            height,
+            head,
+        } => {
+            // A cylinder and two end spheres (uniformly scaled, so the caps stay round),
+            // plus the head sphere; the parent keeps scale 1.
+            let half = (height / 2.0 - radius).max(0.0);
+            let body = if head.is_some() {
+                pick(&assets.body)
+            } else {
+                pick(&assets.target)
+            };
+            let mut parts = vec![
+                (
+                    assets.unit_cylinder.clone(),
+                    body,
+                    Transform::from_scale(Vec3::new(radius, 2.0 * half, radius)),
+                ),
+                (
+                    assets.unit_sphere.clone(),
+                    body,
+                    Transform::from_xyz(0.0, half, 0.0).with_scale(Vec3::splat(radius)),
+                ),
+                (
+                    assets.unit_sphere.clone(),
+                    body,
+                    Transform::from_xyz(0.0, -half, 0.0).with_scale(Vec3::splat(radius)),
+                ),
+            ];
+            if let Some(h) = head {
+                parts.push((
+                    assets.unit_sphere.clone(),
+                    pick(&assets.head),
+                    Transform::from_xyz(0.0, h.offset, 0.0).with_scale(Vec3::splat(h.radius)),
+                ));
+            }
+            e.with_children(|p| {
+                for (mesh, mat, tf) in parts {
+                    let mut part = p.spawn((Mesh3d(mesh.clone()), material(mat), tf));
+                    if let Some((outline_mat, outline_tf)) = &outline {
+                        part.with_child((
+                            Mesh3d(mesh),
+                            MeshMaterial3d(outline_mat.clone()),
+                            *outline_tf,
+                        ));
+                    }
+                }
+            });
+        }
     }
     e.id()
 }
@@ -933,6 +1068,7 @@ fn sync_targets(
         &transforms,
         &shape,
     );
+    let shrinking = run.session.def().targets.shrink_per_kill.is_some();
     // Radar decoys look like every other target: only the radar tells them apart.
     let disguised = run
         .session
@@ -976,11 +1112,15 @@ fn sync_targets(
         if let Ok(mut tf) = transforms.get_mut(entity) {
             tf.translation = pos;
             tf.rotation = rotation;
+            // Shrinking spheres (`targets.shrink_per_kill`) follow the active radius.
+            if let (true, Shape::Sphere { radius }) = (shrinking, &shape) {
+                tf.scale = Vec3::splat(*radius);
+            }
         } else {
             // Spawned this frame: commands have not been applied yet.
             let scale = match shape {
                 Shape::Sphere { radius } => Vec3::splat(radius),
-                Shape::Humanoid { .. } => Vec3::ONE,
+                Shape::Humanoid { .. } | Shape::Capsule { .. } => Vec3::ONE,
             };
             commands.entity(entity).insert(Transform {
                 translation: pos,
@@ -1007,6 +1147,14 @@ fn update_camera(
         run.zoomed,
         zoom,
     );
+    // A scenario's `[view] fov_lock` replaces VALORANT's FOV for that scenario only.
+    let view = run.session.def().view;
+    if view.fov_lock.is_some()
+        && let Projection::Perspective(p) = &mut *projection
+    {
+        let zoom = (run.zoomed && zoom > 1.0).then_some(zoom);
+        p.fov = (view.vertical_fov_deg(zoom) as f32).to_radians();
+    }
 }
 
 /// Put the camera at `eye` looking along `view`, with VALORANT's FOV for the zoom state.
@@ -1223,5 +1371,53 @@ mod tests {
             PlayArea::of(&movement_def().with_elevation(2.0)).unwrap(),
             "a new height rebuilds the area"
         );
+    }
+
+    #[test]
+    fn pauses_count_each_entry_and_add_up_their_time() {
+        let mut p = PauseLog::default();
+        for (paused, dt) in [
+            (false, 1.0),
+            (true, 0.5),
+            (true, 0.5),
+            (false, 1.0),
+            (true, 2.0),
+        ] {
+            p.track(paused, dt);
+        }
+        assert_eq!((p.count, p.secs), (2, 3.0));
+    }
+
+    #[test]
+    fn a_run_snapshot_holds_the_settings_frames_pauses_and_content_hash() {
+        let def = movement_def();
+        let mut run = Run::new(def.clone());
+        let settings = Settings::default();
+        let empty = run.snapshot(&settings);
+        assert_eq!(
+            (empty.avg_fps, empty.low_fps),
+            (None, None),
+            "too few frames"
+        );
+        for _ in 0..100 {
+            run.frames.push(1.0 / 200.0);
+        }
+        run.pauses.track(true, 1.5);
+        let s = run.snapshot(&settings);
+        assert_eq!(s.sensitivity, Some(settings.sensitivity));
+        assert_eq!(
+            s.vertical_fov_deg,
+            Some(aim_core::fov::valorant_vertical_fov_deg() as f32)
+        );
+        assert_eq!(
+            s.crosshair_code,
+            Some(aim_core::crosshair::code::encode(&settings.crosshair))
+        );
+        assert!((s.avg_fps.unwrap() - 200.0).abs() < 0.1);
+        assert_eq!((s.pause_count, s.pause_secs), (Some(1), Some(1.5)));
+        assert_eq!(s.content_hash, Some(def.content_hash()));
+        let finder = Sensitivity::valorant(0.5, 800);
+        run.sens_override = Some(finder);
+        assert_eq!(run.snapshot(&settings).sensitivity, Some(finder));
     }
 }

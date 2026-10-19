@@ -40,6 +40,8 @@ pub(crate) fn anchor(shape: &Shape, zone: Option<HitZone>) -> (f32, f32) {
     let d = HumanoidDims::default();
     match (shape, zone) {
         (Shape::Sphere { radius }, _) => (0.0, *radius),
+        (Shape::Capsule { head: Some(h), .. }, Some(HitZone::Head)) => (h.offset, h.radius),
+        (Shape::Capsule { radius, .. }, _) => (0.0, *radius),
         (Shape::Humanoid { .. }, Some(HitZone::Head)) => (d.head_center_height(), d.head_size),
         (Shape::Humanoid { .. }, Some(HitZone::Legs)) => (d.waist_height / 2.0, d.body_width / 2.0),
         (Shape::Humanoid { .. }, _) => (
@@ -145,7 +147,7 @@ pub(crate) fn apply_struck(
     };
     let base_scale = match *shape {
         Shape::Sphere { radius } => Vec3::splat(radius),
-        Shape::Humanoid { .. } => Vec3::ONE,
+        Shape::Humanoid { .. } | Shape::Capsule { .. } => Vec3::ONE,
     };
     for s in struck.drain(..) {
         let Some(&entity) = visuals.get(&s.id) else {

@@ -1,0 +1,30 @@
+# Idea credit: the small-correction VALORANT stability drills of the Voltaic VALORANT playlists.
+# Original scenario: no file, name or value was copied.
+id = "adjust-track"
+name = "Adjust Track"
+category = "tracking"
+description = """
+Stability tracking. A sphere drifts slowly, then suddenly darts a short way to a new spot.
+Track it smoothly and fix each sudden offset with one small, clean correction."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.19 }
+spawn = { kind = "angular", yaw_deg = [-10.0, 10.0], pitch_deg = [2.0, 8.0], distance = [12.0, 12.0] }
+health = inf
+
+[[targets.motion_profiles]]
+weight = 3
+switch_secs = [0.6, 1.4]
+motion = { kind = "drift", speed = [1.0, 2.0], change_secs = [1.0, 2.0], max_offset = 3.0 }
+
+[[targets.motion_profiles]]
+weight = 1
+switch_secs = [0.1, 0.2]
+motion = { kind = "drift", speed = [6.0, 9.0], change_secs = [0.2, 0.3], max_offset = 3.0 }
+
+[scoring]
+sphere = 100   # points per second on target

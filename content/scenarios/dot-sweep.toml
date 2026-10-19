@@ -1,0 +1,22 @@
+# Idea: Voltaic benchmark "switching speed" slot (static dots killed by holding fire).
+# Own name and parameters.
+id = "dot-sweep"
+name = "Dot Sweep"
+category = "switching"
+description = """
+Static speed switching. Three small dots sit in a ±30° cone; each needs 0.35 s of holding the
+crosshair on it while firing. Finish one and sweep straight to the next. Trains settling on
+a target at once and leaving it the moment it dies."""
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.14 }
+spawn = { kind = "angular", yaw_deg = [-30.0, 30.0], pitch_deg = [0.0, 12.0], distance = [12.0, 12.0] }
+max_alive = 3
+health = 0.35
+min_separation_deg = 10
+
+[scoring]
+sphere = 400   # points per second on target; a kill is worth ≈140

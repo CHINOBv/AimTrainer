@@ -2,7 +2,7 @@
 //! recoil, and the ray cast that finds which target a shot hits.
 
 use super::def::Shape;
-use super::hit::{HitZone, Ray, ray_humanoid, ray_sphere};
+use super::hit::{HitZone, Ray, ray_capsule_target, ray_humanoid, ray_sphere};
 use super::recoil::Kick;
 use super::session::Target;
 use crate::games::valorant::{HumanoidDims, WeaponStats};
@@ -98,6 +98,17 @@ pub(super) fn raycast(
                     t.facing_yaw_deg,
                     &dims.crouched(t.crouch()),
                 ),
+                Shape::Capsule {
+                    radius,
+                    height,
+                    head,
+                } => ray_capsule_target(
+                    ray,
+                    t.position,
+                    radius,
+                    height,
+                    head.map(|h| (h.radius, h.offset)),
+                ),
             };
             hit.map(|(d, z)| (d, i, z))
         })
@@ -123,6 +134,9 @@ pub(super) fn zone_center_fraction(
                 target.position + Vec3::new(0.0, d.head_center_height(), 0.0),
                 d.head_size / 2.0,
             )
+        }
+        (Shape::Capsule { head: Some(h), .. }, HitZone::Head) => {
+            (target.position + Vec3::UP * h.offset, h.radius)
         }
         _ => return None,
     };

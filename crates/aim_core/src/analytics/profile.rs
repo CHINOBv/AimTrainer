@@ -258,6 +258,8 @@ mod tests {
             audio_cue: None,
             detection: None,
             radar_recall: None,
+            ttk_spread: None,
+            damage_efficiency: None,
         }
     }
 
@@ -447,6 +449,8 @@ mod tests {
             audio_cue: None,
             detection: None,
             radar_recall: None,
+            ttk_spread: None,
+            damage_efficiency: None,
         }
     }
 

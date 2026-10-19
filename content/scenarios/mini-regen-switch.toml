@@ -1,0 +1,24 @@
+# Idea: Voltaic benchmark "switching" slots (two small strafers that regenerate if not
+# finished). Own name and parameters.
+id = "mini-regen-switch"
+name = "Mini Regen Switch"
+category = "switching"
+description = """
+Switching against regeneration. Two small spheres strafe; each needs 0.5 s of tracking while
+firing, and heals if you leave it for 0.3 s. Finish what you start before switching.
+Trains committing to a kill under pressure."""
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.2 }
+spawn = { kind = "angular", yaw_deg = [-25.0, 25.0], pitch_deg = [0.0, 12.0], distance = [12.0, 12.0] }
+motion = { kind = "strafe", change_secs = [0.3, 0.6], stop_chance = 0.4, max_offset = 1.2 }
+max_alive = 2
+health = 0.5
+min_separation_deg = 12
+regen = { interval_secs = 0.3, amount = 0.1, reset_on_hit = true }
+
+[scoring]
+sphere = 400   # points per second on target; a kill is worth ≈200

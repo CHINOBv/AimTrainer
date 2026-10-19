@@ -1,0 +1,66 @@
+# Micro corrections for VALORANT, built on the library's micro scenarios (docs/library.md).
+# Structure: ordered warm-up, one blocked pass per new drill, then everything interleaved
+# (docs/training-science.md, "Routine design"). Run counts are our estimate.
+id = "valorant-micros"
+name = "VALORANT Micros (≈23 min)"
+description = """
+Small, exact corrections for VALORANT: tight clusters, accuracy-weighted micros, angle holds and close pairs.
+A warm-up in order, one blocked pass of each new drill, then all of them interleaved with reactive micro-tracking.
+Accuracy matters more than speed here: a micro that overshoots is a lost duel.
+≈23 min; pair it with a flick or tracking routine on longer days."""
+interleave_from = 6
+
+[[blocks]]
+scenario = "track-precise"
+runs = 2
+note = "Warm-up: keep the crosshair glued to the sphere, don't chase score."
+
+[[blocks]]
+scenario = "micro-adjust"
+runs = 2
+note = "Warm-up: nudge the crosshair onto the target, no further."
+
+[[blocks]]
+scenario = "micro-cluster"
+runs = 2
+note = "Learn it: move the crosshair the short gap to the next sphere, then click."
+
+[[blocks]]
+scenario = "micro-pace"
+runs = 2
+note = "Learn it: the crosshair settles on the sphere before every click."
+
+[[blocks]]
+scenario = "angle-hold-peek"
+runs = 2
+note = "Learn it: keep the crosshair on the head line where the target appears."
+
+[[blocks]]
+scenario = "diamond-pair"
+runs = 2
+note = "Learn it: short hop from one sphere to the other, land, then click."
+
+[[blocks]]
+scenario = "micro-cluster"
+runs = 2
+note = "Mixed: small hops between close spheres."
+
+[[blocks]]
+scenario = "micro-pace"
+runs = 2
+note = "Mixed: a hit on the sphere is worth more than a fast miss."
+
+[[blocks]]
+scenario = "angle-hold-peek"
+runs = 2
+note = "Mixed: the crosshair waits on the head line; the target walks into it."
+
+[[blocks]]
+scenario = "diamond-pair"
+runs = 2
+note = "Mixed: land on the sphere, then click."
+
+[[blocks]]
+scenario = "track-reactive-micro"
+runs = 4
+note = "Mixed: keep the crosshair on the sphere as it changes direction."

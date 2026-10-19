@@ -208,7 +208,25 @@ User files live in the folders below. A file with the same `id` as a built-in re
 | Linux | `~/.config/aimtrainer/{scenarios,routines,benchmarks}/` |
 | Windows | `%APPDATA%\CustomAimTrainer\aimtrainer\config\…` |
 
-See [`docs/scenarios.md`](docs/scenarios.md) for the format; the built-ins in `content/scenarios/` are working examples. Run history is saved as CSV in the data directory (`~/.local/share/aimtrainer/history.csv` on Linux).
+See [`docs/scenarios.md`](docs/scenarios.md) for the format; the built-ins in `content/scenarios/` are working examples.
+
+## Run history
+
+Every finished scenario run is saved as one CSV row in the data directory (`~/.local/share/aimtrainer/history.csv` on Linux). Next to the result, each row stores a **settings snapshot**, so runs played under different setups can be told apart:
+
+| Column | Meaning |
+|---|---|
+| `timestamp` … `duration_secs` | The result: Unix time, scenario run key, score, accuracy, kills, kills/min, average time to kill, headshot rate, moving shots, run length |
+| `sens_game`, `sens_value`, `dpi`, `cm_per_360` | The sensitivity used (a sensitivity-finder test's own value for those runs) |
+| `vfov_deg` | Vertical FOV of the camera, a scenario's FOV lock included |
+| `crosshair_code` | Your crosshair as a VALORANT profile code |
+| `avg_fps`, `low_1pct_fps` | Average and 1% low frame rate over the run |
+| `pause_count`, `pause_secs` | How often and how long the run was paused |
+| `content_hash` | A hash of the scenario as played (16 hex digits). Editing a scenario changes it, so an edited file does not silently share history with the original |
+
+Rows written before snapshots existed keep their columns and load with empty snapshot fields; the next run written upgrades the file's header line. Arena runs are stored without a snapshot.
+
+**Export:** on the Progress page, **Export history (CSV)** writes a copy with the same columns, one row per run, with older rows padded with empty fields so every row has all 21 columns. Type a path in the field next to the button, or leave it empty to write `history-export-<unix time>.csv` next to `history.csv`. It never replaces an existing file (the history included); pick a new name instead. The export runs on a background thread, and the page shows where the file went or why it failed.
 
 ## Architecture
 

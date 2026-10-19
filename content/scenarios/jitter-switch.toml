@@ -1,0 +1,23 @@
+# Idea: Voltaic benchmark "switching evasive" slot (short accelerating and decelerating
+# strafes). Own name and parameters.
+id = "jitter-switch"
+name = "Jitter Switch"
+category = "switching"
+description = """
+Evasive switching. Three spheres make short strafes with real acceleration and stops, changing
+direction every 0.15–0.35 s; each needs 0.4 s of tracking while firing. Trains staying on a
+target through quick reversals before switching."""
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.22 }
+spawn = { kind = "angular", yaw_deg = [-30.0, 30.0], pitch_deg = [0.0, 12.0], distance = [12.0, 14.0] }
+motion = { kind = "strafe", change_secs = [0.15, 0.35], stop_chance = 0.15, max_offset = 1.5 }
+max_alive = 3
+health = 0.4
+min_separation_deg = 12
+
+[scoring]
+sphere = 400   # points per second on target; a kill is worth ≈160

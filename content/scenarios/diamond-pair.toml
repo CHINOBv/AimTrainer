@@ -1,0 +1,20 @@
+# Idea: Voltaic benchmark "static clicking" slot (two small targets on a diamond-like grid).
+# Own name and parameters. Approximation: the spawn grid is rectangular (5 × 5), so the
+# diamond is a square lattice rather than a rotated one.
+id = "diamond-pair"
+name = "Diamond Pair"
+category = "precision"
+description = """
+Static clicking. Two small spheres sit on a 5 × 5 lattice of fixed points; each kill moves one
+to another point. The final score is multiplied by the square root of your accuracy. Trains
+short, precise flicks between nearby static targets."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.12 }
+spawn = { kind = "angular", yaw_deg = [-16.0, 16.0], pitch_deg = [-2.0, 14.0], distance = [12.0, 12.0], grid = { rows = 5, cols = 5 } }
+max_alive = 2
+min_separation_deg = 4
+spawn_rules = { avoid_last_deg = 2 }
+
+[scoring]
+accuracy_mult = "sqrt"

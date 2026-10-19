@@ -1,0 +1,46 @@
+# Pre-ranked warm-up: one drill per skill, easiest first, in order. Short on purpose,
+# because the goal is to be warm, not tired (docs/training-science.md, "Routine design",
+# warm-up decrement). Run counts are our estimate.
+id = "ranked-prep-15"
+name = "Ranked Prep (≈13 min)"
+description = """
+A short set before you queue ranked: one drill per skill, easiest first, ending on movement.
+Tracking, clicking, switching, micros, head-level tracking, reflex flicks and counter-strafing, in order.
+It is a warm-up, not training: play the early blocks easy and stop before you get tired."""
+
+[[blocks]]
+scenario = "track-precise"
+runs = 2
+difficulty = -0.25
+note = "Easy: keep the crosshair glued to the sphere."
+
+[[blocks]]
+scenario = "flick-wide"
+runs = 2
+difficulty = -0.25
+note = "Easy: land the crosshair on the sphere's center and stop there."
+
+[[blocks]]
+scenario = "dot-sweep"
+runs = 2
+note = "Settle on the dot at once, leave the moment it dies."
+
+[[blocks]]
+scenario = "micro-pace"
+runs = 2
+note = "The crosshair settles on the sphere before every click."
+
+[[blocks]]
+scenario = "head-strafe-track"
+runs = 2
+note = "The crosshair stays on the head through each reversal."
+
+[[blocks]]
+scenario = "snap-reflex"
+runs = 2
+note = "Snap to the head and stop dead on it."
+
+[[blocks]]
+scenario = "counter-strafe"
+runs = 1
+note = "Stop moving, then click: you are ready to queue."

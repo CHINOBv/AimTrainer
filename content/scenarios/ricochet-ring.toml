@@ -1,0 +1,19 @@
+# Idea: Voltaic benchmark "linear clicking" slot (straight-line movers reversing off
+# octagon walls). Own name and parameters.
+id = "ricochet-ring"
+name = "Ricochet Ring"
+category = "flicking"
+description = """
+Linear clicking. Two spheres travel in straight lines and ricochet off the walls of an octagon
+in front of you. Click each one; the replacement starts a new line. Trains clicking on a
+constant-velocity target and re-reading it after each ricochet."""
+
+[targets]
+shape = { kind = "sphere", radius = 0.2 }
+spawn = { kind = "angular", yaw_deg = [-10.0, 10.0], pitch_deg = [6.0, 14.0], distance = [12.0, 12.0] }
+motion = { kind = "linear_bounce", speed_deg = [14.0, 20.0], arena = { yaw_deg = [-20.0, 20.0], pitch_deg = [-2.0, 22.0], sides = 8 } }
+max_alive = 2
+min_separation_deg = 6
+
+[scoring]
+miss_penalty = 15

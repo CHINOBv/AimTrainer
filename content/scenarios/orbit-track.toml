@@ -1,0 +1,22 @@
+# Idea credit: the circle-around-the-player control-tracking drills of the KovaaK's and Voltaic
+# tracking playlists. Original scenario: no file, name or value was copied.
+id = "orbit-track"
+name = "Orbit Track"
+category = "tracking"
+description = """
+Control tracking. A sphere circles around you, sometimes turning back; every five seconds a new
+one takes over at a new speed. Turn with it and match its pace."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.3 }
+spawn = { kind = "angular", yaw_deg = [-20.0, 20.0], pitch_deg = [3.0, 10.0], distance = [9.0, 9.0] }
+motion = { kind = "orbit", speed_deg = [8.0, 28.0], change_secs = [1.5, 3.0], reverse_chance = 0.3 }
+health = inf
+lifetime_secs = 5.0
+
+[scoring]
+sphere = 100   # points per second on target

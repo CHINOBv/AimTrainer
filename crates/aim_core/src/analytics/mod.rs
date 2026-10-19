@@ -9,6 +9,7 @@
 
 pub mod audio_cue;
 pub mod codec;
+pub mod damage;
 pub mod decision;
 pub mod direction;
 pub mod flick;
@@ -75,6 +76,10 @@ pub struct RunAnalysis {
     pub detection: Option<perception::DetectionAnalysis>,
     /// Correct and incorrect picks, for radar-recall runs.
     pub radar_recall: Option<perception::RadarRecall>,
+    /// Median and quartiles of the per-kill times to kill, with enough kills.
+    pub ttk_spread: Option<damage::TtkSpread>,
+    /// Damage dealt against damage available, for hold runs and multi-hit targets.
+    pub damage_efficiency: Option<damage::DamageEfficiency>,
 }
 
 impl RunAnalysis {
@@ -137,6 +142,7 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         .filter(|p| p.is_radar())
         .and(decision.as_ref())
         .map(|d| perception::RadarRecall::from_counts(&d.counts));
+    let (ttk_spread, damage_efficiency) = damage::analyze(recording);
     RunAnalysis {
         scenario_id: recording.def.id.clone(),
         category: recording.def.category,
@@ -160,6 +166,8 @@ pub fn analyze(recording: &Recording) -> RunAnalysis {
         audio_cue: audio_cue::analyze(&samples),
         detection: detection.then(|| perception::detection(&samples)),
         radar_recall,
+        ttk_spread,
+        damage_efficiency,
     }
 }
 
@@ -223,6 +231,25 @@ mod tests {
         assert!(matches!(a.kind, AnalysisKind::Flick(ref f) if !f.is_empty()));
         let rec = test_support::record("track-precise", AimerProfile::PRESETS[1], 4);
         assert!(analyze(&rec).tracking_summary().is_some());
+    }
+
+    #[test]
+    fn click_runs_report_a_ttk_spread_and_hold_runs_a_damage_efficiency() {
+        let click = analyze(&test_support::record(
+            "micro-adjust",
+            AimerProfile::PRESETS[1],
+            4,
+        ));
+        let ttk = click.ttk_spread.expect("a full click run has kills");
+        assert!(ttk.q1_secs <= ttk.median_secs && ttk.median_secs <= ttk.q3_secs);
+        assert_eq!(click.damage_efficiency, None, "one-hit targets");
+        let hold = analyze(&test_support::record(
+            "track-precise",
+            AimerProfile::PRESETS[1],
+            4,
+        ));
+        let e = hold.damage_efficiency.expect("hold runs get one");
+        assert!(e.ratio() > 0.0 && e.ratio() <= 1.0, "{e:?}");
     }
 
     #[test]

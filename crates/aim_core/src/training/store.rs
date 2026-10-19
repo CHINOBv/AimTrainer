@@ -3,15 +3,49 @@
 
 use super::progress::RunRecord;
 use crate::scenario::RunResult;
+use crate::sensitivity::Sensitivity;
 use std::collections::HashMap;
+
+/// The settings a run was played with, stored next to it so runs played under different
+/// setups (sensitivity, FOV, an edited scenario) can be told apart. Every field is optional:
+/// runs stored before snapshots existed have an empty one.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RunSnapshot {
+    /// Sensitivity used (game, value, DPI; cm/360 follows from them).
+    pub sensitivity: Option<Sensitivity>,
+    /// Vertical field of view of the camera, degrees (a scenario's FOV lock included).
+    pub vertical_fov_deg: Option<f32>,
+    /// The crosshair as a VALORANT profile code.
+    pub crosshair_code: Option<String>,
+    /// Average frames per second over the run.
+    pub avg_fps: Option<f32>,
+    /// 1% low frames per second over the run.
+    pub low_fps: Option<f32>,
+    /// Times the run was paused.
+    pub pause_count: Option<u32>,
+    /// Seconds spent paused.
+    pub pause_secs: Option<f32>,
+    /// [`crate::scenario::ScenarioDef::content_hash`] of the scenario as played.
+    pub content_hash: Option<u64>,
+}
+
+impl RunSnapshot {
+    /// Whether nothing was recorded (a run stored before snapshots existed).
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
 
 /// Where finished runs are kept.
 pub trait RunStore {
     /// Every stored run, oldest first.
     fn runs(&self) -> &[RunRecord];
 
-    /// Keep a finished run, finished at Unix second `timestamp`.
-    fn append(&mut self, result: &RunResult, timestamp: u64);
+    /// The settings snapshot of every stored run, index-aligned with [`Self::runs`].
+    fn snapshots(&self) -> &[RunSnapshot];
+
+    /// Keep a finished run, finished at Unix second `timestamp`, with its settings.
+    fn append(&mut self, result: &RunResult, snapshot: &RunSnapshot, timestamp: u64);
 
     /// Best score stored under the run key `key`.
     fn best(&self, key: &str) -> Option<f32> {
@@ -58,23 +92,55 @@ pub fn record_of(result: &RunResult, timestamp: u64) -> RunRecord {
 
 /// A store that keeps runs in memory (tests, simulations).
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct MemoryStore(pub Vec<RunRecord>);
+pub struct MemoryStore {
+    runs: Vec<RunRecord>,
+    snapshots: Vec<RunSnapshot>,
+}
 
 impl RunStore for MemoryStore {
     fn runs(&self) -> &[RunRecord] {
-        &self.0
+        &self.runs
     }
 
-    fn append(&mut self, result: &RunResult, timestamp: u64) {
-        self.0.push(record_of(result, timestamp));
+    fn snapshots(&self) -> &[RunSnapshot] {
+        &self.snapshots
     }
+
+    fn append(&mut self, result: &RunResult, snapshot: &RunSnapshot, timestamp: u64) {
+        self.runs.push(record_of(result, timestamp));
+        self.snapshots.push(snapshot.clone());
+    }
+}
+
+/// The contract of [`RunStore`]: runs and their snapshots are kept in order and stay
+/// aligned. The app's CSV adapter checks the same through a file round trip.
+#[cfg(test)]
+pub(crate) fn check_store_contract(store: &mut impl RunStore) {
+    let before = store.runs().len();
+    let snapshot = RunSnapshot {
+        sensitivity: Some(Sensitivity::valorant(0.35, 800)),
+        vertical_fov_deg: Some(70.5),
+        crosshair_code: Some("0;P;h;0".into()),
+        avg_fps: Some(240.5),
+        low_fps: Some(180.0),
+        pause_count: Some(2),
+        pause_secs: Some(4.5),
+        content_hash: Some(0x0123_4567_89ab_cdef),
+    };
+    store.append(&tests::result("contract", 10.0), &snapshot, 7);
+    store.append(&tests::result("contract", 20.0), &RunSnapshot::default(), 8);
+    assert_eq!(store.runs().len(), before + 2);
+    assert_eq!(store.snapshots().len(), store.runs().len());
+    assert_eq!(store.snapshots()[before], snapshot);
+    assert!(store.snapshots()[before + 1].is_empty());
+    assert_eq!(store.runs()[before + 1].timestamp, 8);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn result(key: &str, score: f32) -> RunResult {
+    pub(super) fn result(key: &str, score: f32) -> RunResult {
         RunResult {
             scenario_id: key.into(),
             score,
@@ -97,7 +163,7 @@ mod tests {
             .into_iter()
             .enumerate()
         {
-            s.append(&result(k, v), i as u64);
+            s.append(&result(k, v), &RunSnapshot::default(), i as u64);
         }
         assert_eq!(s.runs().len(), 4);
         assert_eq!(s.runs()[2].timestamp, 2);
@@ -106,5 +172,10 @@ mod tests {
         assert_eq!(s.recent("a", 2), [30.0, 20.0]);
         assert_eq!(s.recent("a", 9), [10.0, 30.0, 20.0]);
         assert_eq!(s.best("a@+0.50"), None, "run keys never mix difficulties");
+    }
+
+    #[test]
+    fn the_memory_store_keeps_snapshots_aligned_with_runs() {
+        check_store_contract(&mut MemoryStore::default());
     }
 }

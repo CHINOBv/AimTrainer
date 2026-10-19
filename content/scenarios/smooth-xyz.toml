@@ -1,0 +1,21 @@
+# Idea credit: the 3D smooth control-tracking drills of the Voltaic control-tracking slot.
+# Original scenario: no file, name or value was copied.
+id = "smooth-xyz"
+name = "Smooth XYZ"
+category = "tracking"
+description = """
+Control tracking. A sphere moves on all three axes, sideways, up and down, towards and away,
+with smooth changes of direction and speed. Hold fire and keep the crosshair centered as it changes size."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.25 }
+spawn = { kind = "angular", yaw_deg = [-10.0, 10.0], pitch_deg = [2.0, 8.0], distance = [12.0, 12.0] }
+motion = { kind = "drift", speed = [1.2, 3.2], change_secs = [0.8, 1.6], max_offset = 4.0, depth = { change_secs = [1.0, 2.0], distance = [8.0, 16.0] } }
+health = inf
+
+[scoring]
+sphere = 100   # points per second on target

@@ -1,0 +1,24 @@
+# Idea: Voltaic benchmark "switching speed" slot (predictable diagonal movers).
+# Own name and parameters. Approximation: linear_bounce picks a random direction, so paths
+# are straight and predictable but not strictly diagonal.
+id = "tempo-movers"
+name = "Tempo Movers"
+category = "switching"
+description = """
+Speed switching on movers. Three spheres glide in straight lines at one steady speed and
+bounce off the walls of a box; each needs 0.4 s of tracking while firing. Trains matching a
+known velocity at once and switching on a steady rhythm."""
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.25 }
+spawn = { kind = "angular", yaw_deg = [-24.0, 24.0], pitch_deg = [2.0, 16.0], distance = [12.0, 12.0] }
+motion = { kind = "linear_bounce", speed_deg = [7.0, 7.0], arena = { yaw_deg = [-28.0, 28.0], pitch_deg = [0.0, 18.0] } }
+max_alive = 3
+health = 0.4
+min_separation_deg = 10
+
+[scoring]
+sphere = 400   # points per second on target; a kill is worth ≈160

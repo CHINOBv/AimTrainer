@@ -1,0 +1,36 @@
+# Idea credit: the multi-phase VALORANT flick-tech drills of the Voltaic VALORANT playlists.
+# Original scenario: no file, name or value was copied.
+id = "mini-phase"
+name = "Mini Phase"
+category = "flicking"
+description = """
+Four 15 s phases in one run: wide static spheres, small static spheres, strafing spheres and
+small strafing spheres. Adapt your flick to each change without slowing down."""
+duration_secs = 60
+
+[targets]
+shape = { kind = "sphere", radius = 0.22 }
+spawn = { kind = "angular", yaw_deg = [-30.0, 30.0], pitch_deg = [0.0, 12.0], distance = [12.0, 12.0] }
+max_alive = 3
+min_separation_deg = 8
+
+[scoring]
+miss_penalty = 15
+
+[[phases]]
+name = "Wide statics"
+advance = { kind = "time", secs = 15.0 }
+
+[[phases]]
+name = "Small statics"
+targets = { shape = { kind = "sphere", radius = 0.13 } }
+advance = { kind = "time", secs = 15.0 }
+
+[[phases]]
+name = "Strafers"
+targets = { motion = { kind = "strafe", weapon = "vandal", change_secs = [0.4, 0.9], stop_chance = 0.2, max_offset = 1.5 } }
+advance = { kind = "time", secs = 15.0 }
+
+[[phases]]
+name = "Small strafers"
+targets = { shape = { kind = "sphere", radius = 0.13 }, motion = { kind = "strafe", weapon = "vandal", change_secs = [0.4, 0.9], stop_chance = 0.2, max_offset = 1.5 } }

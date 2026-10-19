@@ -1,0 +1,18 @@
+# Idea: Voltaic benchmark "static clicking" slot (five targets on a very wide wall with an
+# ammo economy). Own name and parameters.
+id = "wide-wall-five"
+name = "Wide Wall Five"
+category = "flicking"
+description = """
+Static clicking with an ammo economy. Five medium spheres spread over a 100° wall. Each shot
+costs 30 of a 100 clip and each hit refunds 37, so three misses in a row force a reload.
+Trains long flicks that still land on the first click."""
+
+[weapon]
+ammo = { clip = 100, cost = 30, refund = 37, reload_secs = 1.5 }
+
+[targets]
+shape = { kind = "sphere", radius = 0.22 }
+spawn = { kind = "angular", yaw_deg = [-50.0, 50.0], pitch_deg = [0.0, 10.0], distance = [14.0, 14.0] }
+max_alive = 5
+min_separation_deg = 12
