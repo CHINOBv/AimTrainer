@@ -3,6 +3,7 @@
 //! overlay, keys and training. Rows go through [`SettingsRows`] so the search can filter
 //! them.
 
+use super::dpi_check::DpiMeter;
 use super::{hotkey_settings, restart_key_setting};
 use crate::persistence::settings::{EnemyHighlight, Settings, TargetVisibility};
 use crate::ui::molecules::SettingsRows;
@@ -14,7 +15,9 @@ use aim_core::sensitivity::Game;
 use aim_core::sensitivity::randomizer::{
     MAX_MULTIPLIER, MIN_INTERVAL_SECS, MIN_MULTIPLIER, RandomizerConfig,
 };
+use aim_core::training::ergonomics::{BreakPolicy, EVIDENCE_NOTE};
 use aim_core::training::missions::Commitment;
+use aim_core::training::warmup::{MIN_DOSE_SESSIONS, MIN_SESSION_RUNS, WarmupDose};
 use bevy_egui::egui;
 
 /// The Settings sub-tabs.
@@ -78,24 +81,8 @@ pub fn reset_section(settings: &mut Settings, tab: SettingsTab) {
             settings.mission_commitment = d.mission_commitment;
             settings.arena_coaching = d.arena_coaching;
             settings.sens_randomizer = d.sens_randomizer;
+            settings.breaks = d.breaks;
         }
-    }
-}
-
-/// Raw mouse counts accumulated while the DPI check runs.
-#[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct DpiMeter {
-    pub active: bool,
-    pub x: f64,
-    pub y: f64,
-}
-
-impl DpiMeter {
-    /// Ruler distance the player is asked to move, in cm.
-    pub const DISTANCE_CM: f64 = 10.0;
-
-    pub fn measured_dpi(&self) -> f64 {
-        self.x.abs() / (Self::DISTANCE_CM / 2.54)
     }
 }
 
@@ -163,34 +150,15 @@ pub fn sensitivity_panel(
             settings.sensitivity = s.with_dpi(*dpi_target);
         }
     });
-    rows.block(ui, "DPI check verify raw input mouse acceleration", |ui| {
-        ui.collapsing("DPI check (verify raw input)", |ui| {
-            ui.label(format!(
-                "Press Start, move the mouse exactly {} cm to the right along a ruler, then Stop.",
-                DpiMeter::DISTANCE_CM
-            ));
-            ui.horizontal(|ui| {
-                if ui
-                    .button(if meter.active { "Stop" } else { "Start" })
-                    .clicked()
-                {
-                    if !meter.active {
-                        *meter = DpiMeter::default();
-                    }
-                    meter.active = !meter.active;
-                }
-                ui.label(format!(
-                    "counts {:.0}  →  measured DPI ≈ {:.0} (configured {})",
-                    meter.x,
-                    meter.measured_dpi(),
-                    s.dpi
-                ));
+    rows.block(
+        ui,
+        "Measure DPI check verify raw input mouse acceleration ruler",
+        |ui| {
+            ui.collapsing("Measure DPI (verify raw input)", |ui| {
+                super::dpi_check::dpi_check(ui, settings, meter);
             });
-            ui.label(
-                "Expect a match within a few %. A large mismatch means wrong DPI or OS acceleration.",
-            );
-        });
-    });
+        },
+    );
     if !rows.searching() {
         ui.small("Converting from another game? Use the Tools tab.");
     }
@@ -263,7 +231,14 @@ pub fn keys_panel(
     );
 }
 
-pub fn training_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mut Settings) {
+/// The Training section. `dose` is the personal warm-up dose, which replaces the queue
+/// warm-up length when known.
+pub fn training_panel(
+    ui: &mut egui::Ui,
+    rows: &mut SettingsRows,
+    settings: &mut Settings,
+    dose: Option<&WarmupDose>,
+) {
     rows.section(ui, "Training");
     rows.row(ui, "Queue warm-up length", |ui| {
         ui.add(
@@ -271,6 +246,7 @@ pub fn training_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mut
                 .range(1..=30)
                 .suffix(" min"),
         );
+        ui.label(personal_warmup_text(dose));
     });
     rows.row(ui, "Daily goal", |ui| {
         ui.add(
@@ -294,6 +270,48 @@ pub fn training_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, settings: &mut
     rows.block(ui, "Sensitivity randomiser drill", |ui| {
         sens_randomizer(ui, &mut settings.sens_randomizer)
     });
+}
+
+/// Break prompts and the weekly volume cap. Every default is an estimate.
+pub fn breaks_panel(ui: &mut egui::Ui, rows: &mut SettingsRows, b: &mut BreakPolicy) {
+    rows.section(ui, "Breaks and wrist care");
+    rows.check(ui, "Break reminders", &mut b.enabled, EVIDENCE_NOTE);
+    rows.row(ui, "Break after", |ui| {
+        ui.add(
+            egui::DragValue::new(&mut b.continuous_minutes)
+                .range(10..=240)
+                .suffix(" min of play"),
+        );
+    });
+    rows.row(ui, "Break length", |ui| {
+        ui.add(
+            egui::DragValue::new(&mut b.break_minutes)
+                .range(1..=60)
+                .suffix(" min"),
+        )
+        .on_hover_text("Time away from runs that counts as a break and resets the count.");
+    });
+    rows.row(ui, "Weekly cap", |ui| {
+        ui.add(
+            egui::DragValue::new(&mut b.weekly_cap_minutes)
+                .range(30..=5000)
+                .suffix(" min / 7 days"),
+        )
+        .on_hover_text("An informational note when your aim training in the last 7 days reaches this. The default (about 1 h a day) is an estimate.");
+    });
+}
+
+/// The personal warm-up line shown next to the queue warm-up length.
+pub fn personal_warmup_text(dose: Option<&WarmupDose>) -> String {
+    match dose {
+        Some(d) => format!(
+            "Personal warm-up: {:.0} min (from {} sessions), used instead of this length",
+            d.minutes, d.sessions
+        ),
+        None => format!(
+            "Personal warm-up: not enough data yet ({MIN_DOSE_SESSIONS} sessions of {MIN_SESSION_RUNS}+ runs)"
+        ),
+    }
 }
 
 /// The sensitivity randomiser drill. It only scales the look while playing; the saved
@@ -587,14 +605,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dpi_meter_converts_counts_over_ten_centimeters() {
-        // 800 DPI over 10 cm = 800 * 10 / 2.54 ≈ 3149.6 counts.
-        let m = DpiMeter {
-            active: false,
-            x: -3149.6,
-            y: 0.0,
+    fn the_personal_warmup_line_names_the_dose_and_its_sessions() {
+        let dose = WarmupDose {
+            minutes: 7.0,
+            sessions: 4,
         };
-        assert!((m.measured_dpi() - 800.0).abs() < 0.1);
+        assert_eq!(
+            personal_warmup_text(Some(&dose)),
+            "Personal warm-up: 7 min (from 4 sessions), used instead of this length"
+        );
+        assert!(personal_warmup_text(None).contains("not enough data"));
     }
 
     /// Every preference changed away from its default.
@@ -625,6 +645,7 @@ mod tests {
         s.feel.apply_preset(FeelPreset::Juicy);
         s.target_visibility.outline = true;
         s.sens_randomizer.enabled = true;
+        s.breaks.enabled = false;
         s
     }
 

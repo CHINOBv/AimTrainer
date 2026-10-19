@@ -12,6 +12,8 @@ use crate::ui::organisms::miss_compass::miss_compass;
 use crate::ui::organisms::moving_panel::moving_panel;
 use crate::ui::organisms::perception_panel::{detection_panel, radar_recall_panel};
 use crate::ui::organisms::potential_tip::potential_tip;
+use crate::ui::organisms::proof_panel::proof_code;
+use aim_core::scenario::{Recording, RunResult};
 use bevy_egui::egui::{self, Align2};
 
 /// What the card needs beyond the result itself.
@@ -28,6 +30,31 @@ pub struct ResultsContext<'a> {
 }
 
 const ANALYSIS_MAX_HEIGHT_PX: f32 = 280.0;
+
+/// "Copy proof code": copies the run's share code to the clipboard and says so. The
+/// message is kept per result in egui's memory.
+fn proof_button(ui: &mut egui::Ui, rec: &Recording, result: &RunResult) {
+    let id = egui::Id::new(("proof-status", rec.seed, rec.inputs.len()));
+    ui.horizontal(|ui| {
+        if ui
+            .button("Copy proof code")
+            .on_hover_text("A code a friend can paste in Progress → Verify a proof to replay this run and confirm its score.")
+            .clicked()
+        {
+            let status = match proof_code(rec, result) {
+                Ok(code) => {
+                    ui.ctx().copy_text(code);
+                    "Proof code copied to the clipboard.".to_owned()
+                }
+                Err(e) => e,
+            };
+            ui.data_mut(|d| d.insert_temp(id, status));
+        }
+        if let Some(status) = ui.data(|d| d.get_temp::<String>(id)) {
+            ui.small(status);
+        }
+    });
+}
 
 pub fn results_card(
     ctx: &egui::Context,
@@ -116,6 +143,9 @@ pub fn results_card(
             }
             for note in &last.notes {
                 ui.label(note);
+            }
+            if let Some(rec) = last.recording.as_ref().filter(|r| !r.inputs.is_empty()) {
+                proof_button(ui, rec, r);
             }
             ui.separator();
             if let Some(p) = rc.routine {

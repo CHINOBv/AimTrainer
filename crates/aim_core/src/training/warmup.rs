@@ -17,6 +17,9 @@ pub const WARMUP_RUN_SECS: f32 = 30.0;
 /// Length of a buy-phase micro drill, seconds (a buy phase lasts 30 s in VALORANT's
 /// standard modes; leave time to buy).
 pub const MICRO_DRILL_SECS: f32 = 20.0;
+/// Most runs in a queue warm-up: [`DOSE_MAX_MINUTES`] of [`WARMUP_RUN_SECS`] runs, so an
+/// explicit length or a personal dose up to 15 min is honoured.
+pub const MAX_WARMUP_RUNS: usize = (DOSE_MAX_MINUTES * 60.0 / WARMUP_RUN_SECS) as usize;
 
 /// `(scenario, difficulty)` in warm-up order: smooth → flicks → precision → switch → move.
 const WARMUP_ORDER: [(&str, f32); 6] = [
@@ -36,11 +39,11 @@ const MICRO_DRILLS: [&str; 4] = [
     "track-reactive-micro",
 ];
 
-/// A warm-up of about `minutes` (at least 1 run per step until the budget runs out, and
-/// never more than the warm-up order). Runs are 30 s and kept in order (no interleaving).
+/// A warm-up of about `minutes` (at least 1 run, at most [`MAX_WARMUP_RUNS`]: the first
+/// pass through the warm-up order, then its later steps repeat). Runs are 30 s and kept in
+/// order (no interleaving).
 pub fn queue_warmup(minutes: f32) -> RoutineDef {
-    let runs =
-        ((minutes * 60.0 / WARMUP_RUN_SECS).floor() as usize).clamp(1, WARMUP_ORDER.len() * 2);
+    let runs = ((minutes * 60.0 / WARMUP_RUN_SECS).floor() as usize).clamp(1, MAX_WARMUP_RUNS);
     let mut blocks: Vec<Block> = Vec::new();
     for i in 0..runs {
         // First pass through the order, then repeat the later (harder) steps.
@@ -202,6 +205,45 @@ mod tests {
                 plan.iter()
                     .all(|p| p.duration_secs == Some(WARMUP_RUN_SECS))
             );
+        }
+    }
+
+    #[test]
+    fn explicit_lengths_up_to_fifteen_minutes_are_honoured() {
+        let lib = builtin::all();
+        for minutes in [10.0, 12.5, 15.0] {
+            let r = queue_warmup(minutes);
+            assert!(r.validate(&lib).is_empty(), "{:?}", r.validate(&lib));
+            assert_eq!(r.blocks.len(), (minutes * 2.0) as usize, "{minutes}");
+            assert!((r.minutes(&lib) - minutes).abs() < 1e-3, "{minutes}");
+        }
+        assert_eq!(queue_warmup(DOSE_MAX_MINUTES).blocks.len(), MAX_WARMUP_RUNS);
+        assert_eq!(queue_warmup(30.0).blocks.len(), MAX_WARMUP_RUNS, "capped");
+    }
+
+    #[test]
+    fn warmups_of_six_minutes_or_less_are_unchanged() {
+        // The order before the cap was raised: the six steps, then the later four repeat.
+        let expected = [
+            "track-precise",
+            "flick-wide",
+            "micro-adjust",
+            "flick-headshot",
+            "switch-speed",
+            "counter-strafe",
+            "micro-adjust",
+            "flick-headshot",
+            "switch-speed",
+            "counter-strafe",
+            "micro-adjust",
+            "flick-headshot",
+        ];
+        for half_minutes in 0..=12 {
+            let minutes = half_minutes as f32 / 2.0;
+            let r = queue_warmup(minutes);
+            let runs = half_minutes.max(1);
+            let ids: Vec<&str> = r.blocks.iter().map(|b| b.scenario.as_str()).collect();
+            assert_eq!(ids, expected[..runs], "{minutes} min");
         }
     }
 

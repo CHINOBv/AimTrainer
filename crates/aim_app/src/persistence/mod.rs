@@ -3,6 +3,7 @@
 pub mod adaptive;
 pub mod coach;
 pub mod history;
+pub mod journal;
 pub mod library;
 pub mod method_progress;
 pub mod missions;

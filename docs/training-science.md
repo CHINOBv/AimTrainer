@@ -495,7 +495,7 @@ The warm-up decrement after rest is verified (Lee & Genovese 1988, see Routine d
 
 - **Guards:** a session needs at least 4 runs, and the dose needs at least 3 such sessions; otherwise the player's setting is used.
 - **Estimates, not sourced values:** the 3-run window, the 5% tolerance, the 4-run and 3-session minimums, and the 2–15 min clamp.
-- **Limit:** `queue_warmup` plays at most 12 runs of 30 s (6 min), so a dose above 6 min is cut to 6 min until that cap changes.
+- **Length:** `queue_warmup` plays up to 30 runs of 30 s (15 min, `MAX_WARMUP_RUNS`), so the whole dose range and any explicit length up to 15 min are honoured; longer requests play 15 min.
 
 ## Ranked journal and tilt reset
 

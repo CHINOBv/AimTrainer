@@ -5,6 +5,7 @@ use crate::game::feedback::{HitMarkerStyle, MarkerColor, TargetEffect};
 use aim_core::crosshair::{CUSTOM_COLOR_INDEX, Crosshair, PRESET_COLORS, Rgba};
 use aim_core::sensitivity::Sensitivity;
 use aim_core::sensitivity::randomizer::RandomizerConfig;
+use aim_core::training::ergonomics::BreakPolicy;
 use aim_core::training::missions::Commitment;
 use bevy::prelude::Resource;
 use directories::ProjectDirs;
@@ -105,6 +106,9 @@ pub struct Settings {
     /// (they live in the OS keyring or an environment variable).
     #[serde(deserialize_with = "deserialize_coach")]
     pub coach: aim_ai::CoachConfig,
+    /// Break prompts and the weekly volume cap (`[breaks]`; `enabled = false` turns them off).
+    #[serde(deserialize_with = "deserialize_breaks")]
+    pub breaks: BreakPolicy,
     /// The first-run wizard was finished or skipped. False only for a new player (no
     /// settings file yet); a file without this key comes from an existing player.
     #[serde(default = "first_run_done_in_old_files")]
@@ -127,6 +131,23 @@ where
         // The error is not logged: a type error quotes the value, which may be a key.
         bevy::log::warn!("invalid [coach] settings; the coach is reset and off");
         aim_ai::CoachConfig::default()
+    }))
+}
+
+/// An invalid `[breaks]` table (an unknown key, a wrong type or a zero length) resets only
+/// the break policy to its defaults instead of every setting.
+fn deserialize_breaks<'de, D>(deserializer: D) -> Result<BreakPolicy, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let table = toml::Table::deserialize(deserializer)?;
+    let policy = table
+        .try_into::<BreakPolicy>()
+        .ok()
+        .filter(|p| p.validate().is_empty());
+    Ok(policy.unwrap_or_else(|| {
+        bevy::log::warn!("invalid [breaks] settings; using the default break policy");
+        BreakPolicy::default()
     }))
 }
 
@@ -471,6 +492,7 @@ impl Default for Settings {
             feel: FeelSettings::default(),
             favorites: Vec::new(),
             coach: aim_ai::CoachConfig::default(),
+            breaks: BreakPolicy::default(),
             first_run_done: false,
         }
     }
@@ -946,6 +968,47 @@ mod tests {
         assert_eq!(ch.color_index, CUSTOM_COLOR_INDEX);
         assert_eq!(ch.custom_color, Rgba::opaque(255, 128, 0));
         assert!(!ch.outlines);
+    }
+
+    #[test]
+    fn breaks_use_the_default_policy_for_old_files_and_round_trip() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert_eq!(old.breaks, BreakPolicy::default());
+        let custom = Settings {
+            breaks: BreakPolicy {
+                continuous_minutes: 30,
+                break_minutes: 10,
+                weekly_cap_minutes: 300,
+                enabled: false,
+            },
+            ..Settings::default()
+        };
+        let text = toml::to_string_pretty(&custom).unwrap();
+        assert!(text.contains("[breaks]"), "{text}");
+        let back: Settings = toml::from_str(&text).unwrap();
+        assert_eq!(back.breaks, custom.breaks);
+        let partial = Settings::parse("[breaks]\nenabled = false\n");
+        assert!(!partial.breaks.enabled);
+        assert_eq!(
+            partial.breaks.continuous_minutes, 45,
+            "missing keys default"
+        );
+    }
+
+    #[test]
+    fn an_invalid_breaks_table_resets_only_the_breaks() {
+        for table in [
+            "[breaks]\nenabled = \"yes\"\n",
+            "[breaks]\nsnooze = 3\n",
+            "[breaks]\ncontinuous_minutes = 0\n",
+        ] {
+            let settings = Settings::parse(&format!("fullscreen = false\n{table}"));
+            assert!(
+                !settings.fullscreen,
+                "the rest of the file still loads: {table}"
+            );
+            assert_eq!(settings.breaks, BreakPolicy::default(), "{table}");
+        }
     }
 
     #[test]
