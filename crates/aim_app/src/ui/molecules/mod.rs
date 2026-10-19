@@ -9,6 +9,19 @@ pub mod sparkline;
 use crate::persistence::settings::Toggle;
 use bevy_egui::egui;
 
+/// A short coloured label on a filled rounded background (a verdict such as "READY").
+pub fn chip(ui: &mut egui::Ui, text: &str, color: egui::Color32) -> egui::Response {
+    egui::Frame::new()
+        .fill(color.gamma_multiply(0.25))
+        .stroke(egui::Stroke::new(1.0, color))
+        .corner_radius(8.0)
+        .inner_margin(egui::Margin::symmetric(8, 2))
+        .show(ui, |ui| {
+            ui.colored_label(color, egui::RichText::new(text).strong())
+        })
+        .response
+}
+
 /// Horizontal tab strip; returns nothing, edits `current` in place. Clicks play the menu
 /// click sound when it is on.
 pub fn tab_bar<T: PartialEq + Copy>(ui: &mut egui::Ui, current: &mut T, tabs: &[(T, &str)]) {

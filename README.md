@@ -84,7 +84,7 @@ The menu tabs (keys 1–9 switch tabs while no text field has focus):
 | Tab | What it holds |
 |---|---|
 | Today | Quick play (your last scenario) and Continue (a routine you started today), the day's method session, the daily challenge, daily missions |
-| Progress | Goal, readiness, fatigue, trend, per-skill strengths and trends, bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
+| Progress | Goal, readiness chips, fatigue, trend, per-skill bars with weekly sparklines (explanations on hover), bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
 | Scenarios | Search and filter (category, click or hold, moving or standing, waves); ★ pins a scenario to Favourites (saved as `favorites` in `settings.toml`); Recent lists your last 5 scenarios. Play, or play adaptively |
 | Routines | The routines (resume a split one), your personalized playlist |
 | Arenas | Deathmatch, site hold, angle clearing, jiggle-peek and pre-aim drills; a Practice button plays any arena with bots that never shoot |
