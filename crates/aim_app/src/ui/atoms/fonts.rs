@@ -22,7 +22,7 @@ mod tests {
     use bevy_egui::egui::{Color32, Context, FontId};
 
     /// Every non-ASCII symbol the UI strings use.
-    const UI_SYMBOLS: &str = "→▶↻·≈±°—…–✔⏵≤−×";
+    const UI_SYMBOLS: &str = "→▶↻·≈±°—…–✔⏵≤−×▲▼⚠↗↖↙↘÷";
 
     /// What egui draws for a character no font in the chain has (an empty box).
     const REPLACEMENT: char = '◻';

@@ -29,6 +29,10 @@ pub struct DirectionGrid {
     pub weakest_note: Option<String>,
     /// Per-axis over/undershoot rates and the weak axis, when both axes were measured.
     pub axis_note: Option<String>,
+    /// Near and far hit rates per quadrant, in the order of `rows` (for the radar chart);
+    /// `None` for a quadrant without flicks.
+    pub near_rates: [Option<f32>; 4],
+    pub far_rates: [Option<f32>; 4],
 }
 
 fn pct(ratio: f32) -> String {
@@ -96,11 +100,14 @@ impl DirectionGrid {
                 v.samples,
             )
         });
+        let rates = |d| std::array::from_fn(|i| summary.bucket(Quadrant::ALL[i], d).hit_rate());
         Some(Self {
             rows,
             split_note,
             weakest_note,
             axis_note,
+            near_rates: rates(DistanceClass::Near),
+            far_rates: rates(DistanceClass::Far),
         })
     }
 }
@@ -178,6 +185,16 @@ mod tests {
                 .all(|c| c == "—" || c.contains(" hit of ")),
             "{grid:?}"
         );
+        // The radar's rates agree with the text cells: a rate exactly where a cell has one.
+        for (row, (near, far)) in grid
+            .rows
+            .iter()
+            .zip(grid.near_rates.iter().zip(&grid.far_rates))
+        {
+            assert_eq!(near.is_some(), row.near != "—", "{row:?}");
+            assert_eq!(far.is_some(), row.far != "—", "{row:?}");
+            assert!(near.iter().chain(far).all(|r| (0.0..=1.0).contains(r)));
+        }
         let report = RunReport::new(&a, |_| None);
         assert_eq!(report.directions, Some(grid));
     }

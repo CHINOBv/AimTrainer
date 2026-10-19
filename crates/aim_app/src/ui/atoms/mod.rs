@@ -20,6 +20,30 @@ pub const BODY_MARKER: Color32 = Color32::from_rgb(235, 235, 235);
 /// Favourite star.
 pub const FAVORITE: Color32 = Color32::from_rgb(250, 200, 60);
 
+/// Charts and gauges for a value no threshold judges.
+pub const NEUTRAL: Color32 = Color32::from_rgb(110, 165, 240);
+
+/// How a value reads against its thresholds; charts and gauges colour by it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tone {
+    Good,
+    Warn,
+    Bad,
+    /// No threshold applies.
+    Neutral,
+}
+
+impl Tone {
+    pub fn color(self) -> Color32 {
+        match self {
+            Tone::Good => GOOD,
+            Tone::Warn => WARN,
+            Tone::Bad => BAD,
+            Tone::Neutral => NEUTRAL,
+        }
+    }
+}
+
 /// Large, bold text (timer, score, countdown).
 pub fn big(text: impl Into<String>, size: f32) -> RichText {
     RichText::new(text)

@@ -1,4 +1,10 @@
-//! Small composed widgets.
+//! Small composed widgets, including the painter-based charts (gauge, radial wedges,
+//! radar, sparkline) that turn numbers into pictures.
+
+pub mod gauge;
+pub mod radar;
+pub mod radial_wedges;
+pub mod sparkline;
 
 use crate::persistence::settings::Toggle;
 use bevy_egui::egui;

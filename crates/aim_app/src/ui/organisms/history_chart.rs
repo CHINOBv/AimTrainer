@@ -1,34 +1,15 @@
 //! Score history chart.
 //!
 //! A small line chart painted with egui's painter (no plotting dependency): one point per
-//! run, oldest on the left, with the personal best marked.
+//! run, oldest on the left, with the personal best marked. The point layout is the
+//! sparkline's ([`spark_points`]).
 
 use crate::ui::atoms::GOOD;
-use bevy_egui::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, StrokeKind, vec2};
+use crate::ui::molecules::sparkline::spark_points;
+use bevy_egui::egui::{self, Align2, Color32, FontId, Sense, Stroke, StrokeKind, vec2};
 
 const HEIGHT_PX: f32 = 80.0;
 const PADDING_PX: f32 = 6.0;
-
-/// Screen positions of `scores` inside `rect`, spread evenly in x and scaled between the
-/// lowest and highest score in y (a flat history sits in the middle).
-fn chart_points(scores: &[f32], rect: Rect) -> Vec<Pos2> {
-    let (lo, hi) = scores
-        .iter()
-        .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), &s| {
-            (lo.min(s), hi.max(s))
-        });
-    let span = hi - lo;
-    let last = scores.len().saturating_sub(1).max(1) as f32;
-    scores
-        .iter()
-        .enumerate()
-        .map(|(i, &s)| {
-            let x = rect.left() + rect.width() * i as f32 / last;
-            let t = if span > 0.0 { (s - lo) / span } else { 0.5 };
-            Pos2::new(x, rect.bottom() - rect.height() * t)
-        })
-        .collect()
-}
 
 /// Draw the chart for `scores` (oldest first). Draws nothing for fewer than two runs.
 pub fn history_chart(ui: &mut egui::Ui, scores: &[f32]) {
@@ -46,7 +27,7 @@ pub fn history_chart(ui: &mut egui::Ui, scores: &[f32]) {
         StrokeKind::Inside,
     );
     let plot = frame.shrink(PADDING_PX);
-    let points = chart_points(scores, plot);
+    let points = spark_points(scores, plot);
     let line = visuals.widgets.active.fg_stroke.color;
     painter.line(points.clone(), Stroke::new(1.5, line));
     let best = scores
@@ -87,30 +68,4 @@ pub fn history_chart(ui: &mut egui::Ui, scores: &[f32]) {
         "Last {} runs, oldest on the left. Green: best.",
         scores.len()
     ));
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn points_span_the_rect_from_lowest_to_highest_score() {
-        let rect = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(100.0, 50.0));
-        let p = chart_points(&[10.0, 30.0, 20.0], rect);
-        assert_eq!(
-            p,
-            vec![
-                Pos2::new(0.0, 50.0),
-                Pos2::new(50.0, 0.0),
-                Pos2::new(100.0, 25.0)
-            ]
-        );
-    }
-
-    #[test]
-    fn a_flat_history_sits_in_the_middle() {
-        let rect = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(10.0, 10.0));
-        let p = chart_points(&[5.0, 5.0], rect);
-        assert!(p.iter().all(|p| p.y == 5.0));
-    }
 }

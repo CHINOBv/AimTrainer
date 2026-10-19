@@ -115,6 +115,9 @@ pub enum UiAction {
         tuning: aim_core::scenario::Tuning,
     },
     Retry(String),
+    /// "Watch it" on the results card: replay the last run's mistakes. The results page
+    /// handles it (for now by opening the replay viewer on that run); the navigator ignores it.
+    WatchMistakes,
     Resume,
     BackToMenu,
     Quit,
