@@ -11,14 +11,14 @@ use crate::overlay::Overlay;
 use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::history::History;
 use crate::persistence::missions::{Missions, MissionsPlugin};
-use crate::persistence::settings::{Paths, Settings};
+use crate::persistence::settings::{DEFAULT_COUNTDOWN_SECS, Paths, Settings};
 use crate::platform::frame_stats::{FrameStats, RUN_WINDOW};
 use aim_core::fov;
 use aim_core::games::valorant::HumanoidDims;
 use aim_core::math::ViewAngles;
 use aim_core::movement::MoveInput;
 use aim_core::scenario::{
-    FrameInput, HitZone, Recording, RunKey, RunOutcome, RunResult, ScenarioDef, Session,
+    FrameInput, HitZone, Prestart, Recording, RunKey, RunOutcome, RunResult, ScenarioDef, Session,
     SessionEvent, Shape, Target, Tuning, parse_run_key,
 };
 use aim_core::sensitivity::Sensitivity;
@@ -34,8 +34,6 @@ use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use feedback::{DamagePop, HitFrame, HitMarkerStyle, MarkerKind, ShotFeedback, ShotOutcome};
 use hit_effect::{BaseMaterial, EffectAssets, Struck};
 use std::collections::HashMap;
-
-const COUNTDOWN_SECS: f32 = 3.0;
 
 #[derive(States, Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub enum AppState {
@@ -63,6 +61,10 @@ pub struct Run {
     pub session: Session,
     pub view: ViewAngles,
     pub countdown: f32,
+    /// The countdown length was taken from the settings (on the run's first frame).
+    countdown_armed: bool,
+    /// Movement scenarios: the player walking during the countdown, until GO.
+    prestart: Option<Prestart>,
     pub paused: bool,
     pub zoomed: bool,
     /// Seconds left on the hit-marker flash.
@@ -122,6 +124,8 @@ impl Run {
 
     /// A run with a fixed seed (daily challenge: everyone gets the same targets).
     pub fn with_seed(def: ScenarioDef, seed: u64) -> Self {
+        // A restart passes the previous run's definition: its countdown start is not reused.
+        let def = Prestart::fresh(&def);
         let recording = Recording::new(def.clone(), seed);
         Self {
             recording,
@@ -132,7 +136,9 @@ impl Run {
             finder_slot: None,
             session: Session::new(def, seed),
             view: ViewAngles::default(),
-            countdown: COUNTDOWN_SECS,
+            countdown: DEFAULT_COUNTDOWN_SECS,
+            countdown_armed: false,
+            prestart: None,
             paused: false,
             zoomed: false,
             hit_flash: 0.0,
@@ -160,8 +166,49 @@ impl Run {
             low_fps: frames.map(|(_, low, _)| low),
             pause_count: Some(self.pauses.count),
             pause_secs: Some(self.pauses.secs),
-            content_hash: Some(def.content_hash()),
+            // Where the countdown left the player is not part of the scenario.
+            content_hash: Some(Prestart::fresh(def).content_hash()),
         }
+    }
+
+    /// Take the countdown length, `secs`, from the settings. Only the first call counts, so
+    /// it can run every frame; 0 starts the run at once.
+    pub fn arm_countdown(&mut self, secs: f32) {
+        if std::mem::replace(&mut self.countdown_armed, true) {
+            return;
+        }
+        self.countdown = secs;
+        self.prestart = (secs > 0.0 && self.recording.def.player.movement)
+            .then(|| Prestart::new(&self.recording.def));
+    }
+
+    /// Advance the countdown by one frame of `input`: only movement scenarios move the
+    /// player, and firing does nothing. At GO the scored session starts from where the
+    /// player stands. Returns whether the frame belonged to the countdown.
+    pub fn count_down(&mut self, input: FrameInput) -> bool {
+        if self.countdown <= 0.0 {
+            return false;
+        }
+        self.countdown -= input.dt;
+        if let Some(p) = self.prestart.as_mut() {
+            p.update(input);
+        }
+        if self.countdown <= 0.0
+            && let Some(p) = self.prestart.take()
+        {
+            let seed = self.recording.seed;
+            let def = p.start(&self.recording.def);
+            self.session = Session::new(def.clone(), seed);
+            self.recording = Recording::new(def, seed);
+        }
+        true
+    }
+
+    /// Where the camera sits: the walking player during the countdown, else the session's.
+    pub fn eye_position(&self) -> aim_core::math::Vec3 {
+        self.prestart
+            .as_ref()
+            .map_or_else(|| self.session.eye_position(), Prestart::eye_position)
     }
 
     /// Weapon inaccuracy from movement and the spray in progress, for the crosshair bloom.
@@ -789,6 +836,7 @@ fn tick(
         buttons,
     } = input;
     let dt = time.delta_secs();
+    run.arm_countdown(finisher.settings.countdown_secs());
     let paused = run.paused;
     run.pauses.track(paused, dt);
     if paused {
@@ -796,12 +844,11 @@ fn tick(
     }
     run.hit_flash = (run.hit_flash - dt).max(0.0);
     run.kill_flash = (run.kill_flash - dt).max(0.0);
-    if run.countdown > 0.0 {
-        run.countdown -= dt;
+    let input = frame_input(dt, run.view, &keys, &buttons);
+    if run.count_down(input) {
         return;
     }
     run.frames.push(dt);
-    let input = frame_input(dt, run.view, &keys, &buttons);
     run.recording.inputs.push(input);
     feedback::age_pops(&mut run.damage_pops, dt);
     let shown = run.session.def().feedback;
@@ -1142,7 +1189,7 @@ fn update_camera(
     place_camera(
         &mut tf,
         &mut projection,
-        run.session.eye_position(),
+        run.eye_position(),
         run.view,
         run.zoomed,
         zoom,
@@ -1371,6 +1418,84 @@ mod tests {
             PlayArea::of(&movement_def().with_elevation(2.0)).unwrap(),
             "a new height rebuilds the area"
         );
+    }
+
+    /// One 144 FPS frame strafing right with the trigger held.
+    fn strafing_and_firing() -> FrameInput {
+        FrameInput {
+            dt: 1.0 / 144.0,
+            fire_pressed: true,
+            fire_held: true,
+            movement: MoveInput {
+                right: 1.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_zero_countdown_starts_the_run_at_once() {
+        let mut run = Run::with_seed(movement_def(), 1);
+        run.arm_countdown(0.0);
+        assert_eq!(run.countdown, 0.0);
+        assert!(
+            !run.count_down(strafing_and_firing()),
+            "the first frame is scored"
+        );
+        run.arm_countdown(3.0);
+        assert_eq!(run.countdown, 0.0, "only the first length counts");
+    }
+
+    #[test]
+    fn moving_during_the_countdown_starts_the_run_from_there_without_firing() {
+        let def = movement_def();
+        let mut run = Run::with_seed(def.clone(), 4);
+        run.arm_countdown(1.0);
+        let mut frames = 0;
+        while run.count_down(strafing_and_firing()) {
+            frames += 1;
+            assert_eq!(run.eye_position().y, run.session.eye_position().y);
+        }
+        assert!((144..=145).contains(&frames), "{frames}");
+        let at = run.session.player_position();
+        assert!(
+            at.x > 1.0,
+            "the run starts where the player walked to: {at:?}"
+        );
+        assert_eq!(run.eye_position(), run.session.eye_position());
+        assert_eq!(run.session.stats().shots, 0, "firing waited for GO");
+        assert!(run.recording.inputs.is_empty());
+        assert_eq!(run.recording.def.player.start, Some([at.x, at.z]));
+        assert_eq!(
+            run.recording.start().player_position(),
+            at,
+            "replays start there"
+        );
+        assert_eq!(
+            run.snapshot(&Settings::default()).content_hash,
+            Some(def.content_hash()),
+            "the scenario hash ignores where the countdown ended"
+        );
+        let restarted = Run::with_seed(run.session.def().clone(), 4);
+        assert_eq!(
+            restarted.session.player_position().x,
+            0.0,
+            "a restart starts over"
+        );
+    }
+
+    #[test]
+    fn scenarios_without_movement_count_down_in_place() {
+        let def = aim_core::scenario::builtin::all()
+            .into_iter()
+            .find(|d| !d.player.movement)
+            .unwrap();
+        let mut run = Run::with_seed(def.clone(), 2);
+        run.arm_countdown(0.5);
+        while run.count_down(strafing_and_firing()) {}
+        assert_eq!(run.recording.def, def);
+        assert_eq!(run.session.player_position().x, 0.0);
     }
 
     #[test]

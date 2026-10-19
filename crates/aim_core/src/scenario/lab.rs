@@ -330,6 +330,8 @@ impl LabSettings {
             bounds_x: Range::new(-w, w),
             bounds_z: Range::new(-d, d),
             elevation: 0.0,
+            start: None,
+            start_velocity: None,
         }
     }
 
@@ -393,6 +395,7 @@ impl LabSettings {
             perception: None,
             shrink_per_kill: None,
             motion_profiles: Vec::new(),
+            spider: None,
         }
     }
 }

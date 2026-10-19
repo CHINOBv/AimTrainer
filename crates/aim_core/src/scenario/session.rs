@@ -11,11 +11,12 @@ use super::def::{FireMode, FloorAction, Motion, MotionProfile, ScenarioDef, Shap
 use super::hit::{HitZone, Ray};
 use super::motion::{Drive, MotionState};
 use super::phase::{self, FailReason, PhaseRun, RunEnd, RunOutcome};
+use super::prestart;
 use super::recoil::RecoilState;
 use super::{scoring, spawn, weapon};
 use crate::games::valorant::{HumanoidDims, RecoilProfile, WeaponStats};
 use crate::math::{Vec3, ViewAngles, angle_between_deg};
-use crate::movement::{self, LocalVelocity, MoveInput, MovementProfile};
+use crate::movement::{LocalVelocity, MoveInput, MovementProfile};
 use crate::rng::Rng;
 use serde::{Deserialize, Serialize};
 
@@ -339,7 +340,8 @@ impl Session {
             .then(|| def.weapon.kind.recoil())
             .flatten()
             .map(|r| RecoilState::new(r, weapon.first_shot_spread_deg));
-        let start = Vec3::new(0.0, def.player.elevation, 0.0);
+        let start = prestart::start_position(&def.player);
+        let start_velocity = prestart::start_velocity(&def.player);
         let mut s = Self {
             def,
             rng: Rng::new(seed),
@@ -349,7 +351,7 @@ impl Session {
             next_id: 1,
             stats: Stats::default(),
             player_pos: start,
-            player_vel: LocalVelocity::default(),
+            player_vel: start_velocity,
             view: ViewAngles::default(),
             profile,
             weapon,
@@ -581,26 +583,14 @@ impl Session {
         if !self.def.player.movement {
             return;
         }
-        self.player_vel = movement::step(&self.profile, self.player_vel, input, dt);
-        let yaw = self.view.yaw_deg;
-        let mut world = self.player_vel.to_world(yaw);
-        let next = self.player_pos + world * dt;
-        let (bx, bz) = (self.def.player.bounds_x, self.def.player.bounds_z);
-        let clamped = Vec3::new(
-            next.x.clamp(bx.min, bx.max),
-            self.def.player.elevation,
-            next.z.clamp(bz.min, bz.max),
+        (self.player_pos, self.player_vel) = prestart::walk(
+            &self.def.player,
+            &self.profile,
+            (self.player_pos, self.player_vel),
+            input,
+            self.view.yaw_deg,
+            dt,
         );
-        // Hitting an edge of the play area behaves like a wall: only the velocity pushing
-        // into it is lost, so the player keeps sliding along the edge.
-        if clamped.x != next.x {
-            world.x = 0.0;
-        }
-        if clamped.z != next.z {
-            world.z = 0.0;
-        }
-        self.player_vel = LocalVelocity::from_world(world, yaw);
-        self.player_pos = clamped;
         if !self.is_accurate() {
             self.last_moving_at = self.time;
         }

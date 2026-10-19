@@ -75,6 +75,8 @@ On Windows, install Rust with rustup and run `cargo build --release`. The binary
 | Shoot | Left mouse button (hold for tracking scenarios) |
 | ADS zoom (weapons that have a scope) | Right mouse button |
 | Move (movement scenarios) | WASD, Shift to walk |
+| Get into position before the run (movement scenarios: move and look during the countdown; shots wait for GO, and the run starts from where you stand and how fast you move) | WASD during the countdown |
+| Countdown length (0–5 s in 0.5 s steps, default 3; 0 starts at once; also arenas) | Settings → Training → Start countdown (`countdown_secs`) |
 | Pause / resume | Esc |
 | Restart the run as it is (scenarios and arenas, also paused or in the countdown; keeps an adaptive run's level and records nothing) | R (Settings → Keys) |
 | Change your floor height (scenario pause menu) | Floor height −/+ (0.5 m steps), then Apply and restart |

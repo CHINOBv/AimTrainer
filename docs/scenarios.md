@@ -33,6 +33,8 @@ movement = false             # WASD with VALORANT movement for the weapon
 bounds_x = [-5.0, 5.0]       # play area for the player's feet (meters); start at origin facing -Z
 bounds_z = [-1.0, 1.0]       # +Z is behind the player, so a larger max leaves room to step back
 elevation = 0.0              # player's floor above the targets' floor (meters), within [-3, 6]
+# start = [0.0, 0.0]         # optional: where the feet start, [x, z] in meters, inside the bounds
+# start_velocity = [0.0, 0.0] # optional: velocity at the start, [right, forward] in m/s (player frame)
 
 [targets]
 shape = { kind = "sphere", radius = 0.15 }        # or { kind = "humanoid", head_only = true }, or a capsule (see below)
@@ -181,6 +183,8 @@ Behaviour rules still override the profile in force. `reactions` need every prof
 ### Play area and floor height
 
 With `movement = true`, the player's feet stay inside `bounds_x` and `bounds_z`; pushing into an edge stops only that direction, so you slide along it. The edges are drawn as low, see-through strips on the floor, a few centimeters high, so they never block the view. The built-in movement drills use `counter-strafe` x [−16, 16], z [−3, 8] and `strafe-shot` x [−16, 16], z [−4, 8] (widened from about ±8 m so a full ADAD rhythm fits without hitting an edge).
+
+`start` and `start_velocity` are optional and default to the origin and standing still. The trainer writes them into the run's copy of the definition when the start countdown ends: in a movement scenario you can walk and look around during the countdown (firing does nothing until GO), and the run begins from where you stand and how fast you are moving at GO. Saved replays embed that copy, so they replay the run exactly. `start` must lie inside `bounds_x` and `bounds_z`; `start_velocity` must be finite and is in the player's own frame (`right`, `forward`), turning with the view like all player velocity. A new run of a movement scenario always clears both fields and starts its countdown from the origin, so leave them out of your own files; a scenario without movement keeps its `start` as written.
 
 `elevation` raises (or lowers, when negative) the player's floor; targets keep theirs at 0. The trainer draws a translucent slab at that height under the play area. You can also change it during a run: press Esc, set **Floor height** in 0.5 m steps, and choose **Apply and restart**. The run restarts at the same difficulty and duration, and a routine stays at the same run.
 

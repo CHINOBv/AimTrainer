@@ -9,6 +9,7 @@ pub mod hit;
 pub mod lab;
 mod motion;
 pub mod phase;
+pub mod prestart;
 mod recoil;
 pub mod recording;
 mod scoring;
@@ -25,6 +26,7 @@ pub use difficulty::{
 };
 pub use hit::HitZone;
 pub use phase::{FailDef, FailReason, PhaseDef, PhaseTrigger, RunEnd, RunOutcome, TargetOverrides};
+pub use prestart::Prestart;
 pub use recording::Recording;
 pub use session::{FrameInput, RunResult, Session, SessionEvent, Stats, Target};
 pub use weapon::shot_direction;
