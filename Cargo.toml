@@ -12,6 +12,7 @@ rust-version = "1.97.1"
 aim_core = { path = "crates/aim_core" }
 aim_world = { path = "crates/aim_world" }
 aim_integrations = { path = "crates/aim_integrations" }
+aim_ai = { path = "crates/aim_ai" }
 serde = { version = "1.0", features = ["derive"] }
 toml = "1.1"
 thiserror = "2.0"

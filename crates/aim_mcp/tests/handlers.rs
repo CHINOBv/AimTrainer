@@ -253,6 +253,37 @@ fn remembered_notes_are_recalled_across_calls() {
 }
 
 #[test]
+fn notes_persist_in_the_trainers_coach_db_across_servers() {
+    let scratch = Scratch::new("memory-file");
+    let paths = scratch.paths();
+    assert_eq!(paths.memory_file, scratch.0.join("data").join("coach.db"));
+    let first = CoachServer::new(paths.clone());
+    let kept = first.call(
+        tools::REMEMBER,
+        args(json!({ "text": "Plays Jett; warms up with tracking" })),
+    );
+    assert!(!is_error(&kept), "{kept:?}");
+    drop(first);
+    assert!(paths.memory_file.exists(), "kept in the shared SQLite file");
+
+    let second = CoachServer::new(paths);
+    let found = second.call(tools::RECALL, args(json!({ "query": "jett" })));
+    let notes = structured(&found)["notes"].as_array().unwrap().clone();
+    assert_eq!(notes.len(), 1, "{found:?}");
+    assert_eq!(notes[0]["text"], "Plays Jett; warms up with tracking");
+}
+
+#[test]
+fn tools_that_need_no_memory_create_no_memory_file() {
+    let scratch = Scratch::new("no-memory-file");
+    let paths = scratch.paths();
+    let server = CoachServer::new(paths.clone());
+    let out = server.call(tools::LIST_STATS, None);
+    assert!(!is_error(&out), "{out:?}");
+    assert!(!paths.memory_file.exists());
+}
+
+#[test]
 fn unknown_tools_are_error_results() {
     let scratch = Scratch::new("unknown");
     let server = CoachServer::new(scratch.paths());

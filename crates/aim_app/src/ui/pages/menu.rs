@@ -3,8 +3,11 @@
 use crate::audio::SoundPreview;
 use crate::game::AppState;
 use crate::game::FinderState;
+use crate::game::{ActiveRoutine, start_run};
 use crate::overlay::{Overlay, background};
 use crate::persistence::adaptive::AdaptiveLevels;
+use crate::persistence::coach::context::{ContextData, load_context};
+use crate::persistence::coach::{self, TurnRequest};
 use crate::persistence::history::History;
 use crate::persistence::library::Library;
 use crate::persistence::method_progress::{DayProgress, MethodProgress};
@@ -17,6 +20,7 @@ use crate::ui::UiAction;
 use crate::ui::atoms::{ERROR, GOOD};
 use crate::ui::molecules::{SettingsRows, tab_bar};
 use crate::ui::navigation::Navigator;
+use crate::ui::organisms::coach_panel::{self, CardOutcome, CoachAction, CoachState};
 use crate::ui::organisms::profile_code::{self, ProfileImport};
 use crate::ui::organisms::progress_panel::{self, ProgressModel};
 use crate::ui::organisms::replay_viewer::{self, ReplayViewerState};
@@ -33,6 +37,7 @@ use crate::ui::organisms::{
     arena_list, benchmark_panel, feedback_settings, first_run, routine_list, scenario_browser,
 };
 use aim_core::fov;
+use aim_core::scenario::ScenarioDef;
 use aim_core::training::method::{MethodDef, Weekday};
 use aim_core::training::playlist;
 use aim_core::training::resume::{PositionStore, RoutinePosition};
@@ -49,7 +54,11 @@ impl Plugin for MenuPage {
     fn build(&self, app: &mut App) {
         app.init_resource::<MenuState>()
             .init_resource::<SettingsSaver>()
-            .add_systems(Update, (count_dpi_meter, save_settings))
+            .init_resource::<CoachPlay>()
+            .add_systems(
+                Update,
+                (count_dpi_meter, save_settings, start_coach_scenario),
+            )
             .add_systems(Last, flush_settings_on_exit)
             .add_systems(OnExit(AppState::Menu), stop_recording_on_exit)
             .add_systems(
@@ -70,9 +79,10 @@ enum Tab {
     Benchmark,
     Tools,
     Settings,
+    Coach,
 }
 
-const TABS: [(Tab, &str); 8] = [
+const TABS: [(Tab, &str); 9] = [
     (Tab::Today, "Today"),
     (Tab::Progress, "Progress"),
     (Tab::Scenarios, "Scenarios"),
@@ -81,10 +91,11 @@ const TABS: [(Tab, &str); 8] = [
     (Tab::Benchmark, "Benchmark"),
     (Tab::Tools, "Tools"),
     (Tab::Settings, "Settings"),
+    (Tab::Coach, "Coach"),
 ];
 
-/// Keys 1–8 select the tabs in [`TABS`] order.
-const TAB_KEYS: [egui::Key; 8] = [
+/// Keys 1–9 select the tabs in [`TABS`] order.
+const TAB_KEYS: [egui::Key; 9] = [
     egui::Key::Num1,
     egui::Key::Num2,
     egui::Key::Num3,
@@ -93,6 +104,7 @@ const TAB_KEYS: [egui::Key; 8] = [
     egui::Key::Num6,
     egui::Key::Num7,
     egui::Key::Num8,
+    egui::Key::Num9,
 ];
 
 fn tab_for_key(key: egui::Key) -> Option<Tab> {
@@ -148,6 +160,7 @@ struct MenuState {
     confirm_reset: Option<SettingsTab>,
     scenario_filter: scenario_browser::ScenarioFilter,
     wizard_step: first_run::WizardStep,
+    coach: CoachState,
 }
 
 /// The Settings tab: search, sub-tabs, a reset per section, and the rows.
@@ -274,6 +287,7 @@ struct TrainingState<'w> {
     finder: ResMut<'w, FinderState>,
     frames: Res<'w, FrameStats>,
     missions: ResMut<'w, Missions>,
+    coach_play: ResMut<'w, CoachPlay>,
 }
 
 /// Settings plus what is needed to persist and preview them.
@@ -547,6 +561,45 @@ fn menu(
             });
         }
         Tab::Settings => settings_page(&mut root, state, &mut cfg),
+        Tab::Coach => {
+            let coach = &mut state.coach;
+            refresh_coach(
+                coach,
+                &cfg.settings.coach,
+                &cfg.paths,
+                lib,
+                &history,
+                &training.missions,
+            );
+            let memory_file = cfg.paths.coach_memory_file.display().to_string();
+            let mut coach_action = None;
+            egui::CentralPanel::default().show(&mut root, |ui| {
+                egui::ScrollArea::vertical()
+                    .id_salt("coach")
+                    .show(ui, |ui| {
+                        coach_action = coach_panel::coach_panel(
+                            ui,
+                            coach,
+                            &mut cfg.settings.coach,
+                            &memory_file,
+                        );
+                    });
+            });
+            if let Some(a) = coach_action {
+                apply_coach(
+                    a,
+                    coach,
+                    &cfg.settings.coach,
+                    &cfg.paths,
+                    lib,
+                    &mut training.coach_play,
+                );
+            }
+            if coach.busy() {
+                // Keep the spinner moving and collect the answer without waiting for input.
+                ctx.request_repaint_after(std::time::Duration::from_millis(100));
+            }
+        }
     }
 
     first_run::first_run_wizard(ctx, &mut state.wizard_step, &mut cfg.settings);
@@ -680,6 +733,159 @@ fn flush_settings_on_exit(
 ) {
     if exits.read().next().is_some() {
         saver.flush(&settings, &paths);
+    }
+}
+
+/// A generated scenario the player chose to play from the Coach page. It is not in the
+/// library, so it starts here rather than through the navigator's id lookup.
+#[derive(Resource, Default)]
+struct CoachPlay(Option<ScenarioDef>);
+
+fn start_coach_scenario(
+    mut play: ResMut<CoachPlay>,
+    mut commands: Commands,
+    mut next: ResMut<NextState<AppState>>,
+    mut routine: ResMut<ActiveRoutine>,
+) {
+    if let Some(def) = play.0.take() {
+        routine.0 = None;
+        start_run(&mut commands, &mut next, def);
+    }
+}
+
+/// Collect finished coach requests and start the background ones the page needs: the key
+/// status for the current provider and the stats summary when the history changed.
+fn refresh_coach(
+    state: &mut CoachState,
+    config: &aim_ai::CoachConfig,
+    paths: &Paths,
+    lib: &Library,
+    history: &History,
+    missions: &Missions,
+) {
+    state.poll();
+    if !config.enabled {
+        // Nothing is sent while the coach is off.
+        state.cancel_sending();
+    }
+    let account = (coach::key_account(config), config.api_key_env.clone());
+    if config.enabled && state.key_checked_for.as_ref() != Some(&account) && !state.key.is_pending()
+    {
+        state.key_checked_for = Some(account);
+        let config = config.clone();
+        state
+            .key
+            .spawn("coach-key", move || Ok(coach::key_status(&config)));
+    }
+    let records = history.runs();
+    let key = (records.len(), records.last().map_or(0, |r| r.timestamp));
+    if state.context_key != Some(key) && !state.context.is_pending() {
+        state.context_key = Some(key);
+        let data = ContextData {
+            records: records.to_vec(),
+            analyses: Vec::new(),
+            benchmark: lib.benchmarks.first().cloned(),
+            missions: Some(missions.0.clone()),
+            readiness_scenarios: READINESS_SCENARIOS.map(str::to_owned).to_vec(),
+            now: now_secs(),
+            utc_offset_secs: local_utc_offset_secs(),
+        };
+        let paths = paths.clone();
+        state
+            .context
+            .spawn("coach-context", move || Ok(load_context(&paths, data)));
+    }
+}
+
+/// Run a Coach page action; every request goes to a background job.
+fn apply_coach(
+    action: CoachAction,
+    state: &mut CoachState,
+    config: &aim_ai::CoachConfig,
+    paths: &Paths,
+    lib: &Library,
+    play: &mut CoachPlay,
+) {
+    match action {
+        CoachAction::Send(message) => {
+            let Some(context) = state.context_value.clone() else {
+                return;
+            };
+            if !config.enabled {
+                return;
+            }
+            let request = TurnRequest {
+                config: config.clone(),
+                memory_file: paths.coach_memory_file.clone(),
+                context,
+                scenarios: lib.scenarios.clone(),
+                routines: lib.routines.clone(),
+                benchmark: lib.benchmarks.first().cloned(),
+                history: state.history.clone(),
+                message,
+                now: now_secs(),
+            };
+            if state
+                .turn
+                .spawn("coach-turn", move || coach::run_request(request))
+            {
+                state.input.clear();
+                state.notice = None;
+            }
+        }
+        CoachAction::Cancel => state.turn.cancel(),
+        CoachAction::TestConnection => {
+            state.test_result = None;
+            let config = config.clone();
+            state
+                .test
+                .spawn("coach-test", move || coach::test_connection(&config));
+        }
+        CoachAction::StoreKey => {
+            // The typed key leaves the page state now; it is never shown again.
+            let key = aim_ai::ApiKey::new(std::mem::take(&mut state.key_input));
+            let config = config.clone();
+            state
+                .key
+                .spawn("coach-key", move || coach::store_key(&config, key));
+        }
+        CoachAction::ForgetKey => {
+            let config = config.clone();
+            state
+                .key
+                .spawn("coach-key", move || coach::forget_key(&config));
+        }
+        CoachAction::RefreshContext => state.context_key = None,
+        CoachAction::WipeMemory => {
+            let file = paths.coach_memory_file.clone();
+            state
+                .wipe
+                .spawn("coach-wipe", move || coach::wipe_memory(&file));
+        }
+        CoachAction::Check(i) => {
+            if let Some(def) = state.cards.get(i).map(|c| c.def.clone()) {
+                state.card_job.spawn("coach-check", move || {
+                    Ok(CardOutcome::Checked(i, coach::check_scenario(&def)))
+                });
+            }
+        }
+        CoachAction::Save(i) => {
+            if let Some(def) = state.cards.get(i).map(|c| c.def.clone()) {
+                let dir = paths.scenarios_dir.clone();
+                state.card_job.spawn("coach-save", move || {
+                    Ok(CardOutcome::Saved(
+                        i,
+                        coach::save_generated_scenario(&dir, &def),
+                    ))
+                });
+            }
+        }
+        CoachAction::Play(i) => play.0 = state.cards.get(i).map(|c| c.def.clone()),
+        CoachAction::ClearChat => {
+            state.history.clear();
+            state.cards.clear();
+            state.notice = None;
+        }
     }
 }
 
@@ -997,15 +1203,16 @@ mod tests {
         assert_is_system(super::stop_recording_on_exit);
         assert_is_system(super::save_settings);
         assert_is_system(super::flush_settings_on_exit);
+        assert_is_system(super::start_coach_scenario);
     }
 
     #[test]
-    fn number_keys_one_to_eight_pick_the_tabs_in_order() {
+    fn number_keys_one_to_nine_pick_the_tabs_in_order() {
         use egui::Key;
         assert_eq!(tab_for_key(Key::Num1), Some(Tab::Today));
         assert_eq!(tab_for_key(Key::Num3), Some(Tab::Scenarios));
         assert_eq!(tab_for_key(Key::Num8), Some(Tab::Settings));
-        assert_eq!(tab_for_key(Key::Num9), None);
+        assert_eq!(tab_for_key(Key::Num9), Some(Tab::Coach));
         assert_eq!(tab_for_key(Key::Num0), None);
         assert_eq!(tab_for_key(Key::A), None);
     }
