@@ -9,6 +9,7 @@ use crate::persistence::settings::{Paths, Settings};
 use crate::ui::UiAction;
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::analysis_panel::RunReport;
+use crate::ui::organisms::mistake_player::{MistakePlayerState, PlayerAction, mistake_player};
 use crate::ui::organisms::replay_viewer::{ReplayViewerState, replay_viewer};
 use crate::ui::organisms::results_card::{ResultsContext, results_card};
 use crate::ui::organisms::results_visuals::{accuracy_gauge, score_hero};
@@ -174,7 +175,7 @@ fn results(
             .collect(),
     };
     match results_card(ctx, &last, &rc) {
-        Some(UiAction::WatchMistakes) => watch.open(),
+        Some(UiAction::WatchMistakes) => watch.open(last.recording.as_ref()),
         Some(action) => {
             watch.open = false;
             nav.apply(action);
@@ -186,20 +187,27 @@ fn results(
 }
 
 const WATCH_TITLE: &str = "Replay";
+const MISTAKES_TITLE: &str = "Mistake replays";
+const NO_MISTAKES: &str = "No flick mistakes to replay in this run. Here is the full replay.";
 
-/// The replay window "Watch it" opens. For now it is the replay viewer on the newest saved
-/// replay (the run just finished); a dedicated mistake player will replace it.
+/// The window "Watch it" opens: the mistake player for the run just finished, one mistake
+/// at a time. Runs without flick mistakes (tracking, arenas, clean runs) fall back to the
+/// replay viewer on the newest saved replay.
 #[derive(Default)]
 struct WatchWindow {
     open: bool,
+    player: Option<MistakePlayerState>,
     viewer: ReplayViewerState,
 }
 
 impl WatchWindow {
-    /// Open it on the newest replay (a fresh viewer selects the first, newest, entry).
-    fn open(&mut self) {
+    fn open(&mut self, recording: Option<&Recording>) {
+        let player = recording
+            .map(MistakePlayerState::from_recording)
+            .filter(|p| !p.is_empty());
         *self = Self {
             open: true,
+            player,
             viewer: ReplayViewerState::default(),
         };
     }
@@ -208,16 +216,35 @@ impl WatchWindow {
         if !self.open {
             return;
         }
-        let Self { open, viewer } = self;
-        egui::Window::new(WATCH_TITLE)
+        let Self {
+            open,
+            player,
+            viewer,
+        } = self;
+        let title = if player.is_some() {
+            MISTAKES_TITLE
+        } else {
+            WATCH_TITLE
+        };
+        let mut closed = false;
+        egui::Window::new(title)
             .open(open)
-            .default_size([440.0, 560.0])
-            .show(ctx, |ui| {
-                let entries = replays::list(paths);
-                replay_viewer(ui, viewer, &entries, |e| {
-                    replays::load(&e.path).ok().map(|r| replay_path(&r))
-                });
+            .default_size([460.0, 600.0])
+            .show(ctx, |ui| match player {
+                Some(state) => {
+                    closed = mistake_player(ui, state) == Some(PlayerAction::Close);
+                }
+                None => {
+                    ui.label(NO_MISTAKES);
+                    let entries = replays::list(paths);
+                    replay_viewer(ui, viewer, &entries, |e| {
+                        replays::load(&e.path).ok().map(|r| replay_path(&r))
+                    });
+                }
             });
+        if closed {
+            *open = false;
+        }
     }
 }
 
