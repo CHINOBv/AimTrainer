@@ -15,6 +15,7 @@ use super::moving::MovingAnalysis;
 use super::rules::{self, MetricSources, RuleSet};
 use super::tracking::{TrackingAnalysis, TrackingSummary};
 use super::{AnalysisKind, RunAnalysis};
+use crate::i18n::{Lang, tr_in, tr_named_in};
 use crate::scenario::Category;
 
 use super::pace::{PaceAnalysis, PaceSummary};
@@ -59,6 +60,62 @@ impl Finding {
             Direction::Below => (self.threshold - self.value) / t,
         }
     }
+
+    /// [`Finding::explanation`] in `lang`: the same sentence with the metric name and
+    /// the rule's meaning translated. The meaning is read back from the English
+    /// explanation; an explanation that does not have the usual shape is only looked up
+    /// as a whole.
+    pub fn explanation_in(&self, lang: Lang) -> String {
+        let prefix = explain(
+            Lang::En,
+            self.metric,
+            self.value,
+            self.direction,
+            self.threshold,
+            "",
+        );
+        let prefix = prefix.strip_suffix(".").unwrap_or(&prefix);
+        match self
+            .explanation
+            .strip_prefix(prefix)
+            .and_then(|rest| rest.strip_suffix('.'))
+        {
+            Some(meaning) => explain(
+                lang,
+                self.metric,
+                self.value,
+                self.direction,
+                self.threshold,
+                tr_in(lang, meaning),
+            ),
+            None => tr_in(lang, &self.explanation).to_owned(),
+        }
+    }
+}
+
+/// "Overshoot rate 42% is above the 35% threshold: {meaning}." in `lang`.
+fn explain(
+    lang: Lang,
+    metric: Metric,
+    value: f32,
+    direction: Direction,
+    threshold: f32,
+    meaning: &str,
+) -> String {
+    let template = match direction {
+        Direction::Above => "{metric} {value} is above the {threshold} threshold: {meaning}.",
+        Direction::Below => "{metric} {value} is below the {threshold} threshold: {meaning}.",
+    };
+    tr_named_in(
+        lang,
+        template,
+        &[
+            ("metric", &metric.label_in(lang)),
+            ("value", &metric.format(value)),
+            ("threshold", &metric.format(threshold)),
+            ("meaning", &meaning),
+        ],
+    )
 }
 
 /// Summary and findings for one scenario category.
@@ -96,13 +153,13 @@ fn evaluate(rules: &RuleSet, category: Category, sources: &MetricSources) -> Vec
                 value,
                 threshold: rule.threshold,
                 direction: rule.direction,
-                explanation: format!(
-                    "{} {} is {} the {} threshold: {}.",
-                    rule.metric.label(),
-                    rule.metric.format(value),
-                    rule.direction.word(),
-                    rule.metric.format(rule.threshold),
-                    rule.meaning,
+                explanation: explain(
+                    Lang::En,
+                    rule.metric,
+                    value,
+                    rule.direction,
+                    rule.threshold,
+                    &rule.meaning,
                 ),
                 recommendation: rule.recommendation.clone(),
             })
@@ -362,6 +419,29 @@ mod tests {
         assert!(recs.iter().any(|f| f.metric == Metric::ReactionTime));
         // Overshoot (+186%) is further past its threshold than reaction (+33%).
         assert_eq!(recs[0].metric, Metric::OvershootRate);
+    }
+
+    #[test]
+    fn explanations_are_shown_in_spanish_and_english_is_unchanged() {
+        let run = flick_run(vec![overshooting_flick(); MIN_FLICKS]);
+        let p = SkillProfile::build(&[run]);
+        for f in p.findings() {
+            assert_eq!(f.explanation_in(Lang::En), f.explanation);
+        }
+        let overshoot = p
+            .findings()
+            .find(|f| f.metric == Metric::OvershootRate)
+            .unwrap();
+        assert_eq!(
+            overshoot.explanation_in(Lang::Es),
+            "Tasa de overshoot 100% está por encima del umbral de 35%: tu primer movimiento suele terminar más allá del borde lejano del objetivo."
+        );
+        // An explanation of another shape is only looked up as a whole.
+        let odd = Finding {
+            explanation: "not in any catalog".into(),
+            ..overshoot.clone()
+        };
+        assert_eq!(odd.explanation_in(Lang::Es), "not in any catalog");
     }
 
     #[test]

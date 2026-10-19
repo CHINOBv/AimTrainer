@@ -11,6 +11,7 @@
 //! commitment level. The factors are estimates (see `docs/training-science.md`).
 //! Missions are frozen when a day starts, so bests set during the day do not move them.
 
+use crate::i18n::{Lang, tr_in};
 use crate::rng::Rng;
 use crate::scenario::{RunKey, RunResult};
 use serde::{Deserialize, Serialize};
@@ -51,6 +52,11 @@ impl Commitment {
             Commitment::Medium => "Medium",
             Commitment::High => "High",
         }
+    }
+
+    /// [`Commitment::label`] in `lang`.
+    pub fn label_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.label())
     }
 
     /// Missions offered per day.
@@ -125,6 +131,11 @@ impl Metric {
             Metric::HeadshotRate => "headshot rate",
             Metric::ShotsHit => "shots hit",
         }
+    }
+
+    /// [`Metric::label`] in `lang`.
+    pub fn label_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.label())
     }
 
     /// `v` in this metric's display unit.
@@ -226,6 +237,12 @@ impl Condition {
 
     /// For example "accuracy ≥ 75%".
     pub fn describe(&self) -> String {
+        self.describe_in(Lang::En)
+    }
+
+    /// [`Condition::describe`] in `lang`: the metric name is translated; the operator
+    /// and the value are the same in every language.
+    pub fn describe_in(&self, lang: Lang) -> String {
         let op = if self.metric.lower_is_better() {
             "≤"
         } else {
@@ -233,7 +250,7 @@ impl Condition {
         };
         format!(
             "{} {op} {}",
-            self.metric.label(),
+            self.metric.label_in(lang),
             self.metric.format(self.target)
         )
     }
@@ -762,5 +779,17 @@ mod tests {
             toml::from_str::<MissionBook>("").unwrap(),
             MissionBook::default()
         );
+    }
+
+    #[test]
+    fn mission_text_is_shown_in_spanish() {
+        assert_eq!(Commitment::High.label_in(Lang::Es), "Alto");
+        assert_eq!(Metric::TimePerKill.label_in(Lang::Es), "tiempo por baja");
+        let c = Condition {
+            metric: Metric::Accuracy,
+            target: 0.75,
+        };
+        assert_eq!(c.describe_in(Lang::En), c.describe());
+        assert_eq!(c.describe_in(Lang::Es), "precisión ≥ 75%");
     }
 }

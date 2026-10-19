@@ -8,6 +8,7 @@
 
 use super::flick::{Flick, FlickKind};
 use super::stats::median;
+use crate::i18n::{Lang, tr_in, tr_named_in};
 
 /// Fewer events (overshoots, misses or slow clicks) than this give no estimate for that fix.
 pub const MIN_EVENTS: usize = 3;
@@ -43,6 +44,11 @@ impl Fix {
             Fix::Misses => "misses",
             Fix::Hesitation => "click hesitation",
         }
+    }
+
+    /// [`Fix::label`] in `lang`.
+    pub fn label_in(self, lang: Lang) -> &'static str {
+        tr_in(lang, self.label())
     }
 }
 
@@ -81,23 +87,20 @@ pub struct Gain {
 impl Gain {
     /// The assumption behind the estimate, in plain English, starting with "if".
     pub fn assumption(&self) -> String {
-        let ms = |secs: Option<f32>| format!("{:.0} ms", secs.unwrap_or(0.0) * 1000.0);
-        match self.fix {
-            Fix::Overshoot => format!(
-                "if your {} overshoots settled like your clean flicks (median {})",
-                self.events,
-                ms(self.reference_secs)
-            ),
-            Fix::Misses => format!(
-                "if half of your {} misses had hit the first time",
-                self.events
-            ),
-            Fix::Hesitation => format!(
-                "if your {} slow clicks came within {} of reaching the target",
-                self.events,
-                ms(self.reference_secs)
-            ),
-        }
+        self.assumption_in(Lang::En)
+    }
+
+    /// [`Gain::assumption`] in `lang`.
+    pub fn assumption_in(&self, lang: Lang) -> String {
+        let template = match self.fix {
+            Fix::Overshoot => {
+                "if your {n} overshoots settled like your clean flicks (median {ms} ms)"
+            }
+            Fix::Misses => "if half of your {n} misses had hit the first time",
+            Fix::Hesitation => "if your {n} slow clicks came within {ms} ms of reaching the target",
+        };
+        let ms = format!("{:.0}", self.reference_secs.unwrap_or(0.0) * 1000.0);
+        tr_named_in(lang, template, &[("n", &self.events), ("ms", &ms)])
     }
 }
 
@@ -341,6 +344,12 @@ mod tests {
             tip.gain.assumption(),
             "if your 3 slow clicks came within 200 ms of reaching the target"
         );
+        assert_eq!(
+            tip.gain.assumption_in(Lang::Es),
+            "si tus 3 clics lentos hubieran llegado dentro de 200 ms tras alcanzar el objetivo"
+        );
+        assert_eq!(tip.gain.fix.label_in(Lang::Es), "duda al hacer clic");
+        assert_eq!(tip.gain.fix.label_in(Lang::En), "click hesitation");
     }
 
     #[test]

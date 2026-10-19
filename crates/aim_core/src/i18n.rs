@@ -72,10 +72,19 @@ pub const ES_SOURCES: &[(&str, &str)] = &[
 
 /// `en` in `lang`: the catalog entry, or `en` itself when there is none (always for
 /// [`Lang::En`]). Works for `&'static` literals and for runtime text such as content names.
+/// Catalog keys use LF line breaks; text with CRLF breaks (content read from a CRLF
+/// checkout) is looked up with LF breaks.
 pub fn tr_in(lang: Lang, en: &str) -> &str {
     match lang {
         Lang::En => en,
-        Lang::Es => spanish().get(en).copied().unwrap_or(en),
+        Lang::Es => match spanish().get(en) {
+            Some(es) => es,
+            None if en.contains("\r\n") => spanish()
+                .get(en.replace("\r\n", "\n").as_str())
+                .copied()
+                .unwrap_or(en),
+            None => en,
+        },
     }
 }
 
@@ -283,6 +292,17 @@ mod tests {
     fn spanish_uses_the_catalog_and_falls_back_to_english() {
         assert_eq!(tr_in(Lang::Es, "Settings"), "Ajustes");
         assert_eq!(tr_in(Lang::Es, "not in any catalog"), "not in any catalog");
+    }
+
+    #[test]
+    fn text_with_crlf_line_breaks_finds_its_lf_entry() {
+        let key = spanish()
+            .keys()
+            .find(|k| k.contains('\n'))
+            .expect("a multi-line content description");
+        let crlf = key.replace('\n', "\r\n");
+        assert_eq!(tr_in(Lang::Es, &crlf), spanish()[key]);
+        assert_eq!(tr_in(Lang::En, &crlf), crlf);
     }
 
     #[test]
