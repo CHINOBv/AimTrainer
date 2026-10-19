@@ -79,6 +79,7 @@ fn main() -> AppExit {
         .add_plugins(EguiPlugin::default())
         .insert_resource(library::Library::load(&paths))
         .insert_resource(history::History::load(&paths))
+        .insert_resource(persistence::journal::JournalStore::load(&paths))
         .insert_resource(persistence::method_progress::MethodProgress::load(&paths))
         .insert_resource(persistence::adaptive::AdaptiveLevels::load(&paths))
         .add_plugins((

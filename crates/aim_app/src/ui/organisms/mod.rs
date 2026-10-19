@@ -17,6 +17,7 @@ pub mod health_bar;
 pub mod history_chart;
 pub mod hotkey_settings;
 pub mod hud_panels;
+pub mod journal_panel;
 pub mod kill_feed;
 pub mod miss_compass;
 pub mod moving_panel;

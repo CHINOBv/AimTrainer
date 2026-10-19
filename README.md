@@ -27,6 +27,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - A **"ready for ranked?" check.**
   - **Fatigue warnings.**
   - **Daily goals and streaks.**
+  - A **ranked journal**: log each match in one tap (win/loss/draw, RR, a 1–5 rating and a tag), see results split by readiness and fatigue, and get a 3-minute **tilt reset** (paced breathing, then easy tracking) after two losses in a row.
   - **Break reminders** after continuous play, a weekly volume cap and a short stretch list. All of it can be changed or turned off.
   - A **daily challenge** that everyone plays with the same seed.
   - **Compound daily missions** built from your own recent bests (for example "accuracy ≥ 75% AND kills ≥ 62"), with mastery missions and a low/medium/high commitment level.
@@ -228,6 +229,14 @@ Every finished scenario run is saved as one CSV row in the data directory (`~/.l
 Rows written before snapshots existed keep their columns and load with empty snapshot fields; the next run written upgrades the file's header line. Arena runs are stored without a snapshot.
 
 **Export:** on the Progress page, **Export history (CSV)** writes a copy with the same columns, one row per run, with older rows padded with empty fields so every row has all 21 columns. Type a path in the field next to the button, or leave it empty to write `history-export-<unix time>.csv` next to `history.csv`. It never replaces an existing file (the history included); pick a new name instead. The export runs on a background thread, and the page shows where the file went or why it failed.
+
+## Ranked journal
+
+The **Ranked journal** section of the Progress page logs a match in one tap: pick the RR change (optional, such as `+18` or `-12`), a 1–5 self-rating (3 if you skip it) and an optional tag, then press **Win**, **Loss** or **Draw**. Each entry also stores today's warm-up readiness (the coldest of the "ready for ranked?" scenarios, or unknown) and whether a fatigue warning was showing, so the page can split your results by readiness and fatigue. A pattern needs many matches; a handful says little.
+
+After **two losses in a row**, the page suggests a **tilt reset (3 min)**: a 60-second breathing timer at 6 breaths a minute (a circle grows as you breathe in and shrinks as you breathe out), then 2 minutes of easy smooth tracking. You can skip to the tracking or cancel. It is a pause before the next queue, not a treatment.
+
+Entries are kept in `journal.toml` next to `history.csv`. It is written in the background through a temporary file and a rename. If the file cannot be read, it is never overwritten: the page says so, and the file is renamed to `journal.corrupt-<unix time>.toml` before the next entry is saved.
 
 ## Breaks and wrist care
 

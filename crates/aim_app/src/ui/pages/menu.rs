@@ -9,6 +9,7 @@ use crate::persistence::adaptive::AdaptiveLevels;
 use crate::persistence::coach::context::{ContextData, load_context};
 use crate::persistence::coach::{self, TurnRequest};
 use crate::persistence::history::{self, History};
+use crate::persistence::journal::{self, JournalStore};
 use crate::persistence::library::Library;
 use crate::persistence::method_progress::{DayProgress, MethodProgress};
 use crate::persistence::missions::Missions;
@@ -21,6 +22,7 @@ use crate::ui::atoms::{ERROR, GOOD};
 use crate::ui::molecules::{SettingsRows, tab_bar};
 use crate::ui::navigation::Navigator;
 use crate::ui::organisms::coach_panel::{self, CardOutcome, CoachAction, CoachState};
+use crate::ui::organisms::journal_panel;
 use crate::ui::organisms::profile_code::{self, ProfileImport};
 use crate::ui::organisms::progress_panel::{self, ProgressModel};
 use crate::ui::organisms::replay_viewer::{self, ReplayViewerState};
@@ -59,7 +61,11 @@ impl Plugin for MenuPage {
                 Update,
                 (count_dpi_meter, save_settings, start_coach_scenario),
             )
-            .add_systems(Last, flush_settings_on_exit)
+            .add_systems(Update, journal::poll_journal)
+            .add_systems(
+                Last,
+                (flush_settings_on_exit, journal::flush_journal_on_exit),
+            )
             .add_systems(OnExit(AppState::Menu), stop_recording_on_exit)
             .add_systems(
                 EguiPrimaryContextPass,
@@ -165,6 +171,8 @@ struct MenuState {
     export: history::HistoryExport,
     /// Path typed for the export; empty uses the default.
     export_path: String,
+    /// The ranked journal's entry form and breathing timer (Progress tab).
+    journal: journal_panel::JournalState,
 }
 
 /// The Settings tab: search, sub-tabs, a reset per section, and the rows.
@@ -295,6 +303,7 @@ struct TrainingState<'w> {
     frames: Res<'w, FrameStats>,
     missions: ResMut<'w, Missions>,
     coach_play: ResMut<'w, CoachPlay>,
+    journal: ResMut<'w, JournalStore>,
 }
 
 /// Settings plus what is needed to persist and preview them.
@@ -418,6 +427,25 @@ fn menu(
                 egui::ScrollArea::vertical().id_salt("progress").show(ui, |ui| {
                     let model = progress_model(lib, &history, cfg.settings.daily_goal_minutes);
                     action = action.take().or(progress_panel::progress_panel(ui, &model));
+                    ui.separator();
+                    let readiness = journal_panel::journal_readiness(&model.readiness);
+                    let fatigued = !model.fatigue.is_empty();
+                    let view = journal_panel::JournalView {
+                        journal: &training.journal.journal,
+                        problem: training.journal.problem(),
+                        readiness,
+                        fatigued,
+                    };
+                    match journal_panel::journal_panel(ui, &mut state.journal, &view) {
+                        Some(journal_panel::JournalAction::Log(draft)) => {
+                            let entry = journal_entry(draft, now_secs(), readiness, fatigued);
+                            if let Err(e) = training.journal.add(entry) {
+                                bevy::log::warn!("journal entry refused: {e}");
+                            }
+                        }
+                        Some(journal_panel::JournalAction::Run(a)) => action = Some(a),
+                        None => {}
+                    }
                     if let Some(bench) = lib.benchmarks.first() {
                         let skills = aim_core::analytics::BenchmarkProfile::build(
                             bench,
@@ -984,6 +1012,24 @@ fn progress_model(lib: &Library, history: &History, goal_minutes: f32) -> Progre
     }
 }
 
+/// A journal entry from the form, stamped `now` with today's readiness and fatigue.
+fn journal_entry(
+    draft: journal_panel::Draft,
+    now: u64,
+    readiness: Option<aim_core::training::progress::Warmth>,
+    fatigued: bool,
+) -> aim_core::training::journal::JournalEntry {
+    aim_core::training::journal::JournalEntry {
+        timestamp: now,
+        outcome: draft.outcome,
+        rr_change: draft.rr_change,
+        self_rating: draft.self_rating,
+        tag: draft.tag,
+        readiness,
+        fatigued,
+    }
+}
+
 /// Local date (`YYYY-MM-DD`) and weekday: the method day follows the player's clock.
 fn local_today() -> (String, Weekday) {
     let now = chrono::Local::now();
@@ -1231,6 +1277,29 @@ mod tests {
         assert_is_system(super::save_settings);
         assert_is_system(super::flush_settings_on_exit);
         assert_is_system(super::start_coach_scenario);
+        assert_is_system(crate::persistence::journal::poll_journal);
+        assert_is_system(crate::persistence::journal::flush_journal_on_exit);
+    }
+
+    #[test]
+    fn journal_entries_carry_the_form_and_todays_readiness_and_fatigue() {
+        use aim_core::training::journal::{JournalTag, Outcome};
+        use aim_core::training::progress::Warmth;
+        let draft = super::journal_panel::Draft {
+            outcome: Outcome::Loss,
+            rr_change: Some(-21),
+            self_rating: 2,
+            tag: Some(JournalTag::Tired),
+        };
+        let e = super::journal_entry(draft, 1_800_000_000, Some(Warmth::Warming), true);
+        assert_eq!(e.timestamp, 1_800_000_000);
+        assert_eq!(e.outcome, Outcome::Loss);
+        assert_eq!(e.rr_change, Some(-21));
+        assert_eq!(e.self_rating, 2);
+        assert_eq!(e.tag, Some(JournalTag::Tired));
+        assert_eq!(e.readiness, Some(Warmth::Warming));
+        assert!(e.fatigued);
+        assert!(e.validate().is_ok());
     }
 
     #[test]
