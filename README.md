@@ -15,7 +15,7 @@ A VALORANT-focused aim trainer for **Arch Linux (Wayland/Hyprland, X11)** and **
   - **38 exercises as TOML files**, with difficulty levels generated from one definition. They include **precision rings** (more points near the center), a **go/no-go** drill (leave the decoys alone), **reactive targets** that mirror your strafe, dodge your crosshair and change behaviour when hit, **multi-phase** drills with fail conditions and kill goals, **sound localisation**, **peripheral detection** and **radar recall**.
   - **Spray and burst drills** with a recoil model built on Riot's published parameters.
   - **Ammo-economy clicking.**
-  - **Arenas:** deathmatch, a site hold (stop bots from capturing a site), angle clearing, jiggle-peek and pre-aim drills against bots that peek, strafe and hold like VALORANT players, on original maps (TOML or glTF). Bots can react to your strafe and shots, follow behaviour rules and shoot back when a kill takes too long. An optional **live coaching overlay** shows crosshair height at the nearest corner and movement accuracy.
+  - **Arenas:** deathmatch, a site hold (stop bots from capturing a site), angle clearing, jiggle-peek and pre-aim drills against bots that peek, strafe and hold like VALORANT players, on original maps (TOML or glTF). Bots can react to your strafe and shots, follow behaviour rules, play mixed squad personalities (pusher, angle holder, jiggle peeker, roamer), adapt their skill to your streaks and shoot back when a kill takes too long. After each death a **recap card** shows why you lost the fight (crosshair placement, first-shot time, moving shots, who saw whom first). An optional **live coaching overlay** shows crosshair height at the nearest corner and movement accuracy.
 - **How to train**
   - A **weekly method** in the style of VDIM: one skill per day, drills → variants → benchmark, with tiers.
   - Interleaved routines and a **personalized playlist**.
@@ -86,7 +86,7 @@ The menu tabs (keys 1–9 switch tabs while no text field has focus):
 | Progress | Goal, readiness, fatigue, trend, per-skill strengths and trends, bests, sensitivity suggestion, replays (speed trail, heatmap, comparison) |
 | Scenarios | Search and filter (category, click or hold, moving or standing, waves); ★ pins a scenario to Favourites (saved as `favorites` in `settings.toml`); Recent lists your last 5 scenarios. Play, or play adaptively |
 | Routines | The routines (resume a split one), your personalized playlist |
-| Arenas | Deathmatch, site hold, angle clearing, jiggle-peek and pre-aim drills; a Practice button plays any arena with bots that never shoot |
+| Arenas | Deathmatch (also with mixed bot squads or an adaptive duel ladder), site hold, angle clearing, jiggle-peek and pre-aim drills; a Practice button plays any arena with bots that never shoot |
 | Benchmark | Your benchmark energy and ranks, at novice, intermediate or advanced tier |
 | Tools | Sensitivity converter (360°, monitor distance 0/75/100%), sensitivity finder, system check |
 | Settings | Sub-tabs: Sensitivity (DPI check, profile code), Crosshair, Feedback (hit feedback, game feel), Audio, Overlay, Keys, Training. A search box filters every section; each sub-tab has a reset to defaults. Changes save automatically ("Saved ✔") |
