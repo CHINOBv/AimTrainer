@@ -6,6 +6,10 @@ use super::def::ScenarioDef;
 /// Embedded built-in scenario files as `(file name, TOML source)`.
 pub const SOURCES: &[(&str, &str)] = &[
     (
+        "adjust-track.toml",
+        include_str!("../../../../content/scenarios/adjust-track.toml"),
+    ),
+    (
         "ammo-discipline.toml",
         include_str!("../../../../content/scenarios/ammo-discipline.toml"),
     ),
@@ -106,6 +110,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/ground-reactive.toml"),
     ),
     (
+        "head-strafe-track.toml",
+        include_str!("../../../../content/scenarios/head-strafe-track.toml"),
+    ),
+    (
         "long-range-heads.toml",
         include_str!("../../../../content/scenarios/long-range-heads.toml"),
     ),
@@ -132,6 +140,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "peek-reaction.toml",
         include_str!("../../../../content/scenarios/peek-reaction.toml"),
+    ),
+    (
+        "peek-track.toml",
+        include_str!("../../../../content/scenarios/peek-track.toml"),
     ),
     (
         "phase-kill-race.toml",
