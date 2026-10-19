@@ -90,6 +90,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/flick-wide.toml"),
     ),
     (
+        "four-shrink.toml",
+        include_str!("../../../../content/scenarios/four-shrink.toml"),
+    ),
+    (
         "go-no-go.toml",
         include_str!("../../../../content/scenarios/go-no-go.toml"),
     ),
@@ -104,6 +108,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "micro-adjust.toml",
         include_str!("../../../../content/scenarios/micro-adjust.toml"),
+    ),
+    (
+        "mini-phase.toml",
+        include_str!("../../../../content/scenarios/mini-phase.toml"),
     ),
     (
         "orbit-track.toml",
@@ -148,6 +156,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "smooth-xyz.toml",
         include_str!("../../../../content/scenarios/smooth-xyz.toml"),
+    ),
+    (
+        "snap-reflex.toml",
+        include_str!("../../../../content/scenarios/snap-reflex.toml"),
     ),
     (
         "sound-turn.toml",

@@ -1,0 +1,19 @@
+# Idea credit: the VALORANT flick-tech reflex drills of the Voltaic VALORANT playlists.
+# Original scenario: no file, name or value was copied.
+id = "snap-reflex"
+name = "Snap Reflex"
+category = "flicking"
+description = """
+Reflex flicks. One head-sized sphere at a time appears at a random height and depth.
+Its value fades over 1.2 s, so a fast, clean flick scores up to four times a slow one."""
+duration_secs = 60
+
+[targets]
+shape = { kind = "sphere", radius = 0.14 }
+spawn = { kind = "angular", yaw_deg = [-35.0, 35.0], pitch_deg = [-2.0, 14.0], distance = [8.0, 18.0] }
+max_alive = 1
+spawn_rules = { min_flick_deg = 10 }
+
+[scoring]
+miss_penalty = 15
+decay = { window_secs = 1.2, floor = 0.25 }
