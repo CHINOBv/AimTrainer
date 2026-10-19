@@ -509,6 +509,9 @@ impl TryFrom<CreateArgs> for CreateRequest {
 
     fn try_from(a: CreateArgs) -> Result<Self, String> {
         match (a.toml, a.skill) {
+            (Some(_), None) if a.level.is_some() => {
+                Err("level: only applies with skill, not with toml".into())
+            }
             (Some(toml), None) => Ok(CreateRequest::Toml(toml)),
             (None, Some(id)) => {
                 let skill = SubSkill::from_id(&id)
@@ -754,6 +757,17 @@ mod tests {
             &mut Default::default(),
         );
         assert!(both.is_error && both.scenario.is_none());
+
+        let level_ignored = run(
+            CREATE_SCENARIO,
+            json!({ "toml": "x", "level": 0.5 }),
+            &e,
+            &mut Default::default(),
+        );
+        assert!(
+            level_ignored.is_error && level_ignored.scenario.is_none(),
+            "level only applies to a skill drill, so it is refused with toml"
+        );
     }
 
     #[test]

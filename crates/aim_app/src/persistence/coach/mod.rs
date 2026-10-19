@@ -30,7 +30,12 @@ pub const TEST_PROMPT: &str = "Reply with the single word OK.";
 /// for OpenAI-compatible servers (an OpenAI key and an OpenCode key are different keys).
 pub fn key_account(config: &CoachConfig) -> String {
     match config.provider {
-        ProviderKind::Anthropic => "anthropic".to_owned(),
+        // A custom Anthropic endpoint gets its own key, so it never receives the
+        // key meant for the official API.
+        ProviderKind::Anthropic => match config.effective_base_url() {
+            Some(url) if url != aim_ai::config::ANTHROPIC_BASE_URL => format!("anthropic {url}"),
+            _ => "anthropic".to_owned(),
+        },
         ProviderKind::OpenaiCompatible => format!(
             "openai-compatible {}",
             config.effective_base_url().unwrap_or_default()
@@ -301,7 +306,16 @@ mod tests {
             base_url: Some("https://example.test".into()),
             ..CoachConfig::default()
         };
-        assert_eq!(key_account(&anthropic), "anthropic");
+        assert_eq!(
+            key_account(&anthropic),
+            "anthropic https://example.test",
+            "a custom endpoint never receives the official key"
+        );
+        let official = CoachConfig {
+            provider: ProviderKind::Anthropic,
+            ..CoachConfig::default()
+        };
+        assert_eq!(key_account(&official), "anthropic");
         let cli = CoachConfig {
             provider: ProviderKind::CliDelegate,
             ..CoachConfig::default()

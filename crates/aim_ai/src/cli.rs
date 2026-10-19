@@ -51,18 +51,16 @@ pub struct CliDelegateProvider {
     command: Vec<String>,
     prompt_input: PromptInput,
     timeout: Duration,
-    workdir: PathBuf,
 }
 
 impl CliDelegateProvider {
-    /// A provider running `command` (program then arguments). The process starts in an
+    /// A provider running `command` (program then arguments). Each reply starts in a new
     /// empty directory under the system temp dir, never in the player's files.
     pub fn new(command: Vec<String>, prompt_input: PromptInput, timeout: Duration) -> Self {
         Self {
             command,
             prompt_input,
             timeout,
-            workdir: std::env::temp_dir().join("aimtrainer-coach-cli"),
         }
     }
 
@@ -71,13 +69,18 @@ impl CliDelegateProvider {
             .command
             .split_first()
             .ok_or_else(|| ModelError::Request("no CLI command is configured".to_owned()))?;
-        std::fs::create_dir_all(&self.workdir).map_err(|e| {
-            ModelError::Request(format!("could not create the CLI scratch directory: {e}"))
-        })?;
+        // A private directory per reply (owner-only on Unix), removed when it drops: no
+        // other user can plant files in it and nothing carries over between replies.
+        let workdir = tempfile::Builder::new()
+            .prefix("aimtrainer-coach-cli-")
+            .tempdir()
+            .map_err(|e| {
+                ModelError::Request(format!("could not create the CLI scratch directory: {e}"))
+            })?;
         let mut command = Command::new(resolve_program(program));
         command
             .args(args)
-            .current_dir(&self.workdir)
+            .current_dir(workdir.path())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -372,6 +375,28 @@ mod tests {
         let expected = flatten(&messages()).len();
         assert_eq!(reply.text, format!("got {expected}"));
         assert!(reply.tool_calls.is_empty(), "this mode never calls tools");
+    }
+
+    #[cfg(windows)]
+    const COUNT_CWD_THEN_LITTER: &str = "$n = @(Get-ChildItem -Force).Count; \
+        New-Item -ItemType File leftover.txt | Out-Null; \
+        $o = @{ type = 'result'; is_error = $false; result = ('items ' + $n) }; \
+        [Console]::Out.Write(($o | ConvertTo-Json -Compress))";
+    #[cfg(unix)]
+    const COUNT_CWD_THEN_LITTER: &str = "n=$(ls -A | wc -l | tr -d ' '); touch leftover.txt; \
+        printf '{\"type\":\"result\",\"is_error\":false,\"result\":\"items %s\"}' \"$n\"";
+
+    #[test]
+    fn every_reply_starts_in_a_fresh_empty_private_directory() {
+        let mut p = CliDelegateProvider::new(
+            fake(COUNT_CWD_THEN_LITTER),
+            PromptInput::Stdin,
+            Duration::from_secs(60),
+        );
+        for _ in 0..2 {
+            let reply = p.complete(&messages(), &[]).unwrap();
+            assert_eq!(reply.text, "items 0", "files from an earlier run are gone");
+        }
     }
 
     #[test]
