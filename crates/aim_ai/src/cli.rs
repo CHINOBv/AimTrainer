@@ -3,14 +3,16 @@
 //! `opencode run --format json`.
 //!
 //! - The conversation is flattened into one prompt; the reply is the CLI's final text.
-//! - Tool calls are not supported in this mode: the reply never contains any, so the
-//!   coach answers from the conversation alone.
+//! - The app's own tool loop is not used: the reply never contains tool calls. Codex is
+//!   the exception that still reaches the tools: `codex exec` is given the trainer's MCP
+//!   server (`aimtrainer-mcp`) with its tools approved, and calls them itself. Other CLIs
+//!   answer from the conversation alone.
 //! - This provider never manages logins and never reads any CLI's credential files. It
 //!   runs the program with the player's environment, in an empty scratch directory, and
 //!   kills it after the timeout.
 
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -45,6 +47,49 @@ fn to_strings(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|s| (*s).to_owned()).collect()
 }
 
+/// Name of the trainer's MCP server in the Codex configuration.
+const MCP_SERVER_NAME: &str = "aimtrainer";
+/// The trainer's MCP server program.
+const MCP_PROGRAM: &str = "aimtrainer-mcp";
+
+/// `command` with the trainer's MCP server added, when it is `codex exec`: the server
+/// runs `server`, and its tools need no approval, since `codex exec` cannot ask. `None`
+/// for any other command, which stays text only.
+pub fn with_trainer_tools(command: &[String], server: &Path) -> Option<Vec<String>> {
+    let [program, subcommand, rest @ ..] = command else {
+        return None;
+    };
+    let stem = Path::new(program).file_stem()?.to_str()?;
+    if !stem.eq_ignore_ascii_case("codex") || subcommand != "exec" {
+        return None;
+    }
+    // A JSON string is a valid TOML basic string, which is what `-c` parses.
+    let path = serde_json::to_string(&server.to_string_lossy()).ok()?;
+    let mut out = vec![program.clone(), subcommand.clone()];
+    out.extend([
+        "-c".to_owned(),
+        format!("mcp_servers.{MCP_SERVER_NAME}.command={path}"),
+        "-c".to_owned(),
+        format!("mcp_servers.{MCP_SERVER_NAME}.default_tools_approval_mode=\"approve\""),
+    ]);
+    out.extend(rest.iter().cloned());
+    Some(out)
+}
+
+/// The installed `aimtrainer-mcp`: next to this executable, else on `PATH`.
+fn find_trainer_server() -> Option<PathBuf> {
+    let file = format!("{MCP_PROGRAM}{}", std::env::consts::EXE_SUFFIX);
+    let beside = std::env::current_exe()
+        .ok()
+        .and_then(|exe| Some(exe.parent()?.join(&file)));
+    let on_path = std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|dir| dir.join(&file));
+    beside.into_iter().chain(on_path).find(|p| p.is_file())
+}
+
 /// Runs a CLI for each reply.
 #[derive(Debug, Clone)]
 pub struct CliDelegateProvider {
@@ -64,9 +109,8 @@ impl CliDelegateProvider {
         }
     }
 
-    fn run(&self, prompt: &str) -> Result<String, ModelError> {
-        let (program, args) = self
-            .command
+    fn run(&self, command: &[String], prompt: &str) -> Result<String, ModelError> {
+        let (program, args) = command
             .split_first()
             .ok_or_else(|| ModelError::Request("no CLI command is configured".to_owned()))?;
         // A private directory per reply (owner-only on Unix), removed when it drops: no
@@ -140,7 +184,12 @@ impl CliDelegateProvider {
 
 impl ChatModel for CliDelegateProvider {
     fn complete(&mut self, messages: &[Message], _tools: &[ToolSpec]) -> Result<Reply, ModelError> {
-        let stdout = self.run(&flatten(messages))?;
+        let wired =
+            find_trainer_server().and_then(|server| with_trainer_tools(&self.command, &server));
+        let stdout = match &wired {
+            Some(command) => self.run(command, &flatten(messages, true))?,
+            None => self.run(&self.command, &flatten(messages, false))?,
+        };
         Ok(Reply {
             text: parse_output(&stdout)?,
             tool_calls: Vec::new(),
@@ -175,9 +224,9 @@ fn resolve_program(program: &str) -> PathBuf {
     PathBuf::from(program)
 }
 
-/// The conversation as one prompt. Tool turns are summarized, since this mode cannot run
-/// tools.
-pub fn flatten(messages: &[Message]) -> String {
+/// The conversation as one prompt. Tool turns from an earlier provider are left out.
+/// `trainer_tools` says whether the CLI can call the trainer's MCP server itself.
+pub fn flatten(messages: &[Message], trainer_tools: bool) -> String {
     let mut out = String::new();
     for message in messages {
         let (label, text) = match message {
@@ -198,7 +247,15 @@ pub fn flatten(messages: &[Message]) -> String {
         out.push_str(":\n");
         out.push_str(text);
     }
-    out.push_str("\n\nAnswer as the coach, in plain text. No tools are available.");
+    out.push_str("\n\nAnswer as the coach, in plain text.");
+    if trainer_tools {
+        out.push_str(
+            " Call the tools of the aimtrainer MCP server whenever you need the player's \
+             stats, a routine, a scenario or the coach's memory.",
+        );
+    } else {
+        out.push_str(" No tools are available.");
+    }
     out
 }
 
@@ -258,18 +315,21 @@ mod tests {
 
     #[test]
     fn the_conversation_becomes_one_labelled_prompt() {
-        let prompt = flatten(&[
-            Message::System {
-                content: "Be brief.".into(),
-            },
-            Message::User {
-                content: "How am I doing?".into(),
-            },
-            Message::Assistant {
-                content: String::new(),
-                tool_calls: Vec::new(),
-            },
-        ]);
+        let prompt = flatten(
+            &[
+                Message::System {
+                    content: "Be brief.".into(),
+                },
+                Message::User {
+                    content: "How am I doing?".into(),
+                },
+                Message::Assistant {
+                    content: String::new(),
+                    tool_calls: Vec::new(),
+                },
+            ],
+            false,
+        );
         assert!(
             prompt.starts_with("Instructions:\nBe brief.\n\nPlayer:\nHow am I doing?\n\n"),
             "{prompt}"
@@ -280,17 +340,20 @@ mod tests {
 
     #[test]
     fn tool_results_from_an_earlier_provider_never_reach_a_cli() {
-        let prompt = flatten(&[
-            Message::User {
-                content: "Analyse my stats".into(),
-            },
-            Message::Tool {
-                call_id: "1".into(),
-                name: "list_stats".into(),
-                content: "{\"recent_runs\":[\"secret-stats\"]}".into(),
-                is_error: false,
-            },
-        ]);
+        let prompt = flatten(
+            &[
+                Message::User {
+                    content: "Analyse my stats".into(),
+                },
+                Message::Tool {
+                    call_id: "1".into(),
+                    name: "list_stats".into(),
+                    content: "{\"recent_runs\":[\"secret-stats\"]}".into(),
+                    is_error: false,
+                },
+            ],
+            false,
+        );
         assert!(!prompt.contains("secret-stats"), "{prompt}");
         assert!(!prompt.contains("Tool result"), "{prompt}");
     }
@@ -372,7 +435,7 @@ mod tests {
         let reply = p
             .complete(&messages(), &aim_core::coach::tools::specs())
             .unwrap();
-        let expected = flatten(&messages()).len();
+        let expected = flatten(&messages(), false).len();
         assert_eq!(reply.text, format!("got {expected}"));
         assert!(reply.tool_calls.is_empty(), "this mode never calls tools");
     }
@@ -435,6 +498,49 @@ mod tests {
             matches!(&err, ModelError::Request(t) if t.contains("could not start")),
             "{err:?}"
         );
+    }
+
+    #[test]
+    fn codex_exec_gets_the_trainer_server_with_its_tools_approved() {
+        let server = Path::new(r"C:\Program Files\aim\aimtrainer-mcp.exe");
+        let command = with_trainer_tools(&codex_command(), server).unwrap();
+        assert_eq!(
+            command,
+            [
+                "codex",
+                "exec",
+                "-c",
+                r#"mcp_servers.aimtrainer.command="C:\\Program Files\\aim\\aimtrainer-mcp.exe""#,
+                "-c",
+                r#"mcp_servers.aimtrainer.default_tools_approval_mode="approve""#,
+                "--skip-git-repo-check",
+                "-"
+            ]
+        );
+        let full_path = to_strings(&[r"C:\bin\Codex.EXE", "exec", "-"]);
+        assert!(with_trainer_tools(&full_path, server).is_some());
+    }
+
+    #[test]
+    fn other_clis_and_other_codex_commands_stay_text_only() {
+        let server = Path::new("aimtrainer-mcp");
+        assert_eq!(with_trainer_tools(&claude_command(), server), None);
+        assert_eq!(with_trainer_tools(&opencode_command(), server), None);
+        assert_eq!(
+            with_trainer_tools(&to_strings(&["codex", "login"]), server),
+            None
+        );
+        assert_eq!(with_trainer_tools(&to_strings(&["codex"]), server), None);
+        assert_eq!(with_trainer_tools(&[], server), None);
+    }
+
+    #[test]
+    fn the_prompt_names_the_trainer_tools_only_when_they_are_wired() {
+        let with = flatten(&messages(), true);
+        assert!(with.contains("aimtrainer MCP server"), "{with}");
+        assert!(!with.contains("No tools are available"), "{with}");
+        let without = flatten(&messages(), false);
+        assert!(without.ends_with("No tools are available."), "{without}");
     }
 
     #[test]

@@ -370,8 +370,9 @@ fn provider_section(
                             }
                         });
                         ui.small(
-                            "Text only: the CLI cannot call the coach's tools, so it does not \
-                             see your stats summary. It uses its own sign-in.",
+                            "Codex calls the coach's tools through aimtrainer-mcp, so it sees \
+                             your stats summary. Claude Code and OpenCode are text only. Each \
+                             uses its own sign-in.",
                         );
                     });
                     ui.end_row();

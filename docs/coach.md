@@ -9,7 +9,7 @@ The Coach tab (key 9) is off until you tick **Enable the AI coach**. While it is
 1. **Pick a provider** under *Provider*:
    - **OpenAI-compatible:** click a base URL preset (OpenAI, OpenCode pay-as-you-go, Ollama, LM Studio) or type one, then type a model id.
    - **Anthropic:** type a model id; the base URL defaults to `https://api.anthropic.com`.
-   - **CLI delegate:** click Codex, Claude Code or OpenCode to use your own installed, signed-in CLI. It is text only: it cannot call the tools, so it never sees your stats summary.
+   - **CLI delegate:** click Codex, Claude Code or OpenCode to use your own installed, signed-in CLI. Codex can call the coach's tools through the trainer's MCP server (`aimtrainer-mcp`, found next to the trainer or on `PATH`), so it sees your stats summary. Claude Code and OpenCode are text only: they cannot call the tools and never see your stats.
 2. **Add a key** (not needed for Ollama, LM Studio or a CLI). Paste it and click **Store in keyring**. The field is cleared at once and the key is never shown again; the page only says "Key stored in OS keyring" or, when you name an environment variable in *Key env var*, "Key from env VAR". **Forget key** removes it from the keyring. Each provider has its own key, and each OpenAI-compatible base URL too.
 3. **Test connection** sends a one-line prompt without tools and shows the reply or the error.
 4. **Preview what is sent** shows the exact `CoachContext::to_prompt_json()` text the model receives when it calls `list_stats`. It holds aggregates only (skill findings, flick directions, miss compass, pace, potential score, benchmark energy, recent runs, missions, readiness, fatigue), built from your history and your newest 20 replays. **Refresh** rebuilds it; it also rebuilds after each new run.
@@ -108,7 +108,7 @@ Pick one with `provider` in `CoachConfig`. `aim_ai::build_model(&config, key)` v
 |---|---|---|---|
 | `openai-compatible` | OpenAI, OpenCode pay-as-you-go, Ollama, LM Studio | Bearer key; none for local servers | Yes |
 | `anthropic` | Anthropic Messages API | `x-api-key` | Yes |
-| `cli-delegate` | The player's own installed CLI | The CLI's own login | No (text only) |
+| `cli-delegate` | The player's own installed CLI | The CLI's own login | Codex: through `aimtrainer-mcp`. Others: no (text only) |
 
 ### OpenAI-compatible (`OpenAiCompatProvider`)
 
@@ -164,7 +164,8 @@ Runs a CLI the player installed and signed in to themselves. The conversation is
 | Claude Code | `["claude", "-p", "--output-format", "json"]` | `stdin` | The `result` field; `is_error: true` becomes an error |
 | OpenCode | `["opencode", "run", "--format", "json"]` | `argument` | Text events (`{"type":"text",...}`), joined |
 
-- **No tool calls.** In this mode the coach cannot read stats or create scenarios; it answers from the conversation only.
+- **Tools through MCP (Codex only).** When the command is `codex exec` and `aimtrainer-mcp` is found next to the trainer or on `PATH`, the app adds `-c mcp_servers.aimtrainer.command=<path>` and `-c mcp_servers.aimtrainer.default_tools_approval_mode="approve"`, and the prompt tells Codex to use those tools. Codex then calls them itself: the app's own tool loop is not used, and the "tools used" list stays empty. The approval is needed because `codex exec` cannot ask and otherwise fails the call with "MCP tool call requires approval, but approval policy is never". Without the server, Codex is text only.
+- **No tool calls for other CLIs.** Claude Code and OpenCode cannot read stats or create scenarios; they answer from the conversation only.
 - **No logins.** The app never manages a CLI's login and never reads any CLI's credential files. If the CLI is not signed in, its error is shown.
 - **Sandboxing.** The process starts in an empty scratch directory under the system temp dir, not in the player's files, with the player's own environment.
 - **Timeout.** The process is killed after `request_timeout_secs`. On Windows, killing an npm `.cmd` shim may leave its child running until that child finishes.
@@ -209,6 +210,7 @@ Keys never go into settings files: `CoachConfig` has no key field, and a setting
 - Only what the core puts in `CoachContext` is sent: aggregates such as skill scores, flick directions, the miss compass, pace, recent run summaries and missions. Raw traces, file paths, account names and machine names are never sent.
 - The Coach tab's *Preview what is sent* shows exactly what is sent.
 - Local servers (Ollama, LM Studio) keep everything on the machine.
+- With the Codex CLI delegate, the stats summary that `list_stats` returns goes to OpenAI through Codex. Tool results from an earlier provider in the same chat are never put into a CLI prompt.
 - Plain `http://` is accepted only for `localhost`, `127.0.0.1` and `[::1]`. Any other host must use `https://`.
 
 ## Why there is no subscription login
