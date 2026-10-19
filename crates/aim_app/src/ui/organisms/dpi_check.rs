@@ -2,6 +2,7 @@
 //! raw counts give the mouse's real DPI (`aim_core::sensitivity::dpi_check`), its deviation
 //! from the configured DPI, and an optional corrected sensitivity.
 
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::persistence::settings::Settings;
 use crate::ui::atoms::{ERROR, GOOD, WARN};
 use aim_core::sensitivity::dpi_check::{
@@ -92,20 +93,25 @@ impl DpiMeter {
 
 /// One line for a measurement.
 pub fn check_text(c: &DpiCheck) -> String {
-    format!(
-        "Real DPI ≈ {:.0} (set to {}): {:+.1}% deviation",
-        c.real_dpi, c.nominal_dpi, c.deviation_pct
+    tr_named(
+        "Real DPI ≈ {real} (set to {set}): {deviation}% deviation",
+        &[
+            ("real", &format!("{:.0}", c.real_dpi)),
+            ("set", &c.nominal_dpi),
+            ("deviation", &format!("{:+.1}", c.deviation_pct)),
+        ],
     )
 }
 
 /// The helper's body. Changes `settings.sensitivity` only after a confirmed "Apply".
 pub fn dpi_check(ui: &mut egui::Ui, settings: &mut Settings, meter: &mut DpiMeter) {
     let s = settings.sensitivity;
-    ui.label(format!(
-        "1. Lay a ruler next to the mouse.  2. Press Start.  3. Hold {MEASURE_KEY}, move the mouse the distance below to the right along the ruler, then release {MEASURE_KEY}."
+    ui.label(tr_named(
+        "1. Lay a ruler next to the mouse.  2. Press Start.  3. Hold {key}, move the mouse the distance below to the right along the ruler, then release {key}.",
+        &[("key", &MEASURE_KEY)],
     ));
     ui.horizontal(|ui| {
-        ui.label("Distance moved");
+        ui.label(tr("Distance moved"));
         ui.add(
             egui::DragValue::new(&mut meter.distance_cm)
                 .speed(0.1)
@@ -113,7 +119,7 @@ pub fn dpi_check(ui: &mut egui::Ui, settings: &mut Settings, meter: &mut DpiMete
                 .suffix(" cm"),
         );
         if ui
-            .button(if meter.armed { "Stop" } else { "Start" })
+            .button(tr(if meter.armed { "Stop" } else { "Start" }))
             .clicked()
         {
             meter.toggle();
@@ -121,17 +127,17 @@ pub fn dpi_check(ui: &mut egui::Ui, settings: &mut Settings, meter: &mut DpiMete
     });
     if meter.armed {
         let status = if meter.holding() {
-            format!("Counting… {} counts", meter.counts())
+            tr_fmt("Counting… {} counts", &[&meter.counts()])
         } else {
-            format!(
-                "Hold {MEASURE_KEY} and move. Last count: {}",
-                meter.counts()
+            tr_named(
+                "Hold {key} and move. Last count: {count}",
+                &[("key", &MEASURE_KEY), ("count", &meter.counts())],
             )
         };
         ui.colored_label(WARN, status);
     }
     if meter.counts() == 0 {
-        ui.small("Expect a match within a few %. A large mismatch means a wrong DPI value or OS acceleration.");
+        ui.small(tr("Expect a match within a few %. A large mismatch means a wrong DPI value or OS acceleration."));
         return;
     }
     match meter.check(s.dpi) {
@@ -145,25 +151,27 @@ pub fn dpi_check(ui: &mut egui::Ui, settings: &mut Settings, meter: &mut DpiMete
             let fixed = corrected_sensitivity(s, c.real_dpi);
             if !meter.confirm_apply {
                 if ui
-                    .button("Apply corrected sensitivity…")
-                    .on_hover_text("Stores the real DPI and scales the sensitivity so your cm/360 stays the same.")
+                    .button(tr("Apply corrected sensitivity…"))
+                    .on_hover_text(tr("Stores the real DPI and scales the sensitivity so your cm/360 stays the same."))
                     .clicked()
                 {
                     meter.confirm_apply = true;
                 }
             } else {
-                ui.label(format!(
-                    "Change to {:.4} @ {} DPI (keeps {:.2} cm/360)? Set the same sensitivity in VALORANT, or the trainer will no longer match the game.",
-                    fixed.value,
-                    fixed.dpi,
-                    fixed.cm_per_360()
+                ui.label(tr_named(
+                    "Change to {value} @ {dpi} DPI (keeps {cm} cm/360)? Set the same sensitivity in VALORANT, or the trainer will no longer match the game.",
+                    &[
+                        ("value", &format!("{:.4}", fixed.value)),
+                        ("dpi", &fixed.dpi),
+                        ("cm", &format!("{:.2}", fixed.cm_per_360())),
+                    ],
                 ));
                 ui.horizontal(|ui| {
-                    if ui.button("Apply").clicked() {
+                    if ui.button(tr("Apply")).clicked() {
                         settings.sensitivity = fixed;
                         meter.confirm_apply = false;
                     }
-                    if ui.button("Cancel").clicked() {
+                    if ui.button(tr("Cancel")).clicked() {
                         meter.confirm_apply = false;
                     }
                 });
@@ -236,6 +244,33 @@ mod tests {
         let c = m.check(800).unwrap();
         assert!((c.real_dpi - 800.0).abs() < 0.2, "{c:?}");
         assert!(c.deviation_pct.abs() < 0.1);
+    }
+
+    #[test]
+    fn tools_text_is_spanish_in_spanish_and_unchanged_in_english() {
+        use aim_core::i18n::{Lang, tr_in, tr_named_in};
+        let reading = |lang| {
+            tr_named_in(
+                lang,
+                "Real DPI ≈ {real} (set to {set}): {deviation}% deviation",
+                &[("real", &"850"), ("set", &800), ("deviation", &"+6.2")],
+            )
+        };
+        assert_eq!(
+            reading(Lang::Es),
+            "DPI real ≈ 850 (configurado en 800): +6.2% de desviación"
+        );
+        assert_eq!(
+            reading(Lang::En),
+            "Real DPI ≈ 850 (set to 800): +6.2% deviation"
+        );
+        assert_eq!(
+            tr_in(Lang::Es, "Sensitivity converter"),
+            "Conversor de sensibilidad"
+        );
+        assert_eq!(tr_in(Lang::Es, "System check"), "Revisión del sistema");
+        assert_eq!(tr_in(Lang::Es, "Profile code"), "Código de perfil");
+        assert_eq!(tr_in(Lang::En, "Profile code"), "Profile code");
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! Routine catalogue with a start button per routine, and a resume button for routines
 //! split earlier today.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::persistence::library::Library;
 use crate::ui::UiAction;
 use aim_core::training::resume::RoutinePosition;
@@ -17,36 +18,31 @@ pub fn routine_list(
     let mut action = None;
     egui::ScrollArea::vertical().show(ui, |ui| {
         if let Some(p) = personalized {
-            ui.heading(&p.name);
-            ui.label(&p.description);
-            ui.label(format!(
-                "{} runs · ≈{:.0} min",
+            ui.heading(tr(&p.name));
+            ui.label(tr(&p.description));
+            ui.label(runs_line(
                 p.run_count(&lib.scenarios),
-                p.minutes(&lib.scenarios)
+                p.minutes(&lib.scenarios),
             ));
-            if ui.button("▶  Start personalized playlist").clicked() {
+            if ui.button(tr("▶  Start personalized playlist")).clicked() {
                 action = Some(UiAction::StartRoutineDef(Box::new(p.clone())));
             }
             ui.separator();
         }
         for r in &lib.routines {
-            ui.heading(&r.name);
-            ui.label(&r.description);
+            ui.heading(tr(&r.name));
+            ui.label(tr(&r.description));
             let runs = r.run_count(&lib.scenarios);
-            ui.label(format!(
-                "{runs} runs · ≈{:.0} min",
-                r.minutes(&lib.scenarios)
-            ));
+            ui.label(runs_line(runs, r.minutes(&lib.scenarios)));
             ui.horizontal(|ui| {
-                if ui.button("▶  Start routine").clicked() {
+                if ui.button(tr("▶  Start routine")).clicked() {
                     action = Some(UiAction::StartRoutine(r.id.clone()));
                 }
                 if let Some(p) = resumable(&r.id)
                     && ui
-                        .button(format!(
+                        .button(tr_fmt(
                             "⏵ Resume at run {}/{}",
-                            p.next_index + 1,
-                            p.total_runs
+                            &[&(p.next_index + 1), &p.total_runs],
                         ))
                         .clicked()
                 {
@@ -62,4 +58,9 @@ pub fn routine_list(
         }
     });
     action
+}
+
+/// "12 runs · ≈9 min" in the current language.
+fn runs_line(runs: usize, minutes: f32) -> String {
+    tr_fmt("{} runs · ≈{} min", &[&runs, &format!("{minutes:.0}")])
 }

@@ -1,6 +1,7 @@
 //! Sensitivity converter between games. The math lives in
 //! [`aim_core::sensitivity::matching`]; this view only collects inputs and shows results.
 
+use crate::i18n::{tr, tr_fmt};
 use crate::persistence::settings::Settings;
 use aim_core::sensitivity::matching::{self, Matching, Side};
 use aim_core::sensitivity::{FovAxis, Game, Sensitivity};
@@ -122,7 +123,7 @@ pub fn sens_converter(ui: &mut egui::Ui, settings: &mut Settings, state: &mut Co
     egui::Grid::new("sens_converter_inputs")
         .num_columns(2)
         .show(ui, |ui| {
-            ui.label("From game");
+            ui.label(tr("From game"));
             egui::ComboBox::from_id_salt("sens_converter_game")
                 .selected_text(state.source.game.display_name())
                 .show_ui(ui, |ui| {
@@ -139,8 +140,8 @@ pub fn sens_converter(ui: &mut egui::Ui, settings: &mut Settings, state: &mut Co
                 });
             ui.end_row();
 
-            ui.label("Sensitivity")
-                .on_hover_text(state.source.game.profile().value_note);
+            ui.label(tr("Sensitivity"))
+                .on_hover_text(tr(state.source.game.profile().value_note));
             ui.add(
                 egui::DragValue::new(&mut state.source.value)
                     .speed(0.001)
@@ -168,26 +169,26 @@ pub fn sens_converter(ui: &mut egui::Ui, settings: &mut Settings, state: &mut Co
                     );
                 }
                 Some(m) => {
-                    ui.label(format!("fixed at {}°", m.default_deg));
+                    ui.label(tr_fmt("fixed at {}°", &[&m.default_deg]));
                 }
                 None => {
-                    ui.label("unknown (360° matching only)");
+                    ui.label(tr("unknown (360° matching only)"));
                 }
             }
             ui.end_row();
 
-            ui.label("Matching");
+            ui.label(tr("Matching"));
             egui::ComboBox::from_id_salt("sens_converter_method")
-                .selected_text(state.method.label())
+                .selected_text(tr(state.method.label()))
                 .show_ui(ui, |ui| {
                     for m in Method::ALL {
-                        ui.selectable_value(&mut state.method, m, m.label());
+                        ui.selectable_value(&mut state.method, m, tr(m.label()));
                     }
                 });
             ui.end_row();
 
             if state.method == Method::Custom {
-                ui.label("Custom");
+                ui.label(tr("Custom"));
                 ui.horizontal(|ui| {
                     ui.add(
                         egui::DragValue::new(&mut state.custom_percent)
@@ -195,17 +196,21 @@ pub fn sens_converter(ui: &mut egui::Ui, settings: &mut Settings, state: &mut Co
                             .range(0.0..=500.0)
                             .suffix(" %"),
                     );
-                    ui.radio_value(&mut state.custom_axis, FovAxis::Horizontal, "horizontal");
-                    ui.radio_value(&mut state.custom_axis, FovAxis::Vertical, "vertical");
+                    ui.radio_value(
+                        &mut state.custom_axis,
+                        FovAxis::Horizontal,
+                        tr("horizontal"),
+                    );
+                    ui.radio_value(&mut state.custom_axis, FovAxis::Vertical, tr("vertical"));
                 });
                 ui.end_row();
             }
 
-            ui.label("Monitor");
+            ui.label(tr("Monitor"));
             let aspect_label = ASPECTS
                 .iter()
                 .find(|(_, a)| (*a - state.monitor_aspect).abs() < 1e-9)
-                .map_or("custom", |(l, _)| *l);
+                .map_or(tr("custom"), |(l, _)| *l);
             egui::ComboBox::from_id_salt("sens_converter_aspect")
                 .selected_text(aspect_label)
                 .show_ui(ui, |ui| {
@@ -215,7 +220,7 @@ pub fn sens_converter(ui: &mut egui::Ui, settings: &mut Settings, state: &mut Co
                 });
             ui.end_row();
         });
-    if ui.button("Load my trainer sensitivity").clicked() {
+    if ui.button(tr("Load my trainer sensitivity")).clicked() {
         *state = ConverterState {
             method: state.method,
             custom_axis: state.custom_axis,
@@ -226,13 +231,13 @@ pub fn sens_converter(ui: &mut egui::Ui, settings: &mut Settings, state: &mut Co
     }
 
     ui.add_space(6.0);
-    ui.label("Target games use their default FOV.");
+    ui.label(tr("Target games use their default FOV."));
     egui::Grid::new("sens_converter_results")
         .num_columns(4)
         .striped(true)
         .show(ui, |ui| {
-            ui.strong("Game");
-            ui.strong("Sensitivity");
+            ui.strong(tr("Game"));
+            ui.strong(tr("Sensitivity"));
             ui.strong("cm/360");
             ui.label("");
             ui.end_row();
@@ -244,8 +249,8 @@ pub fn sens_converter(ui: &mut egui::Ui, settings: &mut Settings, state: &mut Co
                         ui.label(format!("{:.2}", out.cm_per_360()));
                         let current = settings.sensitivity == out;
                         if ui
-                            .add_enabled(!current, egui::Button::new("Use"))
-                            .on_hover_text("Set this as the trainer's sensitivity")
+                            .add_enabled(!current, egui::Button::new(tr("Use")))
+                            .on_hover_text(tr("Set this as the trainer's sensitivity"))
                             .clicked()
                         {
                             settings.sensitivity = out;

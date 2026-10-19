@@ -1,5 +1,6 @@
 //! Today's session of the weekly method: skill of the day, tier, progress, start/resume.
 
+use crate::i18n::{tr, tr_fmt, tr_named};
 use crate::ui::atoms::{GOOD, WARN, big};
 use aim_core::training::resume::RoutinePosition;
 use bevy_egui::egui;
@@ -84,35 +85,35 @@ pub enum TodayAction {
 }
 
 fn missions_section(ui: &mut egui::Ui, m: &MissionsModel, action: &mut Option<TodayAction>) {
-    ui.heading("Daily missions");
-    ui.small(format!(
+    ui.heading(tr("Daily missions"));
+    ui.small(tr_fmt(
         "Commitment: {} (change it in Settings). Every condition must hold in the same run; targets come from your recent bests.",
-        m.commitment
+        &[&m.commitment],
     ));
     if m.missions.is_empty() {
-        ui.label("Play any scenario at its normal difficulty to unlock missions built from your own scores.");
+        ui.label(tr("Play any scenario at its normal difficulty to unlock missions built from your own scores."));
         return;
     }
     for (i, mission) in m.missions.iter().enumerate() {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
+            let name = tr(&mission.scenario_name);
             let title = if mission.mastery {
-                format!("★ Mastery · {}", mission.scenario_name)
+                tr_fmt("★ Mastery · {}", &[&name])
             } else {
-                mission.scenario_name.clone()
+                name.to_owned()
             };
             ui.strong(title);
             if mission.done {
-                ui.colored_label(GOOD, "✔ done");
+                ui.colored_label(GOOD, tr("✔ done"));
             } else {
-                ui.small(format!(
+                ui.small(tr_fmt(
                     "best run today: {}/{} conditions",
-                    mission.best_met,
-                    mission.conditions.len()
+                    &[&mission.best_met, &mission.conditions.len()],
                 ));
                 if ui
                     .push_id(i, |ui| {
-                        crate::audio::ui_click::clicked(ui.button("▶  Play"))
+                        crate::audio::ui_click::clicked(ui.button(tr("▶  Play")))
                     })
                     .inner
                     .clicked()
@@ -121,22 +122,26 @@ fn missions_section(ui: &mut egui::Ui, m: &MissionsModel, action: &mut Option<To
                 }
             }
         });
-        ui.label(mission.conditions.join("  AND  "));
+        ui.label(mission.conditions.join(tr("  AND  ")));
     }
 }
 
 fn routine_card(ui: &mut egui::Ui, r: &RoutineModel, action: &mut Option<TodayAction>) {
-    ui.heading(&r.name);
-    ui.label(&r.description);
-    ui.label(format!("{} runs · ≈{:.0} min", r.runs, r.minutes));
+    ui.heading(tr(&r.name));
+    ui.label(tr(&r.description));
+    ui.label(tr_fmt(
+        "{} runs · ≈{} min",
+        &[&r.runs, &format!("{:.0}", r.minutes)],
+    ));
     ui.add_space(6.0);
     match r.progress {
         Some((next, total)) if next >= total => {
             ui.colored_label(
                 GOOD,
-                "Done for today. Rest, or play a quick warm-up before ranked.",
+                tr("Done for today. Rest, or play a quick warm-up before ranked."),
             );
-            if crate::audio::ui_click::clicked(ui.button("↻ Play again from the start")).clicked()
+            if crate::audio::ui_click::clicked(ui.button(tr("↻ Play again from the start")))
+                .clicked()
             {
                 *action = Some(TodayAction::Start(r.id.clone()));
             }
@@ -144,26 +149,29 @@ fn routine_card(ui: &mut egui::Ui, r: &RoutineModel, action: &mut Option<TodayAc
         Some((next, total)) => {
             ui.add(
                 egui::ProgressBar::new(next as f32 / total as f32)
-                    .text(format!("run {next}/{total}")),
+                    .text(tr_fmt("run {}/{}", &[&next, &total])),
             );
             ui.horizontal(|ui| {
                 if ui
-                    .add_sized([180.0, 34.0], egui::Button::new("▶  Resume"))
+                    .add_sized([180.0, 34.0], egui::Button::new(tr("▶  Resume")))
                     .clicked()
                 {
                     *action = Some(TodayAction::Resume(r.id.clone()));
                 }
-                if ui.button("Restart").clicked() {
+                if ui.button(tr("Restart")).clicked() {
                     *action = Some(TodayAction::Start(r.id.clone()));
                 }
             });
-            ui.small(
+            ui.small(tr(
                 "Splitting a long day into 2–3 sessions is fine; progress is kept until midnight.",
-            );
+            ));
         }
         None => {
             if ui
-                .add_sized([180.0, 34.0], egui::Button::new("▶  Start today's session"))
+                .add_sized(
+                    [180.0, 34.0],
+                    egui::Button::new(tr("▶  Start today's session")),
+                )
                 .clicked()
             {
                 *action = Some(TodayAction::Start(r.id.clone()));
@@ -184,8 +192,11 @@ pub fn quick_bar(ui: &mut egui::Ui, m: &QuickModel) -> Option<TodayAction> {
     ui.horizontal_wrapped(|ui| {
         if let Some((id, name)) = &m.last_scenario
             && ui
-                .add(egui::Button::new(format!("▶  Quick play: {name}")).min_size(QUICK_BUTTON))
-                .on_hover_text("Play the scenario you played last.")
+                .add(
+                    egui::Button::new(tr_fmt("▶  Quick play: {}", &[&tr(name)]))
+                        .min_size(QUICK_BUTTON),
+                )
+                .on_hover_text(tr("Play the scenario you played last."))
                 .clicked()
         {
             action = Some(TodayAction::QuickPlay(id.clone()));
@@ -193,10 +204,13 @@ pub fn quick_bar(ui: &mut egui::Ui, m: &QuickModel) -> Option<TodayAction> {
         if let Some((pos, name)) = &m.routine
             && ui
                 .add(
-                    egui::Button::new(format!(
-                        "⏵ Continue {name} (run {}/{})",
-                        pos.next_index + 1,
-                        pos.total_runs
+                    egui::Button::new(tr_named(
+                        "⏵ Continue {name} (run {next}/{total})",
+                        &[
+                            ("name", &tr(name)),
+                            ("next", &(pos.next_index + 1)),
+                            ("total", &pos.total_runs),
+                        ],
                     ))
                     .min_size(QUICK_BUTTON),
                 )
@@ -212,21 +226,24 @@ pub fn quick_bar(ui: &mut egui::Ui, m: &QuickModel) -> Option<TodayAction> {
 pub fn today_panel(ui: &mut egui::Ui, m: &TodayModel) -> Option<TodayAction> {
     let mut action = None;
     egui::ScrollArea::vertical().id_salt("today").show(ui, |ui| {
-        ui.label(big(format!("{} · {}", m.weekday, m.method_name), 24.0));
-        ui.label(&m.method_description);
+        ui.label(big(
+            format!("{} · {}", m.weekday, tr(&m.method_name)),
+            24.0,
+        ));
+        ui.label(tr(&m.method_description));
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            ui.label("Tier");
+            ui.label(tr("Tier"));
             let selected = m
                 .tiers
                 .iter()
                 .find(|t| t.0 == m.selected_tier)
-                .map_or("", |t| t.1.as_str());
+                .map_or("", |t| tr(&t.1));
             egui::ComboBox::from_id_salt("tier")
                 .selected_text(selected)
                 .show_ui(ui, |ui| {
                     for (id, name) in &m.tiers {
-                        if ui.selectable_label(*id == m.selected_tier, name).clicked() {
+                        if ui.selectable_label(*id == m.selected_tier, tr(name)).clicked() {
                             action = Some(TodayAction::SelectTier(id.clone()));
                         }
                     }
@@ -235,47 +252,52 @@ pub fn today_panel(ui: &mut egui::Ui, m: &TodayModel) -> Option<TodayAction> {
                 .tiers
                 .iter()
                 .find(|t| t.0 == m.suggested_tier)
-                .map_or("", |t| t.1.as_str());
+                .map_or("", |t| tr(&t.1));
             let energy = m
                 .benchmark_energy
-                .map_or("not benchmarked yet".to_owned(), |e| {
-                    format!("{e:.0} energy")
+                .map_or(tr("not benchmarked yet").to_owned(), |e| {
+                    tr_fmt("{} energy", &[&format!("{e:.0}")])
                 });
-            ui.small(format!("Suggested: {suggested} ({energy})"));
+            ui.small(tr_named(
+                "Suggested: {tier} ({energy})",
+                &[("tier", &suggested), ("energy", &energy)],
+            ));
         });
         if m.selected_tier != m.suggested_tier {
             ui.colored_label(
                 WARN,
-                "You picked a different tier than suggested; move back if it feels too hard.",
+                tr("You picked a different tier than suggested; move back if it feels too hard."),
             );
         }
         ui.separator();
         match &m.day {
             DayModel::Routine(r) => routine_card(ui, r, &mut action),
             DayModel::Flex { weakest } => {
-                ui.heading("Flex day");
-                ui.label("Rest is training too: sleep and spacing consolidate skills.");
+                ui.heading(tr("Flex day"));
+                ui.label(tr("Rest is training too: sleep and spacing consolidate skills."));
                 if let Some(r) = weakest {
                     ui.add_space(6.0);
-                    ui.label("Or replay your weakest skill day:");
+                    ui.label(tr("Or replay your weakest skill day:"));
                     routine_card(ui, r, &mut action);
                 }
                 ui.add_space(6.0);
-                if ui.button("Quick warm-up (10 min)").clicked() {
+                if ui.button(tr("Quick warm-up (10 min)")).clicked() {
                     action = Some(TodayAction::WarmUp);
                 }
             }
         }
         if let Some(c) = &m.challenge {
             ui.separator();
-            ui.heading("Daily challenge");
-            ui.label(format!(
+            ui.heading(tr("Daily challenge"));
+            ui.label(tr_fmt(
                 "{} with today's fixed seed: everyone gets the same targets, so you can compare scores with friends.",
-                c.scenario_name
+                &[&tr(&c.scenario_name)],
             ));
-            let best = c.best_today.map_or("not played yet".to_owned(), |b| format!("your best today {b:.0}"));
+            let best = c.best_today.map_or(tr("not played yet").to_owned(), |b| {
+                tr_fmt("your best today {}", &[&format!("{b:.0}")])
+            });
             ui.horizontal(|ui| {
-                if crate::audio::ui_click::clicked(ui.button("▶  Play the daily challenge")).clicked() {
+                if crate::audio::ui_click::clicked(ui.button(tr("▶  Play the daily challenge"))).clicked() {
                     action = Some(TodayAction::Challenge);
                 }
                 ui.small(best);
@@ -284,7 +306,7 @@ pub fn today_panel(ui: &mut egui::Ui, m: &TodayModel) -> Option<TodayAction> {
         ui.separator();
         missions_section(ui, &m.missions, &mut action);
         ui.add_space(10.0);
-        ui.small(&m.credit);
+        ui.small(tr(&m.credit));
     });
     action
 }
