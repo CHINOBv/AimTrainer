@@ -26,7 +26,7 @@ Branches: `feat/movement-space` (done inline), then one per unit in `../CustomAi
 |---|---|---|---|---|
 | T1 | S2 | inline | done | d9ea9d6 |
 | T2 | S1, S3, S4 | delegated (parallel writer, worktree `movement-drills`) | pending | |
-| T3 | S5 | delegated (parallel writer, worktree `movement-lab`) | pending | |
+| T3 | S5 | delegated (parallel writer, worktree `movement-lab`) | done (playtest pending) | e7e6ea1, 4bfbdab |
 | T4 | S6 | delegated (parallel writer, worktree `ai-debrief`) | pending | |
 | T5 | S7 foundation | delegated (parallel writer, worktree `i18n-core`) | pending | |
 | T6 | S7 translation sweep | delegated (parallel writers by area, after T2-T5 merge) | pending | |
@@ -42,3 +42,4 @@ Route evidence: T2-T5 are independent units with disjoint main surfaces, each se
 - L4: AI research. Grounding: send a byte-capped digest with stable metric keys; require citations; validate numbers, ids and lengths deterministically; no silent retries. Reuse `ChatModel::complete(messages, &[])`, `Job<T>` and `model(config)`; cache per `ResultKey`. `Mistake.player/corrected` are raw paths and must not be sent.
 - L5: i18n map. ~880 UI literals and ~290 `format!` in `aim_app/src/ui`; `'static` label tables (`TABS`, `SettingsTab::ALL`, `rows.section`); view models hold preformatted text; core builds `Finding.explanation`, `Mistake.tip`, `Metric::label()`; content TOML has names/descriptions/notes; ~340 exact-English assertions; `Settings` uses struct-level `#[serde(default)]`; no i18n crate; egui default fonts likely cover Latin-1.
 - L6 (parent): S2 done in d9ea9d6, reviewed and approved.
+- L7 (2026-10-19, T3 writer): S5 built on `feat/movement-lab`. Core `scenario::lab::LabSettings` (motion static/strafe/dodge, speed 50-150%, turn interval, dodge preset, 1-6 enemies, head/body, distance 5-50 m, spread, appear delay, lifetime or until killed, player area default x +-16 m, weapon, spread, 15-180 s) clamps and builds a validating `ScenarioDef` with id `lab-<content hash>` (e7e6ea1, 13 tests). App: "Movement Lab" entry below the Scenarios list opens the lab panel (summary, PB, Start, Reset); `[movement_lab]` persisted with back-compat and lenient-table tests; `UiAction::StartLab`; Retry replays the same drill via `lab_retry_for` in results.rs (results_card.rs untouched); lab results keep their own history key (4bfbdab). Checks: fmt clean, clippy -D warnings clean, cargo test --workspace all green. Lab panel painting and in-game feel are untested: playtest needed.
