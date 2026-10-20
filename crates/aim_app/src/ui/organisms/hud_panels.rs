@@ -430,7 +430,7 @@ pub fn arena_status(
                 if let Some(a) = s.adaptive() {
                     ui.label(tr_named(
                         "Bots: {skill} (peak {peak})",
-                        &[("skill", &a.skill), ("peak", &a.peak)],
+                        &[("skill", &tr(a.skill)), ("peak", &tr(a.peak))],
                     ));
                 }
                 if let Some(o) = s.objective() {
