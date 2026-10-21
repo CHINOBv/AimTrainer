@@ -230,6 +230,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/mirror-duel.toml"),
     ),
     (
+        "move-century.toml",
+        include_str!("../../../../content/scenarios/move-century.toml"),
+    ),
+    (
         "orbit-track.toml",
         include_str!("../../../../content/scenarios/orbit-track.toml"),
     ),

@@ -300,11 +300,16 @@ fn shaped(def: &ScenarioDef, level: f32, secs: Option<f32>) -> ScenarioDef {
     }
 }
 
-/// A library scenario rebuilt as the variant a run key names (level, duration), with
+/// A library scenario rebuilt as the variant a run key names (level, duration or kill goal), with
 /// `tuning` and, when given, the player's floor at `elevation` meters. Applied in run-key
 /// order so the id matches the key.
 fn variant(def: &ScenarioDef, key: &RunKey, tuning: Tuning, elevation: Option<f32>) -> ScenarioDef {
-    let def = shaped(def, key.level, key.secs).with_tuning(tuning);
+    let def = shaped(def, key.level, key.secs);
+    let def = match key.end {
+        Some(end) => def.with_end_choice(end),
+        None => def,
+    }
+    .with_tuning(tuning);
     match elevation {
         Some(m) => def.with_elevation(m),
         None => def,
@@ -346,6 +351,14 @@ mod tests {
                     .id,
             );
             keys.push(def.with_elevation(-0.75).id);
+            keys.push(def.with_kill_goal(100).id);
+            keys.push(
+                def.at_difficulty(0.5)
+                    .with_kill_goal(40)
+                    .with_tuning(tuning)
+                    .with_elevation(1.5)
+                    .id,
+            );
         }
         keys
     }

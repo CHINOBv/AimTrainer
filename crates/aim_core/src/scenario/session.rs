@@ -546,6 +546,8 @@ impl Session {
         if let RunEnd::Kills { kills } = self.def.end
             && self.stats.kills >= kills
         {
+            let left = (self.def.duration_secs - self.time).max(0.0);
+            self.stats.score += self.def.scoring.finish_bonus_per_sec * left;
             self.finish(RunOutcome::Completed, events);
         }
     }
@@ -2684,6 +2686,48 @@ mod tests {
             .map(|w| (w[1].x - w[0].x).abs() > 1e-5)
             .collect();
         moving.windows(2).filter(|w| !w[0] && w[1]).count() + usize::from(moving[0])
+    }
+
+    /// Clicks the lone target every other 10 ms frame until the run ends or `max_secs`.
+    fn click_until_done(s: &mut Session, max_secs: f32) {
+        while !s.is_finished() && s.time() < max_secs {
+            let view = s.targets().next().map_or(AWAY, |t| aim_at(s, t.position));
+            tick(s, 0.01, view, true);
+            tick(s, 0.01, view, false);
+        }
+    }
+
+    #[test]
+    fn reaching_a_kill_goal_early_earns_the_finish_bonus() {
+        let run = |bonus: f32| {
+            let mut def = lone_sphere(FireMode::Click, 1.0);
+            def.duration_secs = 10.0;
+            def.end = RunEnd::Kills { kills: 2 };
+            def.scoring.finish_bonus_per_sec = bonus;
+            let mut s = Session::new(def, 1);
+            click_until_done(&mut s, 10.0);
+            assert_eq!(s.outcome(), Some(RunOutcome::Completed));
+            (s.result().score, s.time())
+        };
+        let (plain, _) = run(0.0);
+        let (with_bonus, t) = run(10.0);
+        assert!(t < 5.0, "{t}");
+        assert!(
+            (with_bonus - plain - 10.0 * (10.0 - t)).abs() < 1e-2,
+            "{with_bonus} vs {plain} + 10 × {:.2} s left",
+            10.0 - t
+        );
+
+        // Timed runs never get it.
+        let mut def = lone_sphere(FireMode::Click, 1.0);
+        def.duration_secs = 1.0;
+        def.scoring.finish_bonus_per_sec = 10.0;
+        let mut timed = Session::new(def.clone(), 1);
+        click_until_done(&mut timed, 5.0);
+        def.scoring.finish_bonus_per_sec = 0.0;
+        let mut plain = Session::new(def, 1);
+        click_until_done(&mut plain, 5.0);
+        assert_eq!(timed.result().score, plain.result().score);
     }
 
     #[test]

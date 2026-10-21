@@ -67,6 +67,7 @@ decoy_penalty = 0            # per shot on a go/no-go decoy
 decay = { window_secs = 2.0, floor = 0.3 }   # optional: a target's value fades after it appears
 accuracy_mult = "none"       # "linear" or "sqrt": the final score × accuracy (or its square root)
 stop_window = { secs = 0.3, bonus = 40 }     # optional: bonus per hit fired soon after an accurate stop; needs player.movement
+finish_bonus_per_sec = 0     # kills-ended runs: points per second left under duration_secs when the kill count is reached
 
 [view]                       # optional
 fov_lock = [60, 80]          # vertical FOV in degrees: a fixed value (60) or a [min, max] clamp
@@ -483,6 +484,8 @@ Clicking on the stop or reversal works because the target's lateral speed passes
 ### Phases, fail conditions and run end
 
 A scenario can chain phases (waves), fail early, and end on kills or never. All three are optional; without them a run ends after `duration_secs`, as before. The built-in `phase-peek-ladder` chains close and far waves and fails at 5 misses; `phase-kill-race` ends at 30 kills after an accuracy-gated warm-up.
+
+The player can also override the end in the scenario details ("Run ends"): the scenario's own end, **by time** (any length; a kills-ended scenario becomes a timed run) or **by kills** (scenarios whose targets can die). A kill goal of N ends the run at N kills, fails it after N × 4 s, and scores 100 points per second left (`finish_bonus_per_sec`). Each choice keeps its scores apart through a run-key suffix: `#100k` for a kill goal, `#60s` for a time limit on a scenario that does not end by time (`~60s` otherwise). The choice is saved per scenario.
 
 ```toml
 [end]

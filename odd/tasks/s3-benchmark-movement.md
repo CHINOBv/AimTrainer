@@ -16,7 +16,7 @@ Branch: `feat/s3-benchmark-movement` (worktree `../CustomAimTrainer-worktrees/s3
 |----|-------|-------|--------|--------|
 | T1 | S2 | inline | done | (this commit) |
 | T2 | S1 | inline | done | (this commit) |
-| T3 | S3 | inline | pending | |
+| T3 | S3 | inline | done | (this commit) |
 | T4 | S4 | inline | pending | |
 
 ## Log
@@ -25,3 +25,4 @@ Branch: `feat/s3-benchmark-movement` (worktree `../CustomAimTrainer-worktrees/s3
 - L2 `feat/dynamic-targets` merged into `main` (fast-forward to d41c5de) at the user's request.
 - L3 T1: calibrate contender accuracy now `vertical-rail` 0.61 (path speeds lowered to 1.05–2.2 m/s across its three profiles) and `control-duelist` 0.46 (stop_chance 0.3, max_offset 2.5, change_secs 0.7–1.5); order recruit < contender < veteran < elite holds. The sim is seed-noisy: narrowing control-duelist to 2.2 m dropped it to 0.30.
 - L4 T2: benchmark gains Linear clicking (crossing-lanes, metronome-ring), Control tracking (control-weave, control-duelist), Stability switching (stability-flyers, steady-agents-switch), thresholds from `calibrate -- --level` (new option) rounded to 50; weekly plan focus Monday/Wednesday/Friday; test pins the nine S3 names and that each is in a focus (fails without the plan change). Consequence noted to the user: overall energy reads empty until the three new subcategories are played (energy is recomputed from history; no stored data breaks). Risk item 3 (contract others consume: overall energy semantics) is user-requested.
+- L5 T3: `scoring.finish_bonus_per_sec` (kills-ended runs, points per second left; validated >= 0); `difficulty::EndChoice { Kills(n), Time(s) }` with `with_kill_goal` (cap n x 4 s, bonus 100/s, `#100k`), `with_time_limit` (`~Ns` when already timed, else `#Ns` and end = time) and `RunKey.end`; proof `variant_for_key` and app `variant` rebuild it (consistency test extended). Details panel "Run ends: own / by time / by kills", saved per scenario in `Settings.end_choices` (additive optional settings field). New scenario `move-century` (kills 100, 400 s cap, bonus 100/s): calibrate contender 0.66, 100 kills in ~115 s, order holds. RED: compile failures and the app/core consistency test failing on `#100k` keys before `variant` learned them. Mid-task correction: the first UI only offered own end vs kills, so a kills-authored scenario could not be played by time; generalized to EndChoice.

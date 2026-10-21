@@ -112,6 +112,9 @@ pub struct Settings {
     pub feel: FeelSettings,
     /// Scenario ids starred in the scenario list, in the order they were starred.
     pub favorites: Vec<String>,
+    /// How the player chose each scenario to end (a race to N kills, or N seconds) instead
+    /// of its own end (`ScenarioDef::with_end_choice`). Absent: the scenario's own end.
+    pub end_choices: std::collections::BTreeMap<String, aim_core::scenario::EndChoice>,
     /// The AI coach's provider settings. Off by default; API keys are never kept here
     /// (they live in the OS keyring or an environment variable).
     #[serde(deserialize_with = "deserialize_coach")]
@@ -555,6 +558,7 @@ impl Default for Settings {
             arena_coaching: false,
             feel: FeelSettings::default(),
             favorites: Vec::new(),
+            end_choices: Default::default(),
             coach: aim_ai::CoachConfig::default(),
             breaks: BreakPolicy::default(),
             first_run_done: false,
@@ -1043,6 +1047,23 @@ fullscreen = false",
         };
         let text = toml::to_string_pretty(&starred).unwrap();
         assert_eq!(toml::from_str::<Settings>(&text).unwrap(), starred);
+    }
+
+    #[test]
+    fn end_choices_are_empty_for_old_settings_files_and_round_trip() {
+        let old: Settings = toml::from_str("fullscreen = false").unwrap();
+        assert!(old.end_choices.is_empty());
+        let mut picked = Settings::default();
+        picked.end_choices.insert(
+            "move-century".into(),
+            aim_core::scenario::EndChoice::Time(120),
+        );
+        picked.end_choices.insert(
+            "counter-strafe".into(),
+            aim_core::scenario::EndChoice::Kills(30),
+        );
+        let text = toml::to_string_pretty(&picked).unwrap();
+        assert_eq!(toml::from_str::<Settings>(&text).unwrap(), picked);
     }
 
     #[test]

@@ -1,0 +1,35 @@
+# A race to 100 kills with VALORANT movement (requested by the owner). Original scenario.
+# Time cap: 4 s per kill (`with_kill_goal`'s rule), 100 points per second left.
+id = "move-century"
+name = "Movement Century"
+category = "movement"
+game = "valorant"
+description = """
+A race to 100 kills. Heads appear around the floor ahead; strafe, stop, tap the head, and move on.
+Moving shots are inaccurate and penalised. Every second left when you reach 100 scores 100 points.
+Pick "By time" in the scenario details to play it as a timed run instead."""
+duration_secs = 400
+
+[weapon]
+kind = "vandal"
+simulate_spread = true
+
+[player]
+movement = true
+bounds_x = [-16.0, 16.0]
+bounds_z = [-4.0, 8.0]
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-10.0, 10.0], z = [-22.0, -12.0] }
+max_alive = 3
+min_separation_deg = 8
+
+[scoring]
+miss_penalty = 10
+moving_shot_penalty = 40
+finish_bonus_per_sec = 100
+
+[end]
+kind = "kills"
+kills = 100

@@ -638,6 +638,7 @@ fn menu(
                             def,
                             &history,
                             training.adaptive.level(&def.id),
+                            &mut cfg.settings.end_choices,
                         ))
                     }
                     None => scenario_browser::empty_selection(ui),

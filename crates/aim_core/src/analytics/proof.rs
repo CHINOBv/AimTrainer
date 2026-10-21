@@ -178,6 +178,9 @@ pub fn variant_for_key(library: &[ScenarioDef], key: &str) -> Option<ScenarioDef
     if let Some(secs) = k.secs {
         def = def.with_duration(secs);
     }
+    if let Some(end) = k.end {
+        def = def.with_end_choice(end);
+    }
     def = def.with_tuning(k.tuning);
     if let Some(m) = k.elevation {
         def = def.with_elevation(m);

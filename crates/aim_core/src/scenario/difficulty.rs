@@ -161,6 +161,7 @@ pub fn parse_run_key_full(key: &str) -> (&str, f32, Option<f32>) {
 }
 
 fn parse_level_and_secs(key: &str) -> (&str, f32, Option<f32>) {
+    let key = split_end(key).0;
     let (rest, secs) = match key.rsplit_once('~') {
         Some((rest, d)) => match d.strip_suffix('s').and_then(|n| n.parse::<f32>().ok()) {
             Some(secs) if secs.is_finite() && secs > 0.0 => (rest, Some(secs)),
@@ -177,9 +178,57 @@ fn parse_level_and_secs(key: &str) -> (&str, f32, Option<f32>) {
     }
 }
 
+/// How the player chose a run to end, in place of the scenario's own end
+/// ([`ScenarioDef::with_end_choice`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EndChoice {
+    /// A race to this many kills (`#100k`).
+    Kills(u32),
+    /// A timed run of this many seconds (`#60s`, or `~60s` for a scenario that already ends
+    /// by time).
+    Time(u32),
+}
+
+impl EndChoice {
+    fn suffix(self) -> String {
+        match self {
+            Self::Kills(n) => format!("#{n}k"),
+            Self::Time(s) => format!("#{s}s"),
+        }
+    }
+}
+
+/// Splits a trailing `#100k` or `#60s` end-choice suffix off a run key (without tuning or
+/// height).
+fn split_end(key: &str) -> (&str, Option<EndChoice>) {
+    let Some((rest, e)) = key.rsplit_once('#') else {
+        return (key, None);
+    };
+    let n = |unit: char| e.strip_suffix(unit).and_then(|n| n.parse::<u32>().ok());
+    match (n('k'), n('s')) {
+        (Some(k), _) if k > 0 => (rest, Some(EndChoice::Kills(k))),
+        (_, Some(s)) if s > 0 => (rest, Some(EndChoice::Time(s))),
+        _ => (key, None),
+    }
+}
+
+/// Seconds allowed per kill when a player turns a scenario into a kill goal
+/// ([`ScenarioDef::with_kill_goal`]): the run fails if the goal takes longer. A design
+/// choice (estimate): about three times the 1–1.5 s per kill of the movement drills.
+pub const KILL_GOAL_SECS_PER_KILL: f32 = 4.0;
+/// Points per second left under the time cap when a kill goal is reached, so faster runs
+/// score more (estimate: one second saved is worth about one hit).
+pub const KILL_GOAL_FINISH_BONUS: f32 = 100.0;
+/// Largest kill goal a player can pick.
+pub const MAX_KILL_GOAL: u32 = 500;
+/// Shortest and longest time limit a player can pick, seconds.
+pub const TIME_LIMIT_SECS: (u32, u32) = (10, 1200);
+
 /// Every part of a run key: `id@+0.50~20s%s80d120v150^+1.50m` is the base id, the
-/// difficulty level, the shortened duration, the in-run tuning and the player's floor
-/// height, each optional and in that order.
+/// difficulty level, the shortened duration (or a `#100k` / `#60s` end choice in its
+/// place), the in-run tuning and the player's floor height, each optional and in that
+/// order.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RunKey<'a> {
     /// Base scenario id.
@@ -188,6 +237,8 @@ pub struct RunKey<'a> {
     pub level: f32,
     /// Shortened duration in seconds (`~20s`), if any.
     pub secs: Option<f32>,
+    /// The player's end choice (`#100k` or `#60s`), if any.
+    pub end: Option<EndChoice>,
     /// Target size, distance and speed tuning (`%s80d120v150`); default when absent.
     pub tuning: Tuning,
     /// Player floor height in meters (`^+1.50m`), when it differs from the scenario file.
@@ -200,11 +251,13 @@ impl<'a> RunKey<'a> {
     pub fn parse(key: &'a str) -> Self {
         let (rest, elevation) = split_elevation(key);
         let (rest, tuning) = split_tuning(rest);
+        let end = split_end(rest).1;
         let (base, level, secs) = parse_level_and_secs(rest);
         RunKey {
             base,
             level,
             secs,
+            end,
             tuning: tuning.unwrap_or_default(),
             elevation,
         }
@@ -349,6 +402,45 @@ impl ScenarioDef {
             out.id = format!("{}~{}s", self.id, secs.round() as u32);
         }
         out
+    }
+
+    /// This scenario as a race to `kills` kills (clamped to 1..=[`MAX_KILL_GOAL`]): the run
+    /// ends at the goal and fails if it takes longer than [`KILL_GOAL_SECS_PER_KILL`] per
+    /// kill (never less than the scenario's own length), and every second left scores
+    /// [`KILL_GOAL_FINISH_BONUS`]. Apply it where [`Self::with_duration`] goes: the id gains
+    /// a `#100k` suffix so kill-goal scores never mix with timed ones.
+    pub fn with_kill_goal(&self, kills: u32) -> ScenarioDef {
+        let n = kills.clamp(1, MAX_KILL_GOAL);
+        let mut out = self.clone();
+        out.end = super::RunEnd::Kills { kills: n };
+        out.duration_secs = self.duration_secs.max(n as f32 * KILL_GOAL_SECS_PER_KILL);
+        out.scoring.finish_bonus_per_sec = KILL_GOAL_FINISH_BONUS;
+        out.id = format!("{}{}", self.id, EndChoice::Kills(n).suffix());
+        out
+    }
+
+    /// This scenario as a timed run of `secs` seconds (clamped to [`TIME_LIMIT_SECS`]). A
+    /// scenario that already ends by time is just lengthened or shortened
+    /// ([`Self::with_duration`], `~60s`); one that ends by kills or never ends becomes a
+    /// timed run with a `#60s` suffix.
+    pub fn with_time_limit(&self, secs: u32) -> ScenarioDef {
+        let s = secs.clamp(TIME_LIMIT_SECS.0, TIME_LIMIT_SECS.1);
+        if self.end.is_time() {
+            return self.with_duration(s as f32);
+        }
+        let mut out = self.clone();
+        out.end = super::RunEnd::Time;
+        out.duration_secs = s as f32;
+        out.id = format!("{}{}", self.id, EndChoice::Time(s).suffix());
+        out
+    }
+
+    /// This scenario ending the way the player chose.
+    pub fn with_end_choice(&self, choice: EndChoice) -> ScenarioDef {
+        match choice {
+            EndChoice::Kills(n) => self.with_kill_goal(n),
+            EndChoice::Time(s) => self.with_time_limit(s),
+        }
     }
 
     /// This scenario at difficulty `level` (clamped to [`MIN_LEVEL`], [`MAX_LEVEL`]).
@@ -579,6 +671,85 @@ mod tests {
                 .collect();
             assert!(errs.is_empty(), "{id}: {errs:?}");
         }
+    }
+
+    #[test]
+    fn a_kill_goal_ends_the_run_at_n_kills_and_keeps_its_scores_apart() {
+        use crate::scenario::RunEnd;
+        let d = find("counter-strafe");
+        let goal = d.at_difficulty(0.5).with_kill_goal(100);
+        assert_eq!(goal.id, "counter-strafe@+0.50#100k");
+        assert_eq!(goal.end, RunEnd::Kills { kills: 100 });
+        assert_eq!(
+            goal.duration_secs,
+            100.0 * KILL_GOAL_SECS_PER_KILL,
+            "a time cap"
+        );
+        assert_eq!(goal.scoring.finish_bonus_per_sec, KILL_GOAL_FINISH_BONUS);
+        let errs: Vec<_> = goal
+            .validate()
+            .into_iter()
+            .filter(|e| e.field != "id")
+            .collect();
+        assert!(errs.is_empty(), "{errs:?}");
+        // A short goal never cuts the scenario's own length.
+        assert_eq!(d.with_kill_goal(3).duration_secs, d.duration_secs);
+
+        let full = goal
+            .with_tuning(Tuning {
+                size_pct: 80,
+                ..Tuning::DEFAULT
+            })
+            .with_elevation(1.5);
+        assert_eq!(full.id, "counter-strafe@+0.50#100k%s80d100v100^+1.50m");
+        let key = RunKey::parse(&full.id);
+        assert_eq!(
+            (key.base, key.level, key.secs, key.end),
+            ("counter-strafe", 0.5, None, Some(EndChoice::Kills(100)))
+        );
+        assert_eq!(parse_run_key_full(&full.id), ("counter-strafe", 0.5, None));
+        assert_eq!(parse_run_key("counter-strafe#30k"), ("counter-strafe", 0.0));
+        assert_eq!(RunKey::parse("counter-strafe").end, None);
+        assert_eq!(RunKey::parse("odd#name").base, "odd#name", "not a goal");
+        let lib = builtin::all();
+        assert_eq!(
+            crate::analytics::proof::variant_for_key(&lib, &full.id),
+            Some(full)
+        );
+    }
+
+    #[test]
+    fn a_time_limit_turns_any_scenario_into_a_timed_run() {
+        use crate::scenario::RunEnd;
+        // Already timed: just a duration, with the usual `~` key.
+        let timed = find("counter-strafe");
+        assert_eq!(timed.with_time_limit(30), timed.with_duration(30.0));
+        assert_eq!(timed.with_time_limit(30).id, "counter-strafe~30s");
+        // A kill race becomes a timed run, kept apart by `#60s`.
+        let race = find("phase-kill-race");
+        let t = race.at_difficulty(0.25).with_time_limit(90);
+        assert_eq!(t.id, "phase-kill-race@+0.25#90s");
+        assert_eq!((t.end, t.duration_secs), (RunEnd::Time, 90.0));
+        let key = RunKey::parse(&t.id);
+        assert_eq!(
+            (key.base, key.end),
+            ("phase-kill-race", Some(EndChoice::Time(90)))
+        );
+        assert_eq!(parse_run_key_full(&t.id), ("phase-kill-race", 0.25, None));
+        let lib = builtin::all();
+        assert_eq!(
+            crate::analytics::proof::variant_for_key(&lib, &t.id),
+            Some(t)
+        );
+        assert_eq!(race.with_time_limit(1).duration_secs, 10.0, "clamped");
+        assert_eq!(
+            race.with_end_choice(EndChoice::Kills(5)),
+            race.with_kill_goal(5)
+        );
+        assert_eq!(
+            race.with_end_choice(EndChoice::Time(60)),
+            race.with_time_limit(60)
+        );
     }
 
     #[test]

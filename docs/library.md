@@ -131,6 +131,7 @@ Original drills built from the movement research of 2026-10-19 (VALORANT patch n
 | `stutter-ladder` | Counter-strafe under time pressure | Head-only agents whose lifetime drops every 8 kills (2.6 s → 2.0 s → 1.5 s → 1.1 s, four `phases`) | A fast, clean stop before the shot |
 | `mirror-duel` | ADAD mirror duel | One strafing agent with `reactions` that copy (50%) or oppose (30%) the player's new strafes | Shooting when the head settles instead of timing a bot |
 | `head-rail-run` | Crosshair placement while moving | Agents pop up 8–28 m away after a short wait, stay 1.8 s, and lose value over time (`decay`) | Keeping the crosshair at head height while strafing |
+| `move-century` | A race to 100 kills (owner request) | Three heads at a time on the floor ahead, VALORANT movement and spread, `[end] kind = "kills"` with a 400 s cap and `finish_bonus_per_sec = 100` | Move, stop, tap, repeat at pace; "Run ends: by time" turns it into a timed run |
 | `depth-brake` | W/S braking | A narrow, long play area (x ±2 m, z −8 to 10 m), so the player moves forward and back | Stopping forward/back movement before the shot |
 | `crouch-duel` | Crouch-spam duel | One `dodge` agent with a 40% crouch chance at each decision | Holding the head line through crouches |
 | `flinch-stop` | Reaction stop | An agent appears after 0.6–1.8 s and stays 1.5 s | Stopping on a surprise target |

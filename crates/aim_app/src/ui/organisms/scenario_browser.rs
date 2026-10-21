@@ -9,10 +9,12 @@ use crate::ui::atoms::FAVORITE;
 use crate::ui::molecules::{matches_query, scenario_item};
 use crate::ui::organisms::history_chart::history_chart;
 use aim_core::games::Game;
-use aim_core::scenario::{Category, FireMode, ScenarioDef, parse_run_key};
+use aim_core::scenario::difficulty::{MAX_KILL_GOAL, TIME_LIMIT_SECS};
+use aim_core::scenario::{Category, EndChoice, FireMode, RunEnd, ScenarioDef, parse_run_key};
 use aim_core::training::progress::RunRecord;
 use aim_core::training::store::RunStore;
 use bevy_egui::egui;
+use std::collections::BTreeMap;
 
 /// Scenarios listed under "Recent".
 pub const RECENT_COUNT: usize = 5;
@@ -282,11 +284,112 @@ fn option_combo<T: Copy + PartialEq>(
 const CHART_RUNS: usize = 30;
 const LISTED_RUNS: usize = 10;
 
+/// Kill goal offered when a player first switches a scenario to "by kills".
+pub const DEFAULT_KILL_GOAL: u32 = 100;
+
+/// Whether a scenario can be played as a race to a kill count: its targets must be able
+/// to die.
+pub fn kill_goal_allowed(def: &ScenarioDef) -> bool {
+    def.targets.health.is_finite()
+}
+
+/// Time limit offered when a player first switches a kills-ended scenario to "by time".
+pub const DEFAULT_TIME_LIMIT_SECS: u32 = 60;
+
+/// The run key "Play" starts: the scenario as authored, or the variant the player chose
+/// (`id#100k`, `id#60s` or `id~60s`). A kill goal needs targets that can die.
+pub fn play_key(def: &ScenarioDef, choice: Option<EndChoice>) -> String {
+    match choice {
+        Some(EndChoice::Kills(_)) if !kill_goal_allowed(def) => def.id.clone(),
+        Some(c) => def.with_end_choice(c).id,
+        None => def.id.clone(),
+    }
+}
+
+/// Which "Run ends" option is picked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EndPick {
+    Own,
+    Time,
+    Kills,
+}
+
+/// "Run ends" choice: the scenario's own end, a time limit or a kill goal, saved in
+/// `choices` by scenario id.
+fn run_end_controls(
+    ui: &mut egui::Ui,
+    def: &ScenarioDef,
+    choices: &mut BTreeMap<String, EndChoice>,
+) {
+    let own = match def.end {
+        RunEnd::Kills { kills } => tr_fmt("Its own goal ({} kills)", &[&kills]),
+        RunEnd::Endless => tr("Its own end").to_owned(),
+        RunEnd::Time => tr_fmt(
+            "Its own length ({} s)",
+            &[&(def.duration_secs.round() as u32)],
+        ),
+    };
+    let current = match choices.get(&def.id) {
+        None => EndPick::Own,
+        Some(EndChoice::Time(_)) => EndPick::Time,
+        Some(EndChoice::Kills(_)) => EndPick::Kills,
+    };
+    let mut pick = current;
+    ui.horizontal_wrapped(|ui| {
+        ui.label(tr("Run ends:"));
+        ui.radio_value(&mut pick, EndPick::Own, own);
+        ui.radio_value(&mut pick, EndPick::Time, tr("By time"));
+        if kill_goal_allowed(def) {
+            ui.radio_value(&mut pick, EndPick::Kills, tr("By kills"));
+        }
+        if pick != current {
+            match pick {
+                EndPick::Own => {
+                    choices.remove(&def.id);
+                }
+                EndPick::Time => {
+                    let secs = if def.end.is_time() {
+                        def.duration_secs.round() as u32
+                    } else {
+                        DEFAULT_TIME_LIMIT_SECS
+                    };
+                    choices.insert(def.id.clone(), EndChoice::Time(secs));
+                }
+                EndPick::Kills => {
+                    choices.insert(def.id.clone(), EndChoice::Kills(DEFAULT_KILL_GOAL));
+                }
+            }
+        }
+        match choices.get_mut(&def.id) {
+            Some(EndChoice::Time(s)) => {
+                ui.add(
+                    egui::DragValue::new(s)
+                        .range(TIME_LIMIT_SECS.0..=TIME_LIMIT_SECS.1)
+                        .suffix(" s"),
+                );
+            }
+            Some(EndChoice::Kills(n)) => {
+                ui.add(
+                    egui::DragValue::new(n)
+                        .range(1..=MAX_KILL_GOAL)
+                        .suffix(tr(" kills")),
+                );
+            }
+            None => {}
+        }
+    })
+    .response
+    .on_hover_text(tr(
+        "By kills: the run ends at that many kills, and every second left scores 100 points. Scores of each choice are kept apart.",
+    ));
+}
+
 pub fn scenario_details(
     ui: &mut egui::Ui,
     def: &ScenarioDef,
     history: &History,
     adaptive_level: f32,
+    end_choices: &mut BTreeMap<String, EndChoice>,
 ) -> Option<UiAction> {
     ui.heading(tr(&def.name));
     let fire = tr(if def.weapon.fire == FireMode::Hold {
@@ -308,7 +411,10 @@ pub fn scenario_details(
             "Movement: WASD (Shift = walk). Counter-strafe before shooting.",
         ));
     }
-    let charted = history.recent(&def.id, CHART_RUNS);
+    ui.add_space(4.0);
+    run_end_controls(ui, def, end_choices);
+    let key = play_key(def, end_choices.get(&def.id).copied());
+    let charted = history.recent(&key, CHART_RUNS);
     let recent = &charted[charted.len().saturating_sub(LISTED_RUNS)..];
     if !recent.is_empty() {
         ui.add_space(6.0);
@@ -323,7 +429,7 @@ pub fn scenario_details(
             .add_sized([160.0, 36.0], egui::Button::new(tr("▶  Play")))
             .clicked()
         {
-            action = Some(UiAction::StartScenario(def.id.clone()));
+            action = Some(UiAction::StartScenario(key.clone()));
         }
         let adaptive = egui::Button::new(tr_fmt(
             "▶  Adaptive ({})",
@@ -435,6 +541,38 @@ mod tests {
         let lib = [def("six-pin"), def("counter-strafe"), def("flick-headshot")];
         assert_eq!(game_choices(&lib), [Some(Game::Valorant), None]);
         assert_eq!(game_choices(&lib[..1]), [None]);
+    }
+
+    #[test]
+    fn play_starts_the_end_the_player_chose() {
+        let killable = def("counter-strafe");
+        assert_eq!(play_key(&killable, None), "counter-strafe");
+        let kills = Some(EndChoice::Kills(100));
+        assert_eq!(play_key(&killable, kills), "counter-strafe#100k");
+        assert_eq!(
+            play_key(&killable, Some(EndChoice::Time(30))),
+            "counter-strafe~30s"
+        );
+        let race = def("move-century");
+        assert_eq!(
+            play_key(&race, Some(EndChoice::Time(120))),
+            "move-century#120s"
+        );
+        let unkillable = def("track-precise");
+        assert!(!kill_goal_allowed(&unkillable));
+        assert_eq!(
+            play_key(&unkillable, kills),
+            "track-precise",
+            "no kill goal"
+        );
+        assert_eq!(
+            play_key(&unkillable, Some(EndChoice::Time(30))),
+            "track-precise~30s"
+        );
+        // The key rebuilds the same variant a score proof checks.
+        let lib = aim_core::scenario::builtin::all();
+        let rebuilt = aim_core::analytics::proof::variant_for_key(&lib, "counter-strafe#100k");
+        assert_eq!(rebuilt, Some(killable.with_kill_goal(100)));
     }
 
     #[test]

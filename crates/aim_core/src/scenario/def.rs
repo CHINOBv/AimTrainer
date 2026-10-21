@@ -976,6 +976,11 @@ pub struct ScoringDef {
     /// accurate stop (needs `player.movement`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stop_window: Option<StopWindow>,
+    /// Points per second left under `duration_secs` when a kills-ended run reaches its kill
+    /// count (`end.kind = "kills"`), so finishing faster scores more. Applied before
+    /// `accuracy_mult`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub finish_bonus_per_sec: f32,
 }
 
 /// Stop-timing reward (`scoring.stop_window`). A hit fired while accurate, at most `secs`
@@ -1150,6 +1155,7 @@ impl Default for ScoringDef {
             decay: None,
             accuracy_mult: AccuracyMult::None,
             stop_window: None,
+            finish_bonus_per_sec: 0.0,
         }
     }
 }
@@ -1373,6 +1379,12 @@ impl ScenarioDef {
         check(
             self.scoring.decoy_penalty.is_finite() && self.scoring.decoy_penalty >= 0.0,
             "scoring.decoy_penalty",
+            "must be >= 0",
+        );
+        check(
+            self.scoring.finish_bonus_per_sec.is_finite()
+                && self.scoring.finish_bonus_per_sec >= 0.0,
+            "scoring.finish_bonus_per_sec",
             "must be >= 0",
         );
         let decoys = self.targets.decoy_chance;
@@ -2261,6 +2273,16 @@ mod tests {
 
         let unknown = MINIMAL.replace("name = \"Mini\"", "name = \"Mini\"\ngame = \"quake\"");
         assert!(ScenarioDef::from_toml(&unknown).is_err());
+    }
+
+    #[test]
+    fn a_finish_bonus_must_not_be_negative() {
+        let mut d = ScenarioDef::from_toml(MINIMAL).unwrap();
+        d.scoring.finish_bonus_per_sec = -1.0;
+        let fields: Vec<_> = d.validate().into_iter().map(|e| e.field).collect();
+        assert_eq!(fields, ["scoring.finish_bonus_per_sec"]);
+        d.scoring.finish_bonus_per_sec = 50.0;
+        assert!(d.validate().is_empty());
     }
 
     #[test]

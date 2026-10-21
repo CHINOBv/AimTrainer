@@ -22,7 +22,7 @@ const MIN_SPHERE_HEIGHT: f32 = 0.3;
 
 pub use def::{Category, FireMode, Motion, ScenarioDef, Shape, SpawnArea, ValidationError};
 pub use difficulty::{
-    DifficultyDef, Knob, RunKey, Tuning, parse_run_key, parse_run_key_full, run_key,
+    DifficultyDef, EndChoice, Knob, RunKey, Tuning, parse_run_key, parse_run_key_full, run_key,
 };
 pub use hit::HitZone;
 pub use phase::{FailDef, FailReason, PhaseDef, PhaseTrigger, RunEnd, RunOutcome, TargetOverrides};
