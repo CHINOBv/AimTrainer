@@ -282,8 +282,8 @@ Angles are measured from the eye between aim points (a humanoid's head, a sphere
 | `kind` | Fields | Meaning |
 |---|---|---|
 | `static` | none | The target does not move. |
-| `strafe` | `weapon`, `change_secs`, `stop_chance`, `max_offset` | A/D strafing with real VALORANT acceleration and stopping. |
-| `dodge` | `weapon`, `change_secs`, `juke_secs` (default `[0.1, 0.25]`), `juke_chance`, `stop_chance`, `crouch_chance`, `jump_chance` (chances default `0`), `max_offset` | An evasive duelist: `strafe` physics plus jukes, stop-and-go, crouches and jumps. At each decision the target jumps, crouches in place, stops, or moves (reversing if it was moving); `stop_chance + crouch_chance + jump_chance` must be ≤ 1. After a decision, `juke_chance` picks the short `juke_secs` wait instead of `change_secs`, which produces quick A-D jukes. A crouch lowers the head 0.5 m; a jump rises 0.9 m and lands after 0.85 s with no air control (estimates, see `valorant-mechanics.md`). Spheres drop by the crouch height. |
+| `strafe` | `weapon`, `change_secs`, `stop_chance`, `max_offset`, optional `depth` and `rhythm` | A/D strafing with real VALORANT acceleration and stopping. |
+| `dodge` | `weapon`, `change_secs`, `juke_secs` (default `[0.1, 0.25]`), `juke_chance`, `stop_chance`, `crouch_chance`, `jump_chance` (chances default `0`), `max_offset`, optional `depth` and `rhythm` | An evasive duelist: `strafe` physics plus jukes, stop-and-go, crouches and jumps. At each decision the target jumps, crouches in place, stops, or moves (reversing if it was moving); `stop_chance + crouch_chance + jump_chance` must be ≤ 1. After a decision, `juke_chance` picks the short `juke_secs` wait instead of `change_secs`, which produces quick A-D jukes. A crouch lowers the head 0.5 m; a jump rises 0.9 m and lands after 0.85 s with no air control (estimates, see `valorant-mechanics.md`). Spheres drop by the crouch height. |
 | `drift` | `speed`, `change_secs`, `max_offset` | Smooth wandering, for tracking and evasive switching. |
 | `ballistic` | `speed`, `angle_deg`, `gravity` (default 9.81), `bounces` (default 0), `restitution` (default 0.5), `on_floor` (default `"expire"`) | Thrown once under gravity, then lands. See "Ballistic targets". |
 | `linear_bounce` | `speed_deg`, `arena = { yaw_deg, pitch_deg, sides }` | Straight lines at a constant angular speed, reflecting off the walls of a box or polygon. See "Bouncing and orbiting targets". |
@@ -343,6 +343,20 @@ motion = { kind = "strafe", change_secs = [0.4, 0.9], depth = { change_secs = [0
 |---|---|
 | `change_secs` | Time between forward/back decisions, seconds (a positive range). Each decision reverses the direction; the first one picks a random direction. |
 | `distance` | Horizontal distance from your eye (where it was when the target spawned) that the target stays within, meters, ≥ 1. It turns back at either edge. A target that spawns outside the band first walks into it. |
+
+#### Strafe rhythm
+
+`rhythm = { ... }` changes how a `strafe` or `dodge` target changes direction. Every field is optional:
+
+```toml
+motion = { kind = "strafe", change_secs = [0.3, 0.8], rhythm = { swap_pause_secs = [0.1, 0.3], left_secs_mult = 1.0, right_secs_mult = 1.6, balanced = true } }
+```
+
+| Field | Meaning |
+|---|---|
+| `swap_pause_secs` | At every change of direction (a reversal, or a turn at `max_offset`) the target brakes and stands still until this pause ends, then moves the other way. Seconds within [0, 2]. Teaches you to read the stop instead of tracking through it. |
+| `left_secs_mult`, `right_secs_mult` | Multiply the time between decisions while the target moves to your left or right (default 1, within [0.25, 4]). Unequal values make strafes to one side last longer, so you cannot settle into a symmetric rhythm. |
+| `balanced` | Balanced randomness (default `false`). Waits come in shuffled rounds of four, one from each quarter of `change_secs`, and the side picked from a stop alternates in shuffled pairs, so there are no long streaks of short or long strafes. Jukes use the same rounds over `juke_secs`. |
 
 `strafe` and `dodge` walk with the weapon's VALORANT movement on both axes, and diagonal movement is normalized as it is for the player, so a target moving on both axes is no faster than one strafing. `dodge` targets keep their depth speed in the air. `drift` moves in depth at a speed drawn from its own `speed` at every depth decision, on top of its drift. The built-in `demo-depth` uses it.
 

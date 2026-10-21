@@ -25,8 +25,8 @@ Source of the gap list (assistant comparison, 2026-10-21, accepted by the user):
 
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
-| T1 | S8 | inline | pending | |
-| T2 | S1, S2, S5 | inline | pending | |
+| T1 | S8 | inline | done | d8071b9 |
+| T2 | S1, S2, S5 | inline | done | (this commit) |
 | T3 | S3 | inline | pending | |
 | T4 | S4 | inline | pending | |
 | T5 | S6 | inline | pending | |
@@ -42,3 +42,5 @@ Source of the gap list (assistant comparison, 2026-10-21, accepted by the user):
 - L4 (2026-10-21, verbatim) "Otra cosa, mira, por acá te comparto el documento de las VDM de Voltaic para que le eches un ojillo. Y también te comparto un archivo que es de más que nada ejercicios de estiramiento de manos, de la muñeca y eso para prevenir lesiones y tal. Creo que estaría bien implementarlo, o sea, tenerlo dentro de, tenerlo como una sección para que pues las personas lo puedan ir siguiendo o algo así. Igual te comparto el archivo de las VDM, más que nada para por si hay escenarios que puedas sacar de ahí y pasarlos acá, estaría bastante bien. Y también te comparto un archivo que es sobre los benchmarks." Four Google Drive files read: VDIM S3, Benchmark Focused Routines, Weakness-specific routines, Kastor's wrist guide.
 - L5 Explorer map: side choice only in `MotionState::reversed()` (motion.rs:387); lane-edge flip in `strafe()` (motion.rs:450); reactions hold via `MotionState::react()`; all damage through `Session::on_damage(idx)` (session.rs:737, 1.0 per click hit, `dt` per hold tick); `sim.rs` PINNED bit-exact results, so new options must draw nothing from the RNG when off; picker filter `ScenarioFilter` (ui/organisms/scenario_browser.rs:20) is session-only.
 - L3 Route: all inline (units share `def.rs`/`motion.rs`/`session.rs`, so no disjoint parallel writers). One read-only explorer mapped the motion, reaction, scoring, behaviour and picker code.
+- L6 T1 (d8071b9): optional `game` on `ScenarioDef` (reuses `games::Game`), left out of `content_hash` so replay proofs and lab ids stay valid (RED: hash test failed before `hashed()`). 46 built-ins tagged `valorant` by rule (humanoid, strafe/dodge, player movement, recoil, spread; plus `static-headline`); guard test keeps future content tagged. Picker game filter + details label; es strings. RDD assess: medium, under_budget.
+- L7 T2: `motion.rhythm = { swap_pause_secs, left_secs_mult, right_secs_mult, balanced }` on strafe/dodge; `rng::ShuffleBag`. RED: compile failure; balanced test proven to reject i.i.d. draws. PINNED sim results unchanged (no RNG draw when `rhythm` is absent). New fields skip serialization when absent, so content hashes of existing scenarios are unchanged.

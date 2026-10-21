@@ -3,13 +3,13 @@
 //! flight, straight-line bouncing, or an orbit around the player).
 
 use super::MIN_SPHERE_HEIGHT;
-use super::def::{BounceArena, DepthDef, Motion, Shape, TargetsDef, WaveForm};
+use super::def::{BounceArena, DepthDef, Motion, Rhythm, Shape, TargetsDef, WaveForm};
 use crate::games::valorant::{
     CROUCH_HEIGHT_DROP_M, CROUCH_TRANSITION_SECS, JUMP_AIR_SECS, JUMP_APEX_M, Weapon,
 };
 use crate::math::{Range, Vec3, ViewAngles, wrap_degrees};
 use crate::movement::{self, LocalVelocity, MoveInput};
-use crate::rng::Rng;
+use crate::rng::{Rng, ShuffleBag};
 
 /// Area under VALORANT's counter-strafe curve: braking distance ≈ speed × this.
 pub(super) const STRAFE_BRAKE_SECS: f32 = 0.075;
@@ -83,6 +83,32 @@ pub(super) struct MotionState {
     pub(super) landed: bool,
     /// The weave of a `wave` target; `None` until the motion first decides.
     weave: Option<Weave>,
+    /// Side a `rhythm.swap_pause_secs` pause moves to when it ends (0: no pause).
+    pending: f32,
+    /// Session time the swap pause ends.
+    resume_at: f32,
+    /// A pause is due from a turn at the lane edge; the next step times it.
+    edge_pause: bool,
+    /// Shuffle bags of a `rhythm.balanced` target; `None` until its first decision.
+    bags: Option<Bags>,
+}
+
+/// The shuffle bags a balanced strafe decides with.
+#[derive(Debug, Clone, PartialEq)]
+struct Bags {
+    /// Quarter of `change_secs` the next wait comes from.
+    quarter: ShuffleBag,
+    /// Side picked from a stop: 0 left, 1 right.
+    side: ShuffleBag,
+}
+
+impl Bags {
+    fn new() -> Self {
+        Self {
+            quarter: ShuffleBag::new(4),
+            side: ShuffleBag::new(2),
+        }
+    }
 }
 
 /// What a [`Motion::Wave`] target decided when it appeared.
@@ -113,6 +139,7 @@ struct DodgeRules<'a> {
     depth: Option<&'a DepthDef>,
     /// In-run speed tuning applied to the ground movement.
     speed_k: f32,
+    rhythm: Option<&'a Rhythm>,
 }
 
 impl MotionState {
@@ -138,6 +165,10 @@ impl MotionState {
             bounces_left: 0,
             landed: false,
             weave: None,
+            pending: 0.0,
+            resume_at: 0.0,
+            edge_pause: false,
+            bags: None,
         }
     }
 
@@ -162,6 +193,8 @@ impl MotionState {
     /// until `until`, when the motion decides again: a reaction to the player.
     pub(super) fn react(&mut self, dir: f32, until: f32) {
         self.intent = dir;
+        self.pending = 0.0;
+        self.edge_pause = false;
         self.crouching = false;
         self.next_change_at = until;
     }
@@ -176,6 +209,8 @@ impl MotionState {
         self.glide = None;
         self.flight = Vec3::ZERO;
         self.weave = None;
+        self.pending = 0.0;
+        self.edge_pause = false;
         match motion {
             Motion::Static
             | Motion::Ballistic { .. }
@@ -220,19 +255,34 @@ impl MotionState {
                 stop_chance,
                 max_offset,
                 depth,
+                rhythm,
             } => {
+                let rhythm = rhythm.as_ref();
+                self.resume(rhythm, rng, now);
                 if now >= self.next_change_at {
-                    self.intent = if rng.next_f32() < *stop_chance {
+                    self.pending = 0.0;
+                    let side = if rng.next_f32() < *stop_chance {
                         0.0
                     } else {
-                        self.reversed(rng)
+                        self.next_side(rhythm, rng)
                     };
-                    self.next_change_at = now + rng.in_range(*change_secs);
+                    self.turn(side, rhythm, rng, now);
+                    self.next_change_at =
+                        self.moving_from(now) + self.wait(*change_secs, rhythm, rng);
                 }
                 if let Some(d) = depth {
                     self.decide_depth(d, *position, rng, now);
                 }
-                self.strafe(position, *weapon, *max_offset, depth.as_ref(), speed_k, dt);
+                let pause_turns = rhythm.is_some_and(|r| r.swap_pause_secs.is_some());
+                self.strafe(
+                    position,
+                    *weapon,
+                    *max_offset,
+                    depth.as_ref(),
+                    speed_k,
+                    pause_turns,
+                    dt,
+                );
             }
             Motion::Dodge {
                 weapon,
@@ -244,7 +294,9 @@ impl MotionState {
                 jump_chance,
                 max_offset,
                 depth,
+                rhythm,
             } => {
+                self.resume(rhythm.as_ref(), rng, now);
                 let rules = DodgeRules {
                     weapon: *weapon,
                     change_secs: *change_secs,
@@ -256,6 +308,7 @@ impl MotionState {
                     max_offset: *max_offset,
                     depth: depth.as_ref(),
                     speed_k,
+                    rhythm: rhythm.as_ref(),
                 };
                 if now >= self.next_change_at && !self.is_airborne() {
                     self.decide_dodge(&rules, rng, now);
@@ -392,6 +445,74 @@ impl MotionState {
         }
     }
 
+    /// Ends a swap pause at `resume_at` by moving to the pending side, after timing the
+    /// pause a turn at the lane edge asked for.
+    fn resume(&mut self, rhythm: Option<&Rhythm>, rng: &mut Rng, now: f32) {
+        if self.edge_pause {
+            self.edge_pause = false;
+            if let Some(p) = rhythm.and_then(|r| r.swap_pause_secs) {
+                self.resume_at = now + rng.in_range(p);
+                self.next_change_at = self.next_change_at.max(self.resume_at);
+            }
+        }
+        if self.pending != 0.0 && now >= self.resume_at {
+            self.intent = self.pending;
+            self.pending = 0.0;
+        }
+    }
+
+    /// The side a moving decision of a strafe or dodge picks: a reversal, or a random side
+    /// from a stop (from a shuffled pair with `rhythm.balanced`).
+    fn next_side(&mut self, rhythm: Option<&Rhythm>, rng: &mut Rng) -> f32 {
+        if !rhythm.is_some_and(|r| r.balanced) || self.intent != 0.0 {
+            return self.reversed(rng);
+        }
+        let bags = self.bags.get_or_insert_with(Bags::new);
+        if bags.side.draw(rng) == 0 { -1.0 } else { 1.0 }
+    }
+
+    /// Heads to `side`, through a stop of `rhythm.swap_pause_secs` when that reverses a
+    /// moving target.
+    fn turn(&mut self, side: f32, rhythm: Option<&Rhythm>, rng: &mut Rng, now: f32) {
+        match rhythm.and_then(|r| r.swap_pause_secs) {
+            Some(p) if side != 0.0 && self.intent == -side => {
+                self.intent = 0.0;
+                self.pending = side;
+                self.resume_at = now + rng.in_range(p);
+            }
+            _ => self.intent = side,
+        }
+    }
+
+    /// When the target starts moving after a decision at `now`: after its swap pause.
+    fn moving_from(&self, now: f32) -> f32 {
+        if self.pending != 0.0 {
+            self.resume_at.max(now)
+        } else {
+            now
+        }
+    }
+
+    /// Time until the next decision, drawn from `range` (from a shuffled quarter with
+    /// `rhythm.balanced`) and scaled by the rhythm's multiplier for the side it moves to.
+    fn wait(&mut self, range: Range, rhythm: Option<&Rhythm>, rng: &mut Rng) -> f32 {
+        let Some(r) = rhythm else {
+            return rng.in_range(range);
+        };
+        let secs = if r.balanced {
+            let quarter = self.bags.get_or_insert_with(Bags::new).quarter.draw(rng);
+            range.lerp((f32::from(quarter) + rng.next_f32()) / 4.0)
+        } else {
+            rng.in_range(range)
+        };
+        let side = if self.pending != 0.0 {
+            self.pending
+        } else {
+            self.intent
+        };
+        secs * r.secs_mult(side)
+    }
+
     /// Horizontal distance from the player's eye at spawn, meters.
     fn depth_distance(&self, position: Vec3) -> f32 {
         (position - self.viewer).horizontal().length()
@@ -429,7 +550,9 @@ impl MotionState {
     }
 
     /// Ground A/D (and, with `depth`, W/S) movement towards `intent` with the weapon's
-    /// VALORANT physics.
+    /// VALORANT physics. With `pause_turns`, a turn at the lane edge stops the target and
+    /// asks for a swap pause.
+    #[allow(clippy::too_many_arguments)]
     fn strafe(
         &mut self,
         position: &mut Vec3,
@@ -437,6 +560,7 @@ impl MotionState {
         max_offset: f32,
         depth: Option<&DepthDef>,
         speed_k: f32,
+        pause_turns: bool,
         dt: f32,
     ) {
         let offset = (*position - self.anchor).dot(self.lateral);
@@ -448,7 +572,13 @@ impl MotionState {
         // inside its lane.
         let braking = self.strafe.right.abs() * STRAFE_BRAKE_SECS;
         if self.intent != 0.0 && offset * self.intent + braking >= max_offset {
-            self.intent = -self.intent;
+            if pause_turns {
+                self.pending = -self.intent;
+                self.intent = 0.0;
+                self.edge_pause = true;
+            } else {
+                self.intent = -self.intent;
+            }
         }
         let Some(d) = depth else {
             let input = MoveInput {
@@ -501,6 +631,7 @@ impl MotionState {
     fn decide_dodge(&mut self, r: &DodgeRules, rng: &mut Rng, now: f32) {
         let roll = rng.next_f32();
         self.crouching = false;
+        self.pending = 0.0;
         if roll < r.jump_chance {
             // Take-off speed that, with the matching gravity, reaches the apex height and
             // lands after the air time.
@@ -511,14 +642,15 @@ impl MotionState {
         } else if roll < r.jump_chance + r.crouch_chance + r.stop_chance {
             self.intent = 0.0;
         } else {
-            self.intent = self.reversed(rng);
+            let side = self.next_side(r.rhythm, rng);
+            self.turn(side, r.rhythm, rng, now);
         }
         let wait = if rng.next_f32() < r.juke_chance {
             r.juke_secs
         } else {
             r.change_secs
         };
-        self.next_change_at = now + rng.in_range(wait);
+        self.next_change_at = self.moving_from(now) + self.wait(wait, r.rhythm, rng);
     }
 
     fn dodge(&mut self, position: &mut Vec3, r: &DodgeRules, humanoid: bool, dt: f32) {
@@ -548,7 +680,16 @@ impl MotionState {
                 *position += self.toward() * (self.strafe.forward * dt);
             }
         } else {
-            self.strafe(position, r.weapon, r.max_offset, r.depth, r.speed_k, dt);
+            let pause_turns = r.rhythm.is_some_and(|r| r.swap_pause_secs.is_some());
+            self.strafe(
+                position,
+                r.weapon,
+                r.max_offset,
+                r.depth,
+                r.speed_k,
+                pause_turns,
+                dt,
+            );
         }
 
         position.y = self.anchor.y + self.lift;
@@ -1223,5 +1364,186 @@ mod tests {
             .is_err(),
             "unknown fields are rejected"
         );
+    }
+
+    /// Lateral speed (m/s, + is the player's right) of the first target at every step.
+    fn lateral_speeds(s: &mut Session, frames: usize, dt: f32) -> Vec<f32> {
+        let (path, _) = run(s, frames, dt);
+        path.windows(2)
+            .map(|w| match (w[0], w[1]) {
+                (Some(a), Some(b)) => (b.x - a.x) / dt,
+                _ => 0.0,
+            })
+            .collect()
+    }
+
+    /// Lengths in seconds of the runs of steps where `keep` holds, ignoring the first run
+    /// when it starts at step 0 (the target is still at rest from its spawn).
+    fn runs_where(v: &[f32], dt: f32, keep: impl Fn(f32) -> bool) -> Vec<f32> {
+        let mut runs = Vec::new();
+        let mut len = 0usize;
+        let mut from_start = true;
+        for &x in v {
+            if keep(x) {
+                len += 1;
+            } else {
+                if len > 0 && !from_start {
+                    runs.push(len as f32 * dt);
+                }
+                len = 0;
+                from_start = false;
+            }
+        }
+        runs
+    }
+
+    fn strafe(extra: &str) -> String {
+        format!(r#"{{ kind = "strafe", change_secs = [0.6, 0.6], max_offset = 100.0{extra} }}"#)
+    }
+
+    #[test]
+    fn a_swap_pause_stops_the_target_at_every_reversal() {
+        let stopped = |motion: &str| {
+            let mut s = Session::new(def(SPHERE, POINT, motion), 3);
+            let v = lateral_speeds(&mut s, 600, 0.01);
+            runs_where(&v, 0.01, |x| x.abs() < 0.05)
+        };
+        // Without a pause a reversal only passes through zero speed.
+        assert!(stopped(&strafe("")).iter().all(|&t| t <= 0.02));
+        let paused = stopped(&strafe(", rhythm = { swap_pause_secs = [0.4, 0.4] }"));
+        assert!(paused.len() >= 4, "{paused:?}");
+        // It brakes first, then stands still until the pause ends.
+        assert!(
+            paused.iter().all(|&t| (0.2..=0.41).contains(&t)),
+            "{paused:?}"
+        );
+    }
+
+    #[test]
+    fn dodge_targets_take_the_same_rhythm() {
+        let dodge = |rhythm: &str| {
+            format!(r#"{{ kind = "dodge", change_secs = [0.6, 0.6], max_offset = 100.0{rhythm} }}"#)
+        };
+        let mut s = Session::new(def(SPHERE, POINT, &dodge("")), 3);
+        let v = lateral_speeds(&mut s, 600, 0.01);
+        assert!(
+            runs_where(&v, 0.01, |x| x.abs() < 0.05)
+                .iter()
+                .all(|&t| t <= 0.02)
+        );
+
+        let paused = dodge(", rhythm = { swap_pause_secs = [0.4, 0.4], right_secs_mult = 2.0 }");
+        let mut s = Session::new(def(SPHERE, POINT, &paused), 3);
+        let v = lateral_speeds(&mut s, 1200, 0.01);
+        let stops = runs_where(&v, 0.01, |x| x.abs() < 0.05);
+        assert!(
+            stops.len() >= 4 && stops.iter().all(|&t| (0.2..=0.41).contains(&t)),
+            "{stops:?}"
+        );
+        let right = v.iter().filter(|&&x| x > 0.05).count() as f32;
+        let left = v.iter().filter(|&&x| x < -0.05).count() as f32;
+        assert!((1.4..=2.4).contains(&(right / left)), "{right} / {left}");
+    }
+
+    #[test]
+    fn a_swap_pause_also_stops_the_target_when_it_turns_at_the_lane_edge() {
+        let motion = r#"{ kind = "strafe", change_secs = [30, 30], max_offset = 1.5, rhythm = { swap_pause_secs = [0.4, 0.4] } }"#;
+        let mut s = Session::new(def(SPHERE, POINT, motion), 3);
+        let v = lateral_speeds(&mut s, 600, 0.01);
+        let paused = runs_where(&v, 0.01, |x| x.abs() < 0.05);
+        assert!(paused.len() >= 2, "{paused:?}");
+        assert!(
+            paused.iter().all(|&t| (0.2..=0.41).contains(&t)),
+            "{paused:?}"
+        );
+    }
+
+    #[test]
+    fn side_multipliers_make_strafes_to_one_side_last_longer() {
+        let motion = strafe(", rhythm = { left_secs_mult = 1.0, right_secs_mult = 3.0 }");
+        let mut s = Session::new(def(SPHERE, POINT, &motion), 3);
+        let v = lateral_speeds(&mut s, 1200, 0.01);
+        let right = v.iter().filter(|&&x| x > 0.05).count() as f32;
+        let left = v.iter().filter(|&&x| x < -0.05).count() as f32;
+        assert!((2.4..=3.6).contains(&(right / left)), "{right} / {left}");
+
+        let mut even = Session::new(def(SPHERE, POINT, &strafe("")), 3);
+        let v = lateral_speeds(&mut even, 1200, 0.01);
+        let right = v.iter().filter(|&&x| x > 0.05).count() as f32;
+        let left = v.iter().filter(|&&x| x < -0.05).count() as f32;
+        assert!((0.8..=1.25).contains(&(right / left)), "{right} / {left}");
+    }
+
+    /// Times between the target's direction changes (the velocity's sign flips).
+    fn strafe_lengths(motion: &str, seed: u64) -> Vec<f32> {
+        let mut s = Session::new(def(SPHERE, POINT, motion), seed);
+        let v = lateral_speeds(&mut s, 4000, 0.01);
+        // A reversal can pass through a step of zero speed, so compare with the last side
+        // the target was clearly moving to.
+        let (mut flips, mut side) = (Vec::new(), 0.0f32);
+        for (i, &x) in v.iter().enumerate() {
+            if x.abs() > 0.05 {
+                if side != 0.0 && x.signum() != side {
+                    flips.push(i as f32 * 0.01);
+                }
+                side = x.signum();
+            }
+        }
+        flips.windows(2).map(|w| w[1] - w[0]).collect()
+    }
+
+    #[test]
+    fn balanced_strafes_spread_their_lengths_evenly_over_the_range() {
+        let motion = r#"{ kind = "strafe", change_secs = [0.4, 1.2], max_offset = 100.0, rhythm = { balanced = true } }"#;
+        let lengths = strafe_lengths(motion, 5);
+        assert!(lengths.len() >= 40, "{}", lengths.len());
+        assert!(round_means_stay_central(&lengths), "{lengths:?}");
+        assert_eq!(lengths, strafe_lengths(motion, 5), "seeded");
+        assert_ne!(lengths, strafe_lengths(motion, 6));
+        // Independent draws wander further from the middle.
+        let iid = r#"{ kind = "strafe", change_secs = [0.4, 1.2], max_offset = 100.0 }"#;
+        assert!(!round_means_stay_central(&strafe_lengths(iid, 5)));
+    }
+
+    /// Lengths come in shuffled rounds of four, one from each quarter of [0.4, 1.2], so
+    /// every round's mean stays within 0.1 s of the middle (0.8 s). The first decision is
+    /// made from rest, so length `i` is the wait of decision `i + 1` and rounds start at 3.
+    fn round_means_stay_central(lengths: &[f32]) -> bool {
+        lengths[3..]
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|round| (round.iter().sum::<f32>() / 4.0 - 0.8).abs() <= 0.12)
+    }
+
+    #[test]
+    fn rhythm_parameters_are_validated() {
+        let problems = |rhythm: &str| {
+            let d = ScenarioDef::from_toml(&format!(
+                "id = \"m\"\nname = \"m\"\ncategory = \"custom\"\n[targets]\nshape = {SPHERE}\nspawn = {POINT}\nmotion = {}\n",
+                strafe(&format!(", rhythm = {rhythm}"))
+            ))
+            .unwrap();
+            d.validate()
+                .into_iter()
+                .map(|e| e.field)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            problems("{ swap_pause_secs = [-0.1, 0.2] }"),
+            ["targets.motion.rhythm.swap_pause_secs"]
+        );
+        assert_eq!(
+            problems("{ swap_pause_secs = [0.1, 3.0] }"),
+            ["targets.motion.rhythm.swap_pause_secs"]
+        );
+        assert_eq!(
+            problems("{ left_secs_mult = 0.1, right_secs_mult = 5.0 }"),
+            [
+                "targets.motion.rhythm.left_secs_mult",
+                "targets.motion.rhythm.right_secs_mult"
+            ]
+        );
+        assert!(problems("{ swap_pause_secs = [0.1, 0.3], balanced = true }").is_empty());
     }
 }

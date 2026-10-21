@@ -347,6 +347,7 @@ impl LabSettings {
                 stop_chance: 0.2,
                 max_offset: STRAFE_WIDTH_M,
                 depth: None,
+                rhythm: None,
             },
             LabMotion::Dodge => {
                 let (juke_chance, stop_chance, crouch_chance) = self.dodge.chances();
@@ -360,6 +361,7 @@ impl LabSettings {
                     jump_chance: 0.0,
                     max_offset: STRAFE_WIDTH_M,
                     depth: None,
+                    rhythm: None,
                 }
             }
         };

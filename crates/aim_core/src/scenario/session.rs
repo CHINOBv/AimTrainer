@@ -1507,6 +1507,7 @@ mod tests {
             stop_chance: 0.0,
             max_offset: 2.0,
             depth: None,
+            rhythm: None,
         };
         let mut s = Session::new(def, 4);
         let mut max_speed: f32 = 0.0;
@@ -1533,6 +1534,7 @@ mod tests {
             jump_chance: jump,
             max_offset: 2.0,
             depth: None,
+            rhythm: None,
         }
     }
 
@@ -2496,6 +2498,7 @@ mod tests {
             stop_chance: 1.0,
             max_offset: 3.0,
             depth: None,
+            rhythm: None,
         }
     }
 
@@ -2507,6 +2510,7 @@ mod tests {
             stop_chance: 0.0,
             max_offset: 3.0,
             depth: None,
+            rhythm: None,
         }
     }
 

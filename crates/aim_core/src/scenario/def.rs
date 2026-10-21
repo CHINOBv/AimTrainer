@@ -597,6 +597,9 @@ pub enum Motion {
         /// Optional forward/back movement inside a distance band (W/S on top of A/D).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         depth: Option<DepthDef>,
+        /// Optional strafe rhythm: pauses at swaps, uneven sides, balanced randomness.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rhythm: Option<Rhythm>,
     },
     /// Evasive duelist: the same A/D physics as `Strafe`, plus jukes (bursts of quick
     /// reversals), stop-and-go, crouches and jumps. At each decision the target jumps,
@@ -632,6 +635,9 @@ pub enum Motion {
         /// Optional forward/back movement inside a distance band (W/S on top of A/D).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         depth: Option<DepthDef>,
+        /// Optional strafe rhythm: pauses at swaps, uneven sides, balanced randomness.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rhythm: Option<Rhythm>,
     },
     /// Smooth wandering in the plane facing the player (spheres / smoothness drills).
     Drift {
@@ -729,6 +735,58 @@ impl WaveForm {
         match self {
             Self::Sine => (phase * std::f32::consts::TAU).sin(),
             Self::Zigzag => 4.0 * ((phase - 0.25).rem_euclid(1.0) - 0.5).abs() - 1.0,
+        }
+    }
+}
+
+/// The rhythm of a `strafe` or `dodge` target (`motion.rhythm`): how it changes
+/// direction, on top of `change_secs`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Rhythm {
+    /// Stand still for this long at every change of direction (a reversal or a turn at the
+    /// lane edge) before moving the other way, seconds within [0, 2].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swap_pause_secs: Option<Range>,
+    /// Multiplies the time between decisions while moving to the player's left, within
+    /// [0.25, 4]. With `right_secs_mult` it makes one side's strafes longer.
+    #[serde(default = "one_f")]
+    pub left_secs_mult: f32,
+    /// Multiplies the time between decisions while moving to the player's right.
+    #[serde(default = "one_f")]
+    pub right_secs_mult: f32,
+    /// Balanced randomness: the times between decisions come in shuffled rounds of four,
+    /// one from each quarter of the range, and the side picked from a stop alternates in
+    /// shuffled pairs, so neither long streaks nor droughts happen.
+    #[serde(default)]
+    pub balanced: bool,
+}
+
+/// Longest `rhythm.swap_pause_secs`, seconds.
+pub const MAX_SWAP_PAUSE_SECS: f32 = 2.0;
+/// Range of `rhythm.left_secs_mult` and `rhythm.right_secs_mult`.
+pub const SIDE_SECS_MULT: Range = Range::new(0.25, 4.0);
+
+impl Motion {
+    /// The strafe rhythm of a `strafe` or `dodge` motion.
+    pub fn rhythm(&self) -> Option<&Rhythm> {
+        match self {
+            Self::Strafe { rhythm, .. } | Self::Dodge { rhythm, .. } => rhythm.as_ref(),
+            _ => None,
+        }
+    }
+}
+
+impl Rhythm {
+    /// Multiplier of the time between decisions while moving to `side` (-1 left, 1 right;
+    /// 1 when stopped).
+    pub fn secs_mult(&self, side: f32) -> f32 {
+        if side < 0.0 {
+            self.left_secs_mult
+        } else if side > 0.0 {
+            self.right_secs_mult
+        } else {
+            1.0
         }
     }
 }
@@ -1952,6 +2010,25 @@ fn motion_problems(m: &Motion) -> Vec<(&'static str, &'static str)> {
             "must be a [min, max] of at least 1 m",
         );
     }
+    if let Some(r) = m.rhythm() {
+        if let Some(p) = r.swap_pause_secs {
+            check(
+                p.is_valid() && p.min >= 0.0 && p.max <= MAX_SWAP_PAUSE_SECS,
+                "targets.motion.rhythm.swap_pause_secs",
+                "must be a [min, max] within [0, 2] seconds",
+            );
+        }
+        check(
+            (SIDE_SECS_MULT.min..=SIDE_SECS_MULT.max).contains(&r.left_secs_mult),
+            "targets.motion.rhythm.left_secs_mult",
+            "must be in [0.25, 4]",
+        );
+        check(
+            (SIDE_SECS_MULT.min..=SIDE_SECS_MULT.max).contains(&r.right_secs_mult),
+            "targets.motion.rhythm.right_secs_mult",
+            "must be in [0.25, 4]",
+        );
+    }
     out
 }
 
@@ -2631,6 +2708,7 @@ mod tests {
             stop_chance: 0.0,
             max_offset: 3.0,
             depth: None,
+            rhythm: None,
         };
         let problems: Vec<ValidationError> = {
             let mut c = b.clone();
