@@ -3,7 +3,7 @@
 //! flight, straight-line bouncing, or an orbit around the player).
 
 use super::MIN_SPHERE_HEIGHT;
-use super::def::{BounceArena, DepthDef, Motion, Rhythm, Shape, TargetsDef, WaveForm};
+use super::def::{BounceArena, DepthDef, Motion, PathRoute, Rhythm, Shape, TargetsDef, WaveForm};
 use crate::games::valorant::{
     CROUCH_HEIGHT_DROP_M, CROUCH_TRANSITION_SECS, JUMP_AIR_SECS, JUMP_APEX_M, Weapon,
 };
@@ -91,6 +91,21 @@ pub(super) struct MotionState {
     edge_pause: bool,
     /// Shuffle bags of a `rhythm.balanced` target; `None` until its first decision.
     bags: Option<Bags>,
+    /// Progress along a `path` route; `None` until the motion first decides.
+    walk: Option<Walk>,
+}
+
+/// Where a [`Motion::Path`] target is on its route.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Walk {
+    /// Speed drawn for this target, m/s (before speed tuning).
+    speed: f32,
+    /// Index of the waypoint it walks to; 0 is the spawn point, `i` is `points[i - 1]`.
+    to: usize,
+    /// Direction through the waypoints: 1 forwards, -1 back (ping-pong).
+    step: isize,
+    /// Session time its rest at the last waypoint ends.
+    rest_until: f32,
 }
 
 /// The shuffle bags a balanced strafe decides with.
@@ -169,6 +184,7 @@ impl MotionState {
             resume_at: 0.0,
             edge_pause: false,
             bags: None,
+            walk: None,
         }
     }
 
@@ -211,12 +227,14 @@ impl MotionState {
         self.weave = None;
         self.pending = 0.0;
         self.edge_pause = false;
+        self.walk = None;
         match motion {
             Motion::Static
             | Motion::Ballistic { .. }
             | Motion::LinearBounce { .. }
             | Motion::Orbit { .. }
-            | Motion::Wave { .. } => {
+            | Motion::Wave { .. }
+            | Motion::Path { .. } => {
                 self.intent = 0.0;
                 self.fb_intent = 0.0;
                 self.strafe = LocalVelocity::default();
@@ -429,7 +447,84 @@ impl MotionState {
                 self.weave(position, *max_offset, humanoid, dt);
                 self.measure(before, *position, dt);
             }
+            Motion::Path {
+                points,
+                speed,
+                pause_secs,
+                route,
+            } => {
+                if now >= self.next_change_at {
+                    self.walk = Some(Walk {
+                        speed: rng.in_range(*speed),
+                        to: 1,
+                        step: 1,
+                        rest_until: now,
+                    });
+                    self.next_change_at = f32::INFINITY;
+                }
+                let before = *position;
+                self.walk_path(position, points, *pause_secs, *route, speed_k, rng, now, dt);
+                self.measure(before, *position, dt);
+            }
         }
+    }
+
+    /// Walks a `path` target towards its next waypoint, resting on arrival and then
+    /// heading to the one after it.
+    #[allow(clippy::too_many_arguments)]
+    fn walk_path(
+        &mut self,
+        position: &mut Vec3,
+        points: &[[f32; 3]],
+        pause_secs: Range,
+        route: PathRoute,
+        speed_k: f32,
+        rng: &mut Rng,
+        now: f32,
+        dt: f32,
+    ) {
+        let Some(mut walk) = self.walk else {
+            return;
+        };
+        let (anchor, lateral, toward) = (self.anchor, self.lateral, self.toward());
+        let waypoint = |i: usize| match i.checked_sub(1) {
+            None => anchor,
+            Some(p) => {
+                let [right, up, closer] = points[p];
+                anchor + lateral * right + Vec3::UP * up + toward * closer
+            }
+        };
+        // Time left in this step: walking can reach a waypoint, rest, and go on.
+        let mut left = dt;
+        // A step covers at most one round of the route, so waypoints at the same spot
+        // cannot keep it here.
+        let mut legs = 2 * (points.len() + 1);
+        while left > 0.0 && now + (dt - left) >= walk.rest_until && legs > 0 {
+            legs -= 1;
+            let goal = waypoint(walk.to);
+            let gap = goal - *position;
+            let reach = walk.speed * speed_k * left;
+            if gap.length() > reach {
+                *position += gap * (reach / gap.length());
+                break;
+            }
+            *position = goal;
+            left -= gap.length() / (walk.speed * speed_k);
+            walk.rest_until = now + (dt - left) + rng.in_range(pause_secs);
+            let last = points.len();
+            walk.to = match route {
+                PathRoute::Loop => (walk.to + 1) % (last + 1),
+                PathRoute::PingPong => {
+                    if walk.to as isize + walk.step > last as isize
+                        || walk.to as isize + walk.step < 0
+                    {
+                        walk.step = -walk.step;
+                    }
+                    (walk.to as isize + walk.step) as usize
+                }
+            };
+        }
+        self.walk = Some(walk);
     }
 
     pub(super) fn is_airborne(&self) -> bool {
@@ -1514,6 +1609,147 @@ mod tests {
             .0
             .iter()
             .all(|round| (round.iter().sum::<f32>() / 4.0 - 0.8).abs() <= 0.12)
+    }
+
+    /// Position of the first target after `secs` of 10 ms steps.
+    fn at(motion: &str, secs: f32) -> Vec3 {
+        let mut s = Session::new(def(SPHERE, POINT, motion), 1);
+        let (path, _) = run(&mut s, (secs / 0.01).round() as usize, 0.01);
+        path.last().copied().flatten().expect("a target")
+    }
+
+    fn near(a: Vec3, b: Vec3) -> bool {
+        (a - b).length() < 0.03
+    }
+
+    #[test]
+    fn a_path_walks_its_waypoints_in_order_and_loops_back_to_the_spawn() {
+        // POINT spawns at (0, 1, -10): +x is the player's right and +z is towards him.
+        let motion = r#"{ kind = "path", points = [[2, 0, 0], [2, 1, 1]], speed = [1, 1] }"#;
+        assert!(
+            near(at(motion, 1.0), Vec3::new(1.0, 1.0, -10.0)),
+            "{:?}",
+            at(motion, 1.0)
+        );
+        assert!(near(at(motion, 2.0), Vec3::new(2.0, 1.0, -10.0)));
+        // The second leg is √2 m long, diagonally up and closer.
+        let half = 2.0 + 2f32.sqrt() / 2.0;
+        assert!(
+            near(at(motion, half), Vec3::new(2.0, 1.5, -9.5)),
+            "{:?}",
+            at(motion, half)
+        );
+        // Then straight back to the spawn point (√6 m) and round again.
+        let home = 2.0 + 2f32.sqrt() + 6f32.sqrt();
+        assert!(
+            near(at(motion, home), Vec3::new(0.0, 1.0, -10.0)),
+            "{:?}",
+            at(motion, home)
+        );
+        assert!(near(at(motion, home + 1.0), Vec3::new(1.0, 1.0, -10.0)));
+    }
+
+    #[test]
+    fn a_ping_pong_path_retraces_its_route() {
+        let route = |order: &str| {
+            format!(
+                r#"{{ kind = "path", points = [[2, 0, 0], [2, 2, 0]], speed = [1, 1]{order} }}"#
+            )
+        };
+        // After the last waypoint (4 s), a loop heads straight home, a ping-pong goes back.
+        let d = 1.0 / 2f32.sqrt();
+        let looped = at(&route(""), 5.0);
+        assert!(
+            near(looped, Vec3::new(2.0 - d, 3.0 - d, -10.0)),
+            "{looped:?}"
+        );
+        let ping_pong = at(&route(r#", route = "ping_pong""#), 5.0);
+        assert!(near(ping_pong, Vec3::new(2.0, 2.0, -10.0)), "{ping_pong:?}");
+        assert!(near(
+            at(&route(r#", route = "ping_pong""#), 7.0),
+            Vec3::new(1.0, 1.0, -10.0)
+        ));
+    }
+
+    #[test]
+    fn a_path_rests_at_each_waypoint_and_plays_faster_with_speed_tuning() {
+        let motion =
+            r#"{ kind = "path", points = [[2, 0, 0]], speed = [1, 1], pause_secs = [0.5, 0.5] }"#;
+        assert!(near(at(motion, 2.4), Vec3::new(2.0, 1.0, -10.0)), "resting");
+        assert!(
+            near(at(motion, 3.5), Vec3::new(1.0, 1.0, -10.0)),
+            "{:?}",
+            at(motion, 3.5)
+        );
+
+        let mut d = def(
+            SPHERE,
+            POINT,
+            r#"{ kind = "path", points = [[4, 0, 0]], speed = [1, 1] }"#,
+        );
+        d.targets.speed_scale = 2.0;
+        let mut s = Session::new(d, 1);
+        let (path, _) = run(&mut s, 100, 0.01);
+        assert!(
+            near(path[99].unwrap(), Vec3::new(2.0, 1.0, -10.0)),
+            "{:?}",
+            path[99]
+        );
+    }
+
+    #[test]
+    fn path_parameters_are_validated() {
+        let problems = |shape: &str, motion: &str| {
+            let d = ScenarioDef::from_toml(&format!(
+                "id = \"m\"\nname = \"m\"\ncategory = \"custom\"\n[targets]\nshape = {shape}\nspawn = {POINT}\nmotion = {motion}\n"
+            ))
+            .unwrap();
+            d.validate()
+                .into_iter()
+                .map(|e| e.field)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            problems(
+                SPHERE,
+                r#"{ kind = "path", points = [], speed = [0, 1], pause_secs = [-1, 0] }"#
+            ),
+            [
+                "targets.motion.points",
+                "targets.motion.speed",
+                "targets.motion.pause_secs"
+            ]
+        );
+        assert_eq!(
+            problems(
+                SPHERE,
+                r#"{ kind = "path", points = [[60, 0, 0]], speed = [1, 1] }"#
+            ),
+            ["targets.motion.points"]
+        );
+        assert_eq!(
+            problems(
+                SPHERE,
+                r#"{ kind = "path", points = [[0, 0, 0]], speed = [1, 1] }"#
+            ),
+            ["targets.motion.points"],
+            "a route that never leaves the spawn point"
+        );
+        assert_eq!(
+            problems(
+                r#"{ kind = "humanoid" }"#,
+                r#"{ kind = "path", points = [[2, 1, 0]], speed = [1, 1] }"#
+            ),
+            ["targets.motion.points"],
+            "humanoids walk on the floor"
+        );
+        assert!(
+            problems(
+                r#"{ kind = "humanoid" }"#,
+                r#"{ kind = "path", points = [[2, 0, 3]], speed = [1, 1] }"#
+            )
+            .is_empty()
+        );
     }
 
     #[test]

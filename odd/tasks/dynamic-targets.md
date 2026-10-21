@@ -30,7 +30,7 @@ Source of the gap list (assistant comparison, 2026-10-21, accepted by the user):
 | T3 | S3 | inline | done | (this commit) |
 | T4 | S4 | inline | done (no code: already covered) | — |
 | T5 | S6 | inline | done | (this commit) |
-| T6 | S7 | inline | pending | |
+| T6 | S7 | inline | done | (this commit) |
 | T7 | S9 | inline | pending | |
 | T8 | S10 | inline | pending | |
 | T9 | S11 | inline (research delegated to one read-only worker) | pending | |
@@ -47,3 +47,4 @@ Source of the gap list (assistant comparison, 2026-10-21, accepted by the user):
 - L8 T3: `reactions.damage_juke = { threshold, ignore_chance, delay_secs, cooldown_secs, reset_secs }`; damage flows through `Session::on_damage(idx, amount)` (1 per click hit, dt per hold tick) into `BehaviorState::took_damage`. RED: compile failure; tests cover trigger+delay, no block, ignore, reset timer, cooldown, validation.
 - L9 T4 correction: S4 was already covered before this feature; the 2026-10-21 comparison listed it by mistake (a grep for "efficiency|damage" missed it). Evidence: `scoring::record_on_target` awards zone points per second on target in hold mode (seconds are the damage) and `record_hit` per hit in click mode (one hit is one damage); `run_result` multiplies by `AccuracyMult` (`accuracy_mult = "linear"` = KovaaK's ScoreMultDamageEfficiency). No code written; docs unchanged.
 - L10 T5: `BehaviorWhen.{player_within_m, player_beyond_m, spawn_beyond_m}`; `Situation` gains `player_distance` (horizontal, eye to target) and `spawn_distance` (from `BehaviorState.spawn`, which retreats do not move). RED: compile failure; tests cover each condition holding and not holding, plus validation.
+- L11 T6: `Motion::Path { points, speed, pause_secs, route = loop|ping_pong }` (waypoints as [right, up, towards] offsets from spawn); difficulty speeds it up and shortens rests; humanoid paths must stay on the floor; validation refuses a route that never leaves the spawn point and the walk loop is capped per step (no hang). Recording paths from player input stays out of scope (S7 assumption).

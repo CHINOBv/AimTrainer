@@ -183,7 +183,8 @@ pub(super) fn motion_weapon(motion: &Motion) -> Weapon {
         | Motion::Ballistic { .. }
         | Motion::LinearBounce { .. }
         | Motion::Orbit { .. }
-        | Motion::Wave { .. } => Weapon::Vandal,
+        | Motion::Wave { .. }
+        | Motion::Path { .. } => Weapon::Vandal,
     }
 }
 

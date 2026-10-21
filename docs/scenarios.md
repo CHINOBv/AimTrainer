@@ -289,6 +289,7 @@ Angles are measured from the eye between aim points (a humanoid's head, a sphere
 | `linear_bounce` | `speed_deg`, `arena = { yaw_deg, pitch_deg, sides }` | Straight lines at a constant angular speed, reflecting off the walls of a box or polygon. See "Bouncing and orbiting targets". |
 | `orbit` | `speed_deg`, `radius` (optional), `change_secs` (optional), `reverse_chance` (default 0.5) | Circles around the player. See "Bouncing and orbiting targets". |
 | `wave` | `speed`, `amplitude`, `frequency_hz`, `form` (default `"sine"`), `max_offset` (default 3) | Glides sideways while weaving up and down on a sine or zigzag path. See "Wave targets". |
+| `path` | `points`, `speed`, `pause_secs` (default `[0, 0]`), `route` (`"loop"` default, or `"ping_pong"`) | Walks a fixed route at a constant speed: from its spawn point through `points`, then straight back to the spawn point and round again (`loop`), or back through the waypoints (`ping_pong`), resting `pause_secs` at every waypoint. Each point is an offset from the spawn point, `[right, up, towards you]` in meters as you saw the target when it spawned (1 to 16 points, within ±50 m, not all at the spawn point). Humanoids walk on the floor, so `up` must be 0. Example: `motion = { kind = "path", points = [[3, 0, 0], [3, 0, -4]], speed = [2, 3], pause_secs = [0.2, 0.6], route = "ping_pong" }` |
 
 `strafe`, `dodge` and `drift` also take an optional `depth` block, which adds forward/back movement (see "Depth movement").
 

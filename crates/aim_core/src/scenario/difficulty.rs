@@ -451,6 +451,12 @@ fn scale_motion(motion: &mut Motion, s: f32) {
             *speed = scale(*speed, 1.0 + s);
             *frequency_hz = scale(*frequency_hz, 1.0 + s);
         }
+        Motion::Path {
+            speed, pause_secs, ..
+        } => {
+            *speed = scale(*speed, 1.0 + s);
+            sooner(pause_secs);
+        }
     }
 }
 

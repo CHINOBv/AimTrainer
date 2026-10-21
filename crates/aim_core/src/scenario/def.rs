@@ -758,7 +758,40 @@ pub enum Motion {
         #[serde(default = "default_strafe_width")]
         max_offset: f32,
     },
+    /// Walks a fixed route at a constant speed: from its spawn point through `points`, then
+    /// round to the spawn point again (`loop`) or back the way it came (`ping_pong`),
+    /// resting `pause_secs` at every waypoint.
+    Path {
+        /// Waypoints as offsets from the spawn point, meters: `[right, up, towards the
+        /// player]` as the player saw the target when it spawned (1 to 16 points, each
+        /// coordinate within ±50 m; humanoids walk on the floor, so `up` must be 0).
+        points: Vec<[f32; 3]>,
+        /// Speed along the route, m/s (drawn once per target).
+        speed: Range,
+        /// Rest at every waypoint, seconds within [0, 10].
+        #[serde(default = "zero_range")]
+        pause_secs: Range,
+        /// The order the route repeats in.
+        #[serde(default)]
+        route: PathRoute,
+    },
 }
+
+/// How a `path` motion repeats its route (`motion.route`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PathRoute {
+    /// After the last waypoint, straight back to the spawn point, then round again.
+    #[default]
+    Loop,
+    /// After the last waypoint, back through the waypoints to the spawn point, and so on.
+    PingPong,
+}
+
+/// Most waypoints a `path` motion may list.
+pub const MAX_PATH_POINTS: usize = 16;
+/// Largest waypoint offset of a `path` motion, meters.
+pub const MAX_PATH_OFFSET_M: f32 = 50.0;
 
 /// Shape of a `wave` motion's weave (`motion.form`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -1790,6 +1823,15 @@ impl ScenarioDef {
             "targets.motion.arena.sides",
             "humanoids bounce horizontally only: use the box (sides = 0)",
         );
+        let climbs = |m: &Motion| matches!(m, Motion::Path { points, .. } if points.iter().any(|p| p[1] != 0.0));
+        check(
+            !humanoid
+                || !climbs(&t.motion)
+                    && !t.motion_profiles.iter().any(|p| climbs(&p.motion))
+                    && !t.behaviors.iter().flat_map(|b| &b.motion).any(climbs),
+            "targets.motion.points",
+            "humanoids walk on the floor: every path point needs up = 0",
+        );
         let waves = |m: &Motion| matches!(m, Motion::Wave { .. });
         check(
             !humanoid || !waves(&t.motion),
@@ -1867,7 +1909,7 @@ fn motion_problems(m: &Motion) -> Vec<(&'static str, &'static str)> {
         }
     };
     match m {
-        Motion::Static => {}
+        Motion::Static | Motion::Path { .. } => {}
         Motion::Strafe {
             change_secs,
             stop_chance,
@@ -2073,6 +2115,34 @@ fn motion_problems(m: &Motion) -> Vec<(&'static str, &'static str)> {
                 "must be > 0",
             );
         }
+    }
+    if let Motion::Path {
+        points,
+        speed,
+        pause_secs,
+        ..
+    } = m
+    {
+        check(
+            (1..=MAX_PATH_POINTS).contains(&points.len())
+                && points
+                    .iter()
+                    .flatten()
+                    .all(|c| c.is_finite() && c.abs() <= MAX_PATH_OFFSET_M)
+                && points.iter().any(|p| *p != [0.0; 3]),
+            "targets.motion.points",
+            "must list 1 to 16 [right, up, towards] offsets within ±50 m, not all at the spawn point",
+        );
+        check(
+            speed.is_valid() && speed.min > 0.0,
+            "targets.motion.speed",
+            "must be a positive [min, max] in m/s",
+        );
+        check(
+            pause_secs.is_valid() && pause_secs.min >= 0.0 && pause_secs.max <= 10.0,
+            "targets.motion.pause_secs",
+            "must be a [min, max] within [0, 10] seconds",
+        );
     }
     if let Some(d) = motion_depth(m) {
         check(
