@@ -40,8 +40,8 @@ use crate::ui::organisms::today_panel::{
     TodayAction, TodayModel,
 };
 use crate::ui::organisms::{
-    arena_list, benchmark_panel, feedback_settings, first_run, movement_lab, routine_list,
-    scenario_browser,
+    arena_list, benchmark_panel, care_panel, feedback_settings, first_run, movement_lab,
+    routine_list, scenario_browser,
 };
 use aim_core::fov;
 use aim_core::scenario::ScenarioDef;
@@ -95,9 +95,10 @@ enum Tab {
     Tools,
     Settings,
     Coach,
+    Care,
 }
 
-const TABS: [(Tab, &str); 9] = [
+const TABS: [(Tab, &str); 10] = [
     (Tab::Today, "Today"),
     (Tab::Progress, "Progress"),
     (Tab::Scenarios, "Scenarios"),
@@ -107,10 +108,11 @@ const TABS: [(Tab, &str); 9] = [
     (Tab::Tools, "Tools"),
     (Tab::Settings, "Settings"),
     (Tab::Coach, "Coach"),
+    (Tab::Care, "Hand care"),
 ];
 
-/// Keys 1–9 select the tabs in [`TABS`] order.
-const TAB_KEYS: [egui::Key; 9] = [
+/// Keys 1–9, then 0, select the tabs in [`TABS`] order.
+const TAB_KEYS: [egui::Key; 10] = [
     egui::Key::Num1,
     egui::Key::Num2,
     egui::Key::Num3,
@@ -120,6 +122,7 @@ const TAB_KEYS: [egui::Key; 9] = [
     egui::Key::Num7,
     egui::Key::Num8,
     egui::Key::Num9,
+    egui::Key::Num0,
 ];
 
 fn tab_for_key(key: egui::Key) -> Option<Tab> {
@@ -194,6 +197,8 @@ struct MenuState {
     plateaus: HistoryCache<Vec<aim_core::training::progress::Plateau>>,
     /// "Verify a proof" field and its background check (Progress tab).
     proof: proof_panel::ProofVerifier,
+    /// The guided routine being followed (Hand care tab).
+    care: care_panel::CareState,
 }
 
 /// A value derived from the history, recomputed only after the history changed.
@@ -759,6 +764,13 @@ fn menu(
                 // Keep the spinner moving and collect the answer without waiting for input.
                 ctx.request_repaint_after(std::time::Duration::from_millis(100));
             }
+        }
+        Tab::Care => {
+            egui::CentralPanel::default().show(&mut root, |ui| {
+                egui::ScrollArea::vertical()
+                    .id_salt("care")
+                    .show(ui, |ui| care_panel::care_panel(ui, &mut state.care));
+            });
         }
     }
 
@@ -1449,6 +1461,7 @@ mod tests {
                 "Herramientas",
                 "Ajustes",
                 "Entrenador",
+                "Cuidado de manos",
             ]
         );
         let settings_names =
@@ -1498,13 +1511,17 @@ mod tests {
     }
 
     #[test]
-    fn number_keys_one_to_nine_pick_the_tabs_in_order() {
+    fn number_keys_one_to_nine_then_zero_pick_the_tabs_in_order() {
         use egui::Key;
         assert_eq!(tab_for_key(Key::Num1), Some(Tab::Today));
         assert_eq!(tab_for_key(Key::Num3), Some(Tab::Scenarios));
         assert_eq!(tab_for_key(Key::Num8), Some(Tab::Settings));
         assert_eq!(tab_for_key(Key::Num9), Some(Tab::Coach));
-        assert_eq!(tab_for_key(Key::Num0), None);
+        assert_eq!(
+            tab_for_key(Key::Num0),
+            Some(Tab::Care),
+            "0 is the tenth tab"
+        );
         assert_eq!(tab_for_key(Key::A), None);
     }
 

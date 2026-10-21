@@ -571,6 +571,12 @@ The warm-up decrement after rest is verified (Lee & Genovese 1988, see Routine d
 - `STRETCHES` is a short generic list shown with `STRETCH_DISCLAIMER` (not medical advice).
 - **Estimates, not sourced values:** 45 min of continuous play, 5 min breaks, and a 420 min weekly cap. The cap is about 1 h a day, where Listman et al. 2021 saw daily gains peak (see Routine design); it is not an injury threshold.
 
+**Guided hand care (`aim_core::training::care`, the Hand care tab):** three routines followed one timed exercise at a time, plus posture tips. The exercises follow Kastor's "Wrist stretching and posture guide" (2020, written by a physiotherapy student and shared by Voltaic), in our own words. The timings are picked inside the guide's ranges (estimates): mobility 45 s per exercise (guide: 30–60 s), stretches held 20 s per side (guide: 20–30 s), posture stretches 30 s per side.
+
+- **Mobility before, static stretches after (moderate):** the guide puts static stretching after play. A meta-analysis found small acute losses after pre-exercise static stretching (strength −5.4%, power −1.9%, explosive performance −2.0%), smallest with stretches of 45 s or less, and concluded that static stretching should not be the only warm-up activity: Simic, Sarabon & Markovic 2013, *Scand J Med Sci Sports* 23:131–48 (PMID 22316148, verified). It measured muscle performance, not aiming.
+- **Posture routine (moderate):** stretching the tight muscles and strengthening the weak ones for a forward head posture follows a 10-week randomized controlled trial in healthy adults: Harman, Hubley-Kozey & Butler 2005, *Journal of Manual & Manipulative Therapy* 13(3):163–176, https://doi.org/10.1179/106698105790824888 (verified). It was not done in esports players.
+- **Prevention (absence of evidence):** as with breaks, no trial shows that these routines prevent complaints in esports. The tab shows `STRETCH_DISCLAIMER` and `EVIDENCE_NOTE`.
+
 ## Verifiable score proofs
 
 Runs are deterministic, so a shared run can be checked by playing its inputs again (`aim_core::analytics::proof`). The share code carries the run key, a 64-bit FNV-1a hash of the scenario definition that was played, the seed, the input log (the replay format) and the claimed score and accuracy. Verification rebuilds the scenario from the verifier's own library, refuses it if the hash differs (an edited scenario), replays the inputs and requires the score and accuracy to match bit for bit.

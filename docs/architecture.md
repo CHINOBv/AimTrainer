@@ -145,6 +145,7 @@ These modules are pure and keep their state as plain serde types or values passe
 |---|---|
 | `training::journal` | Ranked match entries with that day's readiness and fatigue, losing streak, tilt-reset routine |
 | `training::ergonomics` | `BreakPolicy` (continuous play, weekly cap), stretch list and disclaimers |
+| `training::care` | Guided hand-care routines (mobility, stretches, posture) and their step timer, `CareSession` |
 | `training::warmup` (dose) | Personal warm-up length from past sessions |
 | `training::progress` (plateaus) | Benchmark subcategories without a new personal best |
 | `sensitivity::dpi_check` | Real DPI from a measured movement, corrected sensitivity |

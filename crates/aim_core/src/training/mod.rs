@@ -2,6 +2,7 @@
 
 pub mod adaptive;
 pub mod benchmark;
+pub mod care;
 pub mod challenge;
 pub mod ergonomics;
 pub mod journal;
