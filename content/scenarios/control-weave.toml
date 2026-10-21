@@ -1,0 +1,29 @@
+# Idea credit: the Voltaic S3 "control tracking" subcategory. Original scenario.
+id = "control-weave"
+name = "Control Weave"
+category = "tracking"
+description = """
+Control tracking. A sphere alternates smooth weaves with stretches of quick, readable turns.
+Glide while the motion is steady, then make one small, calm correction when it turns."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.22 }
+spawn = { kind = "angular", yaw_deg = [-8.0, 8.0], pitch_deg = [2.0, 8.0], distance = [11.0, 13.0] }
+health = inf
+
+[[targets.motion_profiles]]
+weight = 2
+switch_secs = [1.5, 3.0]
+motion = { kind = "wave", speed = [1.2, 2.0], amplitude = [0.4, 0.8], frequency_hz = [0.4, 0.7], max_offset = 3.0 }
+
+[[targets.motion_profiles]]
+weight = 1
+switch_secs = [1.0, 2.0]
+motion = { kind = "drift", speed = [1.6, 2.6], change_secs = [0.5, 1.0], max_offset = 3.0 }
+
+[scoring]
+sphere = 100   # points per second on target

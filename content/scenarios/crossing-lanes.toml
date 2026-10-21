@@ -1,0 +1,25 @@
+# Idea credit: the Voltaic S3 "linear clicking" subcategory. Original scenario: no file, name
+# or value was copied.
+id = "crossing-lanes"
+name = "Crossing Lanes"
+category = "flicking"
+game = "valorant"
+description = """
+Linear clicking. Two agents cross the floor on long, steady A/D runs with VALORANT rifle movement.
+Read the lane early and let the head run into your crosshair instead of chasing it."""
+duration_secs = 60
+
+[weapon]
+fire = "click"
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-6.0, 6.0], z = [-25.0, -12.0] }
+motion = { kind = "strafe", weapon = "vandal", change_secs = [1.4, 2.2], stop_chance = 0.0, max_offset = 4.5, rhythm = { balanced = true } }
+max_alive = 2
+min_separation_deg = 8
+
+[scoring]
+head = 100
+miss_penalty = 15
+accuracy_mult = "sqrt"

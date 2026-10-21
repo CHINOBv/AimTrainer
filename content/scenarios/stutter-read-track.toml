@@ -1,0 +1,25 @@
+# Idea credit: the strafe swap pauses and damage reactions of KovaaK's dodge profiles.
+# Original scenario.
+id = "stutter-read-track"
+name = "Stutter Read Track"
+category = "tracking"
+game = "valorant"
+description = """
+Reactive tracking. A VALORANT agent stops for a moment at every turn, and jukes once it has taken enough damage.
+Read the stop instead of tracking through it, and stay ready to re-acquire after each juke."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "humanoid" }
+spawn = { kind = "floor", x = [-2.0, 2.0], z = [-14.0, -10.0] }
+motion = { kind = "strafe", weapon = "vandal", change_secs = [0.5, 1.1], stop_chance = 0.1, max_offset = 3.5, rhythm = { swap_pause_secs = [0.2, 0.5], left_secs_mult = 1.3 } }
+health = inf
+reactions = { damage_juke = { threshold = 0.8, ignore_chance = 0.3, cooldown_secs = 1.2 } }
+
+[scoring]
+head = 100   # points per second on target
+body = 40
+legs = 25

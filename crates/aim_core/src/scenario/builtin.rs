@@ -46,8 +46,20 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/cockroach-hop.toml"),
     ),
     (
+        "control-duelist.toml",
+        include_str!("../../../../content/scenarios/control-duelist.toml"),
+    ),
+    (
+        "control-weave.toml",
+        include_str!("../../../../content/scenarios/control-weave.toml"),
+    ),
+    (
         "counter-strafe.toml",
         include_str!("../../../../content/scenarios/counter-strafe.toml"),
+    ),
+    (
+        "crossing-lanes.toml",
+        include_str!("../../../../content/scenarios/crossing-lanes.toml"),
     ),
     (
         "crouch-duel.toml",
@@ -130,6 +142,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/dynamic-strafe-heads.toml"),
     ),
     (
+        "evo-juke-spheres.toml",
+        include_str!("../../../../content/scenarios/evo-juke-spheres.toml"),
+    ),
+    (
         "fade-track.toml",
         include_str!("../../../../content/scenarios/fade-track.toml"),
     ),
@@ -158,8 +174,16 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/go-no-go.toml"),
     ),
     (
+        "ground-reactive.toml",
+        include_str!("../../../../content/scenarios/ground-reactive.toml"),
+    ),
+    (
         "head-rail-run.toml",
         include_str!("../../../../content/scenarios/head-rail-run.toml"),
+    ),
+    (
+        "head-strafe-track.toml",
+        include_str!("../../../../content/scenarios/head-strafe-track.toml"),
     ),
     (
         "hop-field.toml",
@@ -174,24 +198,16 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/jitter-switch.toml"),
     ),
     (
-        "ground-reactive.toml",
-        include_str!("../../../../content/scenarios/ground-reactive.toml"),
-    ),
-    (
-        "head-strafe-track.toml",
-        include_str!("../../../../content/scenarios/head-strafe-track.toml"),
-    ),
-    (
         "long-range-heads.toml",
         include_str!("../../../../content/scenarios/long-range-heads.toml"),
     ),
     (
-        "micro-adjust.toml",
-        include_str!("../../../../content/scenarios/micro-adjust.toml"),
+        "metronome-ring.toml",
+        include_str!("../../../../content/scenarios/metronome-ring.toml"),
     ),
     (
-        "mini-regen-switch.toml",
-        include_str!("../../../../content/scenarios/mini-regen-switch.toml"),
+        "micro-adjust.toml",
+        include_str!("../../../../content/scenarios/micro-adjust.toml"),
     ),
     (
         "micro-cluster.toml",
@@ -206,12 +222,20 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/mini-phase.toml"),
     ),
     (
+        "mini-regen-switch.toml",
+        include_str!("../../../../content/scenarios/mini-regen-switch.toml"),
+    ),
+    (
         "mirror-duel.toml",
         include_str!("../../../../content/scenarios/mirror-duel.toml"),
     ),
     (
         "orbit-track.toml",
         include_str!("../../../../content/scenarios/orbit-track.toml"),
+    ),
+    (
+        "patrol-peek.toml",
+        include_str!("../../../../content/scenarios/patrol-peek.toml"),
     ),
     (
         "peek-reaction.toml",
@@ -222,16 +246,16 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/peek-track.toml"),
     ),
     (
+        "peripheral-detect.toml",
+        include_str!("../../../../content/scenarios/peripheral-detect.toml"),
+    ),
+    (
         "phase-kill-race.toml",
         include_str!("../../../../content/scenarios/phase-kill-race.toml"),
     ),
     (
         "phase-peek-ladder.toml",
         include_str!("../../../../content/scenarios/phase-peek-ladder.toml"),
-    ),
-    (
-        "peripheral-detect.toml",
-        include_str!("../../../../content/scenarios/peripheral-detect.toml"),
     ),
     (
         "pill-crossfire.toml",
@@ -330,8 +354,16 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../../content/scenarios/squad-strafe.toml"),
     ),
     (
+        "stability-flyers.toml",
+        include_str!("../../../../content/scenarios/stability-flyers.toml"),
+    ),
+    (
         "static-headline.toml",
         include_str!("../../../../content/scenarios/static-headline.toml"),
+    ),
+    (
+        "steady-agents-switch.toml",
+        include_str!("../../../../content/scenarios/steady-agents-switch.toml"),
     ),
     (
         "stop-go-weavers.toml",
@@ -344,6 +376,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "stutter-ladder.toml",
         include_str!("../../../../content/scenarios/stutter-ladder.toml"),
+    ),
+    (
+        "stutter-read-track.toml",
+        include_str!("../../../../content/scenarios/stutter-read-track.toml"),
     ),
     (
         "switch-evasive-small.toml",
@@ -396,6 +432,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "track-reactive-strafe.toml",
         include_str!("../../../../content/scenarios/track-reactive-strafe.toml"),
+    ),
+    (
+        "vertical-rail.toml",
+        include_str!("../../../../content/scenarios/vertical-rail.toml"),
     ),
     (
         "wave-runners.toml",

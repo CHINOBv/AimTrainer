@@ -1,0 +1,23 @@
+# Idea credit: the Voltaic S3 "stability switching" subcategory. Original scenario.
+id = "stability-flyers"
+name = "Stability Flyers"
+category = "switching"
+description = """
+Stability switching. Three spheres drift calmly and walk in and out; every kill shrinks the next ones a little.
+More depth than speed switching, calmer than evasive: accelerate between targets, not on them."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.28 }
+spawn = { kind = "angular", yaw_deg = [-35.0, 35.0], pitch_deg = [0.0, 14.0], distance = [11.0, 15.0] }
+motion = { kind = "drift", speed = [1.0, 1.8], change_secs = [0.8, 1.4], max_offset = 2.5, depth = { change_secs = [1.0, 2.0], distance = [10.0, 16.0] } }
+max_alive = 3
+health = 0.5
+min_separation_deg = 12
+shrink_per_kill = { factor = 0.98, floor = 0.6 }
+
+[scoring]
+sphere = 300   # points per second on target; a kill is worth 150

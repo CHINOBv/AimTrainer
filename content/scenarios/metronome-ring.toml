@@ -1,0 +1,22 @@
+# Idea credit: the Voltaic S3 "linear clicking" subcategory. Original scenario.
+id = "metronome-ring"
+name = "Metronome Ring"
+category = "flicking"
+description = """
+Linear clicking. Three small spheres circle you, each at its own constant speed, and never turn.
+Learn each target's pace, lead it a little, and click once your crosshair moves with it."""
+duration_secs = 60
+
+[weapon]
+fire = "click"
+
+[targets]
+shape = { kind = "sphere", radius = 0.2 }
+spawn = { kind = "angular", yaw_deg = [-40.0, 40.0], pitch_deg = [-2.0, 12.0], distance = [10.0, 14.0] }
+motion = { kind = "orbit", speed_deg = [18.0, 32.0] }
+max_alive = 3
+min_separation_deg = 10
+
+[scoring]
+sphere = 100
+miss_penalty = 15

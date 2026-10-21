@@ -1,0 +1,23 @@
+# Idea credit: the Voltaic S3 "control tracking" subcategory and the strafe-time multipliers
+# of KovaaK's dodge profiles. Original scenario.
+id = "control-duelist"
+name = "Control Duelist"
+category = "tracking"
+game = "valorant"
+description = """
+Control tracking against an evasive VALORANT duelist: A/D strafes, jukes, stops and crouches, and it walks in and out.
+Its strafes to one side last longer, so you cannot settle into a rhythm. Head time scores twice body time."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "capsule", radius = 0.26, height = 1.6, head = { radius = 0.14, offset = 0.95 } }
+spawn = { kind = "floor", x = [-2.0, 2.0], z = [-15.0, -11.0], height = [0.8, 0.8] }
+motion = { kind = "dodge", weapon = "vandal", change_secs = [0.6, 1.4], juke_chance = 0.1, stop_chance = 0.2, crouch_chance = 0.05, max_offset = 3.0, depth = { change_secs = [0.8, 1.6], distance = [10.0, 16.0] }, rhythm = { right_secs_mult = 1.6, balanced = true } }
+health = inf
+
+[scoring]
+head = 100   # points per second on target
+body = 50

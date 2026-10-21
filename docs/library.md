@@ -31,6 +31,9 @@ The "Trains" column is our inference from the drill's mechanic, not a measured t
 | `shrinking-movers` Shrinking Movers | Voltaic VALORANT shrinking drills | Three drifting spheres with `shrink_per_kill` down to 40% | Keeping clicks clean on moving targets that keep getting smaller |
 | `pill-crossfire` Pill Crossfire | Voltaic dynamic clicking slots | Three capsules with `dodge` jukes and stops on a 70° arc; the head is worth more than twice the body | Picking the next moving target quickly and going for the head |
 | `close-strafe-heads` Close Quarters Strafe | VALORANT close-range duels (own design) | One agent at 5–9 m with VALORANT rifle `strafe` physics, 2.5 s lifetime | Tapping a head that crosses the screen fast at close range, on its stops and reversals |
+| `crossing-lanes` Crossing Lanes | Voltaic S3 linear clicking | Two heads on long, steady rifle `strafe` runs (1.4–2.2 s, no stops) with `rhythm.balanced` | Reading a lane early and letting the head run into the crosshair |
+| `metronome-ring` Metronome Ring | Voltaic S3 linear clicking | Three spheres in `orbit` around you, each at its own constant speed, never turning | Leading a target at a known, constant pace |
+| `patrol-peek` Patrol Peek | Aim Lab waypoint patrols | Heads on a `path` (ping-pong) at about walking pace that rest 0.3–0.8 s at each corner, 6 s lifetime | Clicking on the stop or the turn of a patrol |
 
 ### Switching
 
@@ -45,6 +48,9 @@ Every switching scenario uses `fire = "hold"`: a target dies after `health` seco
 | `hop-switch` Hop Switch | Voltaic switching slots | Spheres hopping under low gravity (`ballistic`, `gravity = 2.0`, six bounces) | Following a smooth vertical arc and switching before the next one lands |
 | `prism-bounce` Prism Bounce | Voltaic switching slots | Three spheres with a slow `linear_bounce` in a pentagon (`sides = 5`) | Re-acquiring a target right after a ricochet |
 | `mini-regen-switch` Mini Regen Switch | Voltaic switching slots | Two small strafing spheres with `regen` (`reset_on_hit = true`) | Committing to a kill before switching |
+| `steady-agents-switch` Steady Agents Switch | Voltaic S3 stability switching; KovaaK's strafe swap pauses | Three agents with short rifle `strafe` runs and a `rhythm.swap_pause_secs` stop at every turn, `health = 0.6` | Fast switches with calm tracking on each target |
+| `stability-flyers` Stability Flyers | Voltaic S3 stability switching | Three spheres with calm `drift` plus `depth`; `shrink_per_kill` down to 60% | Accelerating between targets, not on them |
+| `evo-juke-spheres` Evo Juke Spheres | Voltaic evasive switching (evolving variants) | Three spheres with rifle `dodge` jukes, `regen` and `shrink_per_kill`, `rhythm.balanced` | Finishing each evasive target before switching |
 
 ### Approximations
 
@@ -76,6 +82,10 @@ All of them pass validation, the simulated-player gate and the calibrate check (
 | `smooth-xyz` | 3D smooth control tracking (Voltaic control tracking) | Hold fire on a sphere that `drift`s on all three axes (`depth`) | Control: smooth corrections while the target changes size |
 | `orbit-track` | Around-the-player tracking (KovaaK's and Voltaic tracking) | Hold fire on a sphere in `orbit` around you that turns back sometimes; a new one at a new speed every 5 s | Large, steady arm turns matched to the target's pace |
 | `fade-track` | "Gauntlet" style fading-target tracking | Hold fire; each sphere lives 3 s and its value `decay`s to 10% (approximation, see below) | Fast acquisition and staying on target under a clock |
+| `control-weave` | Voltaic S3 control tracking | Hold fire on a sphere whose `motion_profiles` switch between a smooth `wave` and quick `drift` turns | Gliding on steady motion, one calm correction at each turn |
+| `control-duelist` | Voltaic S3 control tracking; KovaaK's strafe-time multipliers | Hold fire on a capsule with a head: rifle `dodge` plus `depth`, strafes to the right 1.6× longer (`rhythm`) | Control against an uneven, evasive VALORANT-style duelist |
+| `stutter-read-track` | KovaaK's strafe swap pauses and damage reactions | Hold fire on an agent that stops 0.2–0.5 s at every turn and jukes after 0.8 s of damage (`damage_juke`) | Reading the stop, then re-acquiring after each juke |
+| `vertical-rail` | Voltaic weakness routines (vertical precise tracking) | Hold fire on a sphere riding a 2 m vertical `path`, changing pace through `motion_profiles` | Smooth vertical mouse control |
 
 ### VALORANT flick-tech
 

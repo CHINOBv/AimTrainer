@@ -1,0 +1,27 @@
+# Idea credit: waypoint patrols (Aim Lab bot behaviours). Original scenario.
+# Speed: walking is ≈0.6 × run speed (approximate, docs/valorant-mechanics.md), ≈3.2 m/s with a
+# rifle; the patrols walk at 2.6–3.2 m/s.
+id = "patrol-peek"
+name = "Patrol Peek"
+category = "reaction"
+game = "valorant"
+description = """
+Clicking on patrols. Heads walk fixed routes at about VALORANT walking pace, stopping at corners as if checking an angle.
+Click when they pause or as they turn: a moving head is harder to hit than a stopped one."""
+duration_secs = 60
+
+[weapon]
+fire = "click"
+
+[targets]
+shape = { kind = "humanoid", head_only = true }
+spawn = { kind = "floor", x = [-6.0, 6.0], z = [-22.0, -12.0] }
+motion = { kind = "path", points = [[3.0, 0.0, 0.0], [3.0, 0.0, -3.0], [-1.0, 0.0, -3.0]], speed = [2.6, 3.2], pause_secs = [0.3, 0.8], route = "ping_pong" }
+max_alive = 2
+min_separation_deg = 8
+lifetime_secs = 6.0
+
+[scoring]
+head = 100
+miss_penalty = 15
+expire_penalty = 20

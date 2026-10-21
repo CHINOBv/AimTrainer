@@ -1,0 +1,25 @@
+# Idea credit: evolving evasive switching drills (Voltaic weakness routines). Original scenario.
+id = "evo-juke-spheres"
+name = "Evo Juke Spheres"
+category = "switching"
+game = "valorant"
+description = """
+Evasive switching. Spheres juke and stop with VALORANT strafe timing, heal when you let go, and shrink with every kill.
+Track each one to the end before you switch."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "sphere", radius = 0.22 }
+spawn = { kind = "angular", yaw_deg = [-30.0, 30.0], pitch_deg = [0.0, 10.0], distance = [12.0, 14.0] }
+motion = { kind = "dodge", weapon = "vandal", change_secs = [0.4, 0.8], juke_chance = 0.15, stop_chance = 0.3, max_offset = 1.2, rhythm = { balanced = true } }
+max_alive = 3
+health = 0.6
+min_separation_deg = 12
+regen = { interval_secs = 0.6, amount = 0.05, reset_on_hit = true }
+shrink_per_kill = { factor = 0.98, floor = 0.75 }
+
+[scoring]
+sphere = 300   # points per second on target

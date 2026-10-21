@@ -1,0 +1,26 @@
+# Idea credit: the Voltaic S3 "stability switching" subcategory and the strafe swap pauses of
+# KovaaK's dodge profiles. Original scenario.
+id = "steady-agents-switch"
+name = "Steady Agents Switch"
+category = "switching"
+game = "valorant"
+description = """
+Stability switching. Three agents strafe with VALORANT rifle movement and stop for a moment at every turn.
+Each needs 0.6 s of tracking. Switch fast, but stay calm on every target, head first."""
+duration_secs = 60
+
+[weapon]
+fire = "hold"
+
+[targets]
+shape = { kind = "humanoid" }
+spawn = { kind = "floor", x = [-7.0, 7.0], z = [-14.0, -8.0] }
+motion = { kind = "strafe", weapon = "vandal", change_secs = [0.4, 0.8], stop_chance = 0.3, max_offset = 1.2, rhythm = { swap_pause_secs = [0.15, 0.3] } }
+max_alive = 3
+health = 0.6
+min_separation_deg = 12
+
+[scoring]
+head = 400   # points per second on target; a kill on the head is worth 240
+body = 200
+legs = 150
