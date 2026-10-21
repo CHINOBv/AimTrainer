@@ -5,7 +5,7 @@ use super::def::Shape;
 use super::hit::{HitZone, Ray, ray_capsule_target, ray_humanoid, ray_sphere};
 use super::recoil::Kick;
 use super::session::Target;
-use crate::games::valorant::{HumanoidDims, WeaponStats};
+use crate::games::valorant::{CROUCH_SPREAD_MULT, HumanoidDims, WeaponStats};
 use crate::math::{Vec3, ViewAngles};
 use crate::movement::MovementProfile;
 use crate::rng::Rng;
@@ -19,13 +19,15 @@ pub(super) fn can_fire(weapon: &WeaponStats, now: f32, last_shot_at: f32) -> boo
 /// With `simulate_spread`, the direction is sampled inside the weapon's spread cone, which
 /// widens with the player's speed above the accuracy limit.
 /// Shot direction with first-shot spread and running inaccuracy (VALORANT's accuracy
-/// threshold); returns the direction and whether the shooter was moving too fast.
+/// threshold), narrowed by [`CROUCH_SPREAD_MULT`] when `crouched`; returns the direction
+/// and whether the shooter was moving too fast.
 pub fn shot_direction(
     view: ViewAngles,
     speed: f32,
     profile: &MovementProfile,
     weapon: &WeaponStats,
     simulate_spread: bool,
+    crouched: bool,
     rng: &mut Rng,
 ) -> (Vec3, bool) {
     let moving = speed > profile.accuracy_speed_limit();
@@ -33,12 +35,22 @@ pub fn shot_direction(
         return (view.direction(), moving);
     }
     let spread = weapon.first_shot_spread_deg + run_spread(speed, profile, weapon);
-    (sample_cone(view, spread, rng), moving)
+    (sample_cone(view, stance(spread, crouched), rng), moving)
+}
+
+/// `spread` for the shooter's stance: crouching narrows it.
+fn stance(spread: f32, crouched: bool) -> f32 {
+    if crouched {
+        spread * CROUCH_SPREAD_MULT
+    } else {
+        spread
+    }
 }
 
 /// Shot direction of one bullet of a recoil spray: the crosshair moved by the bullet's
 /// recoil `kick`, sampled inside the bullet's spread cone (plus running inaccuracy when
 /// `simulate_spread` is on). Returns the direction and whether the shooter was moving.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn recoil_direction(
     view: ViewAngles,
     kick: Kick,
@@ -46,6 +58,7 @@ pub(super) fn recoil_direction(
     profile: &MovementProfile,
     weapon: &WeaponStats,
     simulate_spread: bool,
+    crouched: bool,
     rng: &mut Rng,
 ) -> (Vec3, bool) {
     let moving = speed > profile.accuracy_speed_limit();
@@ -54,7 +67,7 @@ pub(super) fn recoil_direction(
         spread += run_spread(speed, profile, weapon);
     }
     let aimed = view.rotated(kick.yaw_deg, kick.pitch_deg);
-    (sample_cone(aimed, spread, rng), moving)
+    (sample_cone(aimed, stance(spread, crouched), rng), moving)
 }
 
 /// Extra spread for moving above the accuracy limit, growing linearly up to run speed.

@@ -11,7 +11,8 @@
 //! def_len  u32      then def_len bytes of UTF-8 TOML (the ScenarioDef)
 //! frames   u32      then one frame record per Session::update call:
 //!   dt f32, yaw_deg f32, pitch_deg f32, flags u8
-//!   flags: bit0 fire_pressed, bit1 fire_held, bit2 walk, bit3 movement follows
+//!   flags: bit0 fire_pressed, bit1 fire_held, bit2 walk, bit3 movement follows, bit4 crouch
+//!   (bit4 was unused before crouching existed: older replays read as standing)
 //!   if bit3: right f32, forward f32
 //! ```
 //!
@@ -30,6 +31,7 @@ const FIRE_PRESSED: u8 = 1 << 0;
 const FIRE_HELD: u8 = 1 << 1;
 const WALK: u8 = 1 << 2;
 const MOVEMENT: u8 = 1 << 3;
+const CROUCH: u8 = 1 << 4;
 
 /// Why a replay could not be encoded or decoded.
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -69,6 +71,7 @@ pub fn encode(recording: &Recording) -> Result<Vec<u8>, CodecError> {
             (f.fire_held, FIRE_HELD),
             (f.movement.walk, WALK),
             (has_movement, MOVEMENT),
+            (f.movement.crouch, CROUCH),
         ] {
             if on {
                 flags |= bit;
@@ -164,6 +167,7 @@ pub fn decode(bytes: &[u8]) -> Result<Recording, CodecError> {
                 right,
                 forward,
                 walk: flags & WALK != 0,
+                crouch: flags & CROUCH != 0,
             },
         });
     }
@@ -191,12 +195,13 @@ mod tests {
     #[test]
     fn a_recorded_run_round_trips_exactly_and_replays_the_same_result() {
         let mut rec = record("counter-strafe", AimerProfile::PRESETS[1], 8);
-        // The simulated aimer does not move; add movement and walk frames to cover them.
+        // The simulated aimer does not move; add movement, walk and crouch frames.
         for (i, f) in rec.inputs.iter_mut().enumerate().step_by(7) {
             f.movement = MoveInput {
                 right: if i % 2 == 0 { 1.0 } else { -1.0 },
                 forward: -0.0,
                 walk: i % 3 == 0,
+                crouch: i % 2 == 0,
             };
         }
         let bytes = encode(&rec).unwrap();

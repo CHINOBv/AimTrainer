@@ -56,7 +56,7 @@ Research date: 2026-10-16.
 
 ## Crouch and jump
 
-Used only by `Motion::Dodge` targets (`games/valorant.rs`, `scenario/motion.rs`). Riot does not publish these, and a search on 2026-10-18 found no community measurement we could cite, so all four are estimates. Each lives in one constant, so a measurement can replace it.
+Used by `Motion::Dodge` targets (`games/valorant.rs`, `scenario/motion.rs`) and by the player (below). Riot does not publish these, and a search on 2026-10-18 found no community measurement we could cite, so all four are estimates. Each lives in one constant, so a measurement can replace it.
 
 | Value | Used as | Confidence | Reasoning |
 |---|---|---|---|
@@ -64,6 +64,15 @@ Used only by `Motion::Dodge` targets (`games/valorant.rs`, `scenario/motion.rs`)
 | Standing to fully crouched takes 0.15 s | `CROUCH_TRANSITION_SECS` | estimate | Crouch spam reads as a near-instant head drop in VALORANT footage; nothing published |
 | Jump apex 0.9 m above the floor | `JUMP_APEX_M` | estimate | A standing jump clears waist-high cover but not chest-high boxes without crouch-jumping |
 | Air time of a jump on flat ground 0.85 s | `JUMP_AIR_SECS` | estimate | Chosen so the implied gravity (8 × apex / air time² ≈ 10 m/s²) is close to Earth's |
+
+**The player's crouch** (left Ctrl in movement scenarios, as VALORANT's default bind) uses the same drop and transition for the eye, plus two values of its own (searched 2026-10-21; Riot publishes neither):
+
+| Value | Used as | Confidence | Reasoning / source |
+|---|---|---|---|
+| Crouched movement at 0.4 × run speed (2.16 m/s with a rifle) | `CROUCH_SPEED_FRACTION` | estimate | Community guides only call crouch-walking "very slow" (https://www.strafe.com/articles/read/how-do-you-strafe-in-valorant/); set below walking (0.6×) |
+| Crouched spread ≈ 0.85 × standing spread | `CROUCH_SPREAD_MULT` | approximate | Community-measured movement error ≈0.17° crouched against ≈0.2° standing (https://www.gamer.org/valorant-gun-mechanics-explained-accuracy-spray-movement/); patch 1.04 also gave the Classic a crouch accuracy bonus (https://sportskeeda.com/esports/valorant-the-classic-receiving-much-needed-love-patch-1-04). Not confirmed by Riot |
+
+The player counts as crouched (for spread) once at least half way down. Crouching and walking together move at the crouch speed.
 
 **How the model works.** A crouch keeps the head box the same size and lowers it by the drop; torso and legs compress in proportion (`HumanoidDims::crouched`). A crouching target stops moving. A jump is a parabola with no air control: the target keeps its take-off lateral speed until it lands or reaches its lane edge. Spheres have no hitbox to compress, so a crouching sphere drops by the same 0.5 m.
 

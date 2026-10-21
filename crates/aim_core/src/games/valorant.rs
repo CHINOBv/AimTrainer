@@ -245,6 +245,12 @@ impl HumanoidDims {
 pub const CROUCH_HEIGHT_DROP_M: f32 = 0.5;
 /// Time to go from standing to fully crouched (or back), seconds (estimate).
 pub const CROUCH_TRANSITION_SECS: f32 = 0.15;
+/// Crouched movement speed as a fraction of run speed (estimate: slower than walking; no
+/// published value, see `docs/valorant-mechanics.md`).
+pub const CROUCH_SPEED_FRACTION: f32 = 0.4;
+/// Crouched shots' spread as a fraction of standing spread (approximate: community
+/// measurements give ≈0.17° crouched against ≈0.2° standing).
+pub const CROUCH_SPREAD_MULT: f32 = 0.85;
 /// Peak height of a standing jump above the floor, meters (estimate).
 pub const JUMP_APEX_M: f32 = 0.9;
 /// Time from take-off to landing on flat ground, seconds (estimate).

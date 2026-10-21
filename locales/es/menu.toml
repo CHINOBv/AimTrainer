@@ -96,7 +96,7 @@
 "Generic" = "Genérico"
 "hold to fire" = "mantener para disparar"
 "click" = "clic"
-"Movement: WASD (Shift = walk). Counter-strafe before shooting." = "Movimiento: WASD (Shift = caminar). Haz counter-strafe antes de disparar."
+"Movement: WASD (Shift = walk, Ctrl = crouch). Counter-strafe before shooting." = "Movimiento: WASD (Shift = caminar, Ctrl = agacharse). Haz counter-strafe antes de disparar."
 "Last runs: {}" = "Últimas partidas: {}"
 "▶  Adaptive ({})" = "▶  Adaptativo ({})"
 "Difficulty follows you to keep success near 80%, where learning is fastest." = "La dificultad se adapta a ti para mantener el éxito cerca del 80%, donde se aprende más rápido."

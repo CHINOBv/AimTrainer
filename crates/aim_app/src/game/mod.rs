@@ -931,7 +931,8 @@ pub fn target_tops(s: &Session) -> Vec<(u64, aim_core::math::Vec3)> {
         .collect()
 }
 
-/// The core's per-frame input from keys and buttons (WASD, Shift walk, left click).
+/// The core's per-frame input from keys and buttons (WASD, Shift walk, left Ctrl crouch as
+/// in VALORANT, left click).
 pub(crate) fn frame_input(
     dt: f32,
     view: ViewAngles,
@@ -950,6 +951,7 @@ pub(crate) fn frame_input(
             right: axis(KeyCode::KeyD, KeyCode::KeyA),
             forward: axis(KeyCode::KeyW, KeyCode::KeyS),
             walk: keys.pressed(KeyCode::ShiftLeft),
+            crouch: keys.pressed(KeyCode::ControlLeft),
         },
     }
 }
@@ -1311,6 +1313,24 @@ fn manage_cursor(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn left_ctrl_crouches_and_shift_walks() {
+        let buttons = ButtonInput::<MouseButton>::default();
+        let mut keys = ButtonInput::<KeyCode>::default();
+        let view = ViewAngles::default();
+        let idle = frame_input(0.01, view, &keys, &buttons).movement;
+        assert!(!idle.crouch && !idle.walk);
+        keys.press(KeyCode::ControlLeft);
+        keys.press(KeyCode::KeyD);
+        let crouched = frame_input(0.01, view, &keys, &buttons).movement;
+        assert!(crouched.crouch && !crouched.walk);
+        assert_eq!(crouched.right, 1.0);
+        keys.release(KeyCode::ControlLeft);
+        keys.press(KeyCode::ShiftLeft);
+        let walking = frame_input(0.01, view, &keys, &buttons).movement;
+        assert!(walking.walk && !walking.crouch);
+    }
     use bevy::ecs::system::assert_is_system;
 
     /// Plays `def` idle (looking forward, firing every frame) until it ends.

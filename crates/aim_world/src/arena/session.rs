@@ -651,6 +651,7 @@ impl ArenaSession {
             &self.profile,
             &self.weapon,
             true,
+            false,
             &mut self.rng,
         );
         self.player.last_shot_at = self.time;
@@ -808,6 +809,7 @@ impl ArenaSession {
                 &self.bot_movement,
                 &self.bot_weapon,
                 true,
+                false,
                 &mut self.rng,
             );
             let ray = Ray {

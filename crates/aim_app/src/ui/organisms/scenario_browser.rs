@@ -408,7 +408,7 @@ pub fn scenario_details(
     ui.label(tr(&def.description));
     if def.player.movement {
         ui.label(tr(
-            "Movement: WASD (Shift = walk). Counter-strafe before shooting.",
+            "Movement: WASD (Shift = walk, Ctrl = crouch). Counter-strafe before shooting.",
         ));
     }
     ui.add_space(4.0);

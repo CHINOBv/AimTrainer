@@ -274,6 +274,7 @@ pub(crate) mod tests {
                 right,
                 forward: 0.0,
                 walk: false,
+                crouch: false,
             },
         }
     }

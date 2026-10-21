@@ -295,6 +295,8 @@ pub struct Session {
     stats: Stats,
     player_pos: Vec3,
     player_vel: LocalVelocity,
+    /// How far into a crouch the player is: 0 standing, 1 fully crouched.
+    player_crouch: f32,
     view: ViewAngles,
     profile: MovementProfile,
     weapon: WeaponStats,
@@ -352,6 +354,7 @@ impl Session {
             stats: Stats::default(),
             player_pos: start,
             player_vel: start_velocity,
+            player_crouch: 0.0,
             view: ViewAngles::default(),
             profile,
             weapon,
@@ -440,7 +443,13 @@ impl Session {
     }
     /// Player eye position in meters.
     pub fn eye_position(&self) -> Vec3 {
-        self.player_pos + Vec3::new(0.0, self.dims.eye_height, 0.0)
+        let drop = crate::games::valorant::CROUCH_HEIGHT_DROP_M * self.player_crouch;
+        self.player_pos + Vec3::new(0.0, self.dims.eye_height - drop, 0.0)
+    }
+
+    /// Whether the player is (at least half way) crouched: crouched shots spread less.
+    pub fn is_crouched(&self) -> bool {
+        self.player_crouch >= 0.5
     }
     /// Horizontal speed in m/s.
     pub fn player_speed(&self) -> f32 {
@@ -593,6 +602,9 @@ impl Session {
             self.view.yaw_deg,
             dt,
         );
+        let goal = if input.crouch { 1.0 } else { 0.0 };
+        let rate = dt / crate::games::valorant::CROUCH_TRANSITION_SECS;
+        self.player_crouch += (goal - self.player_crouch).clamp(-rate, rate);
         if !self.is_accurate() {
             self.last_moving_at = self.time;
         }
@@ -694,6 +706,7 @@ impl Session {
             &self.profile,
             &self.weapon,
             self.def.weapon.simulate_spread,
+            self.is_crouched(),
             &mut self.rng,
         )
     }
@@ -855,6 +868,7 @@ impl Session {
             let (dir, moving) = self.shot_direction();
             return (dir, moving, None);
         };
+        let crouched = self.player_crouch >= 0.5;
         let kick = recoil.fire(self.time, &mut self.rng);
         let (dir, moving) = weapon::recoil_direction(
             self.view,
@@ -863,6 +877,7 @@ impl Session {
             &self.profile,
             &self.weapon,
             self.def.weapon.simulate_spread,
+            crouched,
             &mut self.rng,
         );
         (dir, moving, Some(kick.bullet))
@@ -1701,6 +1716,79 @@ mod tests {
         def
     }
 
+    /// Steps `frames` frames of 10 ms with `crouch` held and `right` pressed.
+    fn crouch_steps(s: &mut Session, crouch: bool, right: f32, frames: usize) {
+        for _ in 0..frames {
+            s.update(FrameInput {
+                dt: 0.01,
+                movement: MoveInput {
+                    right,
+                    crouch,
+                    ..Default::default()
+                },
+                ..Default::default()
+            });
+        }
+    }
+
+    #[test]
+    fn crouching_lowers_the_eye_over_the_transition_and_back() {
+        use crate::games::valorant::{CROUCH_HEIGHT_DROP_M, CROUCH_TRANSITION_SECS};
+        let mut s = Session::new(movement_def(), 2);
+        let standing = s.eye_position().y;
+        assert!(!s.is_crouched());
+        crouch_steps(&mut s, true, 0.0, 5);
+        let half = standing - s.eye_position().y;
+        assert!(half > 0.0 && half < CROUCH_HEIGHT_DROP_M, "{half}");
+        crouch_steps(&mut s, true, 0.0, (CROUCH_TRANSITION_SECS / 0.01) as usize);
+        assert!((standing - s.eye_position().y - CROUCH_HEIGHT_DROP_M).abs() < 1e-5);
+        assert!(s.is_crouched());
+        crouch_steps(&mut s, false, 0.0, 30);
+        assert!(
+            (s.eye_position().y - standing).abs() < 1e-6,
+            "stands back up"
+        );
+
+        // Without player movement the scenario has no crouch.
+        let mut still = Session::new(sphere_def(FireMode::Click, 1.0), 2);
+        let eye = still.eye_position().y;
+        crouch_steps(&mut still, true, 0.0, 30);
+        assert_eq!(still.eye_position().y, eye);
+    }
+
+    #[test]
+    fn crouching_slows_the_player_to_the_crouch_speed() {
+        use crate::games::valorant::CROUCH_SPEED_FRACTION;
+        let mut s = Session::new(movement_def(), 2);
+        crouch_steps(&mut s, true, 1.0, 100);
+        let run = s.movement_profile().run_speed;
+        assert!((s.player_speed() - run * CROUCH_SPEED_FRACTION).abs() < 1e-3);
+    }
+
+    #[test]
+    fn crouched_shots_spread_less() {
+        use crate::games::valorant::CROUCH_SPREAD_MULT;
+        let spread_of = |crouch: bool| {
+            let mut def = movement_def();
+            def.weapon.simulate_spread = true;
+            let mut s = Session::new(def, 9);
+            crouch_steps(&mut s, crouch, 0.0, 30);
+            let view = s.view;
+            let mut worst = 0.0f32;
+            for _ in 0..400 {
+                let (dir, _) = s.shot_direction();
+                worst = worst.max(crate::math::angle_between_deg(view.direction(), dir));
+            }
+            worst
+        };
+        let (standing, crouched) = (spread_of(false), spread_of(true));
+        assert!(standing > 0.0);
+        assert!(
+            crouched <= standing * CROUCH_SPREAD_MULT + 1e-3 && crouched > standing * 0.6,
+            "{crouched} vs {standing}"
+        );
+    }
+
     #[test]
     fn pushing_into_a_bound_still_lets_the_player_slide_along_it() {
         let mut s = Session::new(movement_def(), 2);
@@ -1708,6 +1796,7 @@ mod tests {
             right: 1.0,
             forward: 1.0,
             walk: false,
+            crouch: false,
         };
         // Long enough to reach the front edge (z = -1) and keep strafing right.
         for _ in 0..150 {
@@ -1745,6 +1834,7 @@ mod tests {
             right: 1.0,
             forward: -1.0,
             walk: false,
+            crouch: false,
         };
         for _ in 0..150 {
             s.update(FrameInput {

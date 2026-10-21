@@ -129,6 +129,9 @@ pub struct MoveInput {
     pub forward: f32,
     /// Walk (shift) held: moves at the walk fraction of run speed.
     pub walk: bool,
+    /// Crouch held: moves at the crouch fraction of run speed (slower than walking).
+    #[serde(default)]
+    pub crouch: bool,
 }
 
 /// Horizontal velocity in the player's local frame (x = right, y = forward), in m/s.
@@ -175,7 +178,9 @@ pub fn step(
     dt: f32,
 ) -> LocalVelocity {
     let max = profile.run_speed
-        * if input.walk {
+        * if input.crouch {
+            crate::games::valorant::CROUCH_SPEED_FRACTION
+        } else if input.walk {
             profile.walk_fraction
         } else {
             1.0
@@ -286,6 +291,32 @@ mod tests {
     }
 
     #[test]
+    fn crouching_caps_speed_below_walking() {
+        use crate::games::valorant::CROUCH_SPEED_FRACTION;
+        let p = MovementProfile::valorant_rifle();
+        let top = |input: MoveInput| {
+            let mut v = running();
+            for _ in 0..1000 {
+                v = step(&p, v, input, DT);
+            }
+            v.right
+        };
+        let crouch = MoveInput {
+            right: 1.0,
+            crouch: true,
+            ..Default::default()
+        };
+        assert!((top(crouch) - 5.4 * CROUCH_SPEED_FRACTION).abs() < 1e-4);
+        // Crouching wins over walking: the slower of the two.
+        let both = MoveInput {
+            walk: true,
+            ..crouch
+        };
+        assert!((top(both) - 5.4 * CROUCH_SPEED_FRACTION).abs() < 1e-4);
+        assert!(CROUCH_SPEED_FRACTION < p.walk_fraction);
+    }
+
+    #[test]
     fn walking_caps_speed_and_diagonals_do_not_exceed_max() {
         let p = MovementProfile::valorant_rifle();
         let mut v = running();
@@ -304,6 +335,7 @@ mod tests {
             right: 1.0,
             forward: 1.0,
             walk: false,
+            crouch: false,
         };
         for _ in 0..1000 {
             v = step(&p, v, diag, DT);
