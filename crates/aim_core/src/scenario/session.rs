@@ -1216,7 +1216,7 @@ impl Session {
             expires_at: self.def.targets.lifetime_secs.map(|l| visible_at + l),
             motion: MotionState::new(point, lateral, visible_at, self.eye_position()),
             last_hit_at: f32::NEG_INFINITY,
-            behavior: BehaviorState::new(lateral),
+            behavior: BehaviorState::new(point, lateral),
             cue_at,
             cue_played: false,
             blank,
@@ -1277,6 +1277,8 @@ impl Viewpoint {
             crosshair_offset: (aim - crosshair).dot(lateral),
             speed: t.velocity().length(),
             player_lateral: self.player_velocity.dot(lateral),
+            player_distance: (t.position - self.eye).horizontal().length(),
+            spawn_distance: (t.position - t.behavior.spawn).length(),
         }
     }
 }
@@ -2937,6 +2939,68 @@ mod tests {
             (run(holding()) - 12.0).abs() < 1e-4,
             "a still target never retreats"
         );
+    }
+
+    /// The range after 2 s of a target 12 m away that retreats 2 m while `when` holds.
+    fn range_with_retreat_when(motion: Motion, when: BehaviorWhen) -> f32 {
+        let mut def = duelist(motion, 1.0);
+        def.targets.behaviors = vec![BehaviorRule {
+            retreat_m: 2.0,
+            ..rule(when)
+        }];
+        let mut s = Session::new(def, 2);
+        look(&mut s, AWAY, 200);
+        range_to(&s)
+    }
+
+    #[test]
+    fn rules_react_to_the_distance_from_the_player() {
+        let within = |m: f32| {
+            range_with_retreat_when(
+                holding(),
+                BehaviorWhen {
+                    player_within_m: Some(m),
+                    ..Default::default()
+                },
+            )
+        };
+        // Too close: it backs off until it is out of range again.
+        let backed_off = within(13.0);
+        assert!(backed_off > 12.9 && backed_off < 13.6, "{backed_off}");
+        assert!((within(10.0) - 12.0).abs() < 1e-4, "already far enough");
+
+        let beyond = |m: f32| {
+            range_with_retreat_when(
+                holding(),
+                BehaviorWhen {
+                    player_beyond_m: Some(m),
+                    ..Default::default()
+                },
+            )
+        };
+        assert!((beyond(10.0) - 14.0).abs() < 0.1, "{}", beyond(10.0));
+        assert!((beyond(13.0) - 12.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn rules_react_to_the_distance_from_the_spawn_point() {
+        let beyond = |m: f32| {
+            range_with_retreat_when(
+                strafing(0.8),
+                BehaviorWhen {
+                    spawn_beyond_m: Some(m),
+                    ..Default::default()
+                },
+            )
+        };
+        assert!(
+            beyond(1.0) > 13.0,
+            "strafed away from its spawn: {}",
+            beyond(1.0)
+        );
+        // Its lane reaches 3 m to each side, so it never gets 5 m from its spawn and only
+        // strafes (12 m ahead, at most √(12² + 3²) ≈ 12.4 m away).
+        assert!(beyond(5.0) < 12.4, "{}", beyond(5.0));
     }
 
     #[test]

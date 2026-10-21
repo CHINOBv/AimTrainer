@@ -28,8 +28,8 @@ Source of the gap list (assistant comparison, 2026-10-21, accepted by the user):
 | T1 | S8 | inline | done | d8071b9 |
 | T2 | S1, S2, S5 | inline | done | (this commit) |
 | T3 | S3 | inline | done | (this commit) |
-| T4 | S4 | inline | pending | |
-| T5 | S6 | inline | pending | |
+| T4 | S4 | inline | done (no code: already covered) | — |
+| T5 | S6 | inline | done | (this commit) |
 | T6 | S7 | inline | pending | |
 | T7 | S9 | inline | pending | |
 | T8 | S10 | inline | pending | |
@@ -45,3 +45,5 @@ Source of the gap list (assistant comparison, 2026-10-21, accepted by the user):
 - L6 T1 (d8071b9): optional `game` on `ScenarioDef` (reuses `games::Game`), left out of `content_hash` so replay proofs and lab ids stay valid (RED: hash test failed before `hashed()`). 46 built-ins tagged `valorant` by rule (humanoid, strafe/dodge, player movement, recoil, spread; plus `static-headline`); guard test keeps future content tagged. Picker game filter + details label; es strings. RDD assess: medium, under_budget.
 - L7 T2: `motion.rhythm = { swap_pause_secs, left_secs_mult, right_secs_mult, balanced }` on strafe/dodge; `rng::ShuffleBag`. RED: compile failure; balanced test proven to reject i.i.d. draws. PINNED sim results unchanged (no RNG draw when `rhythm` is absent). New fields skip serialization when absent, so content hashes of existing scenarios are unchanged.
 - L8 T3: `reactions.damage_juke = { threshold, ignore_chance, delay_secs, cooldown_secs, reset_secs }`; damage flows through `Session::on_damage(idx, amount)` (1 per click hit, dt per hold tick) into `BehaviorState::took_damage`. RED: compile failure; tests cover trigger+delay, no block, ignore, reset timer, cooldown, validation.
+- L9 T4 correction: S4 was already covered before this feature; the 2026-10-21 comparison listed it by mistake (a grep for "efficiency|damage" missed it). Evidence: `scoring::record_on_target` awards zone points per second on target in hold mode (seconds are the damage) and `record_hit` per hit in click mode (one hit is one damage); `run_result` multiplies by `AccuracyMult` (`accuracy_mult = "linear"` = KovaaK's ScoreMultDamageEfficiency). No code written; docs unchanged.
+- L10 T5: `BehaviorWhen.{player_within_m, player_beyond_m, spawn_beyond_m}`; `Situation` gains `player_distance` (horizontal, eye to target) and `spawn_distance` (from `BehaviorState.spawn`, which retreats do not move). RED: compile failure; tests cover each condition holding and not holding, plus validation.

@@ -463,6 +463,9 @@ motion = { kind = "dodge", change_secs = [0.2, 0.45], juke_chance = 0.4 }
 | `alive_for_secs` | The target has been visible for at least this many seconds (≥ 0). |
 | `crosshair_within_deg` | The crosshair is within this angle of the target's aim point, in (0, 180). |
 | `speed_above` | The target moves faster than this many m/s (≥ 0). |
+| `player_within_m` | Your eye is within this horizontal distance of the target, meters (> 0). For example, a target that backs off when you push it. |
+| `player_beyond_m` | Your eye is farther than this horizontal distance from the target, meters (> 0). |
+| `spawn_beyond_m` | The target is farther than this from where it spawned, meters (> 0). |
 
 A rule needs at least one condition and at least one override:
 

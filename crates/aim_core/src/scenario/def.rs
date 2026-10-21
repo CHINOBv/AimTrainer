@@ -430,6 +430,15 @@ pub struct BehaviorWhen {
     /// The target moves faster than this, m/s.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speed_above: Option<f32>,
+    /// The player's eye is within this horizontal distance of the target, meters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub player_within_m: Option<f32>,
+    /// The player's eye is farther than this horizontal distance from the target, meters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub player_beyond_m: Option<f32>,
+    /// The target is farther than this from where it spawned, meters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spawn_beyond_m: Option<f32>,
 }
 
 /// Most behaviour rules a scenario may list.
@@ -1831,8 +1840,15 @@ fn behavior_when_is_valid(w: &BehaviorWhen) -> bool {
         w.alive_for_secs,
         w.crosshair_within_deg,
         w.speed_above,
+        w.player_within_m,
+        w.player_beyond_m,
+        w.spawn_beyond_m,
     ];
+    let distance = |m: Option<f32>| m.is_none_or(|m| m.is_finite() && m > 0.0);
     set.iter().any(Option::is_some)
+        && distance(w.player_within_m)
+        && distance(w.player_beyond_m)
+        && distance(w.spawn_beyond_m)
         && w.health_below.is_none_or(|h| h > 0.0 && h <= 1.0)
         && w.damaged_within_secs
             .is_none_or(|s| s.is_finite() && s > 0.0)
@@ -2764,6 +2780,18 @@ mod tests {
             },
             BehaviorWhen {
                 speed_above: Some(f32::NAN),
+                ..Default::default()
+            },
+            BehaviorWhen {
+                player_within_m: Some(0.0),
+                ..Default::default()
+            },
+            BehaviorWhen {
+                player_beyond_m: Some(f32::INFINITY),
+                ..Default::default()
+            },
+            BehaviorWhen {
+                spawn_beyond_m: Some(-1.0),
                 ..Default::default()
             },
         ] {

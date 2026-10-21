@@ -39,6 +39,10 @@ pub(super) struct Situation {
     pub(super) speed: f32,
     /// The player's velocity along the target's lateral axis, m/s.
     pub(super) player_lateral: f32,
+    /// Horizontal distance from the player's eye to the target, meters.
+    pub(super) player_distance: f32,
+    /// Distance from where the target spawned, meters.
+    pub(super) spawn_distance: f32,
 }
 
 /// Per-target behaviour state, owned by the target next to its [`MotionState`].
@@ -59,6 +63,8 @@ pub(super) struct BehaviorState {
     /// Damage taken towards a `damage_juke`, and when the last of it was taken.
     damage: f32,
     damaged_at: f32,
+    /// Where the target spawned (`spawn_beyond_m`).
+    pub(super) spawn: Vec3,
     /// Session time a triggered `damage_juke` happens.
     juke_at: Option<f32>,
     /// No new `damage_juke` starts before this session time.
@@ -66,9 +72,10 @@ pub(super) struct BehaviorState {
 }
 
 impl BehaviorState {
-    /// A target that has not reacted yet, whose lateral axis is `lateral`.
-    pub(super) fn new(lateral: Vec3) -> Self {
+    /// A target spawned at `spawn` that has not reacted yet, whose lateral axis is `lateral`.
+    pub(super) fn new(spawn: Vec3, lateral: Vec3) -> Self {
         Self {
+            spawn,
             active: None,
             player_side: 0.0,
             near: false,
@@ -161,6 +168,9 @@ fn holds(w: &BehaviorWhen, s: &Situation) -> bool {
         && w.alive_for_secs.is_none_or(|a| s.alive_secs >= a)
         && w.crosshair_within_deg.is_none_or(|c| s.crosshair_deg <= c)
         && w.speed_above.is_none_or(|v| s.speed > v)
+        && w.player_within_m.is_none_or(|m| s.player_distance <= m)
+        && w.player_beyond_m.is_none_or(|m| s.player_distance > m)
+        && w.spawn_beyond_m.is_none_or(|m| s.spawn_distance > m)
 }
 
 /// The weapon whose movement physics a target moving with `motion` uses; motions without
