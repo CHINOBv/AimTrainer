@@ -431,6 +431,32 @@ mod tests {
     }
 
     #[test]
+    fn the_benchmark_has_the_nine_s3_subcategories_and_each_has_a_day() {
+        let m = method();
+        let b = benchmark::builtin::all().remove(0);
+        let names: Vec<&str> = b.subcategories.iter().map(|s| s.name.as_str()).collect();
+        for s3 in [
+            "Static clicking",
+            "Dynamic clicking",
+            "Linear clicking",
+            "Precise tracking",
+            "Reactive tracking",
+            "Control tracking",
+            "Speed switching",
+            "Evasive switching",
+            "Stability switching",
+        ] {
+            assert!(names.contains(&s3), "{s3} missing");
+            assert!(
+                Weekday::ALL
+                    .iter()
+                    .any(|d| m.day(*d).focus.iter().any(|f| f == s3)),
+                "{s3} is in no day's focus, so weakest_day would skip it"
+            );
+        }
+    }
+
+    #[test]
     fn tier_suggestion_still_reads_the_benchmark_as_authored() {
         let m = method();
         assert_eq!(m.benchmark.as_deref(), Some("valorant-benchmark"));

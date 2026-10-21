@@ -27,10 +27,10 @@ name = "Advanced"
 level = 0.5
 
 [week]
-monday = { routine = "skill-clicking-static", focus = ["Static clicking"] }
+monday = { routine = "skill-clicking-static", focus = ["Static clicking", "Linear clicking"] }
 tuesday = { routine = "skill-clicking-dynamic", focus = ["Dynamic clicking", "Movement accuracy"] }
-wednesday = { routine = "skill-tracking-precise", focus = ["Precise tracking"] }
+wednesday = { routine = "skill-tracking-precise", focus = ["Precise tracking", "Control tracking"] }
 thursday = { routine = "skill-tracking-reactive", focus = ["Reactive tracking"] }
-friday = { routine = "skill-switching-speed", focus = ["Speed switching"] }
+friday = { routine = "skill-switching-speed", focus = ["Speed switching", "Stability switching"] }
 saturday = { routine = "skill-switching-evasive", focus = ["Evasive switching"] }
 sunday = { flex = true }

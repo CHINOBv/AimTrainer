@@ -45,6 +45,14 @@ scenarios = [
 ]
 
 [[subcategories]]
+skill = "clicking"
+name = "Linear clicking"
+scenarios = [
+  { id = "crossing-lanes", thresholds = [2950, 4850, 7100, 9550], tiers = { novice = [2800, 4900, 7200, 9700], advanced = [2850, 4650, 7400, 9800] } },
+  { id = "metronome-ring", thresholds = [2850, 4500, 7100, 9350], tiers = { novice = [2750, 4700, 7200, 9500], advanced = [2700, 4300, 6700, 9000] } },
+]
+
+[[subcategories]]
 skill = "tracking"
 name = "Precise tracking"
 scenarios = [
@@ -58,6 +66,14 @@ scenarios = [
   { id = "track-reactive-strafe", thresholds = [1450, 1850, 2250, 2650], tiers = { novice = [1500, 1850, 2200, 2600], advanced = [1600, 2000, 2450, 2900] } },
   { id = "track-reactive-micro", thresholds = [1250, 2150, 4200, 4500], tiers = { novice = [2000, 4050, 4250, 4450], advanced = [900, 1200, 2300, 4200] } },
   { id = "track-close-strafe", thresholds = [1575, 1950, 2350, 2800], tiers = { novice = [1450, 1800, 2200, 2650], advanced = [1750, 2150, 2600, 3050] } },
+]
+
+[[subcategories]]
+skill = "tracking"
+name = "Control tracking"
+scenarios = [
+  { id = "control-weave", thresholds = [850, 3250, 5750, 6000], tiers = { novice = [1850, 5500, 5950, 6000], advanced = [400, 850, 3500, 5650] } },
+  { id = "control-duelist", thresholds = [2050, 2450, 2700, 3000], tiers = { novice = [2450, 2750, 3000, 3300], advanced = [1850, 2300, 2600, 2900] } },
 ]
 
 [[subcategories]]
@@ -75,6 +91,14 @@ name = "Evasive switching"
 scenarios = [
   { id = "switch-evasive", thresholds = [6250, 11400, 15050, 17100], tiers = { novice = [9300, 13400, 15650, 17350], advanced = [3950, 7500, 13650, 16650] } },
   { id = "switch-evasive-small", thresholds = [7500, 11900, 14400, 16350], tiers = { novice = [9400, 12550, 15050, 16800], advanced = [5200, 9300, 13800, 16000] } },
+]
+
+[[subcategories]]
+skill = "switching"
+name = "Stability switching"
+scenarios = [
+  { id = "stability-flyers", thresholds = [5150, 8900, 12400, 13800], tiers = { novice = [7100, 11100, 12800, 14000], advanced = [3650, 5850, 10600, 13400] } },
+  { id = "steady-agents-switch", thresholds = [9500, 11350, 13500, 15100], tiers = { novice = [8750, 10900, 12450, 14250], advanced = [9750, 12200, 14000, 15050] } },
 ]
 
 [[subcategories]]

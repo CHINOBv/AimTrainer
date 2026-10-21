@@ -3,6 +3,10 @@
 //!
 //! Scenarios with phases, fail conditions or a non-time end get one more line: how far the
 //! contender got and how often its runs failed.
+//!
+//! Options: `--level <x>` plays every scenario at difficulty level `x` (the benchmark tiers use
+//! -0.5 and 0.5), and any other argument keeps only the scenarios with that id, e.g.
+//! `cargo run -p aim_core --release --example calibrate -- --level -0.5 crossing-lanes`.
 
 use aim_core::scenario::{RunOutcome, ScenarioDef, Session, builtin};
 use aim_core::sim::{AimerProfile, SimAimer, simulate};
@@ -10,12 +14,35 @@ use aim_core::sim::{AimerProfile, SimAimer, simulate};
 const SEEDS: [u64; 5] = [1, 2, 3, 4, 5];
 
 fn main() {
+    let mut level = 0.0f32;
+    let mut ids = Vec::new();
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--level" {
+            level = args
+                .next()
+                .and_then(|v| v.parse().ok())
+                .expect("--level needs a number");
+        } else {
+            ids.push(arg);
+        }
+    }
     print!("{:<24}", "scenario");
     for p in AimerProfile::PRESETS {
         print!("{:>12}", p.name);
     }
     println!("{:>10}{:>8}", "acc(ctd)", "kills");
-    for def in builtin::all() {
+    let defs = builtin::all()
+        .into_iter()
+        .filter(|d| ids.is_empty() || ids.contains(&d.id))
+        .map(|d| {
+            if level == 0.0 {
+                d
+            } else {
+                d.at_difficulty(level)
+            }
+        });
+    for def in defs {
         print!("{:<24}", def.id);
         let mut mid = None;
         for p in AimerProfile::PRESETS {

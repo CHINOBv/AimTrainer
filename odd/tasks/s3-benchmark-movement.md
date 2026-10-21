@@ -15,7 +15,7 @@ Branch: `feat/s3-benchmark-movement` (worktree `../CustomAimTrainer-worktrees/s3
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
 | T1 | S2 | inline | done | (this commit) |
-| T2 | S1 | inline | pending | |
+| T2 | S1 | inline | done | (this commit) |
 | T3 | S3 | inline | pending | |
 | T4 | S4 | inline | pending | |
 
@@ -24,3 +24,4 @@ Branch: `feat/s3-benchmark-movement` (worktree `../CustomAimTrainer-worktrees/s3
 - L1 (2026-10-21, verbatim) "Sí, por favor. Y oye, comienza a implementar las correcciones que hoy nos hacen falta. Implementa los benchmarks, al playtest, pues ya lo he estado probando y al menos un momento todo bien. Implementé una vez el precisión del simulador, las pruebas del módulo. Bueno, no, esas creo que van de mi parte, así que yo las hago. Y hoy otra cosa, por favor, implemento un escenario que sea de tipo movement, que sea, pero por kills, en este caso 100 bajas, o bueno, más bien, quisiera que pudiera ser configurable, de que si es por tiempo o por número de objetivos alcanzados, y también en el movement agregar el agacharse."
 - L2 `feat/dynamic-targets` merged into `main` (fast-forward to d41c5de) at the user's request.
 - L3 T1: calibrate contender accuracy now `vertical-rail` 0.61 (path speeds lowered to 1.05–2.2 m/s across its three profiles) and `control-duelist` 0.46 (stop_chance 0.3, max_offset 2.5, change_secs 0.7–1.5); order recruit < contender < veteran < elite holds. The sim is seed-noisy: narrowing control-duelist to 2.2 m dropped it to 0.30.
+- L4 T2: benchmark gains Linear clicking (crossing-lanes, metronome-ring), Control tracking (control-weave, control-duelist), Stability switching (stability-flyers, steady-agents-switch), thresholds from `calibrate -- --level` (new option) rounded to 50; weekly plan focus Monday/Wednesday/Friday; test pins the nine S3 names and that each is in a focus (fails without the plan change). Consequence noted to the user: overall energy reads empty until the three new subcategories are played (energy is recomputed from history; no stored data breaks). Risk item 3 (contract others consume: overall energy semantics) is user-requested.
