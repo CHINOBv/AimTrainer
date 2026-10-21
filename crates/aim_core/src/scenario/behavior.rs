@@ -5,7 +5,7 @@
 //! Everything here is a pure function of the target's state, what it perceives this frame
 //! and the session's seeded RNG, which it draws from only when the matching option is on.
 
-use super::def::{BehaviorRule, BehaviorWhen, Motion, ReactionsDef};
+use super::def::{BehaviorRule, BehaviorWhen, DamageJuke, Motion, ReactionsDef};
 use super::motion::{MotionState, STRAFE_BRAKE_SECS};
 use crate::games::valorant::Weapon;
 use crate::math::Vec3;
@@ -56,6 +56,13 @@ pub(super) struct BehaviorState {
     retreat: LocalVelocity,
     /// Meters retreated so far.
     retreated: f32,
+    /// Damage taken towards a `damage_juke`, and when the last of it was taken.
+    damage: f32,
+    damaged_at: f32,
+    /// Session time a triggered `damage_juke` happens.
+    juke_at: Option<f32>,
+    /// No new `damage_juke` starts before this session time.
+    juke_ready_at: f32,
 }
 
 impl BehaviorState {
@@ -69,7 +76,21 @@ impl BehaviorState {
             away: Vec3::UP.cross(lateral),
             retreat: LocalVelocity::default(),
             retreated: 0.0,
+            damage: 0.0,
+            damaged_at: f32::NEG_INFINITY,
+            juke_at: None,
+            juke_ready_at: 0.0,
         }
+    }
+
+    /// Counts `amount` of damage taken at `now` towards a `damage_juke`, starting again from
+    /// zero when the last damage is older than its `reset_secs`.
+    pub(super) fn took_damage(&mut self, j: &DamageJuke, amount: f32, now: f32) {
+        if now - self.damaged_at > j.reset_secs {
+            self.damage = 0.0;
+        }
+        self.damage += amount;
+        self.damaged_at = now;
     }
 
     /// Velocity added by retreating, m/s.
@@ -190,6 +211,37 @@ pub(super) fn react(
     }
     if entered {
         let dir = away_from_crosshair(s, motion, rng);
+        hold(r, motion, dir, s.now, rng);
+    }
+    if let Some(j) = &r.damage_juke {
+        damage_juke(r, j, state, motion, s, rng);
+    }
+}
+
+/// Triggers a `damage_juke` once the damage taken reaches its threshold (unless ignored or
+/// cooling down), and performs it when its delay is over.
+fn damage_juke(
+    r: &ReactionsDef,
+    j: &DamageJuke,
+    state: &mut BehaviorState,
+    motion: &mut MotionState,
+    s: &Situation,
+    rng: &mut Rng,
+) {
+    if state.juke_at.is_none() && state.damage >= j.threshold && s.now >= state.juke_ready_at {
+        state.damage = 0.0;
+        state.juke_ready_at = s.now + j.cooldown_secs;
+        if rng.next_f32() >= j.ignore_chance {
+            state.juke_at = Some(s.now + rng.in_range(j.delay_secs));
+        }
+    }
+    if state.juke_at.is_some_and(|at| s.now >= at) {
+        state.juke_at = None;
+        let dir = if motion.intent != 0.0 {
+            -motion.intent
+        } else {
+            away_from_crosshair(s, motion, rng)
+        };
         hold(r, motion, dir, s.now, rng);
     }
 }

@@ -732,11 +732,21 @@ impl Session {
         }
     }
 
-    /// Bookkeeping when target `idx` takes damage: remember when, and restart its
-    /// regeneration interval when `targets.regen.reset_on_hit` is set.
-    fn on_damage(&mut self, idx: usize) {
+    /// Bookkeeping when target `idx` takes `amount` of damage: remember when, count it
+    /// towards a `damage_juke`, and restart its regeneration interval when
+    /// `targets.regen.reset_on_hit` is set.
+    fn on_damage(&mut self, idx: usize, amount: f32) {
         let t = &mut self.targets[idx];
         t.last_hit_at = self.time;
+        if let Some(j) = self
+            .def
+            .targets
+            .reactions
+            .as_ref()
+            .and_then(|r| r.damage_juke.as_ref())
+        {
+            t.behavior.took_damage(j, amount, self.time);
+        }
         if let Some(r) = self.def.targets.regen.filter(|r| r.reset_on_hit) {
             t.regen_at = self.time + r.interval_secs;
         }
@@ -817,7 +827,7 @@ impl Session {
             moving,
         });
         self.targets[idx].health -= 1.0;
-        self.on_damage(idx);
+        self.on_damage(idx, 1.0);
         if self.targets[idx].health <= 0.0 {
             self.kill(idx, events);
         }
@@ -934,7 +944,7 @@ impl Session {
         let multiplier = self.points_multiplier(dir, idx, zone);
         scoring::record_on_target(&mut self.stats, &self.def.scoring, zone, dt, multiplier);
         self.targets[idx].health -= dt;
-        self.on_damage(idx);
+        self.on_damage(idx, dt);
         if self.targets[idx].health <= 0.0 {
             self.kill(idx, events);
         }
@@ -2521,6 +2531,7 @@ mod tests {
             dodge_within_deg: 0.0,
             shot_juke_chance: 0.0,
             react_secs: Range::fixed(0.3),
+            damage_juke: None,
         }
     }
 
@@ -2633,6 +2644,96 @@ mod tests {
         assert_eq!(t.position.x, 0.0);
     }
 
+    fn damage_juke() -> DamageJuke {
+        DamageJuke {
+            threshold: 0.2,
+            ignore_chance: 0.0,
+            delay_secs: Range::fixed(0.1),
+            cooldown_secs: 1.0,
+            reset_secs: 0.5,
+        }
+    }
+
+    /// Held fire on an unkillable target that stands still unless it reacts, firing on the
+    /// frames `fire(frame)` picks while the crosshair follows its centre. Returns the
+    /// target's position after every 10 ms frame.
+    fn damage_duel(juke: Option<DamageJuke>, frames: u32, fire: impl Fn(u32) -> bool) -> Vec<Vec3> {
+        let mut def = duelist(holding(), f32::INFINITY);
+        def.weapon.fire = FireMode::Hold;
+        def.targets.reactions = Some(ReactionsDef {
+            damage_juke: juke,
+            ..reactions()
+        });
+        let mut s = Session::new(def, 4);
+        look(&mut s, AWAY, 10);
+        (0..frames)
+            .map(|i| {
+                let view = aim_at(&s, lone(&s).position);
+                tick(&mut s, 0.01, view, fire(i));
+                lone(&s).position
+            })
+            .collect()
+    }
+
+    /// How many times the target starts moving after standing still.
+    fn moves_started(path: &[Vec3]) -> usize {
+        let moving: Vec<bool> = path
+            .windows(2)
+            .map(|w| (w[1].x - w[0].x).abs() > 1e-5)
+            .collect();
+        moving.windows(2).filter(|w| !w[0] && w[1]).count() + usize::from(moving[0])
+    }
+
+    #[test]
+    fn a_target_jukes_after_taking_enough_damage() {
+        let path = damage_duel(Some(damage_juke()), 60, |_| true);
+        // 0.2 s on target, then a 0.1 s delay: it stands still until about frame 30.
+        assert!(path[..28].iter().all(|p| p.x == 0.0), "{:?}", path[27]);
+        assert!(path[59].x.abs() > 0.05, "jukes: {:?}", path[59]);
+        assert_eq!(moves_started(&path), 1);
+
+        let path = damage_duel(None, 60, |_| true);
+        assert!(path.iter().all(|p| p.x == 0.0), "no reaction without it");
+        let ignored = DamageJuke {
+            ignore_chance: 1.0,
+            ..damage_juke()
+        };
+        assert!(
+            damage_duel(Some(ignored), 60, |_| true)
+                .iter()
+                .all(|p| p.x == 0.0)
+        );
+    }
+
+    #[test]
+    fn damage_counts_towards_a_juke_until_the_reset_timer_runs_out() {
+        // Bursts of 0.03 s on target every 0.13 s: 0.24 s of damage in 1 s.
+        let bursts = |i: u32| i % 13 < 3;
+        let quick_reset = DamageJuke {
+            reset_secs: 0.05,
+            ..damage_juke()
+        };
+        let path = damage_duel(Some(quick_reset), 100, bursts);
+        assert!(path.iter().all(|p| p.x == 0.0), "each burst resets");
+        let path = damage_duel(Some(damage_juke()), 100, bursts);
+        assert_eq!(moves_started(&path), 1, "bursts add up");
+    }
+
+    #[test]
+    fn a_damage_juke_waits_for_its_cooldown() {
+        let often = DamageJuke {
+            cooldown_secs: 0.5,
+            ..damage_juke()
+        };
+        let path = damage_duel(Some(often), 300, |_| true);
+        assert!(moves_started(&path) >= 3, "{}", moves_started(&path));
+        let rare = DamageJuke {
+            cooldown_secs: 10.0,
+            ..damage_juke()
+        };
+        assert_eq!(moves_started(&damage_duel(Some(rare), 300, |_| true)), 1);
+    }
+
     /// A scripted duel: strafe, sweep the crosshair across the target and fire.
     fn scripted_duel(def: ScenarioDef, seed: u64) -> (Vec<Vec3>, Stats) {
         let mut s = Session::new(def, seed);
@@ -2664,6 +2765,7 @@ mod tests {
             dodge_within_deg: 2.0,
             shot_juke_chance: 0.5,
             react_secs: Range::new(0.2, 0.4),
+            damage_juke: None,
         });
         def.targets.behaviors = vec![BehaviorRule {
             when: BehaviorWhen {

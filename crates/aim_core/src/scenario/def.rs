@@ -353,6 +353,39 @@ pub struct ReactionsDef {
     /// How long a reaction holds before the motion decides again, seconds.
     #[serde(default = "default_react_secs")]
     pub react_secs: Range,
+    /// Optional juke once the target has taken enough damage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub damage_juke: Option<DamageJuke>,
+}
+
+/// A juke after taking damage (`targets.reactions.damage_juke`): once the damage taken adds
+/// up to `threshold`, the target reverses (or, standing still, moves away from the
+/// crosshair) after a short delay, and holds that for `react_secs`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DamageJuke {
+    /// Damage that triggers a juke: hits with click fire, seconds on target with hold fire.
+    pub threshold: f32,
+    /// Chance that reaching the threshold is ignored (the damage still resets), in [0, 1].
+    #[serde(default)]
+    pub ignore_chance: f32,
+    /// Time from reaching the threshold to the juke, seconds within [0, 2].
+    #[serde(default = "default_damage_juke_delay")]
+    pub delay_secs: Range,
+    /// No new juke can start this long after one is triggered, seconds (≥ 0).
+    #[serde(default = "one_f")]
+    pub cooldown_secs: f32,
+    /// The damage taken starts again from zero after this long without damage, seconds (> 0).
+    #[serde(default = "default_damage_reset_secs")]
+    pub reset_secs: f32,
+}
+
+fn default_damage_juke_delay() -> Range {
+    Range::new(0.125, 0.25)
+}
+
+fn default_damage_reset_secs() -> f32 {
+    0.5
 }
 
 fn default_react_secs() -> Range {
@@ -1670,6 +1703,33 @@ impl ScenarioDef {
                 "targets.reactions.shot_juke_chance",
                 "reacts to click shots: needs weapon.fire = \"click\"",
             );
+            if let Some(j) = &r.damage_juke {
+                check(
+                    j.threshold.is_finite() && j.threshold > 0.0,
+                    "targets.reactions.damage_juke.threshold",
+                    "must be > 0",
+                );
+                check(
+                    (0.0..=1.0).contains(&j.ignore_chance),
+                    "targets.reactions.damage_juke.ignore_chance",
+                    "must be in [0, 1]",
+                );
+                check(
+                    j.delay_secs.is_valid() && j.delay_secs.min >= 0.0 && j.delay_secs.max <= 2.0,
+                    "targets.reactions.damage_juke.delay_secs",
+                    "must be a [min, max] within [0, 2] seconds",
+                );
+                check(
+                    j.cooldown_secs.is_finite() && j.cooldown_secs >= 0.0,
+                    "targets.reactions.damage_juke.cooldown_secs",
+                    "must be >= 0",
+                );
+                check(
+                    j.reset_secs.is_finite() && j.reset_secs > 0.0,
+                    "targets.reactions.damage_juke.reset_secs",
+                    "must be > 0",
+                );
+            }
         }
         check(
             t.behaviors.len() <= MAX_BEHAVIOR_RULES,
@@ -2535,6 +2595,7 @@ mod tests {
                 dodge_within_deg: 3.0,
                 shot_juke_chance: 0.5,
                 react_secs: Range::new(0.2, 0.4),
+                damage_juke: None,
             })
         );
         assert!(r.validate().is_empty(), "{:?}", r.validate());
@@ -2545,6 +2606,35 @@ mod tests {
             f(b.targets.reactions.as_mut().unwrap());
             fields_of(&b)
         };
+        let juke = |f: &dyn Fn(&mut DamageJuke)| {
+            with(&|x| {
+                let mut j: DamageJuke =
+                    toml::from_str("threshold = 0.5").expect("only the threshold is required");
+                f(&mut j);
+                x.damage_juke = Some(j);
+            })
+        };
+        assert!(juke(&|_| {}).is_empty());
+        assert_eq!(
+            juke(&|j| j.threshold = 0.0),
+            ["targets.reactions.damage_juke.threshold"]
+        );
+        assert_eq!(
+            juke(&|j| j.ignore_chance = 1.5),
+            ["targets.reactions.damage_juke.ignore_chance"]
+        );
+        assert_eq!(
+            juke(&|j| j.delay_secs = Range::new(0.0, 3.0)),
+            ["targets.reactions.damage_juke.delay_secs"]
+        );
+        assert_eq!(
+            juke(&|j| j.cooldown_secs = -1.0),
+            ["targets.reactions.damage_juke.cooldown_secs"]
+        );
+        assert_eq!(
+            juke(&|j| j.reset_secs = 0.0),
+            ["targets.reactions.damage_juke.reset_secs"]
+        );
         for bad in [-0.1, 1.1, f32::NAN] {
             assert_eq!(
                 with(&|x| x.mirror_strafe_chance = bad),

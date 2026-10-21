@@ -27,7 +27,7 @@ Source of the gap list (assistant comparison, 2026-10-21, accepted by the user):
 |----|-------|-------|--------|--------|
 | T1 | S8 | inline | done | d8071b9 |
 | T2 | S1, S2, S5 | inline | done | (this commit) |
-| T3 | S3 | inline | pending | |
+| T3 | S3 | inline | done | (this commit) |
 | T4 | S4 | inline | pending | |
 | T5 | S6 | inline | pending | |
 | T6 | S7 | inline | pending | |
@@ -44,3 +44,4 @@ Source of the gap list (assistant comparison, 2026-10-21, accepted by the user):
 - L3 Route: all inline (units share `def.rs`/`motion.rs`/`session.rs`, so no disjoint parallel writers). One read-only explorer mapped the motion, reaction, scoring, behaviour and picker code.
 - L6 T1 (d8071b9): optional `game` on `ScenarioDef` (reuses `games::Game`), left out of `content_hash` so replay proofs and lab ids stay valid (RED: hash test failed before `hashed()`). 46 built-ins tagged `valorant` by rule (humanoid, strafe/dodge, player movement, recoil, spread; plus `static-headline`); guard test keeps future content tagged. Picker game filter + details label; es strings. RDD assess: medium, under_budget.
 - L7 T2: `motion.rhythm = { swap_pause_secs, left_secs_mult, right_secs_mult, balanced }` on strafe/dodge; `rng::ShuffleBag`. RED: compile failure; balanced test proven to reject i.i.d. draws. PINNED sim results unchanged (no RNG draw when `rhythm` is absent). New fields skip serialization when absent, so content hashes of existing scenarios are unchanged.
+- L8 T3: `reactions.damage_juke = { threshold, ignore_chance, delay_secs, cooldown_secs, reset_secs }`; damage flows through `Session::on_damage(idx, amount)` (1 per click hit, dt per hold tick) into `BehaviorState::took_damage`. RED: compile failure; tests cover trigger+delay, no block, ignore, reset timer, cooldown, validation.

@@ -426,6 +426,21 @@ reactions = { mirror_strafe_chance = 0.3, oppose_strafe_chance = 0.3, dodge_with
 | `dodge_within_deg` | `0` (off) | When the crosshair comes within this angle of the target's aim point (head or sphere center), in [0, 90), the target moves away from the crosshair. It triggers again only after the crosshair has left that circle. |
 | `shot_juke_chance` | `0` | Whenever the player fires (click mode), the chance that every visible target jukes: it reverses, or, when standing still, moves away from the crosshair. |
 | `react_secs` | `[0.2, 0.4]` | How long a reaction holds, seconds (a positive range). |
+| `damage_juke` | none | A juke after taking enough damage; see below. |
+
+`damage_juke = { threshold, ignore_chance, delay_secs, cooldown_secs, reset_secs }` makes a target juke once the damage it takes adds up: it reverses, or, standing still, moves away from the crosshair. This punishes tracking that sits on the target without reading it, and trains re-acquiring after a reversal. It works with click and hold fire.
+
+```toml
+reactions = { damage_juke = { threshold = 0.6, ignore_chance = 0.3, delay_secs = [0.125, 0.25], cooldown_secs = 1.0, reset_secs = 0.5 } }
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `threshold` | required | Damage that triggers a juke (> 0): hits with click fire, seconds on target with hold fire. |
+| `ignore_chance` | `0` | Chance that reaching the threshold is ignored, in [0, 1]. The damage starts again from zero either way. |
+| `delay_secs` | `[0.125, 0.25]` | Time from reaching the threshold to the juke, seconds within [0, 2]. |
+| `cooldown_secs` | `1` | No new juke can start this long after one triggered, seconds. |
+| `reset_secs` | `0.5` | The damage taken starts again from zero after this long without damage, seconds (> 0). |
 
 ### Behaviour rules
 
