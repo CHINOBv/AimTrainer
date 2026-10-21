@@ -3,6 +3,7 @@
 id = "pill-crossfire"
 name = "Pill Crossfire"
 category = "flicking"
+game = "valorant"
 description = """
 Dynamic multi-target clicking. Three capsules juke and stop across a wide arc; the small head is worth
 more than twice the body. Pick the next target while the last shot lands, and aim for the head."""

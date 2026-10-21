@@ -3,6 +3,7 @@
 id = "depth-brake"
 name = "Depth Brake"
 category = "movement"
+game = "valorant"
 description = """
 Stop going forward and back. The lane is narrow and long: walk up with W or back off with S, brake with the opposite key, and tap the head.
 The trainer uses the same stopping curves for W/S as for A/D, so a W/S counter-strafe also takes about 0.16 s. A hit within 0.3 s of the stop earns a bonus; moving shots lose points."""

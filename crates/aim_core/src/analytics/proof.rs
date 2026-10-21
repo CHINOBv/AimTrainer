@@ -103,7 +103,7 @@ pub enum ProofError {
 /// Stable 64-bit FNV-1a hash of a definition's canonical TOML. Definitions hold no maps, so
 /// field order is fixed and the text is canonical for a given build. Not cryptographic.
 pub fn content_hash(def: &ScenarioDef) -> Result<u64, ProofError> {
-    let src = toml::to_string(def).map_err(|e| ProofError::Scenario(e.to_string()))?;
+    let src = toml::to_string(&*def.hashed()).map_err(|e| ProofError::Scenario(e.to_string()))?;
     Ok(fnv1a_64(src.as_bytes()))
 }
 

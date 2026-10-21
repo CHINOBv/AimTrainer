@@ -1,6 +1,7 @@
 id = "switch-heads"
 name = "Head Switch"
 category = "switching"
+game = "valorant"
 description = """
 Speed switching between agents' heads. Three agents stand spread across a site at 10–20 m.
 One tap per head, then snap straight to the next: the multi-kill pattern from a retake."""

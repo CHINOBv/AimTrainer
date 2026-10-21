@@ -1,6 +1,7 @@
 id = "dodge-peek"
 name = "Juke Peek"
 category = "reaction"
+game = "valorant"
 description = """
 Hold an angle against a jiggle peeker. After a random 0.6–2.0 s wait, an agent appears near your crosshair at head height,
 jukes and sometimes crouches, then leaves after 1.6 s. React to the appearance, but shoot on the stop or the reversal,

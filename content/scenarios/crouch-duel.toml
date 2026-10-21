@@ -3,6 +3,7 @@
 id = "crouch-duel"
 name = "Crouch Duel"
 category = "movement"
+game = "valorant"
 description = """
 Duel agents that crouch-spam and strafe while you move. Each crouch drops the head by about half a meter.
 Stop, hold the head line, and tap when the head settles instead of chasing every drop. Moving shots lose points."""

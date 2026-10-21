@@ -3,6 +3,7 @@
 id = "close-strafe-heads"
 name = "Close Quarters Strafe"
 category = "flicking"
+game = "valorant"
 description = """
 Dynamic clicking at close range. One agent at 5-9 m A/D strafes with real VALORANT rifle movement
 (5.4 m/s, measured stopping curves): close up, the head crosses your screen fast.

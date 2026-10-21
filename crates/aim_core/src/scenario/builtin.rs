@@ -439,6 +439,42 @@ mod tests {
         }
     }
 
+    #[test]
+    fn builtins_modelled_on_valorant_are_tagged_valorant() {
+        use crate::games::Game;
+        use crate::scenario::def::{Motion, Shape};
+        let valorant_mechanic = |d: &ScenarioDef| {
+            let human_motion =
+                |m: &Motion| matches!(m, Motion::Strafe { .. } | Motion::Dodge { .. });
+            matches!(d.targets.shape, Shape::Humanoid { .. })
+                || human_motion(&d.targets.motion)
+                || d.targets
+                    .motion_profiles
+                    .iter()
+                    .any(|p| human_motion(&p.motion))
+                || d.player.movement
+                || d.weapon.recoil
+                || d.weapon.simulate_spread
+        };
+        let all = all();
+        for d in &all {
+            if valorant_mechanic(d) {
+                assert_eq!(
+                    d.game,
+                    Some(Game::Valorant),
+                    "{} uses VALORANT mechanics",
+                    d.id
+                );
+            }
+            assert!(
+                matches!(d.game, None | Some(Game::Valorant)),
+                "{}: only VALORANT content ships today",
+                d.id
+            );
+        }
+        assert!(all.iter().any(|d| d.game.is_none()), "generic drills exist");
+    }
+
     /// Every piece of built-in content text the UI shows as-is: names, descriptions,
     /// routine notes, benchmark ranks and tiers, method credit, arena and map text and
     /// angle labels. Arenas and maps belong to `aim_world`, so their files are read here.

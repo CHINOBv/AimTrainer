@@ -1,6 +1,7 @@
 id = "demo-depth"
 name = "Demo: Depth Strafe"
 category = "flicking"
+game = "valorant"
 description = """
 Engine demo for the depth axis. Agents strafe left and right and also walk towards and
 away from you between 10 and 18 m, so their heads change size as well as position."""

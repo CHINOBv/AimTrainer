@@ -1,6 +1,7 @@
 id = "dodge-crouch-spam"
 name = "Crouch Spam"
 category = "precision"
+game = "valorant"
 description = """
 Clicking against crouch spam. One agent strafes, stops and often crouches mid-duel, dropping its head ≈0.5 m in 0.15 s.
 Watch the head, not the body: when it ducks, bring the crosshair down with it and tap; when it stands, come back up.

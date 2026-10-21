@@ -3,6 +3,7 @@
 id = "mirror-duel"
 name = "Mirror Duel"
 category = "movement"
+game = "valorant"
 description = """
 An A/D duel against an agent that answers your strafe. Half the time it copies a new strafe of yours, a third of the time it turns against it.
 Its rhythm follows yours, not a timer, so you cannot time its turns. Strafe, stop when the head settles, and tap it. Moving shots lose points."""

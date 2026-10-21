@@ -1,6 +1,7 @@
 id = "track-close-strafe"
 name = "Close Strafe Track"
 category = "tracking"
+game = "valorant"
 description = """
 Reactive tracking at close range, where strafes cover the most screen. An agent ADAD-strafes
 at knife speed 6–8 m away. Track the upper body and head, and react to every direction change."""

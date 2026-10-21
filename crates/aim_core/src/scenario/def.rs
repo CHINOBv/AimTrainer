@@ -18,6 +18,10 @@ pub struct ScenarioDef {
     pub name: String,
     /// Training category the scenario belongs to.
     pub category: Category,
+    /// Game whose parameters the scenario follows (movement physics, weapons, target
+    /// sizes), used to filter the library. `None`: generic, game-agnostic aim training.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game: Option<crate::games::Game>,
     /// Short text shown in the scenario list.
     #[serde(default)]
     pub description: String,
@@ -1163,8 +1167,20 @@ impl ScenarioDef {
     pub fn content_hash(&self) -> u64 {
         // Every definition serializes (replays embed it the same way); the debug form is a
         // stable fallback that still changes with every value.
-        let canonical = toml::to_string(self).unwrap_or_else(|_| format!("{self:?}"));
+        let hashed = self.hashed();
+        let canonical = toml::to_string(&*hashed).unwrap_or_else(|_| format!("{hashed:?}"));
         fnv1a_64(canonical.as_bytes())
+    }
+
+    /// The definition as hashed: the `game` tag does not change gameplay, so it is left
+    /// out and tagging a scenario keeps its replays verifiable and its lab id.
+    pub(crate) fn hashed(&self) -> std::borrow::Cow<'_, Self> {
+        if self.game.is_none() {
+            return std::borrow::Cow::Borrowed(self);
+        }
+        let mut untagged = self.clone();
+        untagged.game = None;
+        std::borrow::Cow::Owned(untagged)
     }
 
     /// Semantic checks that serde cannot express. Returns every problem found.
@@ -2002,6 +2018,42 @@ mod tests {
         assert_eq!(d.targets.motion, Motion::Static);
         assert!(!d.player.movement);
         assert!(d.validate().is_empty(), "{:?}", d.validate());
+    }
+
+    #[test]
+    fn game_tag_defaults_to_generic_and_names_a_known_game() {
+        let generic = ScenarioDef::from_toml(MINIMAL).unwrap();
+        assert_eq!(generic.game, None);
+        assert!(!toml::to_string(&generic).unwrap().contains("game"));
+
+        let tagged = MINIMAL.replace("name = \"Mini\"", "name = \"Mini\"\ngame = \"valorant\"");
+        let d = ScenarioDef::from_toml(&tagged).unwrap();
+        assert_eq!(d.game, Some(crate::games::Game::Valorant));
+        assert!(d.validate().is_empty());
+        let cs = MINIMAL.replace("name = \"Mini\"", "name = \"Mini\"\ngame = \"cs2\"");
+        assert_eq!(
+            ScenarioDef::from_toml(&cs).unwrap().game,
+            Some(crate::games::Game::Cs2)
+        );
+
+        let unknown = MINIMAL.replace("name = \"Mini\"", "name = \"Mini\"\ngame = \"quake\"");
+        assert!(ScenarioDef::from_toml(&unknown).is_err());
+    }
+
+    #[test]
+    fn the_game_tag_does_not_change_the_content_hash() {
+        // Tagging a scenario must keep its replays verifiable and its lab id.
+        let generic = ScenarioDef::from_toml(MINIMAL).unwrap();
+        let mut tagged = generic.clone();
+        tagged.game = Some(crate::games::Game::Valorant);
+        assert_eq!(tagged.content_hash(), generic.content_hash());
+        assert_eq!(
+            crate::analytics::proof::content_hash(&tagged).unwrap(),
+            crate::analytics::proof::content_hash(&generic).unwrap()
+        );
+        let mut changed = generic.clone();
+        changed.duration_secs = 30.0;
+        assert_ne!(changed.content_hash(), generic.content_hash());
     }
 
     #[test]

@@ -1,6 +1,7 @@
 id = "phase-peek-ladder"
 name = "Peek Ladder"
 category = "reaction"
+game = "valorant"
 description = """
 Waves: clear three close heads, then catch a far peeker before it ducks back; later waves strafe
 and send peekers in pairs, then a mixed finale runs until time is up.

@@ -6,6 +6,7 @@
 id = "angle-hold-peek"
 name = "Angle Hold Peek"
 category = "reaction"
+game = "valorant"
 description = """
 Hold an angle. After a random wait a small head-sized target peeks from the left or the right
 side, strafes and leaves after 1.6 s. Keep the crosshair on the head line and react fast."""

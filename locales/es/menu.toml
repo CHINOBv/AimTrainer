@@ -84,6 +84,8 @@
 "Standing" = "Quieto"
 "Waves" = "Oleadas"
 "Only scenarios with phases (waves)." = "Solo escenarios con fases (oleadas)."
+"Any game" = "Cualquier juego"
+"Generic" = "Genérico"
 "hold to fire" = "mantener para disparar"
 "click" = "clic"
 "Movement: WASD (Shift = walk). Counter-strafe before shooting." = "Movimiento: WASD (Shift = caminar). Haz counter-strafe antes de disparar."

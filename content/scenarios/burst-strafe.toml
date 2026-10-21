@@ -3,6 +3,7 @@
 id = "burst-strafe"
 name = "Burst Strafe"
 category = "movement"
+game = "valorant"
 description = """
 Burst with movement. Strafe, counter-strafe, fire a 2–4 bullet burst into the agent, then strafe again. It takes 3 hits.
 Bullets that hit within 0.35 s of your stop earn the stop bonus, and hits among the Vandal's first 6 bullets earn the burst bonus. A long spray climbs and runs past the window; moving shots lose points."""

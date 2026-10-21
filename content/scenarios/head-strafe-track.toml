@@ -3,6 +3,7 @@
 id = "head-strafe-track"
 name = "Head Strafe Track"
 category = "tracking"
+game = "valorant"
 description = """
 Stability tracking. A very thin capsule with a small head does fast, short A/D strafes.
 Head time scores twice body time: stay on the head through every reversal."""

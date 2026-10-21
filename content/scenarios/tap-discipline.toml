@@ -1,6 +1,7 @@
 id = "tap-discipline"
 name = "Tap Discipline"
 category = "precision"
+game = "valorant"
 description = """
 Long-range taps with the Vandal (recoil on). Agents stand at 30–40 m, where a head is ≈0.4°, and leave
 after 1.2 s. Spread grows with every bullet of a burst, so only a fully recovered first bullet (wait about

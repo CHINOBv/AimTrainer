@@ -1,6 +1,7 @@
 id = "static-headline"
 name = "Headline Static"
 category = "microcorrection"
+game = "valorant"
 description = """
 Static clicking at head height. Three heads float in a horizontal band at agent head height and mixed depth.
 Keep the crosshair on the head line and only make small horizontal corrections."""

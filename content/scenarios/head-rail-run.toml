@@ -3,6 +3,7 @@
 id = "head-rail-run"
 name = "Head Rail Run"
 category = "movement"
+game = "valorant"
 description = """
 Crosshair placement on the move. Agents pop up at different distances along the lane while you strafe.
 Keep the crosshair at head height as you move, so each one needs only a small adjustment, then stop and tap. Heads stay 1.8 s and are worth less the longer you take; moving shots lose points."""

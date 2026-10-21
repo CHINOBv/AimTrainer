@@ -1,6 +1,7 @@
 id = "regen-track"
 name = "Regen Track"
 category = "tracking"
+game = "valorant"
 description = """
 Track a strafing sphere until it dies. It heals whenever your crosshair leaves it for 0.3 s,
 and its points per second fade the longer it lives, so only steady, unbroken tracking kills

@@ -1,6 +1,7 @@
 id = "spray-transfer"
 name = "Spray Transfer"
 category = "switching"
+game = "valorant"
 description = """
 Spray transfers with the Phantom (recoil on: hold to fire full-auto). Three agents stand close together
 at 10–15 m and take three hits each. Kill all three in one spray: pull down against the climb and drag

@@ -3,6 +3,7 @@
 id = "mini-phase"
 name = "Mini Phase"
 category = "flicking"
+game = "valorant"
 description = """
 Four 15 s phases in one run: wide static spheres, small static spheres, strafing spheres and
 small strafing spheres. Adapt your flick to each change without slowing down."""

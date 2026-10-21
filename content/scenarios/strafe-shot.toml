@@ -1,6 +1,7 @@
 id = "strafe-shot"
 name = "Strafe Shot"
 category = "movement"
+game = "valorant"
 description = """
 Keep moving between shots. Four targets sit at different heights. Strafe, stop, shoot one, and strafe again.
 Moving shots are inaccurate and penalised, so this drills the move, stop, shoot rhythm."""

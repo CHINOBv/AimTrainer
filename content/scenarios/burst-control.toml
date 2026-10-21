@@ -1,6 +1,7 @@
 id = "burst-control"
 name = "Burst Control"
 category = "precision"
+game = "valorant"
 description = """
 Burst control with the Vandal (recoil on: hold to fire full-auto). One head-sized target at 15–25 m takes
 two hits and leaves after 1.4 s. Fire short 2–3 bullet bursts, then pause about 0.4 s so the recoil fully

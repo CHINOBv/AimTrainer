@@ -3,6 +3,7 @@
 id = "spread-gate"
 name = "Spread Gate"
 category = "movement"
+game = "valorant"
 description = """
 Only a full stop lands. Small spheres sit far away and the Phantom fires with its spread: a shot above 27.5% of run speed sprays up to 6° off and misses at this range.
 Strafe between spheres, stop fully, then shoot. Misses are expensive and the score scales with accuracy."""

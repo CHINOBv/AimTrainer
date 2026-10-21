@@ -1,6 +1,7 @@
 id = "track-reactive-strafe"
 name = "Reactive Strafe Track"
 category = "tracking"
+game = "valorant"
 description = """
 Reactive tracking against a VALORANT agent doing short, unpredictable A/D strafes, stops included.
 React instead of predicting. Head time scores more than body time."""

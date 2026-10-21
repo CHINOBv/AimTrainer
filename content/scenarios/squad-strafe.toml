@@ -3,6 +3,7 @@
 id = "squad-strafe"
 name = "Squad Strafe"
 category = "movement"
+game = "valorant"
 description = """
 Everyone moves. Three agents strafe and juke at once while you strafe too.
 Pick one, counter-strafe, tap the head, and move again before you take the next. A hit within 0.3 s of your stop earns a bonus; moving shots lose points."""

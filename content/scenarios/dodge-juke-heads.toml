@@ -1,6 +1,7 @@
 id = "dodge-juke-heads"
 name = "Juke Heads"
 category = "flicking"
+game = "valorant"
 description = """
 Dynamic clicking against jukes. Two agents strafe with VALORANT rifle movement, but half of their moves are quick A-D taps
 that reverse almost at once, and some end in a full stop. Do not chase the juke: keep the crosshair on the head line and

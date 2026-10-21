@@ -3,6 +3,7 @@
 id = "mini-regen-switch"
 name = "Mini Regen Switch"
 category = "switching"
+game = "valorant"
 description = """
 Switching against regeneration. Two small spheres strafe; each needs 0.5 s of tracking while
 firing, and heals if you leave it for 0.3 s. Finish what you start before switching.

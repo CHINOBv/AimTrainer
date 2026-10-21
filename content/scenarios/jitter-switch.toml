@@ -3,6 +3,7 @@
 id = "jitter-switch"
 name = "Jitter Switch"
 category = "switching"
+game = "valorant"
 description = """
 Evasive switching. Three spheres make short strafes with real acceleration and stops, changing
 direction every 0.15–0.35 s; each needs 0.4 s of tracking while firing. Trains staying on a

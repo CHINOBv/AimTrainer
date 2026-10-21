@@ -3,6 +3,7 @@
 id = "flinch-stop"
 name = "Flinch Stop"
 category = "movement"
+game = "valorant"
 description = """
 React and stop. Keep strafing: an agent appears after a random wait and stays for only 1.5 s.
 Counter-strafe the moment you see it and tap the head. A hit within 0.25 s of your stop earns a bonus; letting it leave or shooting on the move costs points."""

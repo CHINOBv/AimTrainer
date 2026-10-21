@@ -1,6 +1,7 @@
 id = "dynamic-strafe-heads"
 name = "Strafing Heads"
 category = "flicking"
+game = "valorant"
 description = """
 Dynamic clicking. Two agents A/D strafe with real VALORANT rifle movement (5.4 m/s, measured stopping curves).
 Read their movement and tap the head; they leave after 3 s."""

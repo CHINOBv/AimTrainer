@@ -1,6 +1,7 @@
 id = "flick-headshot"
 name = "Headshot Flicks"
 category = "flicking"
+game = "valorant"
 description = """
 VALORANT-sized agents appear 10–47° to either side at 10–30 m, always inside VALORANT's
 view. Only headshots count. Trains flicking straight to head level, as in an entry or

@@ -1283,6 +1283,7 @@ mod tests {
             id: "t".into(),
             name: "t".into(),
             category: Category::Custom,
+            game: None,
             description: String::new(),
             duration_secs: 10.0,
             weapon: WeaponDef {

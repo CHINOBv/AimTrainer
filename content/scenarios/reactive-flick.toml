@@ -3,6 +3,7 @@
 id = "reactive-flick"
 name = "Reactive Flick"
 category = "flicking"
+game = "valorant"
 description = """
 Two-hit flicks. A sphere waits still until you hit it; then it strafes away and needs a
 second hit. Trains a clean first flick followed by an immediate correction onto a target

@@ -1,6 +1,7 @@
 id = "radar-recall"
 name = "Radar Recall"
 category = "reaction"
+game = "valorant"
 description = """
 Glance at the radar: for 1.5 s it shows where 2 enemies stand. Then 4 identical agents appear;
 shoot only the 2 the radar showed and leave the others alone until they vanish. A wrong pick costs

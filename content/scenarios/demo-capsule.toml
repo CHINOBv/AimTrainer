@@ -1,6 +1,7 @@
 id = "demo-capsule"
 name = "Demo: Capsule"
 category = "flicking"
+game = "valorant"
 description = """
 Engine demo for capsule targets. Standing capsules with a small round head strafe across
 the floor ahead. A body hit counts, but a head hit is worth more than twice as much."""

@@ -3,6 +3,7 @@
 id = "stutter-ladder"
 name = "Stutter Ladder"
 category = "movement"
+game = "valorant"
 description = """
 Counter-strafe on a shrinking clock. Strafe with A/D, tap the opposite key to stop, and hit the head before the agent leaves.
 Every 8 kills the head stays for less time: 2.6 s, 2.0 s, 1.5 s, then 1.1 s. A hit within 0.3 s of your stop earns a bonus; moving shots lose points."""

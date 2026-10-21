@@ -1,6 +1,7 @@
 id = "sound-turn"
 name = "Sound Turn"
 category = "reaction"
+game = "valorant"
 description = """
 Turn to the sound. Each agent is first only heard: synthesized footsteps from your sides or behind
 you. It appears 0.8 s later, or as soon as your crosshair gets within 25° of it. Turn towards the

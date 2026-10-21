@@ -3,6 +3,7 @@
 id = "ground-reactive"
 name = "Ground Reactive"
 category = "tracking"
+game = "valorant"
 description = """
 Reactive tracking. A capsule strafes on the ground in every direction, left, right, towards and
 away from you, with fast jukes and stops. Hold fire and react to each change instead of predicting."""

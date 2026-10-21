@@ -1,6 +1,7 @@
 id = "long-range-heads"
 name = "Long Range Heads"
 category = "precision"
+game = "valorant"
 description = """
 Precision. Static agents stand at 35–50 m, where a head is only ≈0.3°. Small flicks, full stop, one clean tap.
 Misses cost a lot, so take the time you need."""

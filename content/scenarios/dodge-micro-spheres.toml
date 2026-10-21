@@ -1,6 +1,7 @@
 id = "dodge-micro-spheres"
 name = "Evasive Micro Clicks"
 category = "microcorrection"
+game = "valorant"
 description = """
 Microcorrection against an evasive target. A head-sized sphere appears 1.5–5° from your crosshair and immediately jukes,
 stops and sometimes ducks. Fix the small error with a short correction and click on the stop; overcorrecting into a

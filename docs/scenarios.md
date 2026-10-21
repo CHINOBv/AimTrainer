@@ -19,6 +19,7 @@ Scenarios, routines and benchmarks are plain TOML files. To add one, drop the fi
 id = "my-drill"              # a-z 0-9 - _ ; used for score history
 name = "My Drill"
 category = "flicking"        # flicking | microcorrection | switching | tracking | movement | reaction | precision | custom
+game = "valorant"            # optional: the game whose parameters it follows (valorant, cs2, apex, ...); omit for generic drills
 description = "What it trains."
 duration_secs = 60           # default 60
 

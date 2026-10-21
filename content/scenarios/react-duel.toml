@@ -1,6 +1,7 @@
 id = "react-duel"
 name = "Reactive Duel"
 category = "reaction"
+game = "valorant"
 description = """
 Duel an agent that holds its angle but reacts to you: it may copy or counter your A/D strafe,
 dodges when your crosshair gets close, and jukes when you fire. Once hit it strafes hard,

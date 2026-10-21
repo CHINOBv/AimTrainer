@@ -5,6 +5,7 @@
 id = "peek-track"
 name = "Peek Track"
 category = "tracking"
+game = "valorant"
 description = """
 Stability tracking. A capsule peeks out, strafes back and forth and ducks away after 3 s.
 Get on it as it appears and track it until it leaves."""

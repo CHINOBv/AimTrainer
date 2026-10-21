@@ -1,6 +1,7 @@
 id = "dodge-jump-spot"
 name = "Jump Spotting"
 category = "flicking"
+game = "valorant"
 description = """
 Clicking against jumpers. Agents strafe and often jump, rising ≈0.9 m with no air control, so an airborne agent keeps
 its line and lands where you can predict. Either click the head in the air or pre-aim the landing spot and tap as it

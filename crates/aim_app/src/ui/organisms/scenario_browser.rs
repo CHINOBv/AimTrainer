@@ -8,6 +8,7 @@ use crate::ui::UiAction;
 use crate::ui::atoms::FAVORITE;
 use crate::ui::molecules::{matches_query, scenario_item};
 use crate::ui::organisms::history_chart::history_chart;
+use aim_core::games::Game;
 use aim_core::scenario::{Category, FireMode, ScenarioDef, parse_run_key};
 use aim_core::training::progress::RunRecord;
 use aim_core::training::store::RunStore;
@@ -27,6 +28,8 @@ pub struct ScenarioFilter {
     pub movement: Option<bool>,
     /// Only scenarios with phases (waves).
     pub waves_only: bool,
+    /// `Some(Some(game))`: scenarios made for that game; `Some(None)`: generic drills only.
+    pub game: Option<Option<Game>>,
 }
 
 impl ScenarioFilter {
@@ -45,11 +48,31 @@ impl ScenarioFilter {
             && self.fire.is_none_or(|f| def.weapon.fire == f)
             && self.movement.is_none_or(|m| def.player.movement == m)
             && (!self.waves_only || def.phases.is_some())
+            && self.game.is_none_or(|g| def.game == g)
     }
 
     /// True when anything narrows the list.
     pub fn is_active(&self) -> bool {
         *self != Self::default()
+    }
+}
+
+/// The game filter's choices: every game some scenario is made for, in `Game::ALL` order,
+/// then generic (`None`).
+pub fn game_choices(scenarios: &[ScenarioDef]) -> Vec<Option<Game>> {
+    Game::ALL
+        .into_iter()
+        .filter(|g| scenarios.iter().any(|d| d.game == Some(*g)))
+        .map(Some)
+        .chain([None])
+        .collect()
+}
+
+/// Label of a game filter choice.
+pub fn game_label(game: Option<Game>) -> &'static str {
+    match game {
+        Some(g) => g.profile().display_name,
+        None => tr("Generic"),
     }
 }
 
@@ -92,7 +115,7 @@ pub fn scenario_list(
     filter: &mut ScenarioFilter,
     favorites: &mut Vec<String>,
 ) {
-    filter_controls(ui, filter);
+    filter_controls(ui, filter, &game_choices(&lib.scenarios));
     ui.separator();
     let mut toggled: Option<String> = None;
     egui::ScrollArea::vertical()
@@ -182,7 +205,7 @@ pub fn scenario_list(
     }
 }
 
-fn filter_controls(ui: &mut egui::Ui, filter: &mut ScenarioFilter) {
+fn filter_controls(ui: &mut egui::Ui, filter: &mut ScenarioFilter, games: &[Option<Game>]) {
     ui.horizontal(|ui| {
         ui.add(
             egui::TextEdit::singleline(&mut filter.query)
@@ -222,6 +245,14 @@ fn filter_controls(ui: &mut egui::Ui, filter: &mut ScenarioFilter) {
             tr("Any movement"),
             &[true, false],
             |m| tr(if m { "Moving" } else { "Standing" }),
+        );
+        option_combo(
+            ui,
+            "filter_game",
+            &mut filter.game,
+            tr("Any game"),
+            games,
+            game_label,
         );
         ui.checkbox(&mut filter.waves_only, tr("Waves"))
             .on_hover_text(tr("Only scenarios with phases (waves)."));
@@ -264,7 +295,8 @@ pub fn scenario_details(
         "click"
     });
     ui.label(format!(
-        "{} · {:.0}s · {} · {fire}",
+        "{} · {} · {:.0}s · {} · {fire}",
+        game_label(def.game),
         tr(def.category.label()),
         def.duration_secs,
         def.weapon.kind.stats().display_name,
@@ -379,6 +411,30 @@ mod tests {
         };
         assert!(wave.matches(&waves) && !wave.matches(&flick));
         assert!(wave.is_active() && !ScenarioFilter::default().is_active());
+    }
+
+    #[test]
+    fn the_game_filter_keeps_one_game_or_only_generic_drills() {
+        let valorant = def("counter-strafe");
+        let generic = def("six-pin");
+        let only = |game: Option<Game>| ScenarioFilter {
+            game: Some(game),
+            ..ScenarioFilter::default()
+        };
+        assert!(only(Some(Game::Valorant)).matches(&valorant));
+        assert!(!only(Some(Game::Valorant)).matches(&generic));
+        assert!(only(None).matches(&generic) && !only(None).matches(&valorant));
+        assert!(!only(Some(Game::Cs2)).matches(&valorant));
+        assert!(only(None).is_active());
+        assert!(ScenarioFilter::default().matches(&valorant));
+        assert!(ScenarioFilter::default().matches(&generic));
+    }
+
+    #[test]
+    fn game_choices_list_the_games_in_the_library_then_generic() {
+        let lib = [def("six-pin"), def("counter-strafe"), def("flick-headshot")];
+        assert_eq!(game_choices(&lib), [Some(Game::Valorant), None]);
+        assert_eq!(game_choices(&lib[..1]), [None]);
     }
 
     #[test]

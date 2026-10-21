@@ -1,6 +1,7 @@
 id = "counter-strafe"
 name = "Counter-Strafe Duel"
 category = "movement"
+game = "valorant"
 description = """
 Movement accuracy. Strafe with A/D (VALORANT rifle movement), counter-strafe, and tap the head before the agent leaves (3 s).
 Shots fired above 27.5% of run speed get running inaccuracy and lose points. Stop, then shoot."""

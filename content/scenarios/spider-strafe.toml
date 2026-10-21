@@ -3,6 +3,7 @@
 id = "spider-strafe"
 name = "Spider Strafe"
 category = "movement"
+game = "valorant"
 description = """
 Spider shot on the move. Shoot the centre sphere, strafe, stop, shoot the sphere that appears 4–10° around it, strafe again, and come back to the centre.
 The centre stays in one place while you move. A hit within 0.4 s of an accurate stop scores 60 more than a standing shot, so moving between shots is most of the score; moving shots lose points."""

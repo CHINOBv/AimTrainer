@@ -243,6 +243,7 @@ impl LabSettings {
             id: LAB_PREFIX.to_owned(),
             name: LAB_NAME.to_owned(),
             category: Category::Movement,
+            game: Some(crate::games::Game::Valorant),
             description: s.summary(),
             duration_secs: s.duration_secs,
             weapon: WeaponDef {
