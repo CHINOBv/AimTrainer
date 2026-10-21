@@ -17,15 +17,15 @@ health = inf
 
 [[targets.motion_profiles]]
 switch_secs = [3.0, 5.0]
-motion = { kind = "path", points = [[0.0, 2.0, 0.0]], speed = [1.1, 1.4], pause_secs = [0.0, 0.15], route = "ping_pong" }
+motion = { kind = "path", points = [[0.0, 2.0, 0.0]], speed = [1.05, 1.35], pause_secs = [0.0, 0.15], route = "ping_pong" }
 
 [[targets.motion_profiles]]
 switch_secs = [3.0, 5.0]
-motion = { kind = "path", points = [[0.0, 2.0, 0.0]], speed = [1.5, 1.8], pause_secs = [0.0, 0.15], route = "ping_pong" }
+motion = { kind = "path", points = [[0.0, 2.0, 0.0]], speed = [1.45, 1.75], pause_secs = [0.0, 0.15], route = "ping_pong" }
 
 [[targets.motion_profiles]]
 switch_secs = [3.0, 5.0]
-motion = { kind = "path", points = [[0.0, 2.0, 0.0]], speed = [1.9, 2.3], pause_secs = [0.0, 0.15], route = "ping_pong" }
+motion = { kind = "path", points = [[0.0, 2.0, 0.0]], speed = [1.8, 2.2], pause_secs = [0.0, 0.15], route = "ping_pong" }
 
 [scoring]
 sphere = 100   # points per second on target

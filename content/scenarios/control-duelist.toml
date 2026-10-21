@@ -15,7 +15,7 @@ fire = "hold"
 [targets]
 shape = { kind = "capsule", radius = 0.26, height = 1.6, head = { radius = 0.14, offset = 0.95 } }
 spawn = { kind = "floor", x = [-2.0, 2.0], z = [-15.0, -11.0], height = [0.8, 0.8] }
-motion = { kind = "dodge", weapon = "vandal", change_secs = [0.6, 1.4], juke_chance = 0.1, stop_chance = 0.2, crouch_chance = 0.05, max_offset = 3.0, depth = { change_secs = [0.8, 1.6], distance = [10.0, 16.0] }, rhythm = { right_secs_mult = 1.6, balanced = true } }
+motion = { kind = "dodge", weapon = "vandal", change_secs = [0.7, 1.5], juke_chance = 0.1, stop_chance = 0.3, crouch_chance = 0.05, max_offset = 2.5, depth = { change_secs = [0.8, 1.6], distance = [10.0, 16.0] }, rhythm = { right_secs_mult = 1.6, balanced = true } }
 health = inf
 
 [scoring]
