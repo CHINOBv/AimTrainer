@@ -86,6 +86,8 @@ This is the structure behind our primary training method (roadmap Phase 2). It w
 | Saturday | Switching II |
 | Sunday | Benchmark focus routine (recommended), replay a weak day, or rest |
 
+S3 splits every skill in three: static, dynamic and linear clicking; precise, reactive and control tracking; speed, evasive and stability switching (VDIM S3 and the Benchmark Focused Routines, Lowgravity56, 4rK and Voltaic). The week keeps six days, so linear, control and stability have their own focus routines (`skill-clicking-linear`, `skill-tracking-control`, `skill-switching-stability`) to swap in on Sunday or for a weak day. Our benchmark keeps its current subcategories; adding these three changes the overall energy, so it waits for real player data. Each `skill-*` routine description ends with one technique tip written in our own words (coaching consensus, confidence: expert).
+
 **Inside a day (verified, from KovaaK's public playlist data):**
 
 - A day has 3 blocks, one per benchmark scenario.

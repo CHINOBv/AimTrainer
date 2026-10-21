@@ -270,6 +270,10 @@ pub mod builtin {
             include_str!("../../../../content/routines/skill-clicking-dynamic.toml"),
         ),
         (
+            "skill-clicking-linear.toml",
+            include_str!("../../../../content/routines/skill-clicking-linear.toml"),
+        ),
+        (
             "skill-clicking-static.toml",
             include_str!("../../../../content/routines/skill-clicking-static.toml"),
         ),
@@ -280,6 +284,14 @@ pub mod builtin {
         (
             "skill-switching-speed.toml",
             include_str!("../../../../content/routines/skill-switching-speed.toml"),
+        ),
+        (
+            "skill-switching-stability.toml",
+            include_str!("../../../../content/routines/skill-switching-stability.toml"),
+        ),
+        (
+            "skill-tracking-control.toml",
+            include_str!("../../../../content/routines/skill-tracking-control.toml"),
         ),
         (
             "skill-tracking-precise.toml",

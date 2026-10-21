@@ -4,7 +4,8 @@ description = """
 Dynamic clicking day: moving heads, flicks to agents, and counter-strafe duels (VALORANT addition).
 VDIM-style day (structure from VDIM by Lowgravity56, 4rK and Voltaic): each block runs a related drill,
 two harder variants of a benchmark scenario, then the benchmark itself 4 times, played in order.
-Levels are relative to your tier; split the day into 2–3 sessions if it gets long."""
+Levels are relative to your tier; split the day into 2–3 sessions if it gets long.
+Tip: follow the target briefly to match its speed, and click once your crosshair moves with it, not while you are still catching up."""
 
 [[blocks]]
 scenario = "flick-headshot"

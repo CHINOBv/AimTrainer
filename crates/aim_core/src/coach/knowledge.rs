@@ -337,8 +337,13 @@ static ENTRIES: [KnowledgeEntry; 10] = [
         },
         progression: "Add 10% target speed at 75% or more time on target.",
         progress_measure: "Time on target and speed match.",
-        scenarios: &["track-precise", "track-orbit"],
-        routines: &["skill-tracking-precise"],
+        scenarios: &[
+            "track-precise",
+            "track-orbit",
+            "control-weave",
+            "vertical-rail",
+        ],
+        routines: &["skill-tracking-precise", "skill-tracking-control"],
         sources: &["chua-2021", "expert"],
     },
     KnowledgeEntry {
@@ -357,7 +362,11 @@ static ENTRIES: [KnowledgeEntry; 10] = [
         progression: "Shorten the time between direction changes 10% at 70% or more time on \
                       target.",
         progress_measure: "Reaction to direction changes and time on target.",
-        scenarios: &["track-reactive-strafe", "track-reactive-micro"],
+        scenarios: &[
+            "track-reactive-strafe",
+            "track-reactive-micro",
+            "stutter-read-track",
+        ],
         routines: &["skill-tracking-reactive"],
         sources: &["expert"],
     },
@@ -381,8 +390,13 @@ static ENTRIES: [KnowledgeEntry; 10] = [
         },
         progression: "Add a target or widen the spacing when accuracy stays at 80% or more.",
         progress_measure: "Kills per minute and nearest-first share.",
-        scenarios: &["switch-wide", "switch-speed", "switch-heads"],
-        routines: &["skill-switching-speed"],
+        scenarios: &[
+            "switch-wide",
+            "switch-speed",
+            "switch-heads",
+            "steady-agents-switch",
+        ],
+        routines: &["skill-switching-speed", "skill-switching-stability"],
         sources: &["expert"],
     },
     KnowledgeEntry {

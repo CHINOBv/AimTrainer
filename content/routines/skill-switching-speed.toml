@@ -4,7 +4,8 @@ description = """
 Speed switching day: fast, decisive switches between static targets and heads.
 VDIM-style day (structure from VDIM by Lowgravity56, 4rK and Voltaic): each block runs a related drill,
 two harder variants of a benchmark scenario, then the benchmark itself 4 times, played in order.
-Levels are relative to your tier; split the day into 2–3 sessions if it gets long."""
+Levels are relative to your tier; split the day into 2–3 sessions if it gets long.
+Tip: keep firing, land each flick on the target with no correction, and look for the next target before the current one dies."""
 
 [[blocks]]
 scenario = "switch-wide"

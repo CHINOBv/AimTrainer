@@ -1,0 +1,55 @@
+id = "skill-switching-stability"
+name = "Switching III: Stability"
+description = """
+Stability switching day: fast switches between targets with calm, controlled tracking on each one.
+VDIM-style day (structure from VDIM by Lowgravity56, 4rK and Voltaic): each block runs a related drill,
+two harder variants of a benchmark scenario, then the benchmark itself 4 times, played in order.
+Tip: speed up between targets, not on them: every target gets the same steady tracking."""
+
+[[blocks]]
+scenario = "fly-switch"
+runs = 2
+difficulty = -0.25
+note = "Drill for stability-flyers: settle on each target before you track it."
+
+[[blocks]]
+scenario = "stability-flyers"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "stability-flyers"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "stability-flyers"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."
+
+[[blocks]]
+scenario = "jitter-switch"
+runs = 2
+difficulty = -0.25
+note = "Drill for steady-agents-switch: stay on the target through its stops."
+
+[[blocks]]
+scenario = "steady-agents-switch"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "steady-agents-switch"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "steady-agents-switch"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."

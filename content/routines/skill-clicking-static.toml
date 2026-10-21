@@ -4,7 +4,8 @@ description = """
 Static clicking day: microcorrections and head-level precision.
 VDIM-style day (structure from VDIM by Lowgravity56, 4rK and Voltaic): each block runs a related drill,
 two harder variants of a benchmark scenario, then the benchmark itself 4 times, played in order.
-Levels are relative to your tier; split the day into 2–3 sessions if it gets long."""
+Levels are relative to your tier; split the day into 2–3 sessions if it gets long.
+Tip: make one decisive flick that covers most of the distance, finish with a small correction, and look for the next target while you click."""
 
 [[blocks]]
 scenario = "static-headline"

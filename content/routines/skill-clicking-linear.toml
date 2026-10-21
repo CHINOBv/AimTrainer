@@ -1,0 +1,55 @@
+id = "skill-clicking-linear"
+name = "Clicking III: Linear"
+description = """
+Linear clicking day: targets on predictable, constant-speed paths you can anticipate.
+VDIM-style day (structure from VDIM by Lowgravity56, 4rK and Voltaic): each block runs a related drill,
+two harder variants of a benchmark scenario, then the benchmark itself 4 times, played in order.
+Tip: read the path early and let the target run into your crosshair, instead of chasing it from behind."""
+
+[[blocks]]
+scenario = "ricochet-ring"
+runs = 2
+difficulty = -0.25
+note = "Drill for crossing-lanes: read where the target goes, not where it is."
+
+[[blocks]]
+scenario = "crossing-lanes"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "crossing-lanes"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "crossing-lanes"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."
+
+[[blocks]]
+scenario = "drifting-heads"
+runs = 2
+difficulty = -0.25
+note = "Drill for metronome-ring: match the target's pace before you click."
+
+[[blocks]]
+scenario = "metronome-ring"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "metronome-ring"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "metronome-ring"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."

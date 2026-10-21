@@ -1,0 +1,55 @@
+id = "skill-tracking-control"
+name = "Tracking III: Control"
+description = """
+Control tracking day: a mix of smooth stretches and readable direction changes.
+VDIM-style day (structure from VDIM by Lowgravity56, 4rK and Voltaic): each block runs a related drill,
+two harder variants of a benchmark scenario, then the benchmark itself 4 times, played in order.
+Tip: glide while the motion is steady, then make one small, calm correction when the target turns."""
+
+[[blocks]]
+scenario = "smooth-xyz"
+runs = 2
+difficulty = -0.25
+note = "Drill for control-weave: keep the crosshair moving at the target's speed."
+
+[[blocks]]
+scenario = "control-weave"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "control-weave"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "control-weave"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."
+
+[[blocks]]
+scenario = "ground-reactive"
+runs = 2
+difficulty = -0.25
+note = "Drill for control-duelist: one correction per turn, no jitter."
+
+[[blocks]]
+scenario = "control-duelist"
+runs = 2
+difficulty = 0.25
+note = "Variant: a bit harder than the benchmark."
+
+[[blocks]]
+scenario = "control-duelist"
+runs = 2
+difficulty = 0.5
+note = "Hard variant: makes the benchmark feel easier."
+
+[[blocks]]
+scenario = "control-duelist"
+runs = 4
+difficulty = 0.0
+note = "Benchmark: give your best runs."

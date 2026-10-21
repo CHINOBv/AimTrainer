@@ -33,7 +33,7 @@ Source of the gap list (assistant comparison, 2026-10-21, accepted by the user):
 | T6 | S7 | inline | done | (this commit) |
 | T7 | S9 | inline | done | (this commit) |
 | T8 | S10 | inline | pending | |
-| T9 | S11 | inline (research delegated to one read-only worker) | pending | |
+| T9 | S11 | inline (research delegated to one read-only worker) | done | (this commit) |
 
 ## Log
 
@@ -49,3 +49,4 @@ Source of the gap list (assistant comparison, 2026-10-21, accepted by the user):
 - L10 T5: `BehaviorWhen.{player_within_m, player_beyond_m, spawn_beyond_m}`; `Situation` gains `player_distance` (horizontal, eye to target) and `spawn_distance` (from `BehaviorState.spawn`, which retreats do not move). RED: compile failure; tests cover each condition holding and not holding, plus validation.
 - L11 T6: `Motion::Path { points, speed, pause_secs, route = loop|ping_pong }` (waypoints as [right, up, towards] offsets from spawn); difficulty speeds it up and shortens rests; humanoid paths must stay on the floor; validation refuses a route that never leaves the spawn point and the walk loop is capped per step (no hang). Recording paths from player input stays out of scope (S7 assumption).
 - L12 T7: 10 new scenarios, 8 from the doc3 research proposal plus 2 showcases: crossing-lanes, metronome-ring (linear clicking); control-weave, control-duelist (control tracking); steady-agents-switch, stability-flyers (stability switching); evo-juke-spheres (evasive); vertical-rail, stutter-read-track (tracking); patrol-peek (path patrols). Tagged per S8 (the guard test enforces it). Calibrate: recruit < contender < veteran < elite for all ten; contender accuracy 0.43–0.76. The low end (vertical-rail, control-duelist 0.43) matches the existing reactive scenarios (0.41–0.43). Tuning note: full-speed rifle strafes over wide lanes push the simulated aimer's hold accuracy to ~0.25, so the switching drills use short lanes (max_offset 1.2) with stops; a single unkillable target draws its path speed once, so vertical-rail varies its pace through motion profiles. Spanish entries added; docs/library.md rows added.
+- L13 T9: routines `skill-clicking-linear`, `skill-tracking-control`, `skill-switching-stability` (VDIM block structure: drill -0.25, variants +0.25/+0.5, benchmark x4); a technique tip appended to every `skill-*` description (9 subcategories, own words, es entries); coach knowledge lists the new scenarios/routines. Benchmark subcategories deliberately unchanged (changing them changes overall energy and history comparisons: high-risk item 1/3, left for a separate decision).
